@@ -1,6 +1,14 @@
-# Contexts first-slice validation — 0.2.8 source candidate
+# Contexts first-slice validation — 0.2.8 alpha prerelease
 
-The Contexts integration has independent Source approval with no blocking or actionable Source findings. This is not a published release or native KDE admission. The current public download instructions continue to target [0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7).
+The Contexts integration has independent Source approval with no blocking or actionable Source findings. The [0.2.8 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) is published (GitHub marks it prerelease, `latest=false`). It was built from source commit `9e42decd42fc4a9a705dd48e6087b17aaca51d29`; PR 18 merged as `c87930bc9881523a390ca492af1e0af6dfc328ca`. CI run [38113776729](https://github.com/caiolombello/orla-desktop/actions/runs/38113776729), job 114394497503, succeeded at 05:08:09 UTC; merge time was 05:08:31 UTC. A root-owned anonymous download verification at 05:09:44 UTC returned HTTP 200 for all three public assets and confirmed exact build matches. Installation is UNRUN and native admission is false.
+
+| Public asset | Bytes | SHA-256 | Build match |
+|---|---:|---|---|
+| `orla-dock-0.2.8.plasmoid` | 57,092 | `205c74df60433b0ee219a434a9f3482eca65bfa342187a95648fe6d4a3a01bed` | Exact |
+| `orla-dock-0.2.8.zip` | 462,757 | `9218e4ee44e032e3ae1d6467f91046ea4c7bda1f7711670e8fe3794e99304a85` | Exact |
+| `SHA256SUMS` | 177 | `c1171addd1a379432561a390a29eef96de915662b21caf5309ca11e21b67a96e` | Exact |
+
+Two candidate builds and one build from the exact source commit were identical: 139 Source files, 113 ZIP entries and 35 applet entries. This publication/build evidence is separate from native KDE admission.
 
 ## Bounded evidence
 
@@ -10,7 +18,7 @@ The Contexts integration has independent Source approval with no blocking or act
 - The pure Contexts core's round-three independent review approved with zero blocking and zero non-blocking findings. The earlier core review findings were addressed by single-read snapshots, semantic no-ops that avoid rewrites, and fixture isolation of both session and system bus paths before Qt import.
 - API references were checked against Plasma Activities and Plasma Workspace 6.7.5 source: [ActivityModel](https://raw.githubusercontent.com/KDE/plasma-activities/v6.7.5/src/imports/activitymodel.h) and [VirtualDesktopInfo](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h). The adapter observes `ActivityModel` roles `id`, `name`, `current` and `VirtualDesktopInfo` properties/signals; it does not call context activation APIs.
 
-These checks used isolated synthetic/offscreen QML fixtures. They do not establish native plugin compilation/construction or model propagation. This host lacks `qmllint` and `qmlcachegen`; native compilation was not performed. The portable CI workflow includes the pure-core `test_contexts.py` suite, but no CI result for this candidate is claimed here.
+These checks used isolated synthetic/offscreen QML fixtures. They do not establish native plugin compilation/construction or model propagation. This host lacks `qmllint` and `qmlcachegen`; native compilation was not performed. The portable CI workflow includes the pure-core `test_contexts.py` suite. CI run 38113776729 passed; that result does not qualify native plugin construction or KDE behavior.
 
 ## Behavior and persistence boundary
 
@@ -22,4 +30,4 @@ The slice does not select a profile from an association or switch Activities/des
 
 ## Not qualified
 
-Native `ActivityModel`/`VirtualDesktopInfo` construction and service readiness, session-bus/model behavior, actual Activity/desktop switching, monitor/output mapping, KDE-style rendering, installed plasmoid/KConfig persistence, restart, panel focus, accessibility assistive technology, user configuration, automatic profile switching, full repository regression, publication, P2 completion and W1 selection/switching remain UNRUN or open. Neither the 12+2 integration checks nor the separate 11-test core run qualify these paths.
+Native `ActivityModel`/`VirtualDesktopInfo` construction and service readiness, session-bus/model behavior, actual Activity/desktop switching, monitor/output mapping, KDE-style rendering, installed plasmoid/KConfig persistence, restart, panel focus, accessibility assistive technology, user configuration, automatic profile switching, full native/session regression, P2 completion and W1 selection/switching remain UNRUN or open. Neither the 12+2 integration checks nor the separate 11-test core run qualify these paths.

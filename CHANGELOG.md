@@ -3,11 +3,12 @@
 User-visible changes are recorded here for each published release.
 
 
-## 0.2.8 alpha candidate — source integration, not published
+## 0.2.8 — 2026-10-11 — Alpha prerelease
 
 - Add a fourth **Contextos** settings tab with separate Activity and virtual-desktop cards. Opening that tab is the only time the read-only native discovery Loader is active; selectors stage a choice and only explicit bind/remove actions save an association to an existing managed profile.
 - Keep Activity and desktop associations in the separate empty-default `contextsJSON` setting. Stable IDs, stale-intent rejection and invalid/future raw-byte preservation avoid silent cleanup or profile/context switching. Associations do not auto-select profiles, switch KDE contexts, apply/cancel appearance previews, or change Pomodoro identity/deadline.
-- The focused integration union passed 12 local offscreen QML tests; 2 independent adversarial cases passed, and independent Source reviews approved the pure core and dock integration. Native plugin compilation/construction, installed KConfig/restart, CI result, publication and native/session qualification remain unverified. P2 is partial; W1 switching is unstarted. See the [guide](docs/contexts.md) and [validation record](docs/validation/contexts-0.2.8.md). The published 0.2.7 release and its download instructions remain unchanged.
+- The pure-core local Qt 6.12.0 run passed 11 tests in 0.201 seconds; the focused dock integration passed 12 tests and its independent adversarial rerun passed 2. Independent Source reviews approved the core and dock integration. The native adapter only observes KDE models. P2 remains partial and W1 switching is unstarted; native plugin construction, KConfig/restart and session behavior remain unqualified.
+- Published as [v0.2.8](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) (alpha prerelease, `latest=false`) from source `9e42decd42fc4a9a705dd48e6087b17aaca51d29` (PR 18, merge `c87930bc9881523a390ca492af1e0af6dfc328ca`). CI run [38113776729](https://github.com/caiolombello/orla-desktop/actions/runs/38113776729), job 114394497503, succeeded. Anonymous HTTP 200 checks confirmed exact source-build matches for the `.plasmoid`, ZIP and `SHA256SUMS`; see the [validation record](docs/validation/contexts-0.2.8.md) for hashes. Two release-candidate builds and one exact-commit build matched (139 Source files, 113 ZIP entries, 35 applet entries). Installation remains UNRUN and native admission is false.
 
 ## 0.2.7 — 2026-10-11 — Alpha prerelease
 
@@ -21,7 +22,7 @@ User-visible changes are recorded here for each published release.
 - Add optional Menu Orla (`org.orla.bar`, component version 0.1.0) for Plasma 6.7.x: an Orla icon or text-only label, bounded plain-text active application name, and explicit system/settings/configuration and capability-aware session actions. Keep the application label stable from menu opening through closure; distinguish an unnamed active application from the desktop.
 - Isolate the private Plasma session adapter behind a 6.7.x guard, with source/API checks against 6.7.5. Logout, reboot and shutdown request native confirmation; successful dispatch does not prove completion.
 - Ten injected mock tests passed with Fusion and KDE styles; independent review repeated ten KDE tests and approved experimental source publication. Four components compiled without errors, without native instantiation. Real dialogs/actions, panel/focus, human gestures and multi-monitor composition remain UNRUN; T1/T2/T3 are open.
-- This component is excluded from the 0.2.5 and 0.2.6 bundles. Manual source installation is described in the [component guide](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md); no bar installer, panel preset, autostart, Control Center, Global Menu or tray is delivered.
+- This component is excluded from the 0.2.5, 0.2.6, 0.2.7 and 0.2.8 bundles. Manual source installation is described in the [component guide](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md); no bar installer, panel preset, autostart, Control Center, Global Menu or tray is delivered.
 
 
 ## 0.2.6 — 2026-10-11 — Alpha prerelease
