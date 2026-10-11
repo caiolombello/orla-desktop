@@ -28,7 +28,9 @@ class ReleaseBundleTests(unittest.TestCase):
             }), encoding="utf-8")
             (root / "package/contents/ui/main.qml").write_text("Item {}\n", encoding="utf-8")
             for name in ("contents/code/Theme.js", "contents/code/Appearance.js",
-                         "contents/ui/AppearanceState.qml", "contents/ui/AppearanceEditor.qml"):
+                         "contents/ui/AppearanceState.qml", "contents/ui/AppearanceEditor.qml",
+                         "contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
+                         "contents/config/main.xml"):
                 target = root / "package" / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source / "package" / name, target)
@@ -62,9 +64,15 @@ class ReleaseBundleTests(unittest.TestCase):
                             "themes/schema/theme-0.1-experimental.schema.json",
                             "scripts/themes.py", "docs/theme-format.md", "tests/test_themes.py",
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
-                            "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml")
+                            "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml",
+                            "package/contents/ui/EventState.qml", "package/contents/ui/EventSurface.qml",
+                            "package/contents/config/main.xml")
                 for name in required:
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
+                with zipfile.ZipFile(root / "dist/orla-dock-1.2.3.plasmoid") as package_archive:
+                    for name in ("contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
+                                 "contents/config/main.xml"):
+                        self.assertEqual(package_archive.read(name), (root / "package" / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
                 for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml"):

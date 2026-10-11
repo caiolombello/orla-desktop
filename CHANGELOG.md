@@ -2,6 +2,12 @@
 
 User-visible changes are recorded here for each published release.
 
+## 0.2.7 alpha candidate — prepared, not published
+
+- Add an opt-in local toast for completion of a Pomodoro focus or break period. The global Widgets setting is off by default; when enabled, the dock shows a short plain-text message in its own reserved area. KDE notifications remain independent.
+- Keep the existing Pomodoro timer, deadline and owner. Invalid or unsupported profile data clears local presentation and uses the existing legacy notice path without rewriting saved profile data. The setting is global; per-profile event rules are not included.
+- The 14-check product suite and the existing 9-pass/3-pre-existing-skip offscreen QML suite passed before the compact-boundary correction. After that change, two focused surface tests passed with zero warnings; the full product suite was not rerun. Independent review approved both corrections and additionally checked pointer/geometry behavior at 48 pixels. The synthetic package check also passed after the correction, with exact current event/config bytes and two reproducible builds. Native panel, popup, focus, screen-reader and install/upgrade behavior remain unqualified. See the [local events guide](docs/local-events.md) and [validation record](docs/validation/local-events-0.2.7.md).
+
 ## Unreleased — experimental source components
 
 - Add optional Menu Orla (`org.orla.bar`, component version 0.1.0) for Plasma 6.7.x: an Orla icon or text-only label, bounded plain-text active application name, and explicit system/settings/configuration and capability-aware session actions. Keep the application label stable from menu opening through closure; distinguish an unnamed active application from the desktop.
