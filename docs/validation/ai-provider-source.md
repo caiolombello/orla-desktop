@@ -62,22 +62,51 @@ terminal event batch until stream EOF and local cleanup. Cleanup failures,
 cancellation and transport errors have a fixed precedence. Events contain no
 raw headers, bodies, exceptions or credentials.
 
-Independent Source review approved this slice after cancellation, secret/body
-overlap and credential ownership adversaries. The maintained suites contain
+The T2.1/T2.2 baseline was integrated by [PR #30](https://github.com/caiolombello/orla-desktop/pull/30). Independent Source review approved that slice after cancellation, secret/body
+overlap and credential ownership adversaries. Its maintained suites contained
 23 T1 tests and 29 T2 tests; all transport, input, signal, timer, clock and sink
-boundaries are fakes. Best-effort buffer wiping is attempted independently on
+boundaries were fakes. [CI run 38132537208](https://github.com/caiolombello/orla-desktop/actions/runs/38132537208) passed these tests, 17 package tests and all five launcher CTests. Best-effort buffer wiping is attempted independently on
 failure; it does not promise perfect erasure.
 
 ```bash
 python3 -B -m unittest discover -s tests -p 'test_ai_text_transport.py' -v
 ```
 
-The command-line entry point still returns `unsupported_transport`. HTTP
-headers/framing, sockets, DNS, TLS and production signal adapters are not
-implemented. No provider, credential store, authentication, paid request,
-subscription, launcher UI or native session is exercised. These files are
-Source foundations, with no functional AI or release admission. Future CI Source
-ZIPs include the script and tests; published 0.2.9 assets remain unchanged.
+At the T2.1/T2.2 baseline, HTTP headers/framing, sockets, DNS, TLS and production
+signal adapters were not implemented. The command-line entry point remains
+`unsupported_transport`. CI Source ZIPs include the script and tests; published
+0.2.9 assets remain unchanged.
+
+## Numeric Ollama adapter foundation (T2.3)
+
+The Source module now contains a private adapter for literal loopback IPv4 and
+IPv6 Ollama endpoints. It selects AF_INET or AF_INET6 directly, builds an
+explicit HTTP request using public standard-library methods, and checks status,
+media type, duplicate headers, transfer framing and declared length before
+passing a response to the lifecycle. Response bytes remain capped at 512 KiB.
+
+All verification uses injected connections, sockets and byte streams in memory.
+Some fixtures exercise the real public HTTPConnection/HTTPResponse parser on
+these fakes, including persistent responses rejected before wrapper transfer,
+partial connection setup, premature EOF, body bounds and cleanup faults. Tests
+deny real socket creation and DNS resolution. Acquired socket and response
+ownership must be closed before a successful provider terminal batch is
+released. Failed cleanup instead emits the cleanup-failure terminal and retains
+unconfirmed resource ownership. The maintained suites contain 23 T1 tests and
+46 T2 tests. This is Source verification, with no provider request or runtime
+isolation claim.
+
+The adapter checks the 64-header and 32-KiB metadata limits after the standard
+library has parsed headers. These checks do not provide an aggregate preparse
+allocation bound; the upstream parser has its own line and count limits.
+
+The adapter is not wired into the command-line entry point or a default
+transport factory. Signal/timer adapters, operational CLI, TLS/OpenAI transport,
+launcher text UI and real cancellation remain separate work. Authentication,
+credentials stores, subscriptions, inference, usage and billing were not
+exercised. A local model endpoint or a provider subscription does not establish
+account permission or API credit. The module is a Source foundation; published
+0.2.9 assets remain unchanged.
 
 ## Reviewed source pins
 

@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Private fake-only lifecycle for Orla's bounded AI text transport.
+"""Private lifecycle and numeric Ollama adapter for bounded AI text transport.
 
-This T2.1/T2.2 module has no production connector and imports no networking or
-signal APIs.  Callers must inject readers, clocks, signal boundaries, sinks and
-fake connectors.  The command-line entry point remains unavailable.
+The T2.3 stdlib adapter accepts only literal loopback IPv4/IPv6 destinations.
+Its factories remain injectable for offline tests, and the command-line entry
+point remains unavailable.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import http.client
 import importlib.util
 import json
 from pathlib import Path
 import re
+import socket
 import sys
 
 
@@ -22,8 +24,16 @@ SEND_TIMEOUT = 5.0
 FIRST_BYTE_TIMEOUT = 30.0
 IDLE_TIMEOUT = 30.0
 READ_CHUNK_BYTES = 8 * 1024
+MAX_HTTP_REQUEST_BODY_BYTES = 96 * 1024
+MAX_HTTP_RESPONSE_BODY_BYTES = 512 * 1024
+MAX_HTTP_RESPONSE_HEADERS = 64
+MAX_HTTP_RESPONSE_HEADER_BYTES = 32 * 1024
 SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGALRM")
 _CREDENTIAL = re.compile(rb"[A-Za-z0-9._~+/=-]+")
+_OLLAMA_URL = re.compile(
+    r"^http://(?P<host>127\.0\.0\.1|\[::1\]):(?P<port>[0-9]{1,5})/api/chat$"
+)
+_OLLAMA_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 
 
 def _load_contract():
@@ -62,6 +72,321 @@ class _TransportFailure(Exception):
         super().__init__(code)
         self.code = code
         self.retryable = retryable
+
+
+class _NumericHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection whose connect path never resolves a host name."""
+
+    def __init__(self, *, host, port, family, sockaddr, socket_factory=None,
+                 timeout=None):
+        super().__init__(host, port, timeout=timeout)
+        self._numeric_family = family
+        self._numeric_sockaddr = sockaddr
+        self._socket_factory = socket_factory
+        self._cleanup_failed = False
+        self._owned_socket = None
+
+    def connect(self):
+        factory = socket.socket if self._socket_factory is None else self._socket_factory
+        sock = factory(self._numeric_family, socket.SOCK_STREAM)
+        self._owned_socket = sock
+        self.sock = sock
+        try:
+            sock.settimeout(self.timeout)
+            sock.connect(self._numeric_sockaddr)
+        except Exception:
+            try:
+                sock.close()
+            except Exception:
+                self._cleanup_failed = True
+            else:
+                self.sock = None
+                self._owned_socket = None
+            raise
+
+    def close(self):
+        sock = self._owned_socket
+        prior_failure = self._cleanup_failed
+        parent_failed = False
+        close_failed = False
+        self.sock = None
+        try:
+            super().close()
+        except Exception:
+            self._cleanup_failed = True
+            parent_failed = True
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                self._cleanup_failed = True
+                close_failed = True
+            else:
+                self._owned_socket = None
+        if prior_failure or parent_failed or close_failed:
+            raise OSError("numeric socket cleanup failed")
+
+
+def _validate_ollama_body(body):
+    if not isinstance(body, dict) or set(body) != {
+            "model", "messages", "stream", "options"}:
+        raise _contract.ContractError("invalid_request")
+    if (not isinstance(body["model"], str) or
+            _OLLAMA_MODEL.fullmatch(body["model"]) is None):
+        raise _contract.ContractError("invalid_request")
+    messages = body["messages"]
+    if (not isinstance(messages, list) or len(messages) != 2 or
+            any(not isinstance(message, dict) for message in messages)):
+        raise _contract.ContractError("invalid_request")
+    expected_roles = ("system", "user")
+    for message, role in zip(messages, expected_roles):
+        if (set(message) != {"role", "content"} or message["role"] != role or
+                not isinstance(message["content"], str) or
+                not message["content"] or "\x00" in message["content"]):
+            raise _contract.ContractError("invalid_request")
+    if body["stream"] is not True:
+        raise _contract.ContractError("invalid_request")
+    options = body["options"]
+    if (not isinstance(options, dict) or set(options) != {"num_predict"} or
+            type(options["num_predict"]) is not int or
+            options["num_predict"] != 1024):
+        raise _contract.ContractError("invalid_request")
+    try:
+        encoded = json.dumps(
+            body, ensure_ascii=False, allow_nan=False, separators=(",", ":"),
+        ).encode("utf-8", errors="strict")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        raise _contract.ContractError("invalid_request") from None
+    if len(encoded) > MAX_HTTP_REQUEST_BODY_BYTES:
+        raise _contract.ContractError("response_limit")
+    return encoded
+
+
+def _validated_ollama_headers(response):
+    try:
+        headers = response.getheaders()
+    except (http.client.HTTPException, OSError):
+        raise _contract.ContractError("protocol_invalid") from None
+    if not isinstance(headers, list):
+        raise _contract.ContractError("protocol_invalid")
+    if len(headers) > MAX_HTTP_RESPONSE_HEADERS:
+        raise _contract.ContractError("response_limit")
+    values = {}
+    total = 0
+    singletons = {
+        "content-type", "content-length", "transfer-encoding",
+        "content-encoding", "location",
+    }
+    for item in headers:
+        if (not isinstance(item, tuple) or len(item) != 2 or
+                not all(isinstance(part, str) for part in item)):
+            raise _contract.ContractError("protocol_invalid")
+        name, value = item
+        try:
+            total += len(name.encode("latin-1")) + len(value.encode("latin-1"))
+        except UnicodeEncodeError:
+            raise _contract.ContractError("protocol_invalid") from None
+        if total > MAX_HTTP_RESPONSE_HEADER_BYTES:
+            raise _contract.ContractError("response_limit")
+        lower = name.lower()
+        if lower in singletons and lower in values:
+            raise _contract.ContractError("protocol_invalid")
+        if lower in singletons:
+            values[lower] = value
+
+    media = values.get("content-type")
+    if media not in (
+            "application/x-ndjson",
+            "application/x-ndjson; charset=utf-8"):
+        raise _contract.ContractError("protocol_invalid")
+    transfer = values.get("transfer-encoding")
+    length_text = values.get("content-length")
+    if transfer is not None and length_text is not None:
+        raise _contract.ContractError("protocol_invalid")
+    if transfer is not None and transfer != "chunked":
+        raise _contract.ContractError("protocol_invalid")
+    encoding = values.get("content-encoding")
+    if encoding is not None and encoding != "identity":
+        raise _contract.ContractError("protocol_invalid")
+    length = None
+    if length_text is not None:
+        if not length_text or not length_text.isascii() or not length_text.isdecimal():
+            raise _contract.ContractError("protocol_invalid")
+        normalized = length_text.lstrip("0") or "0"
+        maximum = str(MAX_HTTP_RESPONSE_BODY_BYTES)
+        if (len(normalized) > len(maximum) or
+                (len(normalized) == len(maximum) and normalized > maximum)):
+            raise _contract.ContractError("response_limit")
+        length = int(normalized)
+    return length, transfer
+
+
+class _ValidatedHTTPResponse:
+    def __init__(self, response, sock, content_length, transfer_encoding):
+        self._response = response
+        self._socket = sock
+        self._content_length = content_length
+        self._transfer_encoding = transfer_encoding
+        self._body_bytes_read = 0
+
+    def read1(self, limit, timeout):
+        if (self._content_length is not None and
+                self._body_bytes_read == self._content_length):
+            return b""
+        try:
+            self._socket.settimeout(timeout)
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        try:
+            chunk = self._response.read1(limit)
+        except TimeoutError:
+            raise
+        except (http.client.IncompleteRead, http.client.HTTPException):
+            raise _contract.ContractError("protocol_invalid") from None
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        if not isinstance(chunk, bytes):
+            raise _contract.ContractError("protocol_invalid")
+        if len(chunk) > limit:
+            raise _contract.ContractError("response_limit")
+        new_total = self._body_bytes_read + len(chunk)
+        if new_total > MAX_HTTP_RESPONSE_BODY_BYTES:
+            raise _contract.ContractError("response_limit")
+        if self._content_length is not None and new_total > self._content_length:
+            raise _contract.ContractError("protocol_invalid")
+        self._body_bytes_read = new_total
+        if (not chunk and self._content_length is not None and
+                self._body_bytes_read != self._content_length):
+            raise _contract.ContractError("protocol_invalid")
+        return chunk
+
+    def close(self):
+        self._response.close()
+
+
+class _OllamaNumericConnector:
+    """Closed HTTP/1.1 adapter for one normalized local Ollama destination."""
+
+    def __init__(self, spec, *, socket_factory=None, connection_factory=None):
+        if (not isinstance(spec, dict) or spec.get("provider") != "ollama_local" or
+                set(spec) != {"provider", "url"} or
+                not isinstance(spec["url"], str)):
+            raise _contract.ContractError("endpoint_rejected")
+        match = _OLLAMA_URL.fullmatch(spec["url"])
+        if match is None:
+            raise _contract.ContractError("endpoint_rejected")
+        port = int(match.group("port"))
+        if not 1 <= port <= 65_535:
+            raise _contract.ContractError("endpoint_rejected")
+        bracketed_host = match.group("host")
+        if bracketed_host == "127.0.0.1":
+            host = bracketed_host
+            family = socket.AF_INET
+            sockaddr = (host, port)
+            authority = f"{host}:{port}"
+        else:
+            host = "::1"
+            family = socket.AF_INET6
+            sockaddr = (host, port, 0, 0)
+            authority = f"[{host}]:{port}"
+        factory = _NumericHTTPConnection if connection_factory is None else connection_factory
+        self._connection = factory(
+            host=host, port=port, family=family, sockaddr=sockaddr,
+            socket_factory=socket_factory, timeout=None,
+        )
+        self._authority = authority
+        self._pending_response = None
+        self._cleanup_failed = False
+
+    def connect(self, timeout):
+        self._connection.timeout = timeout
+        try:
+            self._connection.connect()
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+
+    def _set_socket_timeout(self, timeout):
+        sock = self._connection.sock
+        if sock is None:
+            raise _TransportFailure("connection_failed", True)
+        try:
+            sock.settimeout(timeout)
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        return sock
+
+    def send(self, headers, body, timeout):
+        if headers != ():
+            raise _contract.ContractError("invalid_request")
+        encoded = _validate_ollama_body(body)
+        self._set_socket_timeout(timeout)
+        try:
+            self._connection.putrequest(
+                "POST", "/api/chat", skip_host=True, skip_accept_encoding=True,
+            )
+            for name, value in (
+                    ("Host", self._authority),
+                    ("Content-Type", "application/json"),
+                    ("Accept", "application/x-ndjson"),
+                    ("Accept-Encoding", "identity"),
+                    ("Content-Length", str(len(encoded))),
+                    ("Connection", "close")):
+                self._connection.putheader(name, value)
+            self._connection.endheaders(encoded, encode_chunked=False)
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        except http.client.HTTPException:
+            raise _contract.ContractError("protocol_invalid") from None
+
+    def receive_headers(self, timeout):
+        sock = self._set_socket_timeout(timeout)
+        try:
+            response = self._connection.getresponse()
+        except TimeoutError:
+            raise
+        except (ConnectionError, http.client.RemoteDisconnected):
+            raise _TransportFailure("connection_failed", True) from None
+        except http.client.HTTPException:
+            raise _contract.ContractError("protocol_invalid") from None
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        self._pending_response = response
+        if response.status != 200:
+            code, retryable = _contract.map_http_status(response.status)
+            raise _TransportFailure(code, retryable)
+        content_length, transfer_encoding = _validated_ollama_headers(response)
+        validated = _ValidatedHTTPResponse(
+            response, sock, content_length, transfer_encoding,
+        )
+        self._pending_response = None
+        return validated
+
+    def close(self):
+        cleanup_failed = self._cleanup_failed
+        response = self._pending_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                self._cleanup_failed = True
+                cleanup_failed = True
+            else:
+                self._pending_response = None
+        try:
+            self._connection.close()
+        except Exception:
+            self._cleanup_failed = True
+            cleanup_failed = True
+        if cleanup_failed:
+            raise OSError("numeric connector cleanup failed")
 
 
 @dataclass(frozen=True)
