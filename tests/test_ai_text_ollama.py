@@ -289,5 +289,153 @@ class AiTextOllamaOperationalTests(unittest.TestCase):
         self.assertEqual(events[1]["text"], "kept partial")
 
 
+class AiTextOllamaPublishSignalTests(unittest.TestCase):
+    CHILD = r'''
+import importlib.util,json,os,signal,socket,sys,time
+from pathlib import Path
+shim_path,ready_path,result_path=sys.argv[1:]
+spec=importlib.util.spec_from_file_location('owned_ollama_signal_shim',shim_path)
+shim=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(shim)
+transport=shim._load_transport()
+def forbidden_network(*args,**kwargs):
+ raise AssertionError('network forbidden in signal publication fixture')
+socket.socket=forbidden_network
+socket.create_connection=forbidden_network
+socket.getaddrinfo=forbidden_network
+trace=[]
+terminal_traces=[]
+class Response:
+ def __init__(self,retry=False):
+  self.chunks=[json.dumps({'message':{'role':'assistant','content':'fresh' if retry else 'controlled partial'},'done':False}).encode()+b'\n',json.dumps({'message':{'role':'assistant','content':''},'done':True,'prompt_eval_count':4,'eval_count':5}).encode()+b'\n',b'']
+ def read1(self,limit,timeout): return self.chunks.pop(0)
+ def close(self): trace.append('response.close')
+class Connector:
+ def __init__(self,retry=False): self.response=Response(retry)
+ def connect(self,timeout): pass
+ def send(self,headers,body,timeout): pass
+ def receive_headers(self,timeout): return self.response
+ def close(self): trace.append('connector.close')
+original_write=os.write
+paused=False
+def controlled_write(fd,data):
+ global paused
+ event=json.loads(bytes(data)) if fd==1 else None
+ if event and event['type'] in ('completed','failed','cancelled'):
+  terminal_traces.append(trace.copy())
+ written=original_write(fd,data)
+ if event and event['type']=='delta' and not paused:
+  if written!=len(data): raise AssertionError('fixture delta did not finish writing')
+  paused=True
+  Path(ready_path).write_text(json.dumps({'pid':os.getpid(),'stage':'delta-written-inside-publish','written':written,'bytes':len(data)}))
+  signal.pause()
+ return written
+os.write=controlled_write
+names=transport.SIGNAL_NAMES
+handlers={name:signal.getsignal(getattr(signal,name)) for name in names}
+mask=signal.pthread_sigmask(signal.SIG_BLOCK,set())
+boundary=shim.PosixSignalBoundary(transport)
+sink=shim.NdjsonStdoutSink(transport._contract)
+first=transport._run_call(input_reader=shim.FdInputReader(),connector_factory=lambda spec:Connector(),clock=time.monotonic,signal_boundary=boundary,sink=sink)
+first_trace=trace.copy()
+restored_after_first=all(signal.getsignal(getattr(signal,name))==handlers[name] for name in names)
+mask_after_first=signal.pthread_sigmask(signal.SIG_BLOCK,set())==mask
+timer_after_first=signal.getitimer(signal.ITIMER_REAL)==(0.0,0.0)
+trace.clear()
+request={'schemaVersion':1,'requestId':'ollama-operational.retry','provider':'ollama_local','task':'summarize','targetLanguage':None,'text':'offline retry marker','model':'gemma3:4b','endpoint':'http://127.0.0.1:11434','credentialBytes':0}
+class Reader:
+ def __init__(self): self.chunks=[json.dumps(request).encode()+b'\n',b'']
+ def read1(self,limit,timeout): return self.chunks.pop(0)
+retry=transport._run_call(input_reader=Reader(),connector_factory=lambda spec:Connector(True),clock=time.monotonic,signal_boundary=boundary,sink=sink)
+os.write=original_write
+Path(result_path).write_text(json.dumps({'first':first.__dict__,'retry':retry.__dict__,'first_close_trace':first_trace,'retry_close_trace':trace,'terminal_write_traces':terminal_traces,'handlers_restored':restored_after_first and all(signal.getsignal(getattr(signal,name))==handlers[name] for name in names),'mask_restored':mask_after_first and signal.pthread_sigmask(signal.SIG_BLOCK,set())==mask,'timer_cancelled':timer_after_first and signal.getitimer(signal.ITIMER_REAL)==(0.0,0.0)}))
+sys.exit(first.exit_code)
+'''
+
+    def test_real_posix_signal_inside_delta_publish_keeps_lifecycle_terminal(self):
+        for number in (signal.SIGTERM, signal.SIGALRM):
+            with self.subTest(signal=number.name):
+                with tempfile.TemporaryDirectory(prefix="orla-publish-signal-") as temporary:
+                    runtime = Path(temporary)
+                    ready = runtime / "ready.json"
+                    result_path = runtime / "result.json"
+                    process = subprocess.Popen(
+                        [str(PYTHON), "-I", "-B", "-c", self.CHILD,
+                         str(HELPER), str(ready), str(result_path)],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        cwd=runtime, env={}, start_new_session=True,
+                    )
+                    try:
+                        process.stdin.write(request_wire(11434, text="offline signal marker"))
+                        process.stdin.close()
+                        process.stdin = None
+                        deadline = time.monotonic() + 2.0
+                        while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                            time.sleep(0.005)
+                        observed = ready.exists()
+                        marker = json.loads(ready.read_text()) if observed else None
+                        if observed and process.poll() is None:
+                            process.send_signal(number)
+                        elif process.poll() is None:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        stdout, stderr = process.communicate(timeout=2.5)
+                        result = json.loads(result_path.read_text()) if result_path.exists() else None
+                        (runtime / "raw.stdout").write_bytes(stdout)
+                        (runtime / "raw.stderr").write_bytes(stderr)
+                    finally:
+                        if process.poll() is None:
+                            os.killpg(process.pid, signal.SIGKILL)
+                            process.wait(timeout=2.0)
+                        for stream in (process.stdin, process.stdout, process.stderr):
+                            if stream is not None:
+                                stream.close()
+                    pid = process.pid
+                    returncode = process.returncode
+                # Reaping and private runtime removal precede every causal publication oracle.
+                self.assertFalse(runtime.exists())
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(pid, 0)
+                print("OWNED_PUBLISH_SIGNAL_CLEANUP " + json.dumps({
+                    "signal": number.name, "pid": pid, "runtime_gone": True,
+                    "pid_group_absent": True, "ready": marker, "result": result,
+                    "stdout_hex": stdout.hex(), "stderr_hex": stderr.hex(),
+                    "exit": returncode,
+                }, sort_keys=True))
+                self.assertTrue(observed)
+                self.assertEqual(marker["pid"], pid)
+                self.assertEqual(marker["stage"], "delta-written-inside-publish")
+                self.assertEqual(marker["written"], marker["bytes"])
+                self.assertEqual(stderr, b"")
+                self.assertEqual(returncode, 0)
+                self.assertTrue(result["handlers_restored"])
+                self.assertTrue(result["mask_restored"])
+                self.assertTrue(result["timer_cancelled"])
+                self.assertEqual(result["first_close_trace"], ["response.close", "connector.close"])
+                self.assertEqual(result["retry_close_trace"], ["response.close", "connector.close"])
+                self.assertEqual(result["terminal_write_traces"], [
+                    ["response.close", "connector.close"], ["response.close", "connector.close"],
+                ])
+                events = [json.loads(line) for line in stdout.splitlines()]
+                first = [event for event in events if event["requestId"] == "ollama-operational.1"]
+                retry = [event for event in events if event["requestId"] == "ollama-operational.retry"]
+                terminal = "cancelled" if number == signal.SIGTERM else "failed"
+                self.assertEqual([event["type"] for event in first], ["started", "delta", terminal])
+                self.assertEqual([event["sequence"] for event in first], [0, 1, 2])
+                self.assertEqual(first[1]["text"], "controlled partial")
+                expected = {"schemaVersion": 1, "requestId": "ollama-operational.1",
+                            "sequence": 2, "type": terminal}
+                if terminal == "failed":
+                    expected.update(code="operation_timeout", retryable=True)
+                self.assertEqual(first[-1], expected)
+                self.assertEqual([event["type"] for event in retry], ["started", "delta", "completed"])
+                self.assertEqual([event["sequence"] for event in retry], [0, 1, 2])
+                self.assertEqual(retry[-1]["usage"]["totalTokens"], 9)
+                self.assertEqual((result["retry"]["terminal"], result["retry"]["exit_code"]),
+                                 ("completed", 0))
+
+
+
 if __name__ == "__main__":
     unittest.main()

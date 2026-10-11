@@ -151,6 +151,14 @@ limpa e reinício; o serviço ficou ativo/habilitado. Esses fluxos básicos não
 qualificam geração/provedor real, clipboard/acessibilidade, matriz de telas,
 pacote relocável, distribuição/release ou admissão completa.
 
+A revisão posterior preserva o erro original após recuperar a limpeza, bloqueia
+novos trabalhos IA/Steam enquanto o fechamento está pendente e mantém
+cancelamento/timeout quando o sinal interrompe a publicação. A composição local
+passou ALL40, seis CTests em 83,64 s (UI 30 dentro de 30 s; controller 53) e 93 testes
+Python. O SIGSEGV após Totals do desafio dirigido continua UNKNOWN: um GDB não
+reproduziu e a suíte completa aprovada não explica a falha. CI/merge da nova
+revisão estão pendentes; a instalação local continua no canary `5aaf518`.
+
 ## Fundação do pacote de dados — somente no fonte
 
 `launcher/package.py` contém um builder determinístico e um verificador externo

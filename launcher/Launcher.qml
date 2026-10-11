@@ -109,10 +109,11 @@ Window {
                 id: aiEntry
                 objectName: "aiEntryButton"
                 text: window.activePanel === "ai" ? qsTr("Busca") : qsTr("IA")
+                enabled: !window.pendingDismiss || window.activePanel === "ai"
                 Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
                 onClicked: {
                     if (window.activePanel === "ai") window.closeAiPanel()
-                    else { window.activePanel = "ai"; aiPanel.focusFirst() }
+                    else if (!window.pendingDismiss) { window.activePanel = "ai"; aiPanel.focusFirst() }
                 }
                 contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
@@ -121,10 +122,11 @@ Window {
                 id: steamEntry
                 objectName: "steamEntryButton"
                 text: window.activePanel === "steam" ? qsTr("Busca") : qsTr("Steam")
+                enabled: !window.pendingDismiss || window.activePanel === "steam"
                 Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
                 onClicked: {
                     if (window.activePanel === "steam") window.closeSteamPanel()
-                    else {
+                    else if (!window.pendingDismiss) {
                         if (window.activePanel === "ai") {
                             aiProviders.cancelAll()
                             aiText.cancelAll()
@@ -288,6 +290,7 @@ Window {
             visible: window.activePanel === "ai"
             controller: aiProviders
             textController: aiText
+            operationStartBlocked: window.pendingDismiss
             onBackRequested: window.closeAiPanel()
         }
         SteamSettings {
@@ -298,6 +301,7 @@ Window {
             Layout.minimumHeight: 0
             visible: window.activePanel === "steam"
             controller: steamProvider
+            operationStartBlocked: window.pendingDismiss
             onBackRequested: window.closeSteamPanel()
         }
     }

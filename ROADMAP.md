@@ -82,6 +82,8 @@ Esses documentos especificam capacidades futuras. As releases públicas 0.2.5–
 
 Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, os componentes em `package/contents/ui/`, `package/contents/code/integrations.py`, `scripts/caiodock.py` e `tests/`. O recibo histórico do smoke nativo registra fixar/abrir/ativar/minimizar/restaurar em uma janela de teste nativa; isso ainda não comprova os fluxos prolongados no painel. O Google Agenda ainda não foi conectado, conforme informado pelo usuário. Os incrementos entregues e seus limites estão registrados acima; os checklists abaixo mantêm os critérios de aceite completos, incluindo funcionalidades ainda não implementadas.
 
+**Novas correções de fechamento e sinais (PR 36, somente fonte):** a recuperação da limpeza volta a mostrar o erro original da resposta; fechar o launcher bloqueia novos trabalhos nos painéis IA/Steam, preservando Cancelar e Voltar; cancelamento/timeout durante publicação deixam de virar falha do stdout. Regressões causais e revisões independentes cobrem os três casos. A composição local passou ALL40, seis CTests em 83,64 s (UI 30/26,404 s Qt; controller 53) e 93 testes Python. O teste dirigido da UI havia terminado com SIGSEGV após cinco assertions aprovadas; um único GDB não reproduziu, e a causa continua UNKNOWN. A tentativa inicial de composição falhou antes de Qt por TMPDIR privado ausente; criar somente esse diretório permitiu a execução corrigida. Esses resultados não explicam os crashes anteriores. CI e integração desta nova revisão permanecem pendentes; o launcher instalado segue no canary `5aaf518` e a admissão completa permanece aberta.
+
 ## Arquitetura proposta
 
 | Componente | Responsabilidade | Configuração |

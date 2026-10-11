@@ -1862,6 +1862,72 @@ class AiTextTransportTests(unittest.TestCase):
                     "completed", "failed", "cancelled",
                 } for event in sink.events), 1)
 
+    def test_lifecycle_exception_during_delta_publication_keeps_terminal_class(self):
+        delta = b'{"message":{"role":"assistant","content":"kept"},"done":false}\n'
+        terminal = (
+            b'{"message":{"role":"assistant","content":""},"done":true,'
+            b'"prompt_eval_count":4,"eval_count":5}\n'
+        )
+        cases = ((self.target._Cancelled, "cancelled", None),
+                 (self.target._TimedOut, "failed", "operation_timeout"))
+        for exception, terminal_type, code in cases:
+            with self.subTest(exception=exception.__name__):
+                def interrupt(event):
+                    if event["type"] == "delta":
+                        raise exception()
+
+                sink = RecordingSink(on_publish=interrupt)
+                outcome, sink, _connector, response, signals, trace, _specs = self.run_local(
+                    [delta, terminal, b""], sink=sink,
+                )
+                self.assertEqual(trace, ["response.close", "connector.close"])
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(len(response.calls), 1)
+                self.assertEqual((outcome.state, outcome.exit_code),
+                                 ("terminal_emitted", 0))
+                self.assertEqual((outcome.terminal, outcome.code), (terminal_type, code))
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", "delta", terminal_type])
+                self.assertEqual([event["sequence"] for event in sink.events], [0, 1, 2])
+                self.assertEqual(sink.events[1]["text"], "kept")
+                expected = {"schemaVersion": 1, "requestId": "txt-transport.1",
+                            "sequence": 2, "type": terminal_type}
+                if code is not None:
+                    expected.update(code=code, retryable=True)
+                self.assertEqual(sink.events[-1], expected)
+                retry, retry_sink, *_rest = self.run_local([delta, terminal, b""])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["usage"]["totalTokens"], 9)
+
+    def test_ordinary_sink_exceptions_still_fail_closed_after_started(self):
+        class CustomSinkError(Exception):
+            pass
+
+        delta = b'{"message":{"role":"assistant","content":"hidden"},"done":false}\n'
+        terminal = b'{"message":{"role":"assistant","content":""},"done":true}\n'
+        for exception in (BrokenPipeError, OSError, CustomSinkError):
+            with self.subTest(exception=exception.__name__):
+                class FailingSink(RecordingSink):
+                    def publish(self, event):
+                        if event["type"] == "delta":
+                            raise exception("synthetic sink fault")
+                        super().publish(event)
+
+                outcome, sink, _connector, _response, signals, trace, _specs = self.run_local(
+                    [delta, terminal, b""], sink=FailingSink(),
+                )
+                self.assertEqual(trace, ["response.close", "connector.close"])
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual((outcome.state, outcome.exit_code), ("sink_failed", 3))
+                self.assertIsNone(outcome.terminal)
+                self.assertEqual([event["type"] for event in sink.events], ["started"])
+                self.assertNotIn("synthetic sink fault", json.dumps(outcome.__dict__))
+                retry, retry_sink, *_rest = self.run_local([terminal, b""])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["usage"]["status"], "unknown")
+
     def test_sink_failure_never_retries_or_calls_a_connector_after_failed_started(self):
         connector_calls = []
         sink = RecordingSink(fail_at=1)

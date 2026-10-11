@@ -133,6 +133,167 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void recoveredRuntimeCleanupRestoresTheOriginalFailureAndNotifies_data()
+    {
+        QTest::addColumn<bool>("malformed");
+        QTest::newRow("protocol-failure-after-runtime-recovery") << true;
+        QTest::newRow("nonzero-exit-after-runtime-recovery") << false;
+    }
+
+    void recoveredRuntimeCleanupRestoresTheOriginalFailureAndNotifies()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QFETCH(bool, malformed);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QByteArray script = QByteArray(R"PY(import json,os,pathlib,sys
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as record:
+ record.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+retry=r['requestId'].endswith('.retry')
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='fresh' if retry else 'retained')
+if not retry and )PY") + (malformed ? QByteArray("True") : QByteArray("False"))
+            + QByteArray(R"PY(:
+ print('{broken}',flush=True)
+else:
+ emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4 if retry else 2,'outputTokens':5 if retry else 3,'totalTokens':9 if retry else 5},cost={'status':'unknown','currency':None,'amount':None})
+sys.exit(0 if retry else 7)
+)PY");
+        bool allowCleanup = false;
+        int removalAttempts = 0;
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                ++removalAttempts;
+                runtimePaths.append(path);
+                return allowCleanup && QDir(path).removeRecursively();
+            });
+        const auto cleanupGuard = qScopeGuard([&] { allowCleanup = true; });
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        QStringList order;
+        QVariantMap blockedState;
+        QVariantMap finalState;
+        int finalNotifications = 0;
+        bool originalPhase = true;
+        const auto snapshot = [&] {
+            return QVariantMap{{QStringLiteral("busy"), controller.busy()},
+                {QStringLiteral("status"), controller.status()},
+                {QStringLiteral("errorCode"), controller.errorCode()},
+                {QStringLiteral("error"), controller.error()},
+                {QStringLiteral("output"), controller.output()},
+                {QStringLiteral("usage"), controller.usage()}};
+        };
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (!originalPhase) return;
+            if (controller.busy() && controller.errorCode() == QStringLiteral("process_cleanup_failed")) {
+                order.append(QStringLiteral("cleanup-failed"));
+                blockedState = snapshot();
+            } else if (!controller.busy()) {
+                ++finalNotifications;
+                order.append(QStringLiteral("finished"));
+                finalState = snapshot();
+            }
+        });
+        controller.generate(QStringLiteral("request.recovered-failure"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        QVERIFY(controller.busy());
+        QVERIFY(removalAttempts > 0);
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(closeReady.size(), 0);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        record.close();
+        QCOMPARE(identity.count('\n'), 1);
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        QVERIFY(!runtimePaths.isEmpty());
+        QVERIFY(QFileInfo::exists(runtimePaths.first()));
+        // Observe the real parsed violation or actual finished exit, without writing private state.
+        const bool protocolObserved = controller.m_protocolInvalid;
+        const int actualExitCode = controller.m_pendingExitCode;
+        const qsizetype previousSignals = changed.size();
+        const int previousAttempts = removalAttempts;
+        QTest::qWait(125);
+        QVERIFY(removalAttempts > previousAttempts);
+        QCOMPARE(changed.size(), previousSignals);
+        QCOMPARE(finalNotifications, 0);
+        QCOMPARE(closeReady.size(), 0);
+        // No explicit cancel/close here: a late-cancel latch would conceal this recovery bug.
+        allowCleanup = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        qInfo() << "OWNED_RECOVERED_FAILURE_CLEANUP" << malformed << pid
+                << "protocol" << protocolObserved << "actualExit" << actualExitCode
+                << "runtimeGone" << runtimePaths << "order" << order
+                << "finalNotified" << finalState;
+        // The causal oracles run after genuine owned PID/group/runtime cleanup.
+        if (malformed) QVERIFY(protocolObserved);
+        else QCOMPARE(actualExitCode, 7);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_helper_response"));
+        QCOMPARE(order, QStringList({QStringLiteral("cleanup-failed"), QStringLiteral("finished")}));
+        QCOMPARE(finalNotifications, 1);
+        QVERIFY(blockedState.value(QStringLiteral("busy")).toBool());
+        QCOMPARE(blockedState.value(QStringLiteral("errorCode")).toString(), QStringLiteral("process_cleanup_failed"));
+        QVERIFY(!finalState.value(QStringLiteral("busy")).toBool());
+        QCOMPARE(finalState.value(QStringLiteral("status")).toString(), QStringLiteral("failed"));
+        QCOMPARE(finalState.value(QStringLiteral("errorCode")).toString(), QStringLiteral("invalid_helper_response"));
+        QCOMPARE(finalState.value(QStringLiteral("error")).toString(), controller.error());
+        QVERIFY(!controller.error().isEmpty());
+        QVERIFY(controller.error() != blockedState.value(QStringLiteral("error")).toString());
+        QCOMPARE(finalState.value(QStringLiteral("output")).toString(), QStringLiteral("retained"));
+        QVERIFY(finalState.value(QStringLiteral("usage")).toMap().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(controller.requestClose());
+        QCOMPARE(closeReady.size(), 0);
+        originalPhase = false;
+        controller.generate(QStringLiteral("request.recovered-failure.retry"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identities = record.readAll();
+        QCOMPARE(identities.count('\n'), 2);
+        for (const QByteArray &line : identities.split('\n')) {
+            if (line.isEmpty()) continue;
+            const qint64 captured = line.left(line.indexOf(' ')).toLongLong();
+            QVERIFY(captured > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
     void lateCancellationPreservesAlreadyObservedFailure_data()
     {
         QTest::addColumn<QString>("cause");

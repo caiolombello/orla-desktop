@@ -9,6 +9,7 @@ Item {
     implicitHeight: 0
     clip: true
     required property var controller
+    property bool operationStartBlocked: false
     signal backRequested()
     function focusFirst() { backButton.forceActiveFocus() }
     function rootSpecs() {
@@ -21,6 +22,7 @@ Item {
         return result
     }
     function statusText() {
+        if (panel.operationStartBlocked) return qsTr("Encerrando operações. Aguarde antes de iniciar outra.")
         switch (controller.status) {
         case "available": return qsTr("Inventário local carregado nesta sessão")
         case "absent": return qsTr("As raízes informadas não foram encontradas")
@@ -76,9 +78,9 @@ Item {
                     id: scanButton
                     objectName: "steamScanButton"
                     Layout.fillWidth: true; Layout.preferredHeight: 42
-                    enabled: !panel.controller.busy
+                    enabled: !panel.operationStartBlocked && !panel.controller.busy
                     text: panel.controller.apps.length > 0 ? qsTr("Atualizar jogos") : qsTr("Carregar jogos")
-                    onClicked: panel.controller.scan(panel.rootSpecs())
+                    onClicked: if (!panel.operationStartBlocked) panel.controller.scan(panel.rootSpecs())
                     contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                     background: Rectangle { radius: 9; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
                 }
@@ -104,10 +106,10 @@ Item {
                 id: downloadsButton
                 objectName: "steamDownloadsButton"
                 Layout.fillWidth: true; Layout.preferredHeight: 40
-                enabled: !panel.controller.busy
+                enabled: !panel.operationStartBlocked && !panel.controller.busy
                 text: qsTr("Abrir downloads no Steam")
                 Accessible.description: qsTr("Encaminha a URI fixa de downloads; não confirma que o cliente abriu")
-                onClicked: panel.controller.openDownloads()
+                onClicked: if (!panel.operationStartBlocked) panel.controller.openDownloads()
                 contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#253F42"; border.width: parent.activeFocus ? 2 : 1; border.color: "#69D7C2" }
             }

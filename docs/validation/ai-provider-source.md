@@ -432,3 +432,46 @@ This covers basic flows on this machine, not full native admission. Actual AI
 discovery/generation, provider identity/semantics, native clipboard/accessibility,
 multi-monitor/DPI, real calendar accounts, relocatable distribution/update and
 release remain open. Local screenshots stay private. The full roadmap is active.
+
+### Further review — cleanup recovery, idle starts and publication signals
+
+Three accepted findings add narrowly scoped recovery/start guards and preserve
+lifecycle exceptions during stdout publication. Real-helper controller rows
+reproduce malformed output/nonzero exit followed by transient runtime-removal
+refusal without explicit cancellation; after recovery the original error and
+message are restored before notification. UI rows reproduce late work on an
+initially idle owner during another owner's close barrier. Direct/queued
+callbacks now reject starts while preserving busy Cancel, Back and quit intent.
+The guard covers pending drain/commit; the existing asynchronous native hide
+interval is not qualified by these offscreen tests.
+
+Transport tests cover real owned SIGTERM/SIGALRM after a complete fixture delta
+write, inside the actual shim sink. The two lifecycle exceptions retain their
+classification; genuine sink exceptions remain fail-closed. This does not
+guarantee atomic partial writes or a terminal if started publication itself is
+interrupted. Return-based event counters, framing and automatic retry remain
+unchanged. Response/connector cleanup, timer cancellation and credential wiping
+precede the terminal publication attempt; original signal handlers and the signal
+mask are restored afterward in the finalizer.
+
+All three Source reviews approved their bounded scopes. The UI author's focused
+run reached five PASS assertions and then child SIGSEGV/runner245; normal full
+UI was not run there. One independent GDB capture on the exact ELF exited0
+without reproducing; cause UNKNOWN, no crash fix claimed. Historical UI/behavior
+crashes and the cooperative supplemental challenge retain UNKNOWN status.
+
+The combined candidate passed a fresh ALL40 build. Root's first CTest attempt
+failed in all six wrappers before Qt or private-bus startup because its owned
+TMPDIR had not been created; retained as setup failure, not application failure.
+Only creating that directory0700 justified the corrected invocation, with the
+same compiled artifacts, runner, asserts and limits. All six CTests then passed
+in 83.64s: UI30/26.404s Qt (26.51s CTest, cap30), controller53/11.684s Qt;
+behavior retained its one expected skip. Python AI text suites passed 93 tests
+in 1.167s. Each runner reported process0 and owned-daemon cleanup; owned TMP was
+empty afterward. These are bounded local Source checks, not a cause explanation
+for the earlier SIGSEGV, hosted CI, native/provider/release admission.
+
+CI at preceding Source5f898ce passed both jobs (run38177233983, six CTests80.42s),
+with GDB skipped. CI and merge for this follow-up remain pending. The permanent
+launcher canary remains5aaf518; no new installed payload, real provider, personal
+calendar, native clipboard or full roadmap acceptance is claimed.

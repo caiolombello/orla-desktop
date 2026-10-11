@@ -10,6 +10,7 @@ Item {
     clip: true
     required property var controller
     required property var textController
+    property bool operationStartBlocked: false
     signal backRequested()
     function focusFirst() { backButton.forceActiveFocus() }
     property int textRequestGeneration: 0
@@ -26,6 +27,7 @@ Item {
         return taskChoice.currentText
     }
     function terminalStatusText() {
+        if (panel.operationStartBlocked) return qsTr("Encerrando operações. Aguarde antes de iniciar outra.")
         switch (textController.status) {
         case "running": return qsTr("Geração iniciada. Aguarde ou cancele.")
         case "completed": return qsTr("Geração concluída. Revise o resultado.")
@@ -104,10 +106,10 @@ Item {
                 id: discoverButton
                 objectName: "aiDiscoverButton"
                 Layout.fillWidth: true; Layout.preferredHeight: 42
-                enabled: !panel.controller.busy
+                enabled: !panel.operationStartBlocked && !panel.controller.busy
                 text: panel.controller.busy && panel.controller.operation === "detect" ? qsTr("Verificando…") : qsTr("Verificar clientes instalados")
                 Accessible.description: qsTr("Consulta presença e versões permitidas em isolamento local; não autentica nem faz inferência")
-                onClicked: panel.controller.discover()
+                onClicked: if (!panel.operationStartBlocked) panel.controller.discover()
                 contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 9; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
             }
@@ -156,13 +158,14 @@ Item {
                     Button {
                         id: probeButton
                         objectName: "aiProbeButton"
+                        enabled: !panel.operationStartBlocked || (panel.controller.busy && panel.controller.operation === "probe-codex-anonymous")
                         Layout.fillWidth: true; Layout.preferredHeight: 40
                         text: panel.controller.busy && panel.controller.operation === "probe-codex-anonymous" ? qsTr("Cancelar teste") : qsTr("Testar compatibilidade anônima")
                         Accessible.description: qsTr("Consentimento separado para iniciar o teste local limitado do Codex")
                         onClicked: {
                             if (panel.controller.busy && panel.controller.operation === "probe-codex-anonymous")
                                 panel.controller.cancel(panel.controller.requestId)
-                            else if (!panel.controller.busy)
+                            else if (!panel.operationStartBlocked && !panel.controller.busy)
                                 panel.controller.probeCodex("qml-consent")
                         }
                         contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
@@ -377,7 +380,7 @@ Item {
                             objectName: "aiTextGenerate"
                             Layout.fillWidth: true
                             Layout.preferredHeight: 42
-                            enabled: textController.busy || (textConsent.checked && modelInput.text.length > 0
+                            enabled: textController.busy || (!panel.operationStartBlocked && textConsent.checked && modelInput.text.length > 0
                                      && textInput.length > 0
                                      && (panel.taskValues[taskChoice.currentIndex] !== "translate" || languageInput.text.length > 0))
                             text: textController.busy ? qsTr("Cancelar") : qsTr("Gerar")
@@ -387,6 +390,7 @@ Item {
                                     textController.cancel(textController.requestId)
                                     return
                                 }
+                                if (panel.operationStartBlocked) return
                                 panel.textRequestGeneration += 1
                                 textController.generate("orla-qml-" + panel.textRequestGeneration,
                                     panel.taskValues[taskChoice.currentIndex],

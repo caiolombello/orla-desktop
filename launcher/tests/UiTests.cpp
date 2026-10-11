@@ -1250,6 +1250,201 @@ private Q_SLOTS:
         QCOMPARE(window->property("pendingQuit").toBool(), false);
         qInfo() << "ORLA_QUIT_BARRIER_PASS intent_upgraded=true nonquit_downgrade_blocked=true quit_committed_once=true idle_nonquit_immediate=true fresh_nonquit_preserved=true three_helpers_reaped=true";
     }
+    void pendingCloseBlocksIdleOwnerStarts_data()
+    {
+        QTest::addColumn<QString>("blockingOwner");
+        QTest::addColumn<QString>("providerStart");
+        QTest::newRow("provider-busy-text-idle") << QStringLiteral("provider") << QStringLiteral("probe");
+        QTest::newRow("text-busy-provider-idle-discover") << QStringLiteral("text") << QStringLiteral("discover");
+        QTest::newRow("text-busy-provider-idle-probe") << QStringLiteral("text") << QStringLiteral("probe");
+    }
+
+    void pendingCloseBlocksIdleOwnerStarts()
+    {
+        QFETCH(QString, blockingOwner);
+        QFETCH(QString, providerStart);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray steamDocument = R"({"apps":[{"appid":"42","library":"library-0","name":"Pending Close Game","ownership":"unknown","source":"local_manifest","status":"installed_candidate"}],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
+        const QByteArray caps = R"({"installation":"absent","anonymous_protocol":"absent","authentication":"unknown","inference":"absent","cancellation":"absent","usage_reporting":"unknown"})";
+        const QByteArray providers = QByteArray("[")
+            + R"({"id":"codex","displayName":"Codex","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"owned_app_server","messageCode":"cli_not_found"},)"
+            + R"({"id":"claude","displayName":"Claude Code","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"official_terminal_handoff","messageCode":"cli_not_found"},)"
+            + R"({"id":"opencode","displayName":"OpenCode","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"},)"
+            + R"({"id":"ollama","displayName":"Ollama","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"},)"
+            + R"({"id":"lmstudio","displayName":"LM Studio","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"}])";
+        const QByteArray providerDocument = "{\"schemaVersion\":1,\"providers\":" + providers + '}';
+        const QByteArray codexDocument = "{\"schemaVersion\":1,\"provider\":{\"id\":\"codex\",\"displayName\":\"Codex\",\"enabled\":false,\"clientVersion\":null,\"capabilities\":"
+            + caps + ",\"route\":\"owned_app_server\",\"messageCode\":\"cli_not_found\"}}";
+        const auto receiptPath = [&](const QString &owner, bool warm) {
+            return directory.filePath(owner + (warm ? QStringLiteral("-warm") : QStringLiteral("-later")));
+        };
+        for (const QString &owner : {QStringLiteral("provider"), QStringLiteral("text"), QStringLiteral("steam")}) {
+            QFile file(directory.filePath(owner + QStringLiteral(".py")));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,json,os,pathlib,signal,sys,time\nowner='");
+            file.write(owner.toUtf8());
+            file.write("'\nblocking='");
+            file.write(blockingOwner.toUtf8());
+            file.write("'\nbase=pathlib.Path(base64.b64decode('");
+            file.write(directory.path().toUtf8().toBase64());
+            file.write("').decode())\ncounter=base/(owner+'-count')\nn=int(counter.read_text())+1 if counter.exists() else 1\ncounter.write_text(str(n))\n"
+                       "runtime=sys.argv[sys.argv.index('--runtime-root')+1] if owner=='provider' else os.getcwd()\n"
+                       "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                       "(base/(owner+('-warm' if n==1 else '-later'))).write_text(str(os.getpid())+'\\n'+runtime)\n");
+            if (owner == QStringLiteral("text")) {
+                file.write("request=json.loads(sys.stdin.buffer.readline())\nb={'schemaVersion':1,'requestId':request['requestId']}\n"
+                           "print(json.dumps(dict(b,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model'])),flush=True)\n"
+                           "print(json.dumps(dict(b,sequence=1,type='delta',text='parcial-pendente')),flush=True)\n");
+            }
+            file.write("if n>1:\n time.sleep(60 if owner==blocking else 0.65)\n");
+            if (owner == QStringLiteral("text")) {
+                file.write("print(json.dumps(dict(b,sequence=2,type='completed',finishReason='stop',usage={'status':'unknown','inputTokens':None,'outputTokens':None,'totalTokens':None},cost={'status':'unknown','currency':None,'amount':None})),flush=True)\n");
+            } else {
+                file.write("sys.stdout.buffer.write(base64.b64decode('");
+                file.write((owner == QStringLiteral("steam") ? steamDocument : providerDocument).toBase64());
+                if (owner == QStringLiteral("provider")) {
+                    file.write("') if sys.argv[1]=='detect' else base64.b64decode('");
+                    file.write(codexDocument.toBase64());
+                }
+                file.write("'))\nsys.stdout.flush()\n");
+            }
+        }
+        const auto reaped = [&](const QString &owner, bool warm) {
+            const QString receipt = receiptPath(owner, warm);
+            if (owner != QStringLiteral("steam")) return helperReapedAndRuntimeRemoved(receipt);
+            QFile file(receipt);
+            if (!file.open(QIODevice::ReadOnly)) return false;
+            bool valid = false;
+            const qint64 pid = file.readAll().split('\n').first().toLongLong(&valid);
+            if (!valid || pid <= 0) return false;
+            errno = 0;
+            if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+            errno = 0;
+            return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH;
+        };
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("provider.py")), {}, nullptr, {}, 400);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("text.py")), {}, nullptr, {}, 400);
+        QList<QUrl> opened;
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("steam.py")),
+            [&](const QUrl &url) { opened.append(url); return true; }); // Owned URI boundary only.
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        window->requestActivate();
+        QTRY_VERIFY_WITH_TIMEOUT(window->isActive(), 1000);
+        WindowSession session(&controller, window, false, QString());
+        connect(&controller, &LauncherController::closeRequested, &ai, &AiProviderController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &aiText, &AiTextController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &steam, &SteamProviderController::cancelAll);
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            ai.cancelAll(); aiText.cancelAll(); steam.cancelAll();
+            QElapsedTimer timer; timer.start();
+            while ((ai.busy() || aiText.busy() || steam.busy()) && timer.elapsed() < 7000) QTest::qWait(10);
+            QVERIFY(!ai.busy() && !aiText.busy() && !steam.busy());
+            for (const QString &owner : {QStringLiteral("provider"), QStringLiteral("text"), QStringLiteral("steam")})
+                for (bool warm : {true, false}) if (QFile::exists(receiptPath(owner, warm))) QVERIFY(reaped(owner, warm));
+        });
+        ai.discover();
+        aiText.generate(QStringLiteral("warm-request"), QStringLiteral("summarize"), QVariant(), QStringLiteral("texto"), QStringLiteral("modelo:1"), QStringLiteral("127.0.0.1"), 11434, true);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_VERIFY_WITH_TIMEOUT(!ai.busy() && !aiText.busy() && !steam.busy(), 1500);
+        QCOMPARE(ai.providers().size(), 5);
+        QCOMPARE(aiText.status(), QStringLiteral("completed"));
+        QCOMPARE(steam.apps().size(), 1);
+        for (const QString &owner : {QStringLiteral("provider"), QStringLiteral("text"), QStringLiteral("steam")}) QVERIFY(reaped(owner, true));
+        controller.setQuery(QStringLiteral("Pending Close Game"));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("ready"), 1500);
+        const QVariantMap row = controller.rows().first().toMap();
+        const QVariantMap ticket{{"row", 0}, {"generation", row.value("generation")}, {"id", row.value("id")}};
+        const auto item = [&](const char *name) { return window->findChild<QQuickItem *>(QString::fromLatin1(name)); };
+        auto *panel = item("aiSettings");
+        auto *discover = item("aiDiscoverButton"); auto *probe = item("aiProbeButton"); auto *generate = item("aiTextGenerate");
+        auto *scan = item("steamScanButton"); auto *downloads = item("steamDownloadsButton");
+        auto *aiEntry = item("aiEntryButton"); auto *steamEntry = item("steamEntryButton");
+        QVERIFY(panel && discover && probe && generate && scan && downloads && aiEntry && steamEntry);
+        QVERIFY(item("aiTextInput")->setProperty("text", QStringLiteral("texto explícito")));
+        QVERIFY(item("aiTextConsent")->setProperty("checked", true));
+        QVERIFY(item("steamRootInput")->setProperty("text", QStringLiteral("native=/synthetic/root")));
+        QVERIFY(QMetaObject::invokeMethod(aiEntry, "click"));
+        QVERIFY(QMetaObject::invokeMethod(blockingOwner == QStringLiteral("provider") ? probe : generate, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(receiptPath(blockingOwner, false)) && (ai.busy() || aiText.busy()), 1500);
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        QSignalSpy visibility(window, &QWindow::visibleChanged);
+        QSignalSpy quitRequested(&engine, &QQmlApplicationEngine::quit);
+        QSignalSpy providerReady(&ai, &AiProviderController::closeReady);
+        QSignalSpy textReady(&aiText, &AiTextController::closeReady);
+        QSignalSpy steamReady(&steam, &SteamProviderController::closeReady);
+        bool hiddenAfterReap = false;
+        connect(window, &QWindow::visibleChanged, &session, [&] {
+            if (!window->isVisible()) hiddenAfterReap = !ai.busy() && !aiText.busy() && !steam.busy() && reaped(blockingOwner, false);
+        });
+        session.showFromShortcut();
+        QVERIFY(window->property("pendingDismiss").toBool());
+        QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss", Q_ARG(QVariant, QVariant(true))));
+        session.showFromShortcut();
+        QVERIFY(window->property("pendingQuit").toBool());
+        const int textGeneration = panel->property("textRequestGeneration").toInt();
+        const bool startsDisabled = !discover->isEnabled() && !scan->isEnabled() && !downloads->isEnabled()
+            && (blockingOwner == QStringLiteral("provider") ? !generate->isEnabled() && probe->isEnabled()
+                                                             : !probe->isEnabled() && generate->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(steamEntry, "clicked")); // Opening another panel cannot reopen start routes.
+        const bool navigationStayedClosed = window->property("activePanel").toString() == QStringLiteral("ai");
+        // Emit actual handlers even when disabled, including queued delivery of a stale click.
+        for (auto *button : {providerStart == QStringLiteral("discover") ? discover : probe, generate, scan, downloads}) {
+            const bool idleToggle = (button == generate && blockingOwner != QStringLiteral("text"))
+                || (button == probe && blockingOwner != QStringLiteral("provider"));
+            if (!idleToggle) QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+            QVERIFY(QMetaObject::invokeMethod(button, "clicked", Qt::QueuedConnection));
+        }
+        QVERIFY(QMetaObject::invokeMethod(window, "executeTicket", Q_ARG(QVariant, QVariant(ticket)), Q_ARG(QVariant, QVariant(false))));
+        QTest::qWait(10);
+        const bool lateOwnerStarted = steam.busy() || (blockingOwner == QStringLiteral("provider") ? aiText.busy() : ai.busy());
+        const bool generationUnchanged = panel->property("textRequestGeneration").toInt() == textGeneration;
+        QTRY_VERIFY_WITH_TIMEOUT(!ai.busy() && !aiText.busy() && !steam.busy(), 2500);
+        for (const QString &owner : {QStringLiteral("provider"), QStringLiteral("text"), QStringLiteral("steam")}) {
+            for (bool warm : {true, false}) if (QFile::exists(receiptPath(owner, warm))) {
+                QVERIFY(reaped(owner, warm));
+                QFile file(receiptPath(owner, warm)); QVERIFY(file.open(QIODevice::ReadOnly));
+                qInfo().noquote() << "ORLA_PENDING_CLOSE_HELPER" << owner << warm << file.readAll();
+            }
+        }
+        qInfo() << "ORLA_PENDING_CLOSE_OBSERVED" << blockingOwner << providerStart << "late_started=" << lateOwnerStarted
+            << "pending=" << window->property("pendingDismiss").toBool() << "dismissed=" << dismissed.count();
+        // Causal assertions follow actual cleanup, so RED cannot abandon live helpers.
+        QVERIFY2(!lateOwnerStarted, "A late operation started after its idle owner had accepted requestClose");
+        QVERIFY(generationUnchanged);
+        for (const QString &owner : {QStringLiteral("provider"), QStringLiteral("text"), QStringLiteral("steam")}) {
+            QFile counter(directory.filePath(owner + QStringLiteral("-count")));
+            QVERIFY(counter.open(QIODevice::ReadOnly));
+            QCOMPARE(counter.readAll().toInt(), owner == blockingOwner ? 2 : 1);
+            QCOMPARE(QFile::exists(receiptPath(owner, false)), owner == blockingOwner);
+        }
+        QVERIFY(startsDisabled);
+        QVERIFY(navigationStayedClosed);
+        QCOMPARE(opened.size(), 0);
+        QCOMPARE(providerReady.count(), blockingOwner == QStringLiteral("provider") ? 1 : 0);
+        QCOMPARE(textReady.count(), blockingOwner == QStringLiteral("text") ? 1 : 0);
+        QCOMPARE(steamReady.count(), 0);
+        QCOMPARE(dismissed.count(), 1);
+        QCOMPARE(visibility.count(), 1);
+        QCOMPARE(quitRequested.count(), 1);
+        QVERIFY(hiddenAfterReap);
+        QVERIFY(!window->isVisible());
+        QVERIFY(!window->property("pendingDismiss").toBool() && !window->property("pendingQuit").toBool());
+        QCOMPARE(aiText.output(), QStringLiteral("parcial-pendente"));
+        QVERIFY(discover->isEnabled() && probe->isEnabled() && generate->isEnabled() && scan->isEnabled() && downloads->isEnabled());
+        qInfo() << "ORLA_PENDING_CLOSE_PASS idle_starts_blocked=true queued_handlers_guarded=true quit_once=true helpers_reaped=true";
+    }
 };
 QTEST_MAIN(UiTests)
 #include "UiTests.moc"

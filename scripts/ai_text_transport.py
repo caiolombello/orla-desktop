@@ -927,6 +927,8 @@ def _publish(sink, events, state):
     for event in events:
         try:
             sink.publish(event)
+        except (_Cancelled, _TimedOut):
+            raise
         except Exception:
             raise _SinkFailure() from None
         state["published_events"] += 1

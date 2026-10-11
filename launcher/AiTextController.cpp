@@ -681,7 +681,8 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
             }
         } else if (m_protocolInvalid || !m_terminalEvent
                    || m_pendingExitStatus != QProcess::NormalExit || m_pendingExitCode != 0) {
-            if (m_errorCode.isEmpty()) recordFailure(QStringLiteral("invalid_helper_response"));
+            recordFailure(m_knownFailureCode.isEmpty() ? QStringLiteral("invalid_helper_response")
+                                                       : m_knownFailureCode);
         } else if (m_terminalType == QStringLiteral("completed")) {
             m_usage = std::move(m_pendingUsage);
             m_status = QStringLiteral("completed");

@@ -134,6 +134,14 @@ empacotamento relocável, distribuição/release e admissão completa continuam
 abertos. A1 permanece aberta: o roadmap completo ainda exige também o backend
 API opt-in e os demais gates publicados.
 
+A revisão posterior preserva o erro original após recuperar a limpeza, bloqueia
+novos trabalhos IA/Steam enquanto o fechamento está pendente e mantém
+cancelamento/timeout quando o sinal interrompe a publicação. A composição local
+passou ALL40, seis CTests em 83,64 s (UI 30 dentro de 30 s; controller 53) e 93 testes
+Python. O SIGSEGV após Totals do desafio dirigido continua UNKNOWN: um GDB não
+reproduziu e a suíte completa aprovada não explica a falha. CI/merge da nova
+revisão estão pendentes; a instalação local continua no canary `5aaf518`.
+
 ## Resultado esperado
 
 Usar o provedor que a pessoa já prefere, dentro do launcher e das ações do Orla, com entrada inspecionável, cancelamento e controle do contexto. O desktop funciona integralmente sem IA. O primeiro caso de uso é transformar um texto que a pessoa escolheu: resumir, traduzir ou reescrever e revisar antes de copiar. Agenda, projetos e ações do sistema entram depois de contratos de permissão testados.
