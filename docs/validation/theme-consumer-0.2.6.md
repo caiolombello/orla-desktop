@@ -1,8 +1,13 @@
 # Experimental theme consumer validation — 0.2.6 alpha
 
 This record covers the first applet consumer of the `0.1-experimental` JSON
-theme format. It records source and bounded fixture validation for the 0.2.6 alpha
-package. It does not qualify a stable theme API or native Plasma behavior.
+theme format in the published 0.2.6 alpha prerelease. It records source, bounded
+fixture, CI and public asset validation. It does not qualify a stable theme API
+or native Plasma behavior.
+
+The initial source-preparation record predated publication. The release and CI
+facts below were added after independent remote verification; local fixture
+limits and the unrun user installation remain unchanged.
 
 ## Behavior reviewed
 
@@ -53,15 +58,33 @@ strictly bound transient native clipboard memory.
   The corrected portable selection (five parser tests and five new plain
   Appearance consumer tests) passed all ten checks in 0.829 seconds with no
   warnings. The failed selection is retained; implementation bytes did not
-  change. CI uses these selected checks in separate processes. A remote CI
-  result is not established by this local run.
+  change. The corrected selected suite runs in separate CI processes; its
+  successful remote result is recorded below.
+- PR 14 was merged as `6e4555a135ff1e8a8ff21d24b8a2730bfa7008f9`. GitHub Actions
+  [run 38109454140, job 114381787703](https://github.com/caiolombello/orla-desktop/actions/runs/38109454140/job/114381787703)
+  completed successfully in 29 seconds. It ran the selected
+  portable consumer/parser checks; it does not turn the broader local fixture
+  run green or qualify native behavior.
+- Anonymous HTTP retrieval verified the public [0.2.6 prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.6)
+  and all three published assets against source commit
+  `6c845ca363d5e6246ec61aa1b9da0af16f622340`. Each asset was byte-identical to
+  that exact commit's output: `orla-dock-0.2.6.plasmoid` (44,874 bytes,
+  SHA-256 `0fad8ee14ad0720736a7841cbf6aabe18f3c60fba4840382a18e82e6bb4ab853`),
+  `orla-dock-0.2.6.zip` (408,600 bytes,
+  SHA-256 `4d0c44d385061f22fae912674f53ced98c1d3e2ca65060c200dcd07c1c0ce0f6`),
+  and `SHA256SUMS` (177 bytes,
+  SHA-256 `349e3f83f9303dceca5bdbc004593aea9fbeebc409fd94b2a613bab322ba232b`).
+  This proves those public bytes match the pinned source build; it is not an
+  installation or runtime test.
+- The public assets were downloaded and verified anonymously without an
+  authorization header. User installation or upgrade remains UNRUN.
 
 ## Limits
 
-Native `Popup.Window` behavior, Wayland focus/grabs, keyboard behavior in a real
-Plasma panel, screen-reader output, contrast against imported colors, scaling,
-multi-monitor layout, KConfig persistence/restart and human clipboard interaction
-remain unqualified. The tests used synthetic fixtures and do not prove those
+Native `Popup.Window` behavior, human clipboard interaction, Wayland
+focus/grabs, keyboard behavior in a real Plasma panel, screen-reader output,
+contrast against imported colors, scaling, multi-monitor layout and KConfig
+persistence/restart remain unqualified. The tests used synthetic fixtures and do not prove those
 properties. Theme authorship/license fields are declarations, not identity or
 rights verification. The `0.1-experimental` format can change; no file chooser,
 download, URL loader, package installer, metadata store, gallery, catalog, SDK or
