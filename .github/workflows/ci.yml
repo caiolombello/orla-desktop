@@ -92,3 +92,133 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
+
+  launcher-build-and-ctest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    container:
+      image: registry.fedoraproject.org/fedora@sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install pinned launcher build dependencies
+        run: |
+          set -euo pipefail
+          packages=(
+            'cmake-0:4.3.0-1.fc44.x86_64'
+            'dbus-daemon-1:1.16.2-1.fc44.x86_64'
+            'gcc-c++-0:16.2.1-2.fc44.x86_64'
+            'git-0:2.56.0-1.fc44.x86_64'
+            'glib2-0:2.88.3-1.fc44.x86_64'
+            'kf6-kconfig-devel-0:6.30.0-1.fc44.x86_64'
+            'kf6-kglobalaccel-devel-0:6.30.0-1.fc44.x86_64'
+            'kf6-krunner-devel-0:6.30.0-1.fc44.x86_64'
+            'kf6-kwindowsystem-devel-0:6.30.0-1.fc44.x86_64'
+            'ninja-build-0:1.13.2-2.fc44.x86_64'
+            'plasma-workspace-libs-0:6.7.5-1.fc44.x86_64'
+            'python3-0:3.14.8-1.fc44.x86_64'
+            'qt6-qtbase-devel-0:6.11.2-3.fc44.x86_64'
+            'qt6-qtdeclarative-devel-0:6.11.2-2.fc44.x86_64'
+          )
+          expected=(
+            'cmake|0:4.3.0-1.fc44|x86_64|fedora'
+            'dbus-daemon|1:1.16.2-1.fc44|x86_64|fedora'
+            'gcc-c++|0:16.2.1-2.fc44|x86_64|updates'
+            'git|0:2.56.0-1.fc44|x86_64|updates'
+            'glib2|0:2.88.3-1.fc44|x86_64|updates'
+            'kf6-kconfig-devel|0:6.30.0-1.fc44|x86_64|updates'
+            'kf6-kglobalaccel-devel|0:6.30.0-1.fc44|x86_64|updates'
+            'kf6-krunner-devel|0:6.30.0-1.fc44|x86_64|updates'
+            'kf6-kwindowsystem-devel|0:6.30.0-1.fc44|x86_64|updates'
+            'ninja-build|0:1.13.2-2.fc44|x86_64|fedora'
+            'plasma-workspace-libs|0:6.7.5-1.fc44|x86_64|updates'
+            'python3|0:3.14.8-1.fc44|x86_64|updates'
+            'qt6-qtbase-devel|0:6.11.2-3.fc44|x86_64|updates'
+            'qt6-qtdeclarative-devel|0:6.11.2-2.fc44|x86_64|updates'
+          )
+
+          for index in "${!packages[@]}"; do
+            resolved=$(dnf5 --quiet repoquery --available \
+              --qf '%{name}|%{epoch}:%{version}-%{release}|%{arch}|%{repoid}' \
+              "${packages[$index]}")
+            if [[ "$resolved" != "${expected[$index]}" ]]; then
+              printf 'Unexpected Fedora package for %s\nexpected: %s\nresolved: %s\n' \
+                "${packages[$index]}" "${expected[$index]}" "$resolved" >&2
+              exit 1
+            fi
+          done
+
+          dnf5 install -y --setopt=install_weak_deps=False "${packages[@]}"
+
+          for index in "${!packages[@]}"; do
+            name=${expected[$index]%%|*}
+            installed=$(rpm -q --qf '%{NAME}|%{EPOCHNUM}:%{VERSION}-%{RELEASE}|%{ARCH}\n' "$name")
+            expected_installed=${expected[$index]%|*}
+            if [[ "$installed" != "$expected_installed" ]]; then
+              printf 'Unexpected installed package for %s\nexpected: %s\ninstalled: %s\n' \
+                "$name" "$expected_installed" "$installed" >&2
+              exit 1
+            fi
+          done
+
+          command -v dbus-daemon
+          command -v gdbus
+          test -f /usr/lib64/qt6/plugins/kf6/krunner/krunner_services.so
+          test -f /usr/lib64/qt6/plugins/kf6/krunner/calculator.so
+          rpm -q --whatprovides /usr/lib64/qt6/plugins/kf6/krunner/krunner_services.so
+          rpm -q --whatprovides /usr/lib64/qt6/plugins/kf6/krunner/calculator.so
+          cmake --version
+          python3 --version
+
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure launcher
+        run: |
+          cmake -S launcher -B "$RUNNER_TEMP/orla-launcher-build" \
+            -G Ninja \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DPython3_EXECUTABLE=/usr/bin/python3
+
+      - name: Build launcher and test binaries
+        run: cmake --build "$RUNNER_TEMP/orla-launcher-build" --parallel 2
+
+      - name: Verify launcher CTest inventory
+        run: |
+          ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
+            --show-only=json-v1 > "$RUNNER_TEMP/orla-launcher-ctests.json"
+          python3 - "$RUNNER_TEMP/orla-launcher-ctests.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          expected = {
+              "launcher-ai-provider",
+              "launcher-behavior",
+              "launcher-owned-app",
+              "launcher-steam-provider",
+              "launcher-ui",
+          }
+          document = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          tests = document.get("tests")
+          if not isinstance(tests, list):
+              raise SystemExit("CTest JSON does not contain a tests list")
+          names = [test.get("name") for test in tests if isinstance(test, dict)]
+          if len(names) != len(expected) or set(names) != expected:
+              raise SystemExit(f"unexpected CTest inventory: {names!r}")
+          print("Verified launcher CTests:", ", ".join(sorted(names)))
+          PY
+
+      - name: Run launcher CTests with private fixtures
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Fusion
+          QT_QPA_PLATFORMTHEME: ""
+        run: |
+          ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
+            --output-on-failure --no-tests=error
