@@ -169,6 +169,7 @@ class AiTextOllamaOperationalTests(unittest.TestCase):
         process.stdin.flush()
         if close_stdin:
             process.stdin.close()
+            process.stdin = None
         if not wait:
             return process, runtime
         stdout, stderr = process.communicate(timeout=4.0)
@@ -239,6 +240,7 @@ class AiTextOllamaOperationalTests(unittest.TestCase):
             self.assertFalse(server.accepted.wait(0.15))
             assert process.stdin is not None
             process.stdin.close()
+            process.stdin = None
             self.assertTrue(server.request_complete.wait(2.0))
             stdout, stderr = process.communicate(timeout=2.0)
         events = self.record_then_parse(runtime, stdout, stderr)
