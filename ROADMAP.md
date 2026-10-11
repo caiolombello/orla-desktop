@@ -34,7 +34,7 @@ O planejamento cobre produto, experiência, arquitetura, distribuição, DX e co
 | [DX](docs/DX.md) | Fluxo atual, tooling proposto, mocks, galeria, contratos e contribuição sem API paga |
 | [Contribuição](CONTRIBUTING.md) e [identidade](docs/brand.md) | Entrada atual para colaboradores e assets próprios do projeto |
 
-Esses documentos especificam capacidades futuras. A alpha não inclui SDK, runtime de plugins, catálogo, checkout ou IA. Repositório, landing e release alpha já estão públicos; os novos marcos não equivalem a funcionalidades entregues.
+Esses documentos especificam capacidades futuras. As releases públicas 0.2.5–0.2.8 não incluem SDK, runtime de plugins, catálogo, checkout ou integração de IA. O checkout de fonte agora contém uma fatia experimental de compatibilidade de provedores no launcher, ainda sem versão, PR/CI ou assets publicados; ela não implementa autenticação nem geração. Repositório, landing e releases alpha já estão públicos; os novos marcos não equivalem a funcionalidades entregues.
 
 ## O que já existe e o que falta
 
@@ -54,7 +54,7 @@ Esses documentos especificam capacidades futuras. A alpha não inclui SDK, runti
 | Updates e distribuição | Repositório público MIT, landing bilíngue, CI portátil, release alpha, bundle reproduzível e instalação/upgrade local | Matriz nativa de suporte, dependências dos novos componentes, UI/cache de updates (CLI explícita no ZIP 0.2.8), autenticidade e retorno à versão anterior |
 | UX/UI e DX | Identidade Orla, três temas, documentação de contribuição e testes separados por ambiente | Tokens, galeria de estados, preview/desfazer, acessibilidade, onboarding e tooling de autoria |
 | Ecossistema | Contribuições ao código pelo GitHub | Formato declarativo, SDK, compatibilidade, catálogo e plugins com isolamento comprovado |
-| IA | Integração ausente | Provedores opcionais, API/cofre, acesso oficial a planos elegíveis, clientes locais e contexto consentido |
+| IA | Fatia Source experimental do A0.1 no launcher: detecção explícita de CLI e teste separado de compatibilidade anônima do Codex; sem versão/publicação, auth ou inferência | Completar contrato/cofre/A0; depois acesso autorizado à API/plano, clientes locais e contexto escolhido, com gates próprios |
 
 Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, os componentes em `package/contents/ui/`, `package/contents/code/integrations.py`, `scripts/caiodock.py` e `tests/`. O recibo `.runtime/native-smoke.json` registra fixar/abrir/ativar/minimizar/restaurar em uma janela de teste nativa; isso ainda não comprova os fluxos prolongados no painel. O Google Agenda ainda não foi conectado, conforme informado pelo usuário. Os incrementos entregues e seus limites estão registrados acima; os checklists abaixo mantêm os critérios de aceite completos, incluindo funcionalidades ainda não implementadas.
 
@@ -125,6 +125,8 @@ Arquivos principais: `DockView.qml`, `DockPopup.qml`, `main.qml`, `scripts/orla.
 - [ ] **B1: bateria do sistema.** Usar o provedor nativo KDE/UPower para percentual, carregando/descarregando, energia externa e tempo estimado quando informado. Manter PeriGauge para periféricos, com estimativas e leitura antiga identificadas. Aceite: notebook, desktop sem bateria, múltiplas baterias e serviço indisponível têm estados corretos, sem dispositivos duplicados. [UPower Device](https://upower.freedesktop.org/docs/Device.html)
 
 C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incrementos delimitados acima. C1 depende de R1/R2; M1 e B1 podem avançar independentemente. Compartilhar os modelos de mídia e bateria com a futura barra e Central de Controle.
+
+**A0.1 experimental no fonte:** o launcher separado tem painel de compatibilidade com clientes de IA, inicialmente desligados. Abrir o painel não inicia processos; ações explícitas consultam uma lista fixa e uma ação de consentimento separada testa apenas uma troca mínima do protocolo anônimo do Codex em versão reconhecida. Revisões Source independentes aprovaram o controlador e o helper; CTests, testes sintéticos e uma execução local delimitada estão descritos na [validação](docs/validation/ai-provider-source.md). A execução observada não qualifica autenticação, inferência, cobrança, clientes de terceiros, isolamento de namespace/rede ou comportamento nativo. A funcionalidade permanece candidata Source, não tem versão/PR/CI próprios e não integra os assets públicos 0.2.8. A0 continua parcial; A1 ainda não começou.
 
 ### 0.5 — Perfis, Activities e áreas de trabalho
 

@@ -3,6 +3,13 @@
 User-visible changes are recorded here for each published release.
 
 
+## Unreleased — experimental AI provider compatibility (source only)
+
+- Add an opt-in compatibility panel to the separately built Orla Launcher source. Its fixed local detection can report recognized CLI presence/version for Codex, Claude Code and OpenCode; Ollama is presence-only, and LM Studio is checked through its `lms` CLI when available. All remain disabled; opening the panel does not spawn a client.
+- A separate explicit consent action can test only the anonymous Codex protocol handshake for the recognized version. It does not authenticate, reuse sessions, submit personal context, start a model/turn/generation, or report usage. No inference or paid request is part of this slice.
+- Controller/helper synthetic tests and bounded independent Source reviews passed. One bounded local run observed Codex `initialize`/`initialized`; configured namespace/network enforcement remains unobserved and native/provider readiness is not established. See the [validation record](docs/validation/ai-provider-source.md).
+- This source candidate has no release version, PR/CI result, or published assets yet. It is excluded from public 0.2.8 downloads; AI chat/authentication and the selected-text workflow remain future work.
+
 ## 0.2.8 — 2026-10-11 — Alpha prerelease
 
 - Add a fourth **Contextos** settings tab with separate Activity and virtual-desktop cards. Opening that tab is the only time the read-only native discovery Loader is active; selectors stage a choice and only explicit bind/remove actions save an association to an existing managed profile.

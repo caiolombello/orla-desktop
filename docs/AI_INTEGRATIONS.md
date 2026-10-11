@@ -1,6 +1,14 @@
 # IA opcional: APIs, planos e clientes locais
 
-Revisão das fontes: 10/10/2026. **Proposta, sem integração implementada na alpha 0.2.1.** Nenhuma autenticação, elegibilidade de conta ou geração paga foi testada nesta revisão. Verificar novamente documentação, termos e versões ao implementar cada adaptador.
+Revisão do plano: 11/10/2026. O documento abaixo continua sendo a proposta de longo prazo; uma pequena fatia experimental de compatibilidade já existe no fonte separado do launcher. Ela não integra as releases públicas 0.2.5–0.2.8. Nenhuma autenticação, elegibilidade de conta, inferência ou geração paga do Orla foi testada. Revalidar documentação, termos e versões antes de implementar cada rota.
+
+## Estado atual do fonte: compatibilidade A0.1 experimental
+
+O checkout inclui um painel **IA** no launcher opcional. Todos os provedores continuam desligados. Abrir o painel não inicia processos; a ação explícita **Verificar clientes instalados** consulta uma lista fixa de CLIs e, separadamente, o botão com consentimento testa uma troca mínima do protocolo anônimo do Codex para uma versão reconhecida. A consulta e o teste não recebem consulta de busca, prompt ou contexto de usuário; não há geração, autenticação, reaproveitamento de sessão, armazenamento de credenciais ou handoff para terminal.
+
+O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 (texto escolhido enviado a um backend autorizado) não começou.
+
+O painel não faz parte dos assets públicos 0.2.8; a experiência exige build separado do launcher. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados e limitações.
 
 ## Resultado esperado
 

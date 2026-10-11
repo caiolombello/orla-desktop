@@ -47,6 +47,7 @@ def verify_isolation(env, root, inherited_address):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixture', type=Path)
+    parser.add_argument('--private-path', action='store_true')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if not args.command:
@@ -103,7 +104,11 @@ def main():
                         'Terminal=false\nCategories=Utility;\n', encoding='utf-8')
                 else:
                     env.pop('ORLA_TEST_RECEIPT', None)
-                return subprocess.run(args.command, env=env, cwd=runtime, timeout=20).returncode
+                if args.private_path:
+                    owned_bin = root / 'bin'
+                    owned_bin.mkdir()
+                    env['PATH'] = str(owned_bin)
+                return subprocess.run(args.command, env=env, cwd=runtime, timeout=35).returncode
             finally:
                 daemon.terminate()
                 try:
