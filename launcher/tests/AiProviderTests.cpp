@@ -1,7 +1,11 @@
 #include <QtTest>
+#include <QEventLoop>
 #include <QFile>
+#include <QCryptographicHash>
+#include <QDir>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QElapsedTimer>
 #include "AiProviderController.h"
 
@@ -124,7 +128,7 @@ private Q_SLOTS:
         const QString helper = writeHelper(directory, QByteArray());
         QFile fixture(helper);
         QVERIFY(fixture.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        fixture.write("import base64,sys\nassert sys.argv[1:] == ['detect']\nprint(base64.b64decode('");
+        fixture.write("import base64,sys\nassert sys.argv[1] == 'detect' and sys.argv[2] == '--runtime-root' and sys.argv[4] == '--runtime-root-id' and len(sys.argv) == 6\nprint(base64.b64decode('");
         fixture.write(providerDocument("detect").toBase64());
         fixture.write("').decode(), end='')\n");
         fixture.close();
@@ -136,6 +140,302 @@ private Q_SLOTS:
         QCOMPARE(controller.providers().size(), 5);
         QCOMPARE(controller.providers().first().toMap().value("id").toString(), QStringLiteral("codex"));
         QVERIFY(changed.count() > 0);
+    }
+
+    void directInitialChangedCancellationDoesNotLaunchAProcessGroup()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString helper = writeHelper(directory, QByteArray("import time\ntime.sleep(60)\n"));
+        bool observedGroup = false;
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&](qint64 group) {
+                observedGroup = observedGroup || group > 0;
+                return false;
+            });
+        bool cancelled = false;
+        connect(&controller, &AiProviderController::changed, &controller, [&] {
+            if (!cancelled && controller.status() == QStringLiteral("running")) {
+                cancelled = true;
+                controller.cancelAll();
+            }
+        }, Qt::DirectConnection);
+
+        controller.discover();
+        QVERIFY(cancelled);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 7000);
+        QVERIFY(!observedGroup);
+    }
+
+    void directInitialChangedCloseDoesNotLaunchAProcessGroup()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString helper = writeHelper(directory, QByteArray("import time\ntime.sleep(60)\n"));
+        bool observedGroup = false;
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&](qint64 group) {
+                observedGroup = observedGroup || group > 0;
+                return false;
+            });
+        bool closeRequested = false;
+        connect(&controller, &AiProviderController::changed, &controller, [&] {
+            if (!closeRequested && controller.status() == QStringLiteral("running")) {
+                closeRequested = true;
+                QVERIFY(!controller.requestClose());
+            }
+        }, Qt::DirectConnection);
+        QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
+
+        controller.discover();
+        QVERIFY(closeRequested);
+        QTRY_COMPARE_WITH_TIMEOUT(closeReady.size(), 1, 7000);
+        QVERIFY(!controller.busy());
+        QVERIFY(!observedGroup);
+    }
+
+    void nestedEventLoopDuringInitialCloseCannotInvalidateRuntimeBeforeStart()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString helper = writeHelper(directory, QByteArray("import time\ntime.sleep(60)\n"));
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        bool closeRequested = false;
+        QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
+        connect(&controller, &AiProviderController::changed, &controller, [&] {
+            if (!closeRequested && controller.status() == QStringLiteral("running")) {
+                closeRequested = true;
+                QVERIFY(!controller.requestClose());
+                QEventLoop nested;
+                QTimer::singleShot(100, &nested, &QEventLoop::quit);
+                nested.exec();
+            }
+        }, Qt::DirectConnection);
+
+        controller.discover();
+        QVERIFY(closeRequested);
+        QCOMPARE(closeReady.size(), 1);
+        QVERIFY(!controller.busy());
+    }
+
+    void directChangedRestartKeepsTheNewGenerationIdentity()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString counter = directory.filePath(QStringLiteral("counter"));
+        const QString helper = writeHelper(directory,
+            QByteArray("import base64,pathlib,sys,time\ncounter=pathlib.Path(r'")
+            + counter.toUtf8()
+            + "')\ncount=int(counter.read_text()) if counter.exists() else 0\n"
+              "counter.write_text(str(count+1))\n"
+              "if count == 0:\n sys.stdout.buffer.write(base64.b64decode('"
+            + providerDocument("detect").toBase64()
+            + "'))\nelse:\n time.sleep(60)\n");
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        int restartCount = 0;
+        connect(&controller, &AiProviderController::changed, &controller, [&] {
+            if (restartCount == 0 && !controller.busy()
+                && controller.status() == QStringLiteral("report_available")) {
+                ++restartCount;
+                controller.discover();
+            }
+        }, Qt::DirectConnection);
+
+        controller.discover();
+        QTRY_COMPARE_WITH_TIMEOUT(restartCount, 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT([&] {
+            QFile observed(counter);
+            if (!observed.open(QIODevice::ReadOnly)) return QByteArray();
+            return observed.readAll();
+        }(), QByteArray("2"), 3000);
+        QVERIFY(controller.busy());
+        QCOMPARE(controller.operation(), QStringLiteral("detect"));
+        QCOMPARE(controller.requestId(), QStringLiteral("detect-2"));
+
+        controller.cancelAll();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 7000);
+    }
+
+    void pendingCloseCompletesBeforeDirectChangedCanRestart()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString counter = directory.filePath(QStringLiteral("counter"));
+        const QString helper = writeHelper(directory,
+            QByteArray("import pathlib,time\ncounter=pathlib.Path(r'") + counter.toUtf8()
+            + "')\ncount=int(counter.read_text()) if counter.exists() else 0\n"
+              "counter.write_text(str(count+1))\ntime.sleep(60)\n");
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        bool restartArmed = false;
+        int restartCount = 0;
+        int closeReadyCount = 0;
+        bool busyAtCloseReady = true;
+        connect(&controller, &AiProviderController::changed, &controller, [&] {
+            if (restartArmed && restartCount == 0 && !controller.busy()) {
+                ++restartCount;
+                controller.discover();
+            }
+        }, Qt::DirectConnection);
+        connect(&controller, &AiProviderController::closeReady, &controller, [&] {
+            ++closeReadyCount;
+            busyAtCloseReady = controller.busy();
+        }, Qt::DirectConnection);
+
+        controller.discover();
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(counter), 3000);
+        restartArmed = true;
+        QVERIFY(!controller.requestClose());
+        QTRY_COMPARE_WITH_TIMEOUT(closeReadyCount, 1, 7000);
+        QVERIFY(!busyAtCloseReady);
+        QCOMPARE(restartCount, 0);
+        QVERIFY(!controller.busy());
+        QVERIFY(controller.operation().isEmpty());
+        QVERIFY(controller.requestId().isEmpty());
+    }
+
+    void readonlyStagedHelperUsesUniqueExternalRuntimeAndLeavesStageUnchanged()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString stage = directory.filePath(QStringLiteral("readonly stage"));
+        const QString libexec = stage + QStringLiteral("/libexec");
+        QVERIFY(QDir().mkpath(libexec));
+        const QString observed = directory.filePath(QStringLiteral("observed-runtime"));
+        const QString helper = libexec + QStringLiteral("/ai.py");
+        QFile fixture(helper);
+        QVERIFY(fixture.open(QIODevice::WriteOnly));
+        fixture.write("import base64,pathlib,sys\nassert sys.argv[1] == 'detect' and sys.argv[2] == '--runtime-root' and sys.argv[4] == '--runtime-root-id' and len(sys.argv) == 6\nroot=pathlib.Path(sys.argv[3])\n"
+                      "assert root.is_absolute() and (root.stat().st_mode & 0o777) == 0o700\n"
+                      "pathlib.Path(r'");
+        fixture.write(observed.toUtf8());
+        fixture.write("').write_text(str(root))\n(root/'owned-child').mkdir()\n"
+                      "sys.stdout.buffer.write(base64.b64decode('");
+        fixture.write(providerDocument("detect").toBase64());
+        fixture.write("'))\n");
+        fixture.close();
+        QFile beforeFile(helper);
+        QVERIFY(beforeFile.open(QIODevice::ReadOnly));
+        const QByteArray before = QCryptographicHash::hash(beforeFile.readAll(), QCryptographicHash::Sha256);
+        beforeFile.close();
+        QVERIFY(QFile::setPermissions(helper, QFileDevice::ReadOwner));
+        QVERIFY(QFile::setPermissions(libexec, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QVERIFY(QFile::setPermissions(stage, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        const QFileDevice::Permissions beforePermissions = QFileInfo(helper).permissions();
+
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        controller.discover();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("report_available"));
+        QFile observedFile(observed);
+        QVERIFY(observedFile.open(QIODevice::ReadOnly));
+        const QString runtime = QString::fromUtf8(observedFile.readAll());
+        QVERIFY(QDir::isAbsolutePath(runtime));
+        QVERIFY(!QFileInfo::exists(runtime));
+        observedFile.close();
+        controller.discover();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QVERIFY(observedFile.open(QIODevice::ReadOnly));
+        const QString secondRuntime = QString::fromUtf8(observedFile.readAll());
+        QVERIFY(secondRuntime != runtime);
+        QVERIFY(!QFileInfo::exists(secondRuntime));
+        QFile afterFile(helper);
+        QVERIFY(afterFile.open(QIODevice::ReadOnly));
+        QCOMPARE(QCryptographicHash::hash(afterFile.readAll(), QCryptographicHash::Sha256), before);
+        QCOMPARE(QFileInfo(helper).permissions(), beforePermissions);
+        QCOMPARE(QDir(stage).entryList(QDir::AllEntries | QDir::NoDotAndDotDot), QStringList{QStringLiteral("libexec")});
+        QVERIFY(QFile::setPermissions(libexec, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        QVERIFY(QFile::setPermissions(stage, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+    }
+
+    void invalidRuntimeRootsDoNotStartTheHelper()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString helper = writeHelper(directory,
+            QByteArray("from pathlib import Path\nPath(r'") + marker.toUtf8() + "').touch()\n");
+        const QString target = directory.filePath(QStringLiteral("target"));
+        QVERIFY(QDir().mkdir(target));
+        QVERIFY(QFile::setPermissions(target, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        const QString link = directory.filePath(QStringLiteral("link"));
+        QVERIFY(::symlink(QFile::encodeName(target).constData(), QFile::encodeName(link).constData()) == 0);
+        const QString wrongMode = directory.filePath(QStringLiteral("wrong-mode"));
+        QVERIFY(QDir().mkdir(wrongMode));
+        QVERIFY(QFile::setPermissions(wrongMode, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+            | QFileDevice::ExeOwner | QFileDevice::ReadGroup | QFileDevice::ExeGroup));
+        const QByteArray original = qgetenv("XDG_RUNTIME_DIR");
+        for (const QString &runtime : {QStringLiteral("relative"), link, wrongMode, QStringLiteral("/")}) {
+            qputenv("XDG_RUNTIME_DIR", runtime.toUtf8());
+            AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+            controller.discover();
+            QVERIFY(!controller.busy());
+            QCOMPARE(controller.errorCode(), QStringLiteral("helper_unavailable"));
+            QVERIFY(!QFileInfo::exists(marker));
+        }
+        qputenv("XDG_RUNTIME_DIR", original);
+    }
+
+    void runtimeCleanupFailureRetainsOwnershipAndDefersCloseReady()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString helper = writeHelper(directory,
+            QByteArray("import base64,pathlib,sys\nassert sys.argv[1] == 'detect' and sys.argv[2] == '--runtime-root' and sys.argv[4] == '--runtime-root-id' and len(sys.argv) == 6\nroot=pathlib.Path(sys.argv[3])\n"
+                       "(root/'resistant').mkdir()\nprint(base64.b64decode('")
+            + providerDocument("detect").toBase64() + "').decode(),end='')\n");
+        bool allowRemoval = false;
+        QString retained;
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper, {}, nullptr,
+            [&](const QString &path) {
+                retained = path;
+                return allowRemoval && QDir(path).removeRecursively();
+            });
+        QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
+        controller.discover();
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        QVERIFY(controller.busy());
+        QVERIFY(QFileInfo::exists(retained + QStringLiteral("/resistant")));
+        QVERIFY(!controller.requestClose());
+        QCOMPARE(closeReady.size(), 0);
+        controller.discover();
+        allowRemoval = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1000);
+        QVERIFY(!QFileInfo::exists(retained));
+        QCOMPARE(closeReady.size(), 1);
+        QCOMPARE(controller.status(), QStringLiteral("disabled"));
+    }
+
+    void substitutedRuntimeIsNeverRemovedAndCloseWaitsForOriginalIdentity()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString observed = directory.filePath(QStringLiteral("substituted-runtime"));
+        const QString helper = writeHelper(directory,
+            QByteArray("import base64,pathlib,sys\nroot=pathlib.Path(sys.argv[3])\noriginal=pathlib.Path(str(root)+'.original')\n"
+                       "root.rename(original)\nroot.mkdir(mode=0o700)\npathlib.Path(r'")
+            + observed.toUtf8() + "').write_text(str(root))\nprint(base64.b64decode('"
+            + providerDocument("detect").toBase64() + "').decode(),end='')\n");
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
+        controller.discover();
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        QVERIFY(controller.busy());
+        QFile observedFile(observed);
+        QVERIFY(observedFile.open(QIODevice::ReadOnly));
+        const QString runtime = QString::fromUtf8(observedFile.readAll());
+        const QString original = runtime + QStringLiteral(".original");
+        const QString foreign = runtime + QStringLiteral(".foreign");
+        QVERIFY(QFileInfo::exists(runtime));
+        QVERIFY(QFileInfo::exists(original));
+        QVERIFY(!controller.requestClose());
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(QDir().rename(runtime, foreign));
+        QVERIFY(QDir().rename(original, runtime));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1000);
+        QVERIFY(!QFileInfo::exists(runtime));
+        QVERIFY(QFileInfo::exists(foreign));
+        QCOMPARE(closeReady.size(), 1);
+        QVERIFY(QDir(foreign).removeRecursively());
     }
 
     void invalidOrOversizedOutputIsRedactedAndNeverPublished()
@@ -162,8 +462,9 @@ private Q_SLOTS:
         QVERIFY(directory.isValid());
         const QString mode = directory.filePath(QStringLiteral("mode"));
         const QString identityPath = directory.filePath(QStringLiteral("cancel-descendant.identity"));
+        const QString readyPath = directory.filePath(QStringLiteral("cancel-descendant.ready"));
         const QByteArray token = QByteArray("orla-ai-cancel-") + QByteArray::number(QCoreApplication::applicationPid());
-        const QByteArray childCode = "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)";
+        const QByteArray childCode = "import pathlib,signal,sys,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path(sys.argv[2]).touch();time.sleep(60)";
         QFile modeFile(mode);
         QVERIFY(modeFile.open(QIODevice::WriteOnly));
         modeFile.write("fast");
@@ -173,13 +474,15 @@ private Q_SLOTS:
             + "doc=base64.b64decode('" + providerDocument("detect").toBase64() + "')\n"
             + "mode=pathlib.Path(r'" + mode.toUtf8() + "').read_text()\n"
             + "if mode == 'slow':\n"
-            + " child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token + "'])\n"
+            + " child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token
+            + "',r'" + readyPath.toUtf8() + "'])\n"
             + " stat=pathlib.Path(f'/proc/{child.pid}/stat').read_text();tail=stat[stat.rfind(') ')+2:].split()\n"
             + " pathlib.Path(r'" + identityPath.toUtf8() + "').write_text(f'{child.pid} {tail[19]}')\n"
             + " def stop(*_):\n  child.wait(timeout=2)\n  raise SystemExit(0)\n"
             + " signal.signal(signal.SIGTERM, stop)\n time.sleep(60)\n"
             + "sys.stdout.buffer.write(doc)\n");
-        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+                                        {}, nullptr, {}, 100);
         controller.discover();
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
         QCOMPARE(controller.providers().size(), 5);
@@ -188,7 +491,7 @@ private Q_SLOTS:
         modeFile.close();
         controller.discover();
         QTRY_VERIFY_WITH_TIMEOUT(controller.busy(), 1000);
-        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(identityPath), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(identityPath) && QFile::exists(readyPath), 3000);
         const QString request = controller.requestId();
         controller.cancel(request);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 7000);
@@ -210,7 +513,7 @@ private Q_SLOTS:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString helper = writeHelper(directory,
-            QByteArray("import base64,sys\nassert sys.argv[1:] == ['probe-codex-anonymous']\n")
+            QByteArray("import base64,sys\nassert sys.argv[1] == 'probe-codex-anonymous' and sys.argv[2] == '--runtime-root' and sys.argv[4] == '--runtime-root-id' and len(sys.argv) == 6\n")
             + "sys.stdout.buffer.write(base64.b64decode('" + providerDocument("probe").toBase64() + "'))\n");
         AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
         controller.probeCodex(QStringLiteral("consent-1"));
@@ -228,19 +531,25 @@ private Q_SLOTS:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString marker = directory.filePath(QStringLiteral("descendant.identity"));
+        const QString readyPath = directory.filePath(QStringLiteral("descendant.ready"));
         const QByteArray token = QByteArray("orla-ai-owned-") + QByteArray::number(QCoreApplication::applicationPid());
         const QByteArray document = providerDocument("detect");
-        const QByteArray childCode = "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)";
+        const QByteArray childCode = "import pathlib,signal,sys,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path(sys.argv[2]).touch();time.sleep(60)";
         const QString helper = writeHelper(directory,
-            QByteArray("import base64,pathlib,subprocess,sys\n")
+            QByteArray("import base64,pathlib,subprocess,sys,time\n")
             + "child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token
+            + "',r'" + readyPath.toUtf8()
             + "'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
             + "stat=pathlib.Path(f'/proc/{child.pid}/stat').read_text();tail=stat[stat.rfind(') ')+2:].split()\n"
             + "pathlib.Path(r'" + marker.toUtf8() + "').write_text(f'{child.pid} {tail[19]}')\n"
+            + "ready=pathlib.Path(r'" + readyPath.toUtf8() + "');deadline=time.monotonic()+2\n"
+            + "while not ready.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+            + "assert ready.exists()\n"
             + "sys.stdout.buffer.write(base64.b64decode('" + document.toBase64() + "'))\n");
-        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+                                        {}, nullptr, {}, 100);
         controller.discover();
-        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(marker), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(marker) && QFile::exists(readyPath), 3000);
         QVERIFY(controller.busy());
         QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("report_available"), 7000);
         QVERIFY(!controller.busy());
@@ -272,7 +581,7 @@ private Q_SLOTS:
                 observedGroup = group;
                 ++observerCalls;
                 return reportGroupExists;
-            });
+            }, nullptr, {}, 100);
         QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
 
         controller.discover();

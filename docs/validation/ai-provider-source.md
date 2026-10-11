@@ -46,8 +46,12 @@ and lifecycle checks. Its 23 author tests use only Python's standard library:
 python3 -B -m unittest discover -s tests -p 'test_ai_text.py' -v
 ```
 
-Portable CI runs that same suite. It does not admit provider/network or native
-behavior. The published 0.2.9 assets remain unchanged and exclude this text module.
+The foundation was integrated by [PR #28](https://github.com/caiolombello/orla-desktop/pull/28),
+Source `bf3e6fc9adf3c4b5e5ffaf2b83a724c14894429c`.
+[CI run 38126133261](https://github.com/caiolombello/orla-desktop/actions/runs/38126133261)
+passed the 23 text tests and all five launcher CTests. It does not admit
+provider/network or native behavior. The generated CI Source ZIP includes this
+module and its tests; the published 0.2.9 assets remain unchanged and exclude it.
 
 ## Reviewed source pins
 
