@@ -1,0 +1,20 @@
+{
+  "formatVersion": "0.1-experimental",
+  "id": "org.orla.example.essential",
+  "name": "Essencial",
+  "author": "Orla contributors",
+  "license": "MIT",
+  "version": "1.0.0",
+  "tokens": {
+    "foreground": "#252b35",
+    "muted": "#526170",
+    "accent": "#167361",
+    "surface": "#f4f0e8",
+    "border": "#788477",
+    "radius": 20,
+    "spacing": 5,
+    "opacity": 1,
+    "iconSize": 42,
+    "reducedMotion": true
+  }
+}

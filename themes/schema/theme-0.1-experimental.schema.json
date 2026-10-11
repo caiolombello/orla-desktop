@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orla:theme:0.1-experimental",
+  "title": "Experimental Orla declarative theme 0.1",
+  "description": "Data-only experimental format, independent of the app version. Mandatory byte/parser limits are documented in docs/theme-format.md.",
+  "x-maxBytes": 65536,
+  "x-maxDepth": 4,
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "id", "name", "author", "license", "version", "tokens"],
+  "properties": {
+    "formatVersion": {"type": "string", "const": "0.1-experimental"},
+    "id": {
+      "type": "string", "minLength": 1, "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+(?![\\s\\S])"
+    },
+    "name": {"$ref": "#/$defs/text"},
+    "author": {"$ref": "#/$defs/text"},
+    "license": {
+      "type": "string", "minLength": 1, "maxLength": 80,
+      "pattern": "^[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\-](?:[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\- ]*[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\-])?(?![\\s\\S])"
+    },
+    "version": {
+      "type": "string", "minLength": 1, "maxLength": 32,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?![\\s\\S])"
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["foreground", "muted", "accent", "surface", "border", "radius", "spacing", "opacity", "iconSize", "reducedMotion"],
+      "properties": {
+        "foreground": {"$ref": "#/$defs/color"},
+        "muted": {"$ref": "#/$defs/color"},
+        "accent": {"$ref": "#/$defs/color"},
+        "surface": {"$ref": "#/$defs/color"},
+        "border": {"$ref": "#/$defs/color"},
+        "radius": {"type": "number", "minimum": 0, "maximum": 32},
+        "spacing": {"type": "number", "minimum": 0, "maximum": 16},
+        "opacity": {"type": "number", "minimum": 0.4, "maximum": 1},
+        "iconSize": {"type": "number", "minimum": 24, "maximum": 64},
+        "reducedMotion": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string", "minLength": 1, "maxLength": 120,
+      "pattern": "^[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\-](?:[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\- ]*[A-Za-z0-9À-ÖØ-öø-ÿ.,_+\\-])?(?![\\s\\S])"
+    },
+    "color": {
+      "type": "string", "minLength": 1, "maxLength": 7,
+      "pattern": "^#[0-9A-Fa-f]{6}(?![\\s\\S])"
+    }
+  }
+}

@@ -9,7 +9,7 @@ Thanks for helping improve Orla. The project is an early alpha, so focused repor
 - Remove personal data from logs and screenshots. Do not attach calendar contents, window titles, account names, tokens, or full home-directory paths.
 - For a change, explain the user-visible behavior and any KDE/Plasma version assumptions. Keep unrelated refactors out of the patch.
 
-Reports, translations, accessibility feedback, documentation, synthetic test fixtures, and KDE/hardware validation are welcome today. Themes, extension tooling, a public SDK, and the catalog are planned; do not depend on a proposed interface as if it were shipped. See the proposals for [UX/UI](docs/UX_UI.md), [extensions](docs/EXTENSIONS.md), [AI integrations](docs/AI_INTEGRATIONS.md), and [DX](docs/DX.md). Discuss changes to public contracts, permissions, or distribution before implementation, including an acceptance criterion and validation path.
+Reports, translations, accessibility feedback, documentation, synthetic test fixtures, and KDE/hardware validation are welcome today. Source checkouts also include an [experimental declarative theme format](docs/theme-format.md), validator and two examples. They validate and package data; applying community themes, extension tooling, a public SDK, and the catalog remain planned. Do not depend on an experimental interface as stable. See the proposals for [UX/UI](docs/UX_UI.md), [extensions](docs/EXTENSIONS.md), [AI integrations](docs/AI_INTEGRATIONS.md), and [DX](docs/DX.md). Discuss changes to public contracts, permissions, or distribution before implementation, including an acceptance criterion and validation path.
 
 ## Local checks
 
@@ -18,8 +18,23 @@ Use Python 3.10 or newer with PySide6 QtDBus, and make `dbus-run-session` availa
 ```bash
 python3 -m unittest discover -s tests -p 'test_integrations.py' -v
 python3 -m unittest discover -s tests -p 'test_package_cli.py' -v
+python3 -m unittest discover -s tests -p 'test_themes.py' -v
+python3 -m unittest discover -s tests -p 'test_release.py' -v
 python3 scripts/release.py
 ```
+
+Theme validation and its tests need only Python 3.10 or newer on Linux, without
+KDE, Qt, a provider account or paid calls. From a source checkout:
+
+```bash
+python3 scripts/themes.py validate themes/examples/essential.json --json
+python3 scripts/themes.py pack themes/examples/mare.json --output dist/themes
+```
+
+Packing never replaces an existing artifact; choose a new output directory for
+a revised example. See [the format guide](docs/theme-format.md) for fields,
+structured errors and limits. The format is `0.1-experimental`, independently
+versioned from Orla. These commands do not install or apply a theme.
 
 QML interaction tests need the KDE/Qt runtime and a graphical session. Before changing a Plasma API or claiming native behavior, verify it on the stated Plasma version and record that version in the pull request. The continuous integration job checks portable behavior and package generation; it does not prove panel, Wayland, multi-monitor, or notification behavior.
 
