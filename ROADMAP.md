@@ -10,7 +10,9 @@ Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado
 
 **Temas no checkout fonte:** o formato `0.1-experimental`, schema, exemplos e comandos de validação/empacotamento já têm testes portáteis e revisão independente. O empacotador publica arquivo completo sem sobrescrever destinos e trata falhas de escrita/caminho com erros estruturados. O consumo no dock, prévia/importação e contribuição externa continuam pendentes; X1/DX2 permanecem parciais. Consulte o [guia do formato](docs/theme-format.md).
 
-**Aparência alpha 0.2.3:** editor com prévia temporária, Aplicar, Cancelar, Desfazer e restauração das preferências anteriores, em snapshot separado. Popup limitado ao orçamento da tela e campos acessíveis pelo teclado; 66 testes locais e revisão independente aprovados. Persistência/foco no painel real, organização de widgets, perfis e importação/exportação continuam pendentes; C1/UX1 permanecem parciais. Consulte a [validação da aparência](docs/validation/appearance-0.2.3.md).
+**Aparência alpha 0.2.3:** editor com prévia temporária, Aplicar, Cancelar, Desfazer e restauração das preferências anteriores, em snapshot separado. Popup limitado ao orçamento da tela e campos acessíveis pelo teclado; 66 testes locais e revisão independente aprovados. Uma fixture com painel/KConfig privados comprovou Aplicar/Cancelar/restart de aparência por ações programáticas; isso não qualifica gesto humano nem foco/grab/layout do popup. Organização de widgets, perfis e importação/exportação continuam pendentes; C1/UX1 permanecem parciais. Consulte a [validação da aparência](docs/validation/appearance-0.2.3.md).
+
+**Bateria e mídia alpha 0.2.4:** bateria do sistema opcional, desligada por padrão, lê somente o agregado UPower e preserva estados neutros/0% válido. Mídia compartilha um modelo MPRIS nativo, prefere Spotify inicialmente, mantém seleção manual por sessão e respeita capacidades por comando. Fixtures de bateria/mídia, leitura real agregada UPower e dois players sintéticos em D-Bus privado passaram; a regressão conjunta passou os 96 testes. B1/M1 continuam parciais: múltiplas baterias/UPS/transições reais, Spotify real/áudio, capa/progresso/abertura do cliente e interação humana no painel têm gates próprios. O launcher não integra esta release. Consulte a [validação](docs/validation/battery-media-0.2.4.md).
 
 Premissas: o dock continua utilizável sozinho; a barra superior, o launcher e seus módulos são opcionais; “ambiente” significa um perfil Trabalho, Pessoal ou Jogos, que pode ser associado a uma Activity do KDE ou a uma área de trabalho virtual. As duas associações serão configuradas separadamente. A primeira plataforma suportada continua sendo Plasma 6.7+ em Wayland; outras versões precisam de validação própria.
 
@@ -31,9 +33,9 @@ Esses documentos especificam capacidades futuras. A alpha não inclui SDK, runti
 | Área | Observado na versão 0.2 | Lacuna a fechar |
 |---|---|---|
 | Aplicativos e janelas | Fixar apps, ativar/minimizar/restaurar, menu de contexto, reorganização pelo menu e entrada de arquivos `.desktop` | Arrastar para reorganizar, agrupamento opcional, teste prolongado no painel e em vários monitores |
-| Personalização | Temas Vidro, Meia-noite e Papel; tamanho dos ícones; animações; widgets ativáveis | Editor de cores, opacidade, espaçamento, cantos, ordem dos widgets, presets, exportação/importação e configuração por perfil |
-| Spotify | Controle genérico de mídia via MPRIS | Selecionar o player, identificar Spotify, capa/progresso quando disponíveis e validar o cliente real |
-| Bateria | Leitura de periféricos pelo cache do PeriGauge | Bateria do computador, alimentação externa, estados de carga e alertas; qualificação com dispositivos reais |
+| Personalização | Três temas e editor com prévia/Aplicar/Cancelar/desfazer; persistência de aparência em KConfig privado | Qualificar popup/foco/grab por gesto real, ordem de widgets, presets, exportação/importação e perfis |
+| Spotify | Modelo MPRIS compartilhado, preferência inicial pelo Spotify, seleção manual, faixa/artista e controles por capacidade | Capa/progresso, abrir cliente e qualificar Spotify real/áudio com segundo player |
+| Bateria | Widget opcional do agregado UPower, percentual/estado/energia/tempo quando informados; PeriGauge separado | Matriz real de notebook/desktop/múltiplas baterias/UPS/transições, alertas e uso humano no painel |
 | Ambientes e áreas de trabalho | Opção de filtrar janelas pela área atual | Perfis, associação com Activities/desktops, seletor e troca de contexto |
 | Steam | Integração ausente | Biblioteca local, favoritos, abrir jogos, suporte nativo/Flatpak e perfil Jogos |
 | Projetos próprios | Adaptadores locais para QuotaLantern, PeriGauge e estado salvo do FalaTrace | Validar os coletores reais, comunicar a idade da leitura e comprovar gravação ativa antes de indicá-la como ao vivo |
@@ -114,7 +116,7 @@ Arquivos principais: `DockView.qml`, `DockPopup.qml`, `main.qml`, `scripts/orla.
 - [ ] **M1: Spotify por MPRIS.** Escolha manual/automática do player, faixa/artista/capa, progresso e controles suportados; abrir o cliente. Aceite: Spotify real responde a play/pause/anterior/próxima, com segundo player aberto; capacidade não anunciada aparece desativada. O protocolo define capacidades e metadados, mas a implementação do cliente precisa ser testada. [MPRIS Player](https://specifications.freedesktop.org/mpris/latest/Player_Interface.html)
 - [ ] **B1: bateria do sistema.** Usar o provedor nativo KDE/UPower para percentual, carregando/descarregando, energia externa e tempo estimado quando informado. Manter PeriGauge para periféricos, com estimativas e leitura antiga identificadas. Aceite: notebook, desktop sem bateria, múltiplas baterias e serviço indisponível têm estados corretos, sem dispositivos duplicados. [UPower Device](https://upower.freedesktop.org/docs/Device.html)
 
-C1 depende de R1/R2; M1 e B1 podem avançar independentemente. Compartilhar os modelos de mídia e bateria com a futura barra e Central de Controle.
+C1, M1 e B1 permanecem sem aceite completo: a 0.2.4 entrega somente os incrementos delimitados acima. C1 depende de R1/R2; M1 e B1 podem avançar independentemente. Compartilhar os modelos de mídia e bateria com a futura barra e Central de Controle.
 
 ### 0.5 — Perfis, Activities e áreas de trabalho
 

@@ -1,6 +1,6 @@
 # Experiência de desenvolvimento do Orla Desktop
 
-> **Roadmap em execução.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. O incremento atual é Orla Dock 0.2.3 alpha, licenciado sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, runtime de plugins ou galeria no alpha.
+> **Roadmap em execução.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. O incremento atual é Orla Dock 0.2.4 alpha, licenciado sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, runtime de plugins ou galeria no alpha.
 
 ## Objetivo
 
@@ -20,6 +20,12 @@ python3 scripts/orla.py build
 ```
 
 `doctor`, `build`, `install` e `uninstall` são comandos atuais do helper. Para interações QML, testes da sessão privada D-Bus ou comportamento nativo, consulte [CONTRIBUTING.md](../CONTRIBUTING.md) e [ROADMAP.md](../ROADMAP.md); esses testes exigem runtimes/ambientes específicos e não são cobertos pela CI portátil inteira. Alterações de UI precisam ser conferidas numa sessão Plasma compatível antes de afirmar que comportamento nativo está validado.
+
+### Bateria e mídia na 0.2.4
+
+O widget de bateria é opt-in e somente leitura do agregado UPower; o modelo MPRIS nativo é compartilhado entre dock e controles. Fixtures de transporte/player permitem testar falhas, tipos, capacidades e seleção sem hardware ou conta Spotify. A [validação da 0.2.4](validation/battery-media-0.2.4.md) lista comandos, receipts delimitados e gates ainda abertos; o launcher não faz parte deste incremento nem do bundle da release.
+
+Testes sintéticos Qt, mesmo em Wayland, não comprovam gesto humano, foco/grab ou áudio. A prova privada nativa de mídia usa receptores sintéticos próprios e o `Mpris2Model` real; a prova UPower real é uma leitura pontual agregada. Contribuições continuam possíveis sem API paga, credencial ou hardware específico. M1/B1 e a qualificação humana têm critérios próprios.
 
 ### Regras para documentação de comandos
 
@@ -127,7 +133,7 @@ Métricas de DX começam por uma baseline observada, não por metas inventadas: 
 
 | Etapa | Entrega | Dependências | Critério de saída |
 |---|---|---|---|
-| **DX0 — alpha compreensível** | Documentar e manter sincronizados comandos atuais, dependências, limites da CI, contribuição e triagem | Estado atual 0.2.3 | Pessoa nova reproduz os testes portáteis e o build usando somente docs existentes; comandos listados coincidem com o helper e a CI. |
+| **DX0 — alpha compreensível** | Documentar e manter sincronizados comandos atuais, dependências, limites da CI, contribuição e triagem | Estado atual 0.2.4 | Pessoa nova reproduz os testes portáteis e o build usando somente docs existentes; comandos listados coincidem com o helper e a CI. |
 | **DX1 — contratos internos testáveis** | Inventariar fronteiras do applet, bridge e adaptadores; adicionar fixtures sintéticas e erros reproduzíveis | DX0; passos iniciais de arquitetura no ROADMAP | Falhas de integração podem ser testadas sem serviço/conta; cada interface interna tem owner, dependências e teste correspondente. |
 | **DX2 — galeria e tema declarativo** | Especificar schema versionado, validador, template, prévia mock/offline e exemplos gratuitos | Tema/manifesto em X1/X2 de EXTENSIONS; DX1 | Contribuidor cria, confere e pré-visualiza tema sem executar código nem usar sessão de IA; CI testa fixtures válidas/inválidas. |
 | **DX3 — kit de contribuidor** | Comandos `create/check/dev/pack`, exemplos e guia gerado do schema | DX2 e necessidade demonstrada pelos primeiros temas | Instruções se mantêm testáveis; pacote determinístico; erro aponta correção; galeria declara quando uma sessão Plasma é necessária. |

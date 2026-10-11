@@ -12,13 +12,16 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
 - Partir dos temas Glass, Midnight ou Paper e pré-visualizar cores, opacidade, espaçamento, cantos, ícones e movimento reduzido. Aplicar salva; Cancelar, Escape ou fechar descarta a prévia. Desfazer restaura a aparência aplicada anterior uma vez por sessão.
-- Usar relógio, Pomodoro, calendário do KDE e controles de mídia compatíveis com MPRIS.
+- Usar relógio, Pomodoro, calendário do KDE e controles MPRIS com seleção de player, faixa/artista e botões conforme as capacidades anunciadas.
+- Ativar nas configurações o widget opcional de bateria do sistema (desligado por padrão) para ler o agregado do UPower; o PeriGauge continua separado para periféricos.
 - Ler snapshots locais opcionais do QuotaLantern, PeriGauge e FalaTrace quando esses projetos gravam arquivos de estado compatíveis.
 - Manter o dock em um painel Plasma e ajustar posição e visibilidade pelas configurações do Plasma.
 
 O calendário usa a mesma seleção de calendários dos componentes do KDE. O Orla não conecta o Google Agenda sozinho. Para ver eventos do Google, primeiro adicione e configure uma conta Google pelo KOrganizer/KDE PIM e depois ative os eventos sincronizados nas configurações do Orla. A configuração e sincronização dependem dos recursos KDE PIM instalados no sistema.
 
-Os controles de mídia usam MPRIS e funcionam com players compatíveis. O comportamento específico do Spotify, capa e reprodução ainda não foi validado. As integrações com projetos locais leem arquivos de estado existentes; elas não iniciam os outros aplicativos nem chamam suas APIs online.
+Os controles de mídia compartilham um único modelo MPRIS nativo do Plasma. Preferem inicialmente o Spotify quando descoberto e mantêm a escolha manual de player durante a sessão. Play, Pause, Anterior e Próxima respeitam as capacidades do player selecionado; faixa e artista aparecem como texto simples e limitado. Uma fixture D-Bus privada qualificou o modelo nativo com dois players sintéticos, sem validar o cliente real do Spotify ou reprodução de áudio. Capa, progresso e abertura do cliente continuam planejados.
+
+A bateria do sistema lê somente o dispositivo agregado do UPower, a cada 30 segundos enquanto ativada, com timeout de cinco segundos. Uma leitura real de 0% permanece visível; dados ausentes ou indisponíveis têm estado neutro. Energia externa, carga e tempo estimado aparecem somente quando informados. O widget não controla hardware nem enumera baterias de periféricos. Veja a [validação de bateria e mídia](docs/validation/battery-media-0.2.4.md) para cobertura e limites. As integrações com projetos locais leem arquivos de estado existentes; elas não iniciam os outros aplicativos nem chamam suas APIs online.
 
 A aparência usa um override separado e preserva as preferências anteriores de tema, ícones e animação. Restaurar prepara essas preferências para prévia e exige Aplicar. O [kit experimental de temas](docs/theme-format.md) valida e empacota dados comunitários; importar/aplicar esses arquivos continua no roadmap. Veja a [validação da aparência](docs/validation/appearance-0.2.3.md) para cobertura e limites nativos.
 
@@ -46,10 +49,10 @@ Baixe o `.zip` da versão na página de [releases do GitHub](https://github.com/
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.3.zip
-cd orla-dock-0.2.3
+unzip orla-dock-0.2.4.zip
+cd orla-dock-0.2.4
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.3.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.4.plasmoid
 ```
 
 O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
@@ -61,7 +64,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.3.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.4.plasmoid
 ```
 
 Para verificar a configuração local ou remover os arquivos gerenciados pelo Orla:
@@ -91,7 +94,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Para ass
 
 Orla Desktop é um projeto alpha. O componente atual mantém o identificador Plasma `org.caiodock.dock` e o serviço D-Bus `org.caiodock.Integrations` para preservar instalações e configurações existentes. O nome exibido às pessoas é Orla Dock; esses identificadores internos existem por compatibilidade.
 
-A barra de menus inspirada no macOS, a Central de Controle, o launcher inspirado no Raycast, Dynamic Island/HUD/toasts, suporte específico ao Spotify, bateria do sistema, Steam, perfis, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
+A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra de menus inspirada no macOS, a Central de Controle, o launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, Steam, perfis, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
 
 Veja o [roadmap completo](ROADMAP.md) para sequência, dependências e critérios de aceite, com propostas de [UX/UI](docs/UX_UI.md), [temas e extensões](docs/EXTENSIONS.md), [acesso e provedores de IA](docs/AI_INTEGRATIONS.md) e [experiência de desenvolvimento](docs/DX.md). Temas declarativos vêm antes de plugins executáveis; adaptadores de IA usam as rotas de autorização oferecidas por cada provedor. O núcleo continua útil sem conta Orla, addon pago ou assinatura de IA. Checkout de marketplace e SDK ainda não foram implementados.
 

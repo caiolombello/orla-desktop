@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
+import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
-from PySide6.QtCore import QObject, QUrl, Qt, QPointF
+from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -34,6 +35,7 @@ class AppearanceTests(unittest.TestCase):
         if hasattr(self, "window"):
             self.window.close()
         self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(self.engine, QEvent.DeferredDelete)
         self.app.processEvents()
 
     def evaluate(self, source, target=None):
@@ -60,6 +62,17 @@ class AppearanceTests(unittest.TestCase):
                 return found
         return None
 
+    def focus_control(self, window, control):
+        control.forceActiveFocus(Qt.TabFocusReason)
+        # forceActiveFocus sets the item focus chain before a newly shown
+        # Wayland window has received its pending Qt focus event. QTest sends
+        # modifier and key events synchronously, so settle this precondition
+        # before the single key gesture. No window activation is requested.
+        deadline = time.monotonic() + 1
+        while window.activeFocusItem() != control and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertEqual(window.activeFocusItem(), control, "Owned fixture must have settled item focus before synthetic keys")
+
     def test_draft_preview_never_persists_until_apply(self):
         self.assertEqual(self.config.property("appearanceJSON"), "")
         self.evaluate("setToken('accent', '#123456')")
@@ -82,7 +95,7 @@ class AppearanceTests(unittest.TestCase):
     def test_invalid_color_and_numbers_block_apply_and_keep_last_good_preview(self):
         self.evaluate("setToken('accent', '#123456')")
         field = self.visual_item("appearanceColoraccent")
-        field.forceActiveFocus()
+        self.focus_control(self.window, field)
         QTest.keyClick(self.window, Qt.Key_A, Qt.ControlModifier)
         for key in (Qt.Key_B, Qt.Key_A, Qt.Key_D):
             QTest.keyClick(self.window, key)
@@ -144,11 +157,11 @@ class AppearanceTests(unittest.TestCase):
     def test_native_buttons_apply_and_undo_from_keyboard(self):
         self.evaluate("setToken('accent', '#123456')")
         apply = self.window.findChild(QQuickItem, "appearanceApply")
-        apply.forceActiveFocus(Qt.TabFocusReason)
+        self.focus_control(self.window, apply)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertIn('"accent":"#123456"', self.config.property("appearanceJSON"))
         undo = self.window.findChild(QQuickItem, "appearanceUndo")
-        undo.forceActiveFocus(Qt.TabFocusReason)
+        self.focus_control(self.window, undo)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertEqual(self.config.property("appearanceJSON"), "")
 
@@ -156,7 +169,7 @@ class AppearanceTests(unittest.TestCase):
         self.window.setHeight(420)
         self.app.processEvents()
         apply = self.window.findChild(QQuickItem, "appearanceApply")
-        apply.forceActiveFocus(Qt.TabFocusReason)
+        self.focus_control(self.window, apply)
         QTest.keyClick(self.window, Qt.Key_Tab, Qt.ShiftModifier)
         focused = self.window.activeFocusItem()
         self.assertEqual(focused.objectName(), "appearanceDefaults")
@@ -206,7 +219,7 @@ class AppearanceTests(unittest.TestCase):
                     expression.evaluate()
                 else:
                     cancel = window.findChild(QQuickItem, "appearanceCancel")
-                    cancel.forceActiveFocus(Qt.TabFocusReason)
+                    self.focus_control(window, cancel)
                     QTest.keyClick(window, Qt.Key_Space)
                 QTest.qWait(100)
                 expression = QQmlExpression(engine.rootContext(), dock, "appearance.effective.tokens.accent")
@@ -220,6 +233,7 @@ class AppearanceTests(unittest.TestCase):
         finally:
             window.close()
             engine.deleteLater()
+            QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
             self.app.processEvents()
 
     def test_complete_settings_popup_keeps_actions_visible_with_420_pixel_budget(self):
@@ -249,7 +263,7 @@ class AppearanceTests(unittest.TestCase):
                 self.assertGreaterEqual(point.y(), 0, name)
                 self.assertLessEqual(point.y() + button.height(), content.height() + 1, name)
             apply = window.findChild(QQuickItem, "appearanceApply")
-            apply.forceActiveFocus(Qt.TabFocusReason)
+            self.focus_control(window, apply)
             QTest.keyClick(window, Qt.Key_Tab, Qt.ShiftModifier)
             focused = window.activeFocusItem()
             self.assertEqual(focused.objectName(), "appearanceDefaults")
@@ -264,6 +278,7 @@ class AppearanceTests(unittest.TestCase):
         finally:
             window.close()
             engine.deleteLater()
+            QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
             self.app.processEvents()
 
 

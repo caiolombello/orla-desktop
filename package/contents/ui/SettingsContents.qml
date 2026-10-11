@@ -9,7 +9,7 @@ ColumnLayout {
     required property var appearance
     signal appearanceCanceled()
     spacing: 8
-    Controls.Label { text: "Orla Dock 0.2.3 alpha · Plasma 6.7+"; opacity: 0.6 }
+    Controls.Label { text: "Orla Dock 0.2.4 alpha · Plasma 6.7+"; opacity: 0.6 }
     Controls.TabBar {
         id: tabs
         Layout.fillWidth: true
@@ -40,6 +40,7 @@ ColumnLayout {
                 Controls.CheckBox { text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.configuration.calendarEvents; onToggled: settings.configuration.calendarEvents = checked }
                 Controls.CheckBox { text: qsTr("Pomodoro"); checked: settings.configuration.showPomodoro; onToggled: settings.configuration.showPomodoro = checked }
                 Controls.CheckBox { text: qsTr("Música (MPRIS)"); checked: settings.configuration.showMusic; onToggled: settings.configuration.showMusic = checked }
+                Controls.CheckBox { text: qsTr("Bateria do computador"); checked: settings.configuration.showSystemBattery; onToggled: settings.configuration.showSystemBattery = checked }
                 Controls.CheckBox { text: qsTr("Quotas de IA · QuotaLantern"); checked: settings.configuration.showQuota; onToggled: settings.configuration.showQuota = checked }
                 Controls.CheckBox { text: qsTr("Baterias · PeriGauge"); checked: settings.configuration.showPeripherals; onToggled: settings.configuration.showPeripherals = checked }
                 Controls.CheckBox { text: qsTr("Gravação · FalaTrace"); checked: settings.configuration.showRecording; onToggled: settings.configuration.showRecording = checked }

@@ -2,6 +2,15 @@
 
 User-visible changes are recorded here for each published release.
 
+## 0.2.4 — 2026-10-10 — Alpha
+
+- Add an opt-in system battery widget (off by default), reading only UPower’s aggregate display device. Preserve valid 0%, show absent/unavailable states neutrally, and display power/charging/time only when supplied; PeriGauge peripheral readings remain separate.
+- Share one native Plasma MPRIS model across the dock and media controls. Prefer Spotify initially, allow manual session selection, and show bounded plain-text track/artist metadata.
+- Gate Play, Pause, Previous and Next by the selected player’s current capabilities; recover selection and focus after a player disappears.
+- Battery fixtures (16 tests), media fixtures (12 tests across offscreen/Fusion/KDE styles), and private native MPRIS receiver checks passed. Independent battery, media and dock-wiring reviews have no outstanding findings. The combined regression suite passed all 96 tests.
+- A read-only real UPower aggregate probe and a private two-player native MPRIS fixture passed. Real Spotify/audio, the hardware matrix and human panel interaction remain unqualified; M1/B1/C1 remain open. See [validation](docs/validation/battery-media-0.2.4.md).
+- This release does not include the launcher; it remains a separate review and delivery.
+
 ## 0.2.3 — 2026-10-10 — Alpha
 
 - Preview dock colors, opacity, spacing, corners, icon size and reduced motion; Apply saves the appearance, while Cancel, Escape or closing settings discards the preview.

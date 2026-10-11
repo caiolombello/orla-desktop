@@ -6,7 +6,7 @@
         "Description[pt_BR]": "Um dock nativo e personalizável para KDE Plasma — Orla Desktop alpha",
         "Icon": "preferences-desktop-launch-feedback",
         "Category": "Application Launchers",
-        "Version": "0.2.3",
+        "Version": "0.2.4",
         "License": "MIT",
         "Authors": [{ "Name": "Caio Barbieri", "Website": "https://github.com/caiolombello" }],
         "Website": "https://github.com/caiolombello/orla-desktop",
