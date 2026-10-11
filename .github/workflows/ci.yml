@@ -49,6 +49,22 @@ jobs:
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_steam.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
 
+      - name: Run portable theme parser and appearance consumer checks
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Fusion
+          QT_QPA_PLATFORMTHEME: ""
+          PYTHONPATH: tests
+        run: |
+          $ORLA_CI_PYTHON -B -m unittest test_theme_consumer -v
+          $ORLA_CI_PYTHON -B -m unittest \
+            test_appearance.AppearanceTests.test_theme_preview_preserves_base_and_only_apply_saves_normalized_tokens \
+            test_appearance.AppearanceTests.test_theme_controls_use_keyboard_plain_text_and_tab_leaves_input \
+            test_appearance.AppearanceTests.test_invalid_or_pending_theme_keeps_last_preview_and_clear_recovers \
+            test_appearance.AppearanceTests.test_theme_error_focus_and_oversized_text_preserve_controls_at_420_pixels \
+            test_appearance.AppearanceTests.test_stale_theme_preview_and_apply_do_not_change_saved_bytes -v
+
       - name: Run optional menu mock tests
         run: $ORLA_CI_PYTHON bar/run_tests.py
 

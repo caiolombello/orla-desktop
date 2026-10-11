@@ -8,13 +8,13 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 > [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
-O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.5 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
+O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. As releases 0.2.5 e 0.2.6 não o empacotam nem instalam; foco global no Wayland e integração completa do launcher continuam pendentes.
 
-O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), com menu do sistema e nome do aplicativo ativo para Plasma 6.7.x. Exige instalação manual separada e não faz parte da release 0.2.5. Diálogos reais de sessão, painel/foco e composição em vários monitores continuam sem teste. Menu Global, bandeja e relógio serão widgets KDE irmãos.
+O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), com menu do sistema e nome do aplicativo ativo para Plasma 6.7.x. Exige instalação manual separada e não faz parte das releases 0.2.5 e 0.2.6. Diálogos reais de sessão, painel/foco e composição em vários monitores continuam sem teste. Menu Global, bandeja e relógio serão widgets KDE irmãos.
 
-O bundle da release 0.2.5 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
+O bundle da release 0.2.6 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
 
-O checkout inclui uma [CLI experimental de inventário local do Steam](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md). Ela lê metadados limitados de bibliotecas em raízes informadas explicitamente e distingue estados parciais/desconhecidos; não inicia jogos, acessa contas nem comprova titularidade. Busca/favoritos no dock e validação com Steam real continuam planejados. Os assets publicados da 0.2.5 não a incluem.
+O ZIP da prerelease alpha 0.2.6 inclui a CLI experimental de inventário local do Steam. Ela lê metadados limitados de bibliotecas em raízes informadas explicitamente e distingue estados parciais/desconhecidos; não inicia jogos, acessa contas nem comprova titularidade. Busca/favoritos no dock e validação com Steam real continuam planejados. Os assets publicados da 0.2.5 permanecem inalterados e não a incluem. Veja o [guia do Steam](docs/steam.md).
 
 ## O que funciona hoje
 
@@ -32,7 +32,7 @@ Os controles de mídia compartilham um único modelo MPRIS nativo do Plasma. Pre
 
 A bateria do sistema lê somente o dispositivo agregado do UPower, a cada 30 segundos enquanto ativada, com timeout de cinco segundos. Uma leitura real de 0% permanece visível; dados ausentes ou indisponíveis têm estado neutro. Energia externa, carga e tempo estimado aparecem somente quando informados. O widget não controla hardware nem enumera baterias de periféricos. Veja a [validação de bateria e mídia](docs/validation/battery-media-0.2.4.md) para cobertura e limites. As integrações com projetos locais leem arquivos de estado existentes; elas não iniciam os outros aplicativos nem chamam suas APIs online.
 
-A aparência usa um override separado e preserva as preferências anteriores de tema, ícones e animação. Restaurar prepara essas preferências para prévia e exige Aplicar. O [kit experimental de temas](docs/theme-format.md) valida e empacota dados comunitários; importar/aplicar esses arquivos continua no roadmap. Veja a [validação da aparência](docs/validation/appearance-0.2.3.md) para cobertura e limites nativos.
+A aparência usa um override separado e preserva as preferências anteriores de tema, ícones e animação. Restaurar prepara essas preferências para prévia e exige Aplicar. O editor agora oferece prévia somente por colagem de temas JSON `0.1-experimental`. Ela mostra dez tokens em memória; Aplicar salva somente a aparência normal do perfil atual. O recurso não lê arquivos, instala pacotes nem salva os metadados declarados. Formato e consumidor continuam experimentais; veja o [guia de temas](docs/theme-format.md) e a [validação do consumidor](docs/validation/theme-consumer-0.2.6.md) para cobertura e limites nativos.
 
 ## Usar perfis
 
@@ -59,15 +59,15 @@ A base atual de validação é Fedora 44, Plasma 6.7.5, Qt 6.11.2 e Wayland. Out
 
 ## Instalar uma versão publicada
 
-Os comandos abaixo apontam para a [prerelease alpha 0.2.5 publicada](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.5). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
+Os comandos abaixo apontam para a [prerelease alpha 0.2.6](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.6). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.5.zip
-cd orla-dock-0.2.5
+unzip orla-dock-0.2.6.zip
+cd orla-dock-0.2.6
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.5.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.6.plasmoid
 ```
 
 O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
@@ -79,7 +79,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.5.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.6.plasmoid
 ```
 
 Para verificar a configuração local ou remover os arquivos gerenciados pelo Orla:
@@ -109,7 +109,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Para ass
 
 Orla Desktop é um projeto alpha. O componente atual mantém o identificador Plasma `org.caiodock.dock` e o serviço D-Bus `org.caiodock.Integrations` para preservar instalações e configurações existentes. O nome exibido às pessoas é Orla Dock; esses identificadores internos existem por compatibilidade.
 
-Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 publicado na 0.2.5. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra completa inspirada no macOS, a Central de Controle, a integração completa do launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, Steam, associação de perfis a Activities/desktops, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
+Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 publicado na 0.2.5. A versão 0.2.6 acrescenta o primeiro consumidor experimental de tema por colagem e inclui a CLI experimental do Steam; a qualificação em ambientes reais continua pendente. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra completa inspirada no macOS, a Central de Controle, a integração completa do launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, integração Steam no dock, associação de perfis a Activities/desktops, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Formato estável de temas, galeria, importação de arquivos, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados.
 
 Veja o [roadmap completo](ROADMAP.md) para sequência, dependências e critérios de aceite, com propostas de [UX/UI](docs/UX_UI.md), [temas e extensões](docs/EXTENSIONS.md), [acesso e provedores de IA](docs/AI_INTEGRATIONS.md) e [experiência de desenvolvimento](docs/DX.md). Temas declarativos vêm antes de plugins executáveis; adaptadores de IA usam as rotas de autorização oferecidas por cada provedor. O núcleo continua útil sem conta Orla, addon pago ou assinatura de IA. Checkout de marketplace e SDK ainda não foram implementados.
 

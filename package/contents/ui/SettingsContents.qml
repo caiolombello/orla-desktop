@@ -57,7 +57,7 @@ ColumnLayout {
         if (point.y < 0) viewport.contentY += point.y;
         else if (point.y + control.height > viewport.height) viewport.contentY += point.y + control.height - viewport.height;
     }
-    Controls.Label { text: "Orla Dock 0.2.5 alpha · Plasma 6.7+"; opacity: 0.6 }
+    Controls.Label { text: "Orla Dock 0.2.6 alpha · Plasma 6.7+"; opacity: 0.6 }
     Controls.TabBar {
         id: tabs
         objectName: "settingsTabs"

@@ -8,7 +8,7 @@ Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado
 
 **Execução iniciada:** o incremento alpha 0.2.2 permite instalar/atualizar sem dependências opcionais das integrações, recuperar o serviço por reinstalação e abrir os menus dos aplicativos pelo teclado. Foram verificados 43 testes da base e o ciclo real de instalação em diretórios temporários, com D-Bus privado e dados sintéticos preservados. R1/R2 continuam parciais: painel real, vários monitores, uso diário e empacotamento do futuro launcher têm gates próprios. Consulte a [evidência da base](docs/validation/foundation-0.2.2.md). As versões abaixo continuam sendo marcos de aceite.
 
-**Temas no checkout fonte:** o formato `0.1-experimental`, schema, exemplos e comandos de validação/empacotamento já têm testes portáteis e revisão independente. O empacotador publica arquivo completo sem sobrescrever destinos e trata falhas de escrita/caminho com erros estruturados. O consumo no dock, prévia/importação e contribuição externa continuam pendentes; X1/DX2 permanecem parciais. Consulte o [guia do formato](docs/theme-format.md).
+**Primeiro consumidor de tema no fonte:** além do formato `0.1-experimental`, schema, exemplos e CLI com testes portáteis/revisão, Aparência agora aceita JSON colado e oferece prévia reversível dos dez tokens. A candidata 0.2.6 preparada inclui esse consumidor; ainda não está publicada. Aplicar salva somente a aparência normal do perfil atual. Não há leitura de arquivo, persistência de metadados, galeria, catálogo ou API estável. Testes sintéticos não qualificam popup/foco nativo, acessibilidade, contraste ou reinício; C1, X1 e DX2 continuam parciais. Consulte o [guia do formato](docs/theme-format.md) e a [validação do consumidor](docs/validation/theme-consumer-0.2.6.md).
 
 **Aparência alpha 0.2.3:** editor com prévia temporária, Aplicar, Cancelar, Desfazer e restauração das preferências anteriores, em snapshot separado. Popup limitado ao orçamento da tela e campos acessíveis pelo teclado; 66 testes locais e revisão independente aprovados. Uma fixture com painel/KConfig privados comprovou Aplicar/Cancelar/restart de aparência por ações programáticas; isso não qualifica gesto humano nem foco/grab/layout do popup. Esse recibo histórico não cobre organização de widgets/perfis; importação/exportação continua pendente; C1/UX1 permanecem parciais. Consulte a [validação da aparência](docs/validation/appearance-0.2.3.md).
 
@@ -147,7 +147,7 @@ T1 depende de C1/P1; T2/T4 dependem de T1; T3 depende também de R3. Os módulos
 
 ### 0.7 — Central de Controle, Steam e projetos próprios
 
-**Primeira fatia Steam no fonte:** `scripts/steam.py` consulta metadados em raízes explícitas e bibliotecas declaradas pelo índice, sem acessar conta/rede nem iniciar jogos. Limites de arquivos/parser/worker/saída, estados parciais/desconhecidos e nomes obviamente semelhantes a caminhos têm tratamento explícito. Vinte testes sintéticos e revisão independente passaram; não houve leitura de bibliotecas pessoais. Não integra os assets publicados 0.2.5. Detecção do cliente, provedor/UI, favoritos/busca, handler e dois jogos reais permanecem pendentes; S1 continua parcial. Consulte o [guia](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md).
+**Primeira fatia Steam no fonte:** `scripts/steam.py` consulta metadados em raízes explícitas e bibliotecas declaradas pelo índice, sem acessar conta/rede nem iniciar jogos. Limites de arquivos/parser/worker/saída, estados parciais/desconhecidos e nomes obviamente semelhantes a caminhos têm tratamento explícito. Vinte testes sintéticos e revisão independente passaram; não houve leitura de bibliotecas pessoais. Está no bundle 0.2.6 preparado, ainda não publicado; os assets publicados 0.2.5 não o incluem e o Menu Orla permanece excluído da candidata. Detecção do cliente, provedor/UI, favoritos/busca, handler e dois jogos reais permanecem pendentes; S1 continua parcial. Consulte o [guia](docs/steam.md).
 
 - [ ] **CC0: Central de Controle de estado e atalhos.** Primeiro entregar cards com dados e abertura dos controles KDE, acessíveis também pelo dock sem a barra. Aceite: abrir o painel não altera configurações e serviço ausente afeta somente o card correspondente.
 - [ ] **CC1: controles diretos básicos.** Cards de volume/saída de áudio, microfone/mudo, brilho quando disponível, mídia, bateria/energia e Não perturbe. Sincronizar com mudanças feitas fora do Orla. Aceite: valores refletem o KDE, hardware ausente desativa somente o card correspondente e cada alteração resulta de uma ação do usuário, confirmada pelo serviço.
@@ -243,7 +243,7 @@ Começar por dados declarativos, depois contratos de dados/ações com UI render
 | ID | Entrega | Gate principal |
 |---|---|---|
 | **X0** | Personalização nativa, 0.4 | C1/UX1 reversíveis e acessíveis |
-| **X1** | Formato de temas/presets, 0.4–0.5 | Schema versionado, limites, assets/caminhos validados, corpus malformado; sem executar código |
+| **X1** | Formato de temas/presets, 0.4–0.5 | Primeiro consumidor por colagem e prévia experimental existem; completar schema/compatibilidade, importação segura de arquivo e corpus de consumidores; sem executar código |
 | **X2** | SDK de conteúdo e autoria, 0.4–0.5 | Template, validador, preview e pacote reproduzível; nova pessoa cria tema sem conhecer o núcleo |
 | **X3** | Distribuição de temas, 0.6–0.7 | Origem, licença, compatibilidade, instalação/rollback e revogação local claros |
 | **X4** | Widgets hospedados, 0.7 | Adaptadores internos/mocks entregam dados tipados a blocos finitos da UI; fonte lenta/entrada inválida não trava o dock; executar provedor comunitário depende de X5 |
@@ -281,7 +281,7 @@ Um primeiro tema, bug reproduzível ou tradução deve ser possível sem API pag
 |---|---|---|
 | **DX0** | 0.3 | Comandos/dependências e limites da CI conferidos por nova pessoa; triagem clara |
 | **DX1** | 0.3–0.4 | Fronteiras internas, fixtures sintéticas, erros e estados sem serviço real |
-| **DX2** | 0.4–0.5 | Schema, galeria de estados e preview de tema sem código/API |
+| **DX2** | 0.4–0.5 | Preview de tema por colagem sem código/API foi iniciado; galeria de estados, autoria guiada e qualificação nativa continuam pendentes |
 | **DX3** | 0.5 | Kit de autoria com validador, templates, empacotamento e exemplos testados |
 | **DX4** | 0.7–0.9 | Contrato experimental de dados/ações, mocks e matriz host/SDK/protocolo/addon |
 | **DX5** | Após X5 | Runtime de terceiros e ferramentas de compatibilidade/isolamento, revisão e revogação |

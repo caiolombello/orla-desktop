@@ -89,6 +89,108 @@ class ProfilesDockTests(unittest.TestCase):
     def flat(self):
         return self.evaluate("JSON.stringify({launchers:Array.from(configuration.launchers),theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,iconSize:configuration.iconSize,animations:configuration.animations,showClock:configuration.showClock,showMusic:configuration.showMusic,showSystemBattery:configuration.showSystemBattery,showPomodoro:configuration.showPomodoro,showQuota:configuration.showQuota,showPeripherals:configuration.showPeripherals,showRecording:configuration.showRecording,calendarEvents:configuration.calendarEvents,currentDesktopOnly:configuration.currentDesktopOnly})")
 
+    def theme_text(self, index=0):
+        examples = sorted((Path(__file__).resolve().parents[1] / "themes/examples").glob("*.json"))
+        return examples[index].read_text()
+
+    def set_theme(self, text):
+        self.evaluate("appearance.setThemeText(" + json.dumps(text) + ")")
+
+    def test_external_theme_tokens_preview_and_apply_only_current_profile(self):
+        self.initialize()
+        flat = self.flat()
+        original_raw = self.config.property("profilesJSON")
+        original = json.loads(original_raw)
+        before_personal = next(p for p in original["profiles"] if p["id"] == "personal")
+        self.evaluate("pomodoro.toggle()")
+        timer = {key: self.config.property(key) for key in ("timerDeadline", "timerRemaining", "timerBreak", "completedFocus")}
+        self.evaluate("appearance.begin()")
+        for index in range(2):
+            text = self.theme_text(index)
+            tokens = json.loads(text)["tokens"]
+            self.set_theme(text)
+            self.assertTrue(self.evaluate("appearance.dirty"))
+            self.assertFalse(self.command("select", "personal"))
+            self.assertFalse(self.command("create", "Blocked"))
+            self.assertFalse(self.evaluate("appearance.canApply"))
+            self.assertTrue(self.evaluate("appearance.previewTheme()"))
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(appearance.effective.tokens)")), tokens)
+            for key in ("foreground", "muted", "accent", "surface"):
+                self.assertEqual(self.evaluate("String(" + key + ")"), tokens[key])
+            surface = self.window.findChild(QQuickItem, "dockSurface")
+            self.assertEqual(surface.property("radius"), tokens["radius"])
+            self.assertAlmostEqual(surface.property("opacity"), tokens["opacity"])
+            self.assertEqual(self.evaluate("String(border.color)", surface), tokens["border"])
+            self.assertEqual(self.window.findChild(QQuickItem, "dockContent").property("spacing"), tokens["spacing"])
+            self.assertEqual(self.dock.property("requestedIconSize"), tokens["iconSize"])
+            self.assertEqual(self.evaluate("appearance.effective.tokens.reducedMotion"), tokens["reducedMotion"])
+            self.assertEqual(self.config.property("profilesJSON"), original_raw)
+            self.assertEqual(self.flat(), flat)
+        widgets = self.widgets(False, True)
+        self.assertTrue(self.command("commitPresentation", {"widgets": widgets}))
+        self.assertTrue(self.evaluate("appearance.apply()"))
+        saved = json.loads(self.config.property("profilesJSON"))
+        work = next(p for p in saved["profiles"] if p["id"] == "work")
+        self.assertEqual(json.loads(work["appearance"]["appearanceJSON"])["tokens"], tokens)
+        self.assertEqual(work["widgets"], widgets)
+        self.assertEqual(work["launchers"], next(p for p in original["profiles"] if p["id"] == "work")["launchers"])
+        self.assertEqual(next(p for p in saved["profiles"] if p["id"] == "personal"), before_personal)
+        self.assertEqual(self.flat(), flat)
+        for key, value in timer.items():
+            self.assertEqual(self.config.property(key), value)
+        self.assertTrue(self.evaluate("appearance.undo()"))
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.widgets)")), widgets)
+        self.assertEqual(self.evaluate("presentation.appearance.appearanceJSON"), "")
+        self.assertEqual(self.flat(), flat)
+
+    def test_theme_input_escape_cancels_and_invalid_profile_bytes_remain_protected(self):
+        self.initialize()
+        saved = self.config.property("profilesJSON")
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        QTest.qWait(20)
+        disclosure = self.owned_item("appearanceThemeJSON")
+        self.focus(disclosure); QTest.keyClick(self.window, Qt.Key_Space)
+        self.set_theme(self.theme_text())
+        self.assertTrue(self.evaluate("appearance.previewTheme()"))
+        field = self.owned_item("appearanceThemeInput")
+        self.focus(field); QTest.keyClick(self.window, Qt.Key_Escape)
+        self.settle(lambda: not self.popup.property("visible"))
+        self.assertEqual(self.evaluate("appearance.themeText"), "")
+        self.assertFalse(self.evaluate("appearance.editing"))
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        raw = '{"formatVersion":"future","preserve":"owned bytes"}'
+        for when in ("before", "during"):
+            self.evaluate("appearance.cancel()")
+            if when == "before": self.config.setProperty("profilesJSON", raw)
+            self.evaluate("appearance.begin()")
+            self.set_theme(self.theme_text())
+            self.assertTrue(self.evaluate("appearance.previewTheme()"))
+            if when == "during": self.config.setProperty("profilesJSON", raw)
+            self.assertFalse(self.evaluate("appearance.apply()"))
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+            self.assertEqual(self.config.property("appearanceJSON"), "")
+            self.config.setProperty("profilesJSON", saved)
+
+    def test_external_theme_rejects_profile_signature_change_and_scope_clears_input(self):
+        self.initialize()
+        self.evaluate("appearance.begin()")
+        self.set_theme(self.theme_text())
+        self.assertTrue(self.command("commitPresentation", {"appearance": {"theme": "paper"}}))
+        saved = self.config.property("profilesJSON")
+        self.assertTrue(self.evaluate("appearance.stale"))
+        self.assertFalse(self.evaluate("appearance.previewTheme()"))
+        self.assertFalse(self.evaluate("appearance.apply()"))
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        self.evaluate("appearance.cancel(); appearance.begin()")
+        self.set_theme(self.theme_text())
+        self.assertTrue(self.evaluate("appearance.previewTheme()"))
+        self.assertTrue(self.evaluate("appearance.apply()"))
+        self.assertTrue(self.command("select", "personal"))
+        self.assertEqual(self.evaluate("appearance.themeText"), "")
+        self.assertFalse(self.evaluate("appearance.canUndo"))
+        self.assertFalse(self.evaluate("appearance.undo()"))
+
     def test_scoped_apply_retains_immediate_widgets_and_dirty_preview_blocks_switch(self):
         self.initialize()
         self.evaluate("appearance.begin()")

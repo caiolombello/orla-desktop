@@ -1,17 +1,45 @@
 # Temas declarativos experimentais / Experimental declarative themes
 
 **PT-BR:** `0.1-experimental` é a versão deste formato de dados, independente da
-versão do Orla. Pode mudar antes da estabilização. Esta entrega é uma base
-portátil de X1/DX2: valida e empacota dados, sem instalar nem aplicar temas no
-dock. Editor de arquivos de tema, galeria/prévia, contraste/foco no Plasma, importação com recuperação
-e teste por contribuidor externo continuam pendentes. C1, X1 e DX2 não estão
-concluídos por este validador.
+versão do Orla. Pode mudar antes da estabilização. O applet agora aceita JSON
+colado explicitamente no painel recolhível **Tema JSON experimental** e permite
+usar os dez tokens na prévia. Isso não instala um tema: aplicar salva somente a
+aparência normal do perfil atual, sem documento ou metadados externos. O kit de
+CLI continua validando e empacotando arquivos. Seção abaixo descreve o consumidor
+no applet. Importação de arquivo, galeria, autoria guiada e qualificação nativa
+de contraste/foco continuam pendentes. C1, X1 e DX2 seguem parciais.
 
 **EN:** `0.1-experimental` versions this data format independently of the Orla app.
-It may change before stabilization. This portable X1/DX2 foundation validates and
-packs data without installing or applying themes to the dock. The editor,
-gallery/preview, Plasma contrast/focus checks, recoverable import and an outside
-contributor trial remain pending. This validator does not complete C1, X1 or DX2.
+It may change before stabilization. The applet now accepts explicitly pasted JSON
+in a collapsible **Experimental JSON theme** section and previews its ten tokens.
+This does not install a theme: Apply saves only the current profile's ordinary
+appearance, without the external document or metadata. The CLI kit still
+validates and packs files. File import, gallery, guided authoring and native
+contrast/focus qualification remain pending. C1, X1 and DX2 remain partial.
+
+## Applet preview / Prévia no applet
+
+In Appearance settings, expand **Experimental JSON theme**, paste a complete
+`0.1-experimental` document and choose **Use in preview**. Parsing is explicit;
+editing the text alone never previews it. The imported ten tokens replace the
+current temporary appearance draft while retaining its valid base preset. You
+can continue editing tokens, then use the existing Apply, Undo, Cancel or Escape
+controls. Apply writes only the normalized appearance to the current profile.
+Pending or invalid non-empty input blocks Apply and profile create/switch; an
+invalid attempt preserves the most recent good preview. Clear JSON removes the
+pending text/error while retaining that preview.
+
+Declared name, author, version and license are shown as plain text. They are
+unverified claims: identity, ownership and redistribution rights are not checked.
+The document and metadata are not saved, installed or exported. The field accepts
+pasted text only; there is no file chooser, URL, download, catalog or executable
+content. The text widget can temporarily receive a larger clipboard paste; the
+parser bounds its own work using a 65,536-byte-equivalent UTF-8 limit. Because Qt
+has already decoded the text, this does not prove an original file's encoding or
+strictly bound native clipboard memory.
+
+See the [consumer validation record](validation/theme-consumer-0.2.6.md) for the
+synthetic evidence and unqualified native behavior.
 
 ## Autoria / Authoring
 
