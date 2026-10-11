@@ -40,6 +40,8 @@ QML interaction tests need the KDE/Qt runtime and a graphical session. Before ch
 
 The source checkout has a separate experimental [C++/Qt Quick launcher](launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
 
+The experimental [release-check CLI](docs/updates.md) uses Python's standard library on Linux. Run its offline tests in their own process with `python3 -m unittest discover -s tests -p 'test_updates.py' -v`; no network or provider account is required. These tests are included in portable CI. Live release checks are explicit commands and never run during tests.
+
 Contributions and CI must not require paid AI calls, an AI subscription, or private account credentials. Future provider tests use synthetic mocks by default; live tests are separate, manually initiated, and opt-in. UI changes include the relevant loading, empty, error, long-text, keyboard/focus, contrast, and reduced-motion states. Captures should use synthetic data.
 
 ## Pull requests

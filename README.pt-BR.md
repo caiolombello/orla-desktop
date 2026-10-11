@@ -10,6 +10,8 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 O checkout de código também inclui um [launcher independente experimental](launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.4 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
 
+Uma [CLI experimental de consulta de updates](docs/updates.md) também está disponível no checkout de código. Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. A release 0.2.4 exclui esse comando novo; interface no desktop, cache e atualização com recuperação continuam planejados.
+
 ## O que funciona hoje
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
