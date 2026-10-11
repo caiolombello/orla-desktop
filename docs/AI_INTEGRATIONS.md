@@ -23,10 +23,14 @@ somente **Gerar** inicia a chamada.
 Em execução, todos os campos ficam travados e **Cancelar** permanece disponível.
 O streaming aparece numa saída somente leitura, a parcial continua revisável e
 a cópia exige **Copiar resultado**. Fechar o painel ou abrir Steam cancela
-compatibilidade e texto; fechar a janela espera compatibilidade, texto e Steam drenarem antes de
-prosseguir uma única vez. Timeout mantém sua causa após a limpeza. Uso
-desconhecido continua desconhecido, e uma resposta terminal rejeitada por custo
-inválido não publica tokens.
+compatibilidade e texto. O fechamento solicitado pela UI e o atalho repetido
+com a janela ativa esperam compatibilidade, texto e Steam drenarem antes de
+prosseguir uma única vez. A nova tentativa limpa o resultado anterior antes
+do preflight; chamadas ignoradas durante execução/fechamento o preservam.
+Timeout mantém sua causa após a limpeza. Uso desconhecido continua desconhecido,
+e uma resposta terminal rejeitada por custo inválido não publica tokens.
+O fonte ainda tem um dismiss direto ao abrir aplicativo depois de Voltar;
+esta fatia não qualifica todos os caminhos de saída.
 
 A cadeia operacional usa processos próprios:
 
@@ -50,13 +54,19 @@ rede. Por isso a interface não promete identidade Ollama, privacidade nem
 processamento offline.
 
 O plano R2, o shim, o controller R3 e a correção de UI têm revisão delimitada
-favorável. O build normal, seis CTests isolados e 90 testes Python da composição
-passaram (6 do shim, 23 T1 e 61 T2). Esta mudança adota esse Source; integração
-na branch remota principal e CI hospedada desta fatia ainda não foram verificadas. As fixtures
-cobriram a cadeia controller → helper → servidor HTTP Qt,
-streaming, cancelamento, parcial e a barreira dos três proprietários. Ollama e
-modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
-empacotamento relocável, instalação, CI hospedada para esta fatia, release e
+favorável. A composição inicial passou build normal, seis CTests isolados e
+90 testes Python (6 do shim, 23 T1 e 61 T2). Após as seis correções revisadas
+do PR [#36](https://github.com/caiolombello/orla-desktop/pull/36), um build novo
+e os seis CTests passaram com 24 entradas do controller e 18 da UI. As fixtures
+cobriram a cadeia controller → helper → servidor HTTP Qt, streaming, cancelamento,
+parcial, resultado anterior e a barreira do atalho com três proprietários.
+Os dois jobs hospedados passaram em `1f59e0c`; em `2c8b750`, o portátil passou,
+mas o processo da UI saiu com SIGSEGV depois das 17 entradas aprovadas. A causa
+continua desconhecida e impede o merge. A captura GDB adicionada ao workflow
+é somente diagnóstico condicionado à falha; a falha original continua bloqueante.
+CI da revisão final e integração na branch remota principal estão pendentes.
+Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
+empacotamento relocável, instalação, release e
 admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda
 exige também o backend API opt-in e os demais gates publicados. A instalação
 existente do launcher baseada no Source 32 continua sem a nova UI; esta mudança

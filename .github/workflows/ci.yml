@@ -125,6 +125,7 @@ jobs:
             'cmake-0:4.3.0-1.fc44.x86_64'
             'dbus-daemon-1:1.16.2-1.fc44.x86_64'
             'gcc-c++-0:16.2.1-2.fc44.x86_64'
+            'gdb-0:17.2-4.fc44.x86_64'
             'git-0:2.56.0-1.fc44.x86_64'
             'glib2-0:2.88.3-1.fc44.x86_64'
             'kf6-kconfig-devel-0:6.30.0-1.fc44.x86_64'
@@ -141,6 +142,7 @@ jobs:
             'cmake|0:4.3.0-1.fc44|x86_64|fedora'
             'dbus-daemon|1:1.16.2-1.fc44|x86_64|fedora'
             'gcc-c++|0:16.2.1-2.fc44|x86_64|updates'
+            'gdb|0:17.2-4.fc44|x86_64|updates'
             'git|0:2.56.0-1.fc44|x86_64|updates'
             'glib2|0:2.88.3-1.fc44|x86_64|updates'
             'kf6-kconfig-devel|0:6.30.0-1.fc44|x86_64|updates'
@@ -229,6 +231,7 @@ jobs:
           PY
 
       - name: Run launcher CTests with private fixtures
+        id: launcher_ctests
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
@@ -237,3 +240,29 @@ jobs:
         run: |
           ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
             --output-on-failure --no-tests=error
+
+      - name: Diagnose failed launcher UI without changing its result
+        if: ${{ failure() && steps.launcher_ctests.outcome == 'failure' }}
+        timeout-minutes: 2
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Fusion
+          QT_QPA_PLATFORMTHEME: ""
+          DEBUGINFOD_URLS: ""
+        run: |
+          set -euo pipefail
+          failed="$RUNNER_TEMP/orla-launcher-build/Testing/Temporary/LastTestsFailed.log"
+          if [[ ! -f "$failed" ]] || ! grep -Eq '^[0-9]+:launcher-ui$' "$failed"; then
+            exit 0
+          fi
+          # This one diagnostic run cannot turn the original failed step green.
+          python3 launcher/tests/run_isolated.py --private-path \
+            /usr/bin/gdb --nx --nh --batch --return-child-result \
+            -iex 'set auto-load off' \
+            -iex 'set debuginfod enabled off' \
+            -ex 'set pagination off' \
+            -ex 'set disable-randomization off' \
+            -ex 'set startup-with-shell off' \
+            -ex run -ex 'thread apply all bt 40' -ex 'info sharedlibrary' \
+            --args "$RUNNER_TEMP/orla-launcher-build/orla-launcher-ui-tests"

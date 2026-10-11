@@ -122,8 +122,10 @@ API support.
 
 This Source change integrates `scripts/ai_text_ollama.py`, `AiTextController`
 and the explicit text UI. Its component reviews and fresh composition checks
-passed. Remote main integration, hosted CI, release and installation for this
-slice have not yet been verified; this is Source adoption, not runtime admission.
+passed. Remote main integration, release and installation for this slice remain
+unverified. Hosted checks passed on `1f59e0c`; the later `2c8b750` run has an
+unexplained UI process SIGSEGV after passing assertions, detailed below.
+This is Source adoption, not runtime admission.
 
 The UI accepts only an explicitly chosen numeric loopback host (`127.0.0.1` or
 `::1`), port, model, task, text and translation language when required. It shows
@@ -133,8 +135,13 @@ consenting do not execute anything; only **Gerar** starts a request. During the
 request inputs are locked, **Cancelar** stays available, deltas stream to a
 read-only review area, partial output is retained and copy is manual. Closing
 the panel or switching from AI to Steam cancels both AI controllers before
-leaving that panel; the actual window-close barrier waits for AI compatibility,
-AI text and Steam owners before finishing once.
+leaving that panel. UI-requested closing and the visible+active shortcut route
+wait for AI compatibility, AI text and Steam owners before finishing once.
+A newly admitted attempt clears previous output/usage before preflight; ignored
+busy/closing attempts preserve the live result. A separate baseline path still
+exposes search after asynchronous AI-panel cancellation and calls direct dismiss
+on successful app/runner launch. That Source observation has no runtime witness
+here and remains a separate follow-up; not every dismissal route is qualified.
 
 The controller invokes exactly `python -I -B ai_text_ollama.py run-ollama` by
 absolute paths in a private cwd with an empty child environment. This is
@@ -166,14 +173,37 @@ case first showed reported zero usage, then rejected malformed cost on the same
 controller and showed empty usage and the actual unknown QML label. These are
 synthetic helpers and offscreen interactions, not a real model or native focus.
 
+Two subsequent independent Source reviews approved clearing stale results before
+preflight and routing the active-window shortcut through QML requestDismiss(false).
+The final exact composition passed a fresh 40-step all-target build and all six
+isolated CTests once (66.197 s): 24 controller entries, 18 UI entries and six
+actual process-exit-zero/owned-bus cleanup receipts. Regression rows cover prior
+completed results rejected for invalid model/language or missing helper, ignored
+busy/closing requests, and three real owned resistant helpers before exactly one
+hide. An independent baseline RED reproduced early hiding; a plain owned active
+QQuickWindow without the QML method stayed visible on repeated callbacks. This
+does not exercise global key registration or compositor focus.
+
 The first portable job on `6364572` failed on Python 3.12.3 because test
 fixtures handed a manually closed stdin to `communicate()`. Commit `1f59e0c`
 sets that reference to `None` after close, preserving the EOF assertion and
 existing test bodies. All six shim tests passed in Python 3.12.3 and 3.14.7,
 including independent runs in an owned harness that preserves actual parent
 HOME/CODEX_HOME literals. The exact hosted command was not replayed locally.
-Hosted checks and remote main integration of the final follow-up still require
-verification; the original failure evidence is retained.
+Both hosted checks subsequently passed on `1f59e0c`. On `2c8b750`, the portable
+job passed. In the [launcher job](https://github.com/caiolombello/orla-desktop/actions/runs/38159702441/job/114529858525),
+all 17 UI entries and the other five CTests passed, but the UI process returned
+`-11` after Finished testing. Cause UNKNOWN; no hosted stack was supplied.
+Bounded local normal/GDB/allocator runs exited zero and do not establish a fix.
+
+The workflow now retains the original failing CTest step and adds a two-minute
+failure-only diagnostic selected by the exact launcher-ui LastTestsFailed entry.
+It uses an exact Fedora GDB pin, the unchanged isolated runner and private bus,
+a bounded backtrace and child-result propagation. Owned checks verified exit0,
+exit42, a controlled synthetic SIGSEGV with stack, and the exact UI diagnostic
+command exiting zero. The independent review approved diagnosis only. Hosted
+execution of the final revision remains pending; merge stays blocked while the
+CI failure is unexplained/unresolved. The original failure evidence is retained.
 
 No real Ollama, model, provider identity, semantic output, authentication,
 external service, clipboard, accessibility runtime, native Wayland session,

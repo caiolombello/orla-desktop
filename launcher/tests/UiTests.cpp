@@ -5,6 +5,7 @@
 #include <QQuickItem>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <cerrno>
 #include <csignal>
@@ -13,6 +14,7 @@
 #include "LauncherController.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
+#include "WindowSession.h"
 
 // Synthetic Qt key events verify handlers only; they do not qualify Wayland/global-shortcut focus.
 class UiTests final : public QObject
@@ -639,6 +641,132 @@ private Q_SLOTS:
         QCOMPARE(window->property("pendingDismiss").toBool(), false);
         QTest::qWait(100);
         QCOMPARE(dismissed.count(), 1);
+    }
+
+    void activeShortcutWaitsForThreeOwnersBeforeHidingExactlyOnce()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString providerReceipt = directory.filePath(QStringLiteral("shortcut-provider-receipt"));
+        const QString textReceipt = directory.filePath(QStringLiteral("shortcut-text-receipt"));
+        const QString steamReceipt = directory.filePath(QStringLiteral("shortcut-steam-receipt"));
+        const QString providerHelper = directory.filePath(QStringLiteral("shortcut-provider.py"));
+        const QString textHelper = directory.filePath(QStringLiteral("shortcut-text.py"));
+        const QString steamHelper = directory.filePath(QStringLiteral("shortcut-steam.py"));
+        for (const auto &pair : {qMakePair(providerHelper, providerReceipt),
+                                 qMakePair(textHelper, textReceipt), qMakePair(steamHelper, steamReceipt)}) {
+            QFile file(pair.first);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,json,os,pathlib,signal,sys,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n");
+            file.write(pair.first == providerHelper
+                ? "runtime=sys.argv[sys.argv.index('--runtime-root')+1]\n" : "runtime=os.getcwd()\n");
+            file.write("pathlib.Path(base64.b64decode('");
+            file.write(pair.second.toUtf8().toBase64());
+            file.write("').decode()).write_text(str(os.getpid())+'\\n'+runtime)\n");
+            if (pair.first == textHelper) {
+                file.write("request=json.loads(sys.stdin.buffer.readline())\n"
+                           "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+                           "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial-atalho')]\n"
+                           "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n");
+            }
+            file.write("time.sleep(60)\n");
+        }
+        const auto steamReaped = [&] {
+            QFile file(steamReceipt);
+            if (!file.open(QIODevice::ReadOnly)) return false;
+            bool valid = false;
+            const qint64 pid = file.readAll().split('\n').first().toLongLong(&valid);
+            if (!valid || pid <= 0) return false;
+            errno = 0;
+            if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+            errno = 0;
+            return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH;
+        };
+
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper,
+                                {}, nullptr, {}, 500);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
+                                {}, nullptr, {}, 100);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        window->requestActivate(); // Only the owned offscreen Qt window, without a compositor or global shortcut.
+        QTRY_VERIFY_WITH_TIMEOUT(window->isActive(), 1000);
+        WindowSession session(&controller, window, false, QString());
+        QVERIFY(session.shortcutText().isEmpty());
+        // Match main.cpp's order: the session's hide slot precedes the cancellation slots.
+        connect(&controller, &LauncherController::closeRequested, &ai, &AiProviderController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &aiText, &AiTextController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &steam, &SteamProviderController::cancelAll);
+
+        ai.discover();
+        aiText.generate(QStringLiteral("shortcut-request"), QStringLiteral("summarize"),
+                        QVariant(), QStringLiteral("texto"), QStringLiteral("modelo:1"),
+                        QStringLiteral("127.0.0.1"), 11434, true);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_VERIFY_WITH_TIMEOUT(ai.busy() && aiText.busy() && steam.busy()
+            && QFile::exists(providerReceipt) && QFile::exists(textReceipt) && QFile::exists(steamReceipt), 1500);
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial-atalho"), 1500);
+        for (const auto &receipt : {providerReceipt, textReceipt, steamReceipt}) {
+            QFile file(receipt);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            qInfo().noquote() << "ORLA_SHORTCUT_HELPER" << QFileInfo(receipt).fileName() << file.readAll();
+        }
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        QSignalSpy providerReady(&ai, &AiProviderController::closeReady);
+        QSignalSpy textReady(&aiText, &AiTextController::closeReady);
+        QSignalSpy steamReady(&steam, &SteamProviderController::closeReady);
+        QSignalSpy visibility(window, &QWindow::visibleChanged);
+        QSignalSpy quitRequested(&engine, &QQmlApplicationEngine::quit);
+        bool hiddenAfterCleanup = false;
+        connect(window, &QWindow::visibleChanged, &session, [&] {
+            if (!window->isVisible()) hiddenAfterCleanup = !ai.busy() && !aiText.busy() && !steam.busy()
+                && helperReapedAndRuntimeRemoved(providerReceipt)
+                && helperReapedAndRuntimeRemoved(textReceipt) && steamReaped();
+        });
+        QVERIFY(window->isVisible() && window->isActive());
+        session.showFromShortcut(); // Actual QAction target; no registration, native key, or fake activity flag.
+        QVERIFY(window->isVisible());
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QCOMPARE(window->property("pendingQuit").toBool(), false);
+        QCOMPARE(dismissed.count(), 0);
+        session.showFromShortcut(); // Repeated activation cannot bypass the pending barrier.
+        QVERIFY(window->isVisible());
+        QCOMPARE(dismissed.count(), 0);
+
+        QTRY_COMPARE_WITH_TIMEOUT(textReady.count(), 1, 1500);
+        QVERIFY(helperReapedAndRuntimeRemoved(textReceipt));
+        QVERIFY(ai.busy() && steam.busy());
+        QVERIFY(window->isVisible());
+        QCOMPARE(dismissed.count(), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(providerReady.count(), 1, 2000);
+        QVERIFY(helperReapedAndRuntimeRemoved(providerReceipt));
+        QVERIFY(steam.busy());
+        QVERIFY(window->isVisible());
+        QCOMPARE(dismissed.count(), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(steamReady.count(), 1, 7000);
+        QVERIFY(steamReaped());
+        QCOMPARE(dismissed.count(), 1);
+        QCOMPARE(visibility.count(), 1);
+        QVERIFY(!window->isVisible());
+        QVERIFY(hiddenAfterCleanup);
+        QCOMPARE(aiText.output(), QStringLiteral("parcial-atalho"));
+        QCOMPARE(window->property("pendingDismiss").toBool(), false);
+        QCOMPARE(quitRequested.count(), 0);
+        QTest::qWait(100);
+        QCOMPARE(dismissed.count(), 1);
+        QCOMPARE(visibility.count(), 1);
+        qInfo() << "ORLA_SHORTCUT_BARRIER_PASS three_helpers_reaped=true owned_ai_runtimes_removed=true hide_exactly_once=true partial_preserved=true";
     }
 
     void windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce()

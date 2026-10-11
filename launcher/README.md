@@ -36,9 +36,13 @@ executa nada; somente **Gerar** inicia o pedido.
 Durante a execução, os campos ficam bloqueados e a ação principal vira
 **Cancelar**. Deltas aparecem numa área somente leitura; resposta parcial é
 preservada para revisão e **Copiar resultado** continua sendo uma ação manual.
-Fechar o painel ou abrir Steam cancela os dois controladores de IA. Fechar a janela espera os
-três proprietários de trabalho — compatibilidade de IA, texto e Steam — antes
-de concluir uma única vez.
+Fechar o painel ou abrir Steam cancela os dois controladores de IA. O pedido
+de fechamento da UI e a repetição do atalho com a janela ativa esperam os três
+proprietários — compatibilidade de IA, texto e Steam — antes de concluir uma
+única vez. Uma nova tentativa limpa texto e uso anteriores antes de validar
+a entrada; uma tentativa ignorada durante execução ou fechamento preserva o
+resultado ativo. O caminho separado de abrir um aplicativo depois de Voltar
+ainda tem chamada direta de dismiss no fonte e exige correção/validação própria.
 
 O controller inicia exatamente Python isolado com `-I -B`, o helper
 `ai_text_ollama.py` e `run-ollama`, em cwd privado e com ambiente filho vazio.
@@ -54,8 +58,11 @@ correção de UI receberam revisão independente delimitada. O build normal da c
 CTests isolados e 90 testes Python passaram (6 do shim, 23 T1 e 61 T2),
 usando somente processos e servidores HTTP privados e sintéticos. Após as
 correções do PR [#36](https://github.com/caiolombello/orla-desktop/pull/36), um
-novo build normal e os seis CTests passaram, com 19 entradas do controller e
-17 da UI. Timeout continua sendo falha de prazo após a limpeza; uso só é
+build normal e os seis CTests passaram, com 19 entradas do controller e
+17 da UI. As duas correções seguintes de resultado anterior e atalho receberam
+revisões independentes; a composição final passou um build novo e os seis
+CTests, com 24 entradas do controller e 18 da UI. Timeout continua sendo falha
+de prazo após a limpeza; uso só é
 rotulado como reportado quando o estado validado informa isso. Uma resposta
 terminal com custo inválido não publica os tokens daquela resposta. A fixture
 do shim também passou em Python 3.12.3 e 3.14.7 em harnesses próprios que
@@ -64,8 +71,13 @@ Ollama ou modelo real, validação semântica da resposta,
 clipboard nativo, acessibilidade nativa, instalação, pacote relocável, release
 ou admissão de usuário/Wayland. Loopback limita o destino de rede; não confirma
 identidade Ollama, processamento offline ou privacidade, e o processo que
-escuta ali pode encaminhar o conteúdo para outra rede. A CI hospedada desta
-fatia e sua integração na branch remota principal ainda não foram verificadas.
+escuta ali pode encaminhar o conteúdo para outra rede. Os dois jobs hospedados
+passaram em `1f59e0c`. Em `2c8b750`, o job portátil passou e as 17 entradas da
+UI passaram, mas o processo saiu com SIGSEGV depois de terminar os testes; a
+causa permanece desconhecida e impede o merge. O workflow agora inclui uma
+captura GDB limitada, acionada somente se esse CTest falhar, sem transformar
+a falha original em sucesso. A execução hospedada da revisão final e a
+integração na branch remota principal continuam pendentes.
 Esta mudança não atualiza a instalação existente do launcher baseada no Source
 32, que continua sem a nova UI de texto.
 

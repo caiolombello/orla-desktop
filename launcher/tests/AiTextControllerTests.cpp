@@ -86,6 +86,24 @@ QByteArray completed(const QString &requestId, int sequence)
     });
 }
 
+QByteArray reportedResultHelper(const QString &marker, bool holdAfterCompleted = false)
+{
+    return QByteArray(R"PY(import json,os,pathlib,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as record:
+ record.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text=r['text'])
+usage={'status':'reported','inputTokens':2,'outputTokens':3,'totalTokens':5}
+if r['requestId'].endswith('.retry'):
+ usage={'status':'reported','inputTokens':4,'outputTokens':5,'totalTokens':9}
+emit(2,'completed',finishReason='stop',usage=usage,cost={'status':'unknown','currency':None,'amount':None})
+)PY") + (holdAfterCompleted ? QByteArray("time.sleep(60)\n") : QByteArray());
+}
+
 void writeChunk(QTcpSocket *socket, const QByteArray &bytes)
 {
     socket->write(QByteArray::number(bytes.size(), 16) + "\r\n" + bytes + "\r\n");
@@ -114,6 +132,146 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void newAttemptPreflightFailureClearsPreviousResultWithoutStartingHelper_data()
+    {
+        QTest::addColumn<QString>("failure");
+        QTest::newRow("nonempty-model-with-space") << QStringLiteral("model");
+        QTest::newRow("invalid-translation-language") << QStringLiteral("language");
+        QTest::newRow("owned-helper-unavailable") << QStringLiteral("helper");
+    }
+
+    void newAttemptPreflightFailureClearsPreviousResultWithoutStartingHelper()
+    {
+        QFETCH(QString, failure);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QByteArray script = reportedResultHelper(marker);
+        const QString helper = writeHelper(directory, script);
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        controller.generate(QStringLiteral("request.previous"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("previous result"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("previous result"));
+        QCOMPARE(controller.usage().value(QStringLiteral("status")).toString(), QStringLiteral("reported"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5);
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray previousRecord = record.readAll();
+        record.close();
+        QCOMPARE(previousRecord.count('\n'), 1);
+        const QString runtimeRoot = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        const QStringList previousRuntime = QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        if (failure == QStringLiteral("helper")) QVERIFY(QFile::remove(helper));
+        const qsizetype changedBeforeFailure = changed.size();
+        bool staleResultNotified = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (controller.status() == QStringLiteral("failed"))
+                staleResultNotified = staleResultNotified || !controller.output().isEmpty()
+                    || !controller.usage().isEmpty();
+        });
+        controller.generate(QStringLiteral("request.new-attempt"),
+                            failure == QStringLiteral("language") ? QStringLiteral("translate")
+                                                                  : QStringLiteral("summarize"),
+                            failure == QStringLiteral("language") ? QVariant(QStringLiteral("123invalid"))
+                                                                  : QVariant(),
+                            QStringLiteral("new input"),
+                            failure == QStringLiteral("model") ? QStringLiteral("model with space")
+                                                               : QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), failure == QStringLiteral("helper")
+            ? QStringLiteral("helper_unavailable") : QStringLiteral("invalid_request"));
+        QVERIFY(!controller.busy());
+        QCOMPARE(changed.size(), changedBeforeFailure + 1);
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        QCOMPARE(record.readAll(), previousRecord);
+        record.close();
+        QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
+        QVERIFY(controller.output().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QVERIFY(!staleResultNotified);
+
+        if (failure == QStringLiteral("helper")) QCOMPARE(writeHelper(directory, script), helper);
+        controller.generate(QStringLiteral("request.new-attempt.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("fresh result"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh result"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        QCOMPARE(record.readAll().count('\n'), 2);
+        QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
+    }
+
+    void ignoredGeneratePreservesResultWhileBusyOrClosePending_data()
+    {
+        QTest::addColumn<bool>("closePending");
+        QTest::newRow("busy") << false;
+        QTest::newRow("close-pending") << true;
+    }
+
+    void ignoredGeneratePreservesResultWhileBusyOrClosePending()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured group absence checks are Unix-specific");
+#else
+        QFETCH(bool, closePending);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                    writeHelper(directory, reportedResultHelper(marker, true)));
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        controller.generate(QStringLiteral("request.held-result"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("live result"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5, 3000);
+        QVERIFY(controller.busy());
+        const QVariantMap liveUsage = controller.usage();
+        if (closePending) QVERIFY(!controller.requestClose());
+        QVERIFY(controller.busy());
+        const qsizetype previousSignals = changed.size();
+        controller.generate(QStringLiteral("request.ignored"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("ignored input"), QStringLiteral("model with space"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QCOMPARE(controller.requestId(), QStringLiteral("request.held-result"));
+        QCOMPARE(controller.output(), QStringLiteral("live result"));
+        QCOMPARE(controller.usage(), liveUsage);
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(changed.size(), previousSignals);
+        QCOMPARE(closeReady.size(), 0);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        QCOMPARE(identity.count('\n'), 1);
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+        if (!closePending) controller.cancelAll();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(controller.output(), QStringLiteral("live result"));
+        QCOMPARE(controller.usage(), liveUsage);
+        QCOMPARE(closeReady.size(), closePending ? 1 : 0);
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+#endif
+    }
+
     void constructionAndInvalidRequestsNeverStartAProcess()
     {
         QTemporaryDir directory;

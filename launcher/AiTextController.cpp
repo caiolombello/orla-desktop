@@ -296,6 +296,9 @@ void AiTextController::generate(const QString &requestId, const QString &task,
                                 int port, bool explicitConsent)
 {
     if (busy() || m_closePending) return;
+    m_output.clear();
+    m_usage.clear();
+    m_costStatus = QStringLiteral("unknown");
     if (!validateRequest(requestId, task, targetLanguage, text, model, numericHost, port,
                          explicitConsent)) {
         recordFailure(QStringLiteral("invalid_request"));
@@ -319,11 +322,8 @@ void AiTextController::generate(const QString &requestId, const QString &task,
         ? QStringLiteral("http://[::1]:%1/api/chat").arg(port)
         : QStringLiteral("http://127.0.0.1:%1/api/chat").arg(port);
     m_model = model;
-    m_output.clear();
     m_errorCode.clear();
     m_error.clear();
-    m_usage.clear();
-    m_costStatus = QStringLiteral("unknown");
     m_stdout.clear();
     m_nextSequence = 0;
     m_eventCount = 0;

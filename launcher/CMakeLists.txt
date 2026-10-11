@@ -63,11 +63,12 @@ if(BUILD_TESTING)
         --fixture $<TARGET_FILE:orla-launcher-test-fixture> $<TARGET_FILE:orla-launcher-tests>
         appResultsOnlyRunOwnedFixtureAfterExplicitSelection)
     set_tests_properties(launcher-owned-app PROPERTIES TIMEOUT 30)
-    add_executable(orla-launcher-ui-tests tests/UiTests.cpp)
+    add_executable(orla-launcher-ui-tests tests/UiTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-ui-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
     qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml)
-    target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus)
+    target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
+        KF6::GlobalAccel KF6::WindowSystem)
     add_test(NAME launcher-ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
         --private-path
         $<TARGET_FILE:orla-launcher-ui-tests>)
