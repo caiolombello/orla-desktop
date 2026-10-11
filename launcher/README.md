@@ -41,8 +41,12 @@ de fechamento da UI e a repetição do atalho com a janela ativa esperam os trê
 proprietários — compatibilidade de IA, texto e Steam — antes de concluir uma
 única vez. Uma nova tentativa limpa texto e uso anteriores antes de validar
 a entrada; uma tentativa ignorada durante execução ou fechamento preserva o
-resultado ativo. O caminho separado de abrir um aplicativo depois de Voltar
-ainda tem chamada direta de dismiss no fonte e exige correção/validação própria.
+resultado ativo. Ao voltar à busca, Enter, cliques e ações de resultado ficam
+bloqueados enquanto algum dos três proprietários está ocupado ou há fechamento
+pendente. Os controles
+mostram o estado de espera, permitem continuar digitando e voltam a funcionar
+após a limpeza. Uma falha de limpeza atualiza a interface sem repetir o aviso
+nos polls idênticos; a operação permanece ocupada até a recuperação.
 
 O controller inicia exatamente Python isolado com `-I -B`, o helper
 `ai_text_ollama.py` e `run-ollama`, em cwd privado e com ambiente filho vazio.
@@ -74,10 +78,18 @@ identidade Ollama, processamento offline ou privacidade, e o processo que
 escuta ali pode encaminhar o conteúdo para outra rede. Os dois jobs hospedados
 passaram em `1f59e0c`. Em `2c8b750`, o job portátil passou e as 17 entradas da
 UI passaram, mas o processo saiu com SIGSEGV depois de terminar os testes; a
-causa permanece desconhecida e impede o merge. O workflow agora inclui uma
-captura GDB limitada, acionada somente se esse CTest falhar, sem transformar
-a falha original em sucesso. A execução hospedada da revisão final e a
-integração na branch remota principal continuam pendentes.
+causa permanece desconhecida. Os dois jobs passaram depois em `57c2aa0`; o job
+do launcher reportou os seis CTests aprovados e o diagnóstico GDB foi pulado.
+O workflow mantém a captura limitada somente após falha, preservando o resultado
+original. Esse run aprovado não explica o SIGSEGV anterior.
+
+As duas correções seguintes de NOTIFY e execução de resultados passaram na
+composição exata: build novo, seis CTests, 25 entradas do controller e 27 da UI.
+A UI terminou em 24,75 s, dentro do limite preservado de 30 s. O teste de ação
+lê somente o buffer de clipboard privado da plataforma offscreen. A revisão
+detectou uma referência obsoleta no novo teste Steam; o teste foi corrigido
+para conferir o controle vivo após a reconstrução do modelo.
+CI da revisão seguinte e integração na branch remota principal continuam pendentes.
 Esta mudança não atualiza a instalação existente do launcher baseada no Source
 32, que continua sem a nova UI de texto.
 

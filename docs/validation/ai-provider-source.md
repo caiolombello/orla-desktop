@@ -138,10 +138,15 @@ the panel or switching from AI to Steam cancels both AI controllers before
 leaving that panel. UI-requested closing and the visible+active shortcut route
 wait for AI compatibility, AI text and Steam owners before finishing once.
 A newly admitted attempt clears previous output/usage before preflight; ignored
-busy/closing attempts preserve the live result. A separate baseline path still
-exposes search after asynchronous AI-panel cancellation and calls direct dismiss
-on successful app/runner launch. That Source observation has no runtime witness
-here and remains a separate follow-up; not every dismissal route is qualified.
+busy/closing attempts preserve the live result. All four QML result execution
+routes now share a live guard for the three busy owners and pending dismissal:
+Return/Enter, result delegates, the primary footer and action footer. Delayed
+callbacks carrying a mouse-pressed ticket also pass through that guard. The
+controls display a localized waiting state and re-enable after actual cleanup;
+search typing and navigation stay available. This covers the QML entry points,
+not arbitrary external direct C++ calls. Cleanup failure emits property NOTIFY
+on the first changed state, avoids duplicate identical poll notifications and
+keeps the busy/retry/close barrier until cleanup succeeds.
 
 The controller invokes exactly `python -I -B ai_text_ollama.py run-ollama` by
 absolute paths in a private cwd with an empty child environment. This is
@@ -202,11 +207,37 @@ It uses an exact Fedora GDB pin, the unchanged isolated runner and private bus,
 a bounded backtrace and child-result propagation. Owned checks verified exit0,
 exit42, a controlled synthetic SIGSEGV with stack, and the exact UI diagnostic
 command exiting zero. The independent review approved diagnosis only. Hosted
-execution of the final revision remains pending; merge stays blocked while the
-CI failure is unexplained/unresolved. The original failure evidence is retained.
+checks subsequently passed on `57c2aa0`: both jobs succeeded and the launcher
+job reports all six CTests passing. The GDB diagnostic was skipped because the
+original CTest step passed; passing Qt child stdout is not included in those
+hosted summaries. A bounded read-only lifetime audit found no supported
+introduced unsafe-lifetime path. Neither this audit nor the green run explains
+the historical SIGSEGV; cause UNKNOWN and original failure evidence are retained.
+The two additional corrections notify cleanup failure on state transitions and
+guard result execution while any owner is busy or dismissal is pending. The
+final exact composition passed a fresh 40-step ALL build and all six isolated
+CTests once (75.026 s), with 25 controller and 27 UI entries. All six actual child
+exit-zero and private-bus cleanup receipts were retained; UI took 24.75 s under
+the unchanged 30-second cap. Controller checks cover first failure notification,
+identical-poll deduplication, retry and retained close barriers. Nine UI rows
+cover keyboard, delegate/footer/action, earlier pressed tickets, Steam and
+pending-close paths using real owned resistant helpers and one final hide.
+
+During private review, the new Steam row failed on a cached visual delegate;
+one targeted GDB run confirmed isEnabled at that new assertion after the model
+refresh. The corrected test uses guarded pointers and reacquires the current
+identity/generation while preserving all prior checks and the actual pressed
+ticket. Its focused row and full normal UI suite passed. Final baseline-QML REDs
+with exact final tests reproduce the premature URI opening and late action copy
+as ordinary exit-one failures after cleanup. The copy oracle reads only Qt's
+owned in-process offscreen clipboard after checking the platform; no native
+clipboard is accessed. This new test fault is separate from the historical2c
+suite-complete SIGSEGV. Independent final UI review approved the corrected Source and an additional
+valid-pressed-ticket/three-owner/pending-close challenge; no findings remain.
+Hosted checks for the next revision and remote main integration remain pending.
 
 No real Ollama, model, provider identity, semantic output, authentication,
-external service, clipboard, accessibility runtime, native Wayland session,
+external service, native clipboard, accessibility runtime, native Wayland session,
 package, install, release or deployment was used. There is no automatic probe,
 server start, model download, default context, clipboard read, history, context
 file, auth or paid API. Numeric loopback constrains the socket destination; it

@@ -29,8 +29,12 @@ prosseguir uma única vez. A nova tentativa limpa o resultado anterior antes
 do preflight; chamadas ignoradas durante execução/fechamento o preservam.
 Timeout mantém sua causa após a limpeza. Uso desconhecido continua desconhecido,
 e uma resposta terminal rejeitada por custo inválido não publica tokens.
-O fonte ainda tem um dismiss direto ao abrir aplicativo depois de Voltar;
-esta fatia não qualifica todos os caminhos de saída.
+Ao voltar à busca, as quatro rotas QML de execução de resultado passam por uma
+verificação comum dos três proprietários e de fechamento pendente, inclusive
+callbacks que guardaram o ticket ao pressionar o botão. Os controles mostram
+espera e se reabilitam após a limpeza; a busca continua editável. A falha de
+limpeza notifica a interface ao mudar de estado, sem repetir polls idênticos,
+e mantém a barreira ocupada até resolver o runtime.
 
 A cadeia operacional usa processos próprios:
 
@@ -62,9 +66,17 @@ cobriram a cadeia controller → helper → servidor HTTP Qt, streaming, cancela
 parcial, resultado anterior e a barreira do atalho com três proprietários.
 Os dois jobs hospedados passaram em `1f59e0c`; em `2c8b750`, o portátil passou,
 mas o processo da UI saiu com SIGSEGV depois das 17 entradas aprovadas. A causa
-continua desconhecida e impede o merge. A captura GDB adicionada ao workflow
-é somente diagnóstico condicionado à falha; a falha original continua bloqueante.
-CI da revisão final e integração na branch remota principal estão pendentes.
+continua desconhecida. Os dois jobs passaram posteriormente em `57c2aa0`, com
+os seis CTests reportados pelo job do launcher; a etapa GDB foi pulada. A captura
+continua condicionada à falha, sem converter falha original em sucesso ou provar
+correção do SIGSEGV.
+
+As duas correções seguintes de notificação da limpeza e execução na busca
+passaram na composição exata: build novo, os seis CTests, 25 entradas do
+controller e 27 da UI (24,75 s, limite preservado de 30 s). O novo teste Steam
+teve seu controle obsoleto corrigido após diagnóstico; a ação de cópia é
+observada somente no clipboard privado da plataforma offscreen.
+CI da revisão seguinte e integração na branch remota principal estão pendentes.
 Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
 empacotamento relocável, instalação, release e
 admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda

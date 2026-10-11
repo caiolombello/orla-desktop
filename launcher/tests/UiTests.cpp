@@ -3,6 +3,11 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QJSValue>
+#include <QClipboard>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -767,6 +772,309 @@ private Q_SLOTS:
         QCOMPARE(dismissed.count(), 1);
         QCOMPARE(visibility.count(), 1);
         qInfo() << "ORLA_SHORTCUT_BARRIER_PASS three_helpers_reaped=true owned_ai_runtimes_removed=true hide_exactly_once=true partial_preserved=true";
+    }
+
+    void resultExecutionWaitsForOwnerCleanup_data()
+    {
+        QTest::addColumn<QString>("route");
+        QTest::addColumn<QString>("owner");
+        QTest::newRow("provider-return") << QStringLiteral("return") << QStringLiteral("provider");
+        QTest::newRow("text-enter") << QStringLiteral("enter") << QStringLiteral("text");
+        QTest::newRow("text-main") << QStringLiteral("main") << QStringLiteral("text");
+        QTest::newRow("text-delegate") << QStringLiteral("delegate") << QStringLiteral("text");
+        QTest::newRow("text-held-main") << QStringLiteral("held-main") << QStringLiteral("text");
+        QTest::newRow("text-held-delegate") << QStringLiteral("held-delegate") << QStringLiteral("text");
+        QTest::newRow("text-action") << QStringLiteral("action") << QStringLiteral("text");
+        QTest::newRow("steam-return") << QStringLiteral("return") << QStringLiteral("steam");
+        QTest::newRow("pending-return") << QStringLiteral("pending") << QStringLiteral("text");
+    }
+
+    void resultExecutionWaitsForOwnerCleanup()
+    {
+        QFETCH(QString, route);
+        QFETCH(QString, owner);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString receipt = directory.filePath(QStringLiteral("cleanup-receipt"));
+        const QString providerHelper = directory.filePath(QStringLiteral("execution-provider.py"));
+        const QString textHelper = directory.filePath(QStringLiteral("execution-text.py"));
+        const QString steamHelper = directory.filePath(QStringLiteral("execution-steam.py"));
+        const QString steamLoaded = directory.filePath(QStringLiteral("steam-loaded"));
+        const QByteArray steamDocument = R"({"apps":[{"appid":"42","library":"library-0","name":"Synthetic Execution Game","ownership":"unknown","source":"local_manifest","status":"installed_candidate"}],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
+        for (const auto &helper : {providerHelper, textHelper, steamHelper}) {
+            QFile file(helper);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,json,os,pathlib,signal,sys,time\n");
+            if (helper == steamHelper) {
+                file.write("marker=pathlib.Path(base64.b64decode('");
+                file.write(steamLoaded.toUtf8().toBase64());
+                file.write("').decode())\nif not marker.exists():\n marker.touch()\n sys.stdout.buffer.write(base64.b64decode('");
+                file.write(steamDocument.toBase64());
+                file.write("'))\n raise SystemExit(0)\n");
+            }
+            file.write("signal.signal(signal.SIGTERM,signal.SIG_IGN)\n");
+            file.write(helper == providerHelper
+                ? "runtime=sys.argv[sys.argv.index('--runtime-root')+1]\n" : "runtime=os.getcwd()\n");
+            file.write("pathlib.Path(base64.b64decode('");
+            file.write(receipt.toUtf8().toBase64());
+            file.write("').decode()).write_text(str(os.getpid())+'\\n'+runtime)\n");
+            if (helper == textHelper) {
+                file.write("request=json.loads(sys.stdin.buffer.readline())\n"
+                           "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+                           "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial-execucao')]\n"
+                           "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n");
+            }
+            file.write("time.sleep(60)\n");
+        }
+        const auto processReaped = [&] {
+            QFile file(receipt);
+            if (!file.open(QIODevice::ReadOnly)) return false;
+            bool valid = false;
+            const qint64 pid = file.readAll().split('\n').first().toLongLong(&valid);
+            if (!valid || pid <= 0) return false;
+            errno = 0;
+            if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+            errno = 0;
+            return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH;
+        };
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper,
+                                {}, nullptr, {}, 400);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
+                                {}, nullptr, {}, 400);
+        QList<QUrl> opened;
+        bool cleanupConfirmedAtOpen = false;
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper,
+            [&](const QUrl &url) {
+                opened.append(url); // Owned callback only: never send a real Steam URI.
+                cleanupConfirmedAtOpen = !ai.busy() && !aiText.busy() && !steam.busy()
+                    && processReaped() && (owner == QStringLiteral("steam")
+                        || helperReapedAndRuntimeRemoved(receipt));
+                return true;
+            });
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        WindowSession session(&controller, window, false, QString());
+        connect(&controller, &LauncherController::closeRequested, &ai, &AiProviderController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &aiText, &AiTextController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &steam, &SteamProviderController::cancelAll);
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            if (!ai.busy() && !aiText.busy() && !steam.busy()) return;
+            ai.cancelAll();
+            aiText.cancelAll();
+            steam.cancelAll();
+            QElapsedTimer timer;
+            timer.start();
+            while ((ai.busy() || aiText.busy() || steam.busy()) && timer.elapsed() < 7000)
+                QTest::qWait(10);
+            QVERIFY(!ai.busy() && !aiText.busy() && !steam.busy());
+            if (QFile::exists(receipt)) {
+                QVERIFY(processReaped());
+                if (owner != QStringLiteral("steam")) QVERIFY(helperReapedAndRuntimeRemoved(receipt));
+            }
+        });
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        auto *aiEntry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        auto *aiBack = window->findChild<QQuickItem *>(QStringLiteral("aiBackButton"));
+        auto *steamEntry = window->findChild<QQuickItem *>(QStringLiteral("steamEntryButton"));
+        auto *steamBack = window->findChild<QQuickItem *>(QStringLiteral("steamBackButton"));
+        QVERIFY(search && aiEntry && aiBack && steamEntry && steamBack);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 1500);
+        const bool calculator = route == QStringLiteral("action") || owner == QStringLiteral("steam");
+        const QString query = calculator ? QStringLiteral("2+2") : QStringLiteral("Synthetic Execution Game");
+        controller.setQuery(query);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("ready"), 3000);
+        QCOMPARE(controller.rows().size(), 1);
+        const QVariantMap originalRow = controller.rows().first().toMap();
+        const auto scriptMap = [](const QVariant &value) {
+            return value.metaType() == QMetaType::fromType<QJSValue>()
+                ? value.value<QJSValue>().toVariant().toMap() : value.toMap();
+        };
+        const auto findControl = [&](bool delegate, bool action) -> QQuickItem * {
+            QVariantMap liveRow;
+            for (const QVariant &entry : controller.rows()) {
+                const QVariantMap row = entry.toMap();
+                if (row.value("id") == originalRow.value("id")) { liveRow = row; break; }
+            }
+            if ((delegate || action) && liveRow.isEmpty()) return nullptr;
+            QList<QQuickItem *> items{window->contentItem()};
+            for (int i = 0; i < items.size(); ++i) {
+                auto *item = items[i];
+                items.append(item->childItems()); // ListView delegates belong to its visual content tree.
+                if (!item->isVisible()) continue;
+                const QVariantMap row = scriptMap(item->property("rowData"));
+                if (delegate && row.value("id") == liveRow.value("id")
+                    && row.value("generation") == liveRow.value("generation")) return item;
+                const QVariantMap actionData = scriptMap(item->property("modelData"));
+                if (action && actionData.value("resultId") == liveRow.value("id")
+                    && actionData.value("generation") == liveRow.value("generation")
+                    && actionData.value("id") == originalRow.value("actions").toList().first().toMap().value("id")) return item;
+                if (!delegate && !action && item->property("executionTicket").isValid()
+                    && (item->property("text").toString() == QStringLiteral("Abrir ↵")
+                        || item->property("text").toString() == QStringLiteral("Usar ↵"))) return item;
+            }
+            return nullptr;
+        };
+        QPointer<QQuickItem> mainButton;
+        QPointer<QQuickItem> delegate;
+        QPointer<QQuickItem> action;
+        const bool actionRoute = route == QStringLiteral("action");
+        QTRY_VERIFY_WITH_TIMEOUT((mainButton = findControl(false, false)), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT((delegate = findControl(true, false)), 1000);
+        if (route == QStringLiteral("action")) QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
+        QPointer<QQuickItem> target = route.contains(QStringLiteral("delegate")) ? delegate
+            : route == QStringLiteral("action") ? action : mainButton;
+        const auto center = [](QQuickItem *item) {
+            return item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
+        };
+        const bool held = route.startsWith(QStringLiteral("held-")) || route == QStringLiteral("action");
+        QString ownedClipboardBefore;
+        QVariantMap pressedTicket;
+        if (actionRoute) {
+            QCOMPARE(QGuiApplication::platformName(), QStringLiteral("offscreen"));
+            // Offscreen uses Qt's process-local clipboard buffer; no host display or clipboard is accessed.
+            ownedClipboardBefore = QGuiApplication::clipboard()->text();
+            QVERIFY(ownedClipboardBefore != QStringLiteral("4"));
+        }
+        if (held) {
+            QTRY_VERIFY_WITH_TIMEOUT(target && target->width() > 0 && target->height() > 0, 1000);
+            QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, center(target));
+            QVERIFY(target);
+            pressedTicket = scriptMap(target->property("executionTicket"));
+            QCOMPARE(pressedTicket.value("id"), originalRow.value("id"));
+            QVERIFY(pressedTicket.contains(QStringLiteral("row")));
+        }
+        if (owner == QStringLiteral("steam")) {
+            QVERIFY(QMetaObject::invokeMethod(steamEntry, "click"));
+            steam.scan({QStringLiteral("native=/synthetic/root")});
+        } else {
+            QVERIFY(QMetaObject::invokeMethod(aiEntry, "click"));
+            if (owner == QStringLiteral("provider")) ai.discover();
+            else aiText.generate(QStringLiteral("execution-request"), QStringLiteral("summarize"), QVariant(),
+                QStringLiteral("texto"), QStringLiteral("modelo:1"), QStringLiteral("127.0.0.1"), 11434, true);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(receipt) && (ai.busy() || aiText.busy() || steam.busy()), 1500);
+        if (owner == QStringLiteral("text")) QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial-execucao"), 1500);
+        QFile receiptFile(receipt);
+        QVERIFY(receiptFile.open(QIODevice::ReadOnly));
+        qInfo().noquote() << "ORLA_EXECUTION_HELPER" << owner << receiptFile.readAll();
+        receiptFile.close();
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        QSignalSpy visibility(window, &QWindow::visibleChanged);
+        if (route == QStringLiteral("pending")) {
+            QVERIFY(QMetaObject::invokeMethod(aiBack, "click"));
+            QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss", Q_ARG(QVariant, QVariant(false))));
+            QVERIFY(window->property("pendingDismiss").toBool());
+        } else QVERIFY(QMetaObject::invokeMethod(owner == QStringLiteral("steam") ? steamBack : aiBack, "click"));
+        QCOMPARE(window->property("activePanel").toString(), QStringLiteral("search"));
+        QVERIFY(ai.busy() || aiText.busy() || steam.busy());
+        if (held) {
+            QVERIFY(target); // Keep the original pressed control, never substitute a rebuilt delegate.
+            QCOMPARE(scriptMap(target->property("executionTicket")), pressedTicket);
+            QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, center(target));
+            // Challenge a delayed delivery using the real stored onPressed ticket and QML handler.
+            QVERIFY(target);
+            QCOMPARE(scriptMap(target->property("executionTicket")), pressedTicket);
+            QVERIFY(QMetaObject::invokeMethod(target, "clicked"));
+        } else if (route == QStringLiteral("main") || route == QStringLiteral("delegate")) {
+            target = findControl(route == QStringLiteral("delegate"), false);
+            QVERIFY(target);
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center(target));
+        } else {
+            search->forceActiveFocus();
+            QTest::keyClick(window, route == QStringLiteral("enter") ? Qt::Key_Enter : Qt::Key_Return);
+        }
+        if (!opened.isEmpty() || controller.query() != query || dismissed.count() != 0 || !window->isVisible()
+            || (actionRoute && QGuiApplication::clipboard()->text() != ownedClipboardBefore)) {
+            // Preserve the causal failure while still reaping the owned fixture before a test assertion returns.
+            ai.cancelAll();
+            aiText.cancelAll();
+            steam.cancelAll();
+            QTRY_VERIFY_WITH_TIMEOUT(!ai.busy() && !aiText.busy() && !steam.busy(), 7000);
+            QVERIFY(processReaped());
+            if (owner != QStringLiteral("steam")) QVERIFY(helperReapedAndRuntimeRemoved(receipt));
+        }
+        QCOMPARE(opened.size(), 0);
+        if (actionRoute) QCOMPARE(QGuiApplication::clipboard()->text(), ownedClipboardBefore);
+        QCOMPARE(controller.query(), query);
+        QCOMPARE(dismissed.count(), 0);
+        QVERIFY(window->isVisible());
+        // Scan/cancellation can replace ListView/Repeater objects; observe current identity and generation.
+        QTRY_VERIFY_WITH_TIMEOUT((mainButton = findControl(false, false)), 1000);
+        QTRY_VERIFY_WITH_TIMEOUT((delegate = findControl(true, false)), 1000);
+        QVERIFY(mainButton && !mainButton->isEnabled());
+        QVERIFY(delegate && !delegate->isEnabled());
+        if (actionRoute) {
+            QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
+            QVERIFY(action && !action->isEnabled());
+        }
+        auto *waiting = window->findChild<QQuickItem *>(QStringLiteral("executionWaiting"));
+        QVERIFY(waiting && waiting->isVisible());
+        QCOMPARE(waiting->property("text").toString(), QStringLiteral("Aguarde o encerramento das operações antes de abrir um resultado."));
+        QVERIFY(search->isEnabled());
+        // Typing and navigation stay available; restoring the same text returns a fresh valid selection.
+        if (route == QStringLiteral("main")) {
+            search->forceActiveFocus();
+            QTest::keyClick(window, Qt::Key_Space);
+            QCOMPARE(controller.query(), query + QLatin1Char(' '));
+            QTest::keyClick(window, Qt::Key_Backspace);
+            QCOMPARE(controller.query(), query);
+            QTest::keyClick(window, Qt::Key_Down);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!ai.busy() && !aiText.busy() && !steam.busy(), 7000);
+        QVERIFY(processReaped());
+        if (owner != QStringLiteral("steam")) QVERIFY(helperReapedAndRuntimeRemoved(receipt));
+        if (owner == QStringLiteral("text")) QCOMPARE(aiText.output(), QStringLiteral("parcial-execucao"));
+        if (route == QStringLiteral("pending")) {
+            QCOMPARE(dismissed.count(), 1);
+            QCOMPARE(visibility.count(), 1);
+            QVERIFY(!window->isVisible());
+            QCOMPARE(opened.size(), 0);
+        } else {
+            QVERIFY(window->isVisible());
+            QTRY_VERIFY((mainButton = findControl(false, false)) && mainButton->isEnabled());
+            if (actionRoute) {
+                QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
+                QVERIFY(action && action->isEnabled()); // Restore the action affordance without copying to any clipboard.
+            }
+            QVERIFY(!waiting->isVisible());
+            if (calculator) {
+                // Actual owned calculator action/Steam cleanup handling above; positive dismissal uses the owned URI callback.
+                controller.setQuery(QStringLiteral("Synthetic Execution Game"));
+                if (owner == QStringLiteral("steam")) {
+                    QFile::remove(steamLoaded);
+                    steam.scan({QStringLiteral("native=/synthetic/root")});
+                    QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 1500);
+                }
+            }
+            QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("ready"), 3000);
+            if (!calculator && route != QStringLiteral("main")) {
+                QCOMPARE(controller.rows().first().toMap().value("id"), originalRow.value("id"));
+                QCOMPARE(controller.rows().first().toMap().value("generation"), originalRow.value("generation"));
+            }
+            search->forceActiveFocus();
+            QTest::keyClick(window, Qt::Key_Return);
+            QCOMPARE(opened, QList<QUrl>{QUrl(QStringLiteral("steam://rungameid/42"))});
+            QVERIFY(cleanupConfirmedAtOpen);
+            QCOMPARE(dismissed.count(), 1);
+            QCOMPARE(visibility.count(), 1);
+            QVERIFY(!window->isVisible());
+        }
+        QTest::qWait(20);
+        QCOMPARE(dismissed.count(), 1);
+        QCOMPARE(visibility.count(), 1);
+        qInfo().noquote() << "ORLA_EXECUTION_CLEANUP_PASS" << route << owner
+            << "pid_group_reaped=true owned_ai_runtime_removed=true hide_once=true";
     }
 
     void windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce()

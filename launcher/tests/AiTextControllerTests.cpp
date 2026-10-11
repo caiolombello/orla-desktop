@@ -132,6 +132,127 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void cleanupFailureNotifiesOnceAndKeepsTheCloseBarrier_data()
+    {
+        QTest::addColumn<bool>("unconfirmedGroup");
+        QTest::newRow("runtime-removal-failure") << false;
+#if defined(Q_OS_UNIX) && defined(ORLA_TEST_WRAP_KILL)
+        QTest::newRow("synthetic-unconfirmed-group-with-kill-interception") << true;
+#endif
+    }
+
+    void cleanupFailureNotifiesOnceAndKeepsTheCloseBarrier()
+    {
+        QFETCH(bool, unconfirmedGroup);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString helper = writeHelper(directory, reportedResultHelper(marker));
+        bool allowCleanup = false;
+        bool syntheticGroupExists = true;
+        int groupChecks = 0;
+        int removalAttempts = 0;
+        QString runtimePath;
+        AiTextController::GroupObserver observer;
+#if defined(Q_OS_UNIX) && defined(ORLA_TEST_WRAP_KILL)
+        std::unique_ptr<KillInterception> interception;
+        if (unconfirmedGroup) {
+            // Synthetic observation only: intercepted group signals never reach the kernel.
+            interception = std::make_unique<KillInterception>();
+            observer = [&](qint64) { ++groupChecks; return syntheticGroupExists; };
+        }
+#endif
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            observer, nullptr, [&](const QString &path) {
+                ++removalAttempts;
+                runtimePath = path;
+                return allowCleanup && QDir(path).removeRecursively();
+            }, 100);
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        int failureNotifications = 0;
+        QString notifiedStatus;
+        QString notifiedError;
+        QString notifiedOutput;
+        bool notifiedBusy = false;
+        qsizetype notifiedCloseCount = -1;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (controller.errorCode() != QStringLiteral("process_cleanup_failed")) return;
+            ++failureNotifications;
+            notifiedStatus = controller.status();
+            notifiedError = controller.error();
+            notifiedOutput = controller.output();
+            notifiedBusy = controller.busy();
+            notifiedCloseCount = closeReady.size();
+        });
+        controller.generate(QStringLiteral("request.cleanup-notify"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("retained"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 4000);
+        QVERIFY(controller.busy());
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QCOMPARE(closeReady.size(), 0);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+#ifdef Q_OS_UNIX
+        const auto observeAbsence = [](pid_t captured) {
+            errno = 0;
+#if defined(ORLA_TEST_WRAP_KILL)
+            return __real_kill(captured, 0) == -1 && errno == ESRCH;
+#else
+            return ::kill(captured, 0) == -1 && errno == ESRCH;
+#endif
+        };
+        QVERIFY(observeAbsence(static_cast<pid_t>(pid)));
+        QVERIFY(observeAbsence(-static_cast<pid_t>(pid)));
+#endif
+        QCOMPARE(failureNotifications, 1);
+        QCOMPARE(notifiedStatus, QStringLiteral("failed"));
+        QVERIFY(!notifiedError.isEmpty());
+        QCOMPARE(notifiedOutput, QStringLiteral("retained"));
+        QVERIFY(notifiedBusy);
+        QCOMPARE(notifiedCloseCount, 0);
+        const int previousRetries = unconfirmedGroup ? groupChecks : removalAttempts;
+        const qsizetype previousSignals = changed.size();
+        QTest::qWait(150); // Includes multiple real 25ms cleanup polls.
+        QVERIFY((unconfirmedGroup ? groupChecks : removalAttempts) > previousRetries);
+        QCOMPARE(failureNotifications, 1);
+        QCOMPARE(changed.size(), previousSignals);
+        QVERIFY(controller.busy());
+        if (!unconfirmedGroup) QVERIFY(QFileInfo::exists(runtimePath));
+        QVERIFY(!controller.requestClose());
+        const qsizetype closeSignals = changed.size(); // Explicit cancellation may notify separately.
+        const int closeFailureNotifications = failureNotifications;
+        QTest::qWait(150);
+        QCOMPARE(changed.size(), closeSignals);
+        QCOMPARE(failureNotifications, closeFailureNotifications);
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(controller.busy());
+        allowCleanup = true;
+        syntheticGroupExists = false;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(closeReady.size(), 1);
+        QCOMPARE(controller.status(), QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QVERIFY(removalAttempts > 0);
+        QVERIFY(!QFileInfo::exists(runtimePath));
+        QVERIFY(controller.requestClose());
+        QTest::qWait(100);
+        QCOMPARE(closeReady.size(), 1);
+#if defined(Q_OS_UNIX) && defined(ORLA_TEST_WRAP_KILL)
+        if (unconfirmedGroup) {
+            QVERIFY(!interceptedKills.empty());
+            for (const auto &attempt : interceptedKills) {
+                QCOMPARE(attempt.first, -static_cast<pid_t>(pid));
+                QVERIFY(attempt.second == SIGTERM || attempt.second == SIGKILL);
+            }
+        }
+#endif
+    }
+
     void newAttemptPreflightFailureClearsPreviousResultWithoutStartingHelper_data()
     {
         QTest::addColumn<QString>("failure");

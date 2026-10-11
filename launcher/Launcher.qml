@@ -16,10 +16,16 @@ Window {
     property string activePanel: "search"
     property bool pendingDismiss: false
     property bool pendingQuit: false
+    readonly property bool executionBlocked: pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy
     property var selectedRow: launcher.selectedIndex >= 0 ? launcher.rows[launcher.selectedIndex] : null
+    function executeTicket(ticket, selectRow) {
+        if (!ticket || pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
+        if (selectRow) launcher.select(ticket.row)
+        launcher.execute(ticket.row, ticket.generation, ticket.id, ticket.actionId || "")
+    }
     function executeSelection() {
         const row = selectedRow
-        if (row) launcher.execute(launcher.selectedIndex, row.generation, row.id)
+        if (row) executeTicket({ row: launcher.selectedIndex, generation: row.generation, id: row.id }, false)
     }
     function closeAiPanel() {
         aiProviders.cancelAll()
@@ -200,7 +206,7 @@ Window {
                     property var executionTicket: null
                     width: results.width
                     height: 70
-                    enabled: rowData.enabled
+                    enabled: rowData.enabled && !window.executionBlocked
                     hoverEnabled: true
                     Accessible.name: rowData.title + ", " + rowData.source
                     background: Rectangle {
@@ -227,10 +233,7 @@ Window {
                     onPressed: executionTicket = { row: index, generation: rowData.generation, id: rowData.id }
                     onClicked: {
                         const ticket = executionTicket
-                        if (ticket) {
-                            launcher.select(ticket.row)
-                            launcher.execute(ticket.row, ticket.generation, ticket.id)
-                        }
+                        window.executeTicket(ticket, true)
                         search.forceActiveFocus()
                     }
                 }
@@ -251,9 +254,10 @@ Window {
             }
         }
         Text {
+            objectName: "executionWaiting"
             Layout.fillWidth: true
-            visible: window.activePanel === "search" && windowSession && windowSession.notice.length > 0
-            text: windowSession ? windowSession.notice : ""
+            visible: window.activePanel === "search" && (window.executionBlocked || (windowSession && windowSession.notice.length > 0))
+            text: window.executionBlocked ? qsTr("Aguarde o encerramento das operações antes de abrir um resultado.") : windowSession ? windowSession.notice : ""
             color: "#E7C58E"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: "#283542"; visible: window.activePanel === "search" }
@@ -269,9 +273,9 @@ Window {
                     required property var modelData
                     property var executionTicket: null
                     text: modelData.text
-                    enabled: launcher.status === "ready"
+                    enabled: launcher.status === "ready" && !window.executionBlocked
                     onPressed: executionTicket = { row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id }
-                    onClicked: if (executionTicket) launcher.execute(executionTicket.row, executionTicket.generation, executionTicket.id, executionTicket.actionId)
+                    onClicked: window.executeTicket(executionTicket, false)
                     contentItem: Text { text: parent.text; color: parent.enabled ? "#69D7C2" : "#A7B7C4"; font.pixelSize: 11; textFormat: Text.PlainText; elide: Text.ElideRight }
                     background: Rectangle { radius: 7; color: "#283542"; border.color: parent.activeFocus ? "#69D7C2" : "transparent"; border.width: 1 }
                     Layout.maximumWidth: window.width < 560 ? 118 : 150
@@ -280,9 +284,9 @@ Window {
             Button {
                 property var executionTicket: null
                 text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
-                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
+                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
-                onClicked: if (executionTicket) launcher.execute(executionTicket.row, executionTicket.generation, executionTicket.id)
+                onClicked: window.executeTicket(executionTicket, false)
                 contentItem: Text { text: parent.text; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 7; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
             }

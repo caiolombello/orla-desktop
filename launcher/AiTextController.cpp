@@ -635,8 +635,12 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
     // Confirmed original-group absence ends signal ownership, even if runtime cleanup retries.
     if (cleanupConfirmed) m_processGroup = 0;
     if (!cleanupConfirmed || !removeOwnedRuntime()) {
-        recordFailure(QStringLiteral("process_cleanup_failed"));
+        const QString failureCode = QStringLiteral("process_cleanup_failed");
+        const bool failureChanged = m_status != QStringLiteral("failed")
+            || m_errorCode != failureCode || m_error != safeMessage(failureCode);
+        recordFailure(failureCode);
         if (!m_groupPoll.isActive()) m_groupPoll.start();
+        if (failureChanged) emit changed();
         return;
     }
     m_groupPoll.stop();
