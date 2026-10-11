@@ -3,6 +3,7 @@ import QtQuick.Window
 import "../package/contents/ui" as DockUI
 
 Window {
+    property string fixtureProfilesJSON: ""
     width: Math.max(740, dockView.implicitWidth + 64)
     height: 220
     visible: true
@@ -14,6 +15,7 @@ Window {
         property var launchers: ["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]
         property string theme: "glass"
         property string appearanceJSON: ""
+        property string profilesJSON: fixtureProfilesJSON
         property int iconSize: 42
         property bool animations: false
         property bool showClock: true

@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DISPLAY") else "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
-from PySide6.QtCore import QObject, QUrl, Qt, QPoint
+from PySide6.QtCore import QObject, QUrl, Qt, QPoint, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -30,11 +30,23 @@ class DockInterfaceTests(unittest.TestCase):
 
     def tearDown(self):
         self.window.close()
+        self.window.deleteLater()
+        QCoreApplication.sendPostedEvents(self.window, QEvent.DeferredDelete)
+        QTest.qWait(10)
         self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(self.engine, QEvent.DeferredDelete)
         self.app.processEvents()
 
     def evaluate(self, source):
         expression = QQmlExpression(self.engine.rootContext(), self.dock, source)
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value
+
+    def tile_property(self, name, key):
+        strip = self.window.findChild(QQuickItem, "widgetStrip")
+        expression = QQmlExpression(self.engine.rootContext(), strip,
+            f"children.filter(item => item.objectName === '{name}')[0].{key}")
         value, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
         return value
@@ -49,9 +61,11 @@ class DockInterfaceTests(unittest.TestCase):
         if self.app.platformName() == "offscreen":
             self.skipTest("TaskManager needs a Wayland or X11 connection")
         self.assertTrue(self.evaluate("addLauncher('systemsettings.desktop')"))
-        self.assertIn("applications:systemsettings.desktop", self.config.property("launchers"))
+        launchers = self.config.property("launchers")
+        self.assertIn("applications:systemsettings.desktop", launchers.toVariant() if hasattr(launchers, "toVariant") else launchers)
         self.assertTrue(self.evaluate("moveTask(0, 1)"))
-        self.assertEqual(self.config.property("launchers")[:2], ["applications:org.kde.konsole.desktop", "applications:org.kde.dolphin.desktop"])
+        launchers = self.config.property("launchers")
+        self.assertEqual((launchers.toVariant() if hasattr(launchers, "toVariant") else launchers)[:2], ["applications:org.kde.konsole.desktop", "applications:org.kde.dolphin.desktop"])
         self.assertFalse(self.evaluate("addLauncher('https://example.com/app.desktop')"))
 
     def test_timer_pause_resume_completion_and_reset(self):
@@ -85,9 +99,14 @@ class DockInterfaceTests(unittest.TestCase):
     def test_settings_popup_opens_from_button(self):
         button = self.window.findChild(QQuickItem, "settingsButton")
         popup = self.window.findChild(QObject, "settingsPopup")
+        # Synthetic clicks qualify the in-window handler. Native Wayland popup
+        # seat/focus behavior remains an open real-panel gate for both styles.
+        self.assertTrue(popup.setProperty("popupType", 0))
         opened = QSignalSpy(popup.opened)
         point = button.mapToScene(QPoint(int(button.width() / 2), int(button.height() / 2)))
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        if not opened.count():
+            self.assertTrue(opened.wait(1000))
         self.assertEqual(opened.count(), 1)
         self.assertEqual(self.warnings, [])
 
@@ -165,26 +184,24 @@ class DockInterfaceTests(unittest.TestCase):
 
     def test_system_battery_opt_in_renders_zero_and_neutralizes_failure(self):
         battery = self.window.findChild(QQuickItem, "systemBattery")
-        tile = self.window.findChild(QQuickItem, "systemBatteryTile")
         transport = self.window.findChild(QObject, "batteryTransport")
         self.assertIsNotNone(battery)
-        self.assertIsNotNone(tile)
         self.assertEqual(battery.property("status"), "inactive")
         battery.setProperty("transport", transport)
         self.config.setProperty("showSystemBattery", True)
         self.app.processEvents()
         self.assertEqual(battery.property("status"), "ready")
-        self.assertTrue(tile.property("visible"))
-        self.assertEqual(tile.property("title"), "0%")
-        self.assertEqual(tile.property("subtitle"), "Na bateria")
+        self.assertTrue(self.tile_property("systemBatteryTile", "visible"))
+        self.assertEqual(self.tile_property("systemBatteryTile", "title"), "0%")
+        self.assertEqual(self.tile_property("systemBatteryTile", "subtitle"), "Na bateria")
         transport.setProperty("fail", True)
         self.evaluate("systemBattery.refresh()")
         self.assertEqual(battery.property("status"), "unavailable")
-        self.assertEqual(tile.property("title"), "Energia")
-        self.assertEqual(tile.property("subtitle"), "Bateria indisponível")
+        self.assertEqual(self.tile_property("systemBatteryTile", "title"), "Energia")
+        self.assertEqual(self.tile_property("systemBatteryTile", "subtitle"), "Bateria indisponível")
         self.config.setProperty("showSystemBattery", False)
         self.assertEqual(battery.property("status"), "inactive")
-        self.assertFalse(tile.property("visible"))
+        self.assertFalse(self.tile_property("systemBatteryTile", "visible"))
         self.assertFalse(self.evaluate("systemBattery.refresh()"))
         self.assertEqual(self.warnings, [])
 
@@ -197,9 +214,8 @@ class DockInterfaceTests(unittest.TestCase):
         fixture = self.window.findChild(QObject, "fixtureMedia")
         self.dock.setProperty("mediaSource", fixture)
         self.app.processEvents()
-        tile = self.window.findChild(QQuickItem, "musicTile")
-        self.assertEqual(tile.property("title"), "<b>" + "A" * 509)
-        self.assertEqual(tile.property("subtitle"), "<i>" + "B" * 253)
+        self.assertEqual(self.tile_property("musicTile", "title"), "<b>" + "A" * 509)
+        self.assertEqual(self.tile_property("musicTile", "subtitle"), "<i>" + "B" * 253)
         self.assertEqual(controls.property("media"), fixture)
         self.assertEqual(self.warnings, [])
 

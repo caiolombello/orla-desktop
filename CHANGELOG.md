@@ -2,11 +2,15 @@
 
 User-visible changes are recorded here for each published release.
 
-## Unreleased
+## 0.2.5 — 2026-10-10 — Alpha prerelease
 
-- Add an explicit Linux CLI for official stable/beta release checks, with bounded anonymous HTTPS requests, safe version/link parsing and structured offline/rate-limit errors. It compares a supplied version without installing packages or inspecting the running session. Seventeen offline tests and independent review passed; see [usage and limits](docs/updates.md). Release 0.2.4 excludes this newer command.
-- Add an experimental standalone Qt Quick launcher in the source checkout, using public KRunner application/calculator APIs with anonymous configuration and stale-selection guards.
-- Three CTests passed with private D-Bus, temporary XDG/runtime and automatic service activation blocked; independent review approved the component. Actual global Wayland shortcut/focus, daily use and optional installation remain open. Release 0.2.4 excludes this component.
+- Add explicit manual dock profiles: initialize Work/Personal/Games from saved preferences without switching, or create and use a custom clone. Preserve the previous flat preferences without automatic migration.
+- Save pinned apps, appearance, seven known widgets' order/visibility, calendar-event visibility and current-desktop filtering per profile. Keep the global Pomodoro object/deadline during profile selection; cross-process timer resume remains unqualified.
+- Organize settings into Appearance, Widgets and Profiles. Apply or cancel dirty appearance previews before creating/switching; keep Undo scoped to the current profile. Reject invalid/future profile JSON without overwriting it.
+- Profile implementation review approved; 49 targeted checks passed with Fusion and KDE styles, and the recorded combined regression passed 123 tests. A private native snapshot proved KConfig Apply/Cancel/disk/restart and one owned remove/re-add cycle. Its metadata is 0.2.4 with frozen profile overlays; it does not qualify the full 0.2.5 release or popup/focus behavior. See [profile validation](docs/validation/profiles-0.2.5.md).
+- Include the experimental Linux release-check CLI in the release ZIP. It compares an explicit version against official stable/beta releases with bounded anonymous requests and structured errors; it does not detect the running version or install packages. Seventeen offline tests and independent review passed; see [usage and limits](docs/updates.md).
+- Source also includes an experimental standalone Qt Quick launcher using public KRunner application/calculator APIs. Three private CTests and independent review passed. It requires a separate build and remains excluded from the release; global Wayland shortcut/focus, daily use and optional installation remain open.
+- P1/C1 remain partial; profile association with Activities/desktops and selection of bar/launcher/event surfaces remain planned.
 
 ## 0.2.4 — 2026-10-10 — Alpha
 

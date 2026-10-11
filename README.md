@@ -8,9 +8,9 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 > [Project website](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [Português brasileiro](README.pt-BR.md) · [Roadmap](ROADMAP.md) · [Brand guide](docs/brand.md)
 
-The source checkout also includes an [experimental standalone launcher](launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.4 does not package or install it; global Wayland focus and complete launcher integration remain open.
+The source checkout also includes an [experimental standalone launcher](launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.5 does not package or install it; global Wayland focus and complete launcher integration remain open.
 
-An [experimental update-check CLI](docs/updates.md) is also available from the source checkout. It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Release 0.2.4 excludes this newer command; desktop UI, caching and installation recovery remain planned.
+The 0.2.5 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
 
 ## What works today
 
@@ -19,6 +19,7 @@ An [experimental update-check CLI](docs/updates.md) is also available from the s
 - Use the clock, Pomodoro timer, KDE calendar view, and MPRIS media controls with player selection, track/artist text, and capability-aware playback buttons.
 - Enable the optional system battery widget in settings (off by default) to read the UPower aggregate; PeriGauge remains separate for peripherals.
 - Read optional local snapshots from QuotaLantern, PeriGauge, and FalaTrace when those projects have written supported state files.
+- Create and explicitly select manual profiles for pinned apps, appearance, widget order/visibility, calendar events and the current-desktop window filter. The Pomodoro remains shared.
 - Keep the dock in a Plasma panel and configure its position and visibility through Plasma.
 
 The calendar uses the same calendar selection as KDE's calendar components. Orla does not connect Google Calendar by itself. To use Google events, first add and configure a Google account through KOrganizer/KDE PIM, then enable synced events in Orla. Account setup and sync depend on KDE PIM resources installed on your system.
@@ -28,6 +29,12 @@ Media controls share one native Plasma MPRIS model. They initially prefer Spotif
 System battery reads only UPower’s aggregate display device, every 30 seconds while enabled, with a five-second request timeout. A genuine 0% reading stays visible; absent or unavailable data has a neutral state. External power, charging and estimated time appear only when supplied. It does not control hardware or enumerate peripheral batteries. See [battery and media validation](docs/validation/battery-media-0.2.4.md) for test coverage and limits. Local project integrations read existing state files; they do not start the other apps or call their online APIs.
 
 Appearance uses a separate override, preserving earlier theme/icon/motion preferences. Restore prepares those preferences for preview and requires Apply. The [experimental theme kit](docs/theme-format.md) validates and packages community data; importing/applying those files remains planned. See [appearance validation](docs/validation/appearance-0.2.3.md) for test coverage and native limits.
+
+## Use profiles
+
+Open dock settings and choose **Perfis** (Profiles), alongside **Aparência** (Appearance) and **Widgets**. **Criar Trabalho, Pessoal e Jogos** copies your saved preferences into Work, Personal and Games profiles while keeping **Preferências anteriores** (Previous preferences) active. Choose a profile and press **Usar perfil**; changing the selector alone does not activate it. To clone the saved active presentation, enter a unique name and press **Criar e usar**. Apply or cancel an appearance preview before creating or switching profiles.
+
+In **Widgets**, visibility, order, calendar events and the window filter save immediately for the active profile; appearance Cancel does not undo them. Widget ordering requires a profile. Return to **Preferências anteriores** to use the original flat preferences. There is no automatic migration. See the [profile guide](docs/profiles.md) for limits and the [validation record](docs/validation/profiles-0.2.5.md) for the private KConfig/restart proof. Activity/desktop association, selecting bar/launcher/event surfaces and native popup/focus qualification remain open.
 
 ## Requirements
 
@@ -48,15 +55,15 @@ The current validation baseline is Fedora 44, Plasma 6.7.5, Qt 6.11.2, and Wayla
 
 ## Install a release
 
-Download the release `.zip` from the [GitHub Releases page](https://github.com/caiolombello/orla-desktop/releases), verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
+These commands target the 0.2.5 alpha prerelease; use them when its assets are published. Download the release `.zip` from the [GitHub Releases page](https://github.com/caiolombello/orla-desktop/releases), verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.4.zip
-cd orla-dock-0.2.4
+unzip orla-dock-0.2.5.zip
+cd orla-dock-0.2.5
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.4.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.5.plasmoid
 ```
 
 The helper registers the local integration service when its packaged bridge and optional dependencies are available. `doctor` reports missing optional dependencies separately. After restoring them, reinstall the same package to activate integrations. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
@@ -68,7 +75,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.4.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.5.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:
@@ -98,7 +105,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For securi
 
 Orla Desktop is an alpha project. The current component keeps the existing Plasma package identifier `org.caiodock.dock` and D-Bus service `org.caiodock.Integrations` to preserve existing installations and settings. The name shown to users is Orla Dock; these internal identifiers are compatibility details.
 
-The system battery reader and player selection/control increment ship in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The macOS-inspired optional menu bar, Control Center, Raycast-like launcher, Dynamic Island/HUD/toasts, Spotify artwork/progress/client opening, Steam, profiles, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
+Manual dock profiles and widget organization are the partial P1/C1 increment prepared for 0.2.5. The system battery reader and player selection/control increment shipped in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The macOS-inspired optional menu bar, Control Center, Raycast-like launcher, Dynamic Island/HUD/toasts, Spotify artwork/progress/client opening, Steam, profile association with desktops/Activities, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
 
 See the [complete roadmap](ROADMAP.md) for sequencing, dependencies, and acceptance criteria, with companion proposals for [UX/UI](docs/UX_UI.md), [themes and extensions](docs/EXTENSIONS.md), [AI access and providers](docs/AI_INTEGRATIONS.md), and [developer experience](docs/DX.md). Declarative themes come before executable plugins; AI adapters use each provider's supported authorization route. The core remains useful without an Orla account, paid addon, or AI subscription. Marketplace checkout and the extension SDK have not been implemented.
 

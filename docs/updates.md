@@ -1,9 +1,9 @@
 # Consulta experimental de updates
 
-Disponível no checkout fonte, fora da release 0.2.4. Esta primeira fatia de U1 é uma CLI Linux com Python 3.10+ e biblioteca padrão. Ela consulta releases públicas do repositório oficial por HTTPS e compara a versão informada. O desktop não precisa estar aberto.
+Disponível no checkout fonte e no ZIP da release 0.2.5, em `scripts/updates.py`. Execute no diretório extraído do bundle; o `.plasmoid` sozinho não contém a CLI nem uma interface de updates. A release 0.2.4 não incluía esse comando. Esta primeira fatia de U1 é uma CLI Linux com Python 3.10+ e biblioteca padrão. Ela consulta releases públicas do repositório oficial por HTTPS e compara a versão informada. O desktop não precisa estar aberto.
 
 ```bash
-python3 scripts/updates.py check --installed-version 0.2.4 --channel beta
+python3 scripts/updates.py check --installed-version 0.2.5 --channel beta
 ```
 
 Substitua `--installed-version` pela versão que deseja comparar. O comando não detecta a versão instalada ou em execução. `stable` exclui a marcação de pré-release do GitHub e sufixos SemVer; `beta` inclui ambos. As alphas atuais, como `v0.2.4`, usam a marcação de pré-release do GitHub mesmo sem sufixo. Portanto, o canal estável pode retornar `no_release`.

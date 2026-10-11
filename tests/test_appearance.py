@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest, QSignalSpy
 
 
 class AppearanceTests(unittest.TestCase):
@@ -212,7 +212,9 @@ class AppearanceTests(unittest.TestCase):
                 self.assertEqual(content.property("spacing"), 12)
                 self.assertEqual(dock.property("requestedIconSize"), 56)
                 self.assertEqual(dock.property("motion"), 0)
+                closed = QSignalSpy(popup.closed)
                 if exit_action == "escape":
+                    self.focus_control(window, window.findChild(QQuickItem, "appearanceCancel"))
                     QTest.keyClick(window, Qt.Key_Escape)
                 elif exit_action == "close":
                     expression = QQmlExpression(engine.rootContext(), popup, "close()")
@@ -221,9 +223,10 @@ class AppearanceTests(unittest.TestCase):
                     cancel = window.findChild(QQuickItem, "appearanceCancel")
                     self.focus_control(window, cancel)
                     QTest.keyClick(window, Qt.Key_Space)
-                QTest.qWait(100)
+                if not closed.count():
+                    self.assertTrue(closed.wait(1000), exit_action)
                 expression = QQmlExpression(engine.rootContext(), dock, "appearance.effective.tokens.accent")
-                self.assertEqual(expression.evaluate()[0], "#69d7c2")
+                self.assertEqual(expression.evaluate()[0], "#69d7c2", exit_action)
                 self.assertFalse(popup.property("visible"))
                 self.assertEqual(surface.property("radius"), 21)
                 self.assertEqual(surface.property("opacity"), 1)

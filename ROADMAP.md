@@ -10,9 +10,11 @@ Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado
 
 **Temas no checkout fonte:** o formato `0.1-experimental`, schema, exemplos e comandos de validação/empacotamento já têm testes portáteis e revisão independente. O empacotador publica arquivo completo sem sobrescrever destinos e trata falhas de escrita/caminho com erros estruturados. O consumo no dock, prévia/importação e contribuição externa continuam pendentes; X1/DX2 permanecem parciais. Consulte o [guia do formato](docs/theme-format.md).
 
-**Aparência alpha 0.2.3:** editor com prévia temporária, Aplicar, Cancelar, Desfazer e restauração das preferências anteriores, em snapshot separado. Popup limitado ao orçamento da tela e campos acessíveis pelo teclado; 66 testes locais e revisão independente aprovados. Uma fixture com painel/KConfig privados comprovou Aplicar/Cancelar/restart de aparência por ações programáticas; isso não qualifica gesto humano nem foco/grab/layout do popup. Organização de widgets, perfis e importação/exportação continuam pendentes; C1/UX1 permanecem parciais. Consulte a [validação da aparência](docs/validation/appearance-0.2.3.md).
+**Aparência alpha 0.2.3:** editor com prévia temporária, Aplicar, Cancelar, Desfazer e restauração das preferências anteriores, em snapshot separado. Popup limitado ao orçamento da tela e campos acessíveis pelo teclado; 66 testes locais e revisão independente aprovados. Uma fixture com painel/KConfig privados comprovou Aplicar/Cancelar/restart de aparência por ações programáticas; isso não qualifica gesto humano nem foco/grab/layout do popup. Esse recibo histórico não cobre organização de widgets/perfis; importação/exportação continua pendente; C1/UX1 permanecem parciais. Consulte a [validação da aparência](docs/validation/appearance-0.2.3.md).
 
 **Bateria e mídia alpha 0.2.4:** bateria do sistema opcional, desligada por padrão, lê somente o agregado UPower e preserva estados neutros/0% válido. Mídia compartilha um modelo MPRIS nativo, prefere Spotify inicialmente, mantém seleção manual por sessão e respeita capacidades por comando. Fixtures de bateria/mídia, leitura real agregada UPower e dois players sintéticos em D-Bus privado passaram; a regressão conjunta passou os 96 testes. B1/M1 continuam parciais: múltiplas baterias/UPS/transições reais, Spotify real/áudio, capa/progresso/abertura do cliente e interação humana no painel têm gates próprios. O launcher não integra esta release. Consulte a [validação](docs/validation/battery-media-0.2.4.md).
+
+**Perfis manuais preparados para alpha 0.2.5:** o dock já oferece criação e seleção explícita, cópia das preferências salvas e retorno às preferências anteriores sem migração automática. Perfis guardam apps fixados, aparência, ordem/visibilidade dos sete widgets, eventos do calendário e filtro de janelas pela área atual. Pomodoro continua global na seleção. Revisão da implementação aprovada, 49 testes direcionados em Fusion/KDE e regressão KDE de 123 testes passaram. Snapshot nativo privado (metadata 0.2.4 com overlays de perfis, 26 arquivos congelados) comprovou Apply/Cancel/disco/restart e um ciclo próprio de remover/recriar. Não é qualificação da release inteira nem de popup/foco/gesto humano. P1/C1 continuam parciais; retomada do timer entre processos e escolha de barra/launcher/eventos permanecem abertas, assim como P2/W1. Consulte [uso](docs/profiles.md) e [validação](docs/validation/profiles-0.2.5.md).
 
 Premissas: o dock continua utilizável sozinho; a barra superior, o launcher e seus módulos são opcionais; “ambiente” significa um perfil Trabalho, Pessoal ou Jogos, que pode ser associado a uma Activity do KDE ou a uma área de trabalho virtual. As duas associações serão configuradas separadamente. A primeira plataforma suportada continua sendo Plasma 6.7+ em Wayland; outras versões precisam de validação própria.
 
@@ -33,22 +35,22 @@ Esses documentos especificam capacidades futuras. A alpha não inclui SDK, runti
 | Área | Observado na versão 0.2 | Lacuna a fechar |
 |---|---|---|
 | Aplicativos e janelas | Fixar apps, ativar/minimizar/restaurar, menu de contexto, reorganização pelo menu e entrada de arquivos `.desktop` | Arrastar para reorganizar, agrupamento opcional, teste prolongado no painel e em vários monitores |
-| Personalização | Três temas e editor com prévia/Aplicar/Cancelar/desfazer; persistência de aparência em KConfig privado | Qualificar popup/foco/grab por gesto real, ordem de widgets, presets, exportação/importação e perfis |
+| Personalização | Três temas, editor com prévia/Aplicar/Cancelar/desfazer e ordem/visibilidade por perfil; persistência em KConfig privado | Qualificar popup/foco/grab por gesto real, presets, exportação/importação e composição completa dos perfis |
 | Spotify | Modelo MPRIS compartilhado, preferência inicial pelo Spotify, seleção manual, faixa/artista e controles por capacidade | Capa/progresso, abrir cliente e qualificar Spotify real/áudio com segundo player |
 | Bateria | Widget opcional do agregado UPower, percentual/estado/energia/tempo quando informados; PeriGauge separado | Matriz real de notebook/desktop/múltiplas baterias/UPS/transições, alertas e uso humano no painel |
-| Ambientes e áreas de trabalho | Opção de filtrar janelas pela área atual | Perfis, associação com Activities/desktops, seletor e troca de contexto |
+| Ambientes e áreas de trabalho | Perfis manuais do dock e filtro de janelas pela área atual | Escolha de barra/launcher/eventos, associação com Activities/desktops, seletor e troca de contexto |
 | Steam | Integração ausente | Biblioteca local, favoritos, abrir jogos, suporte nativo/Flatpak e perfil Jogos |
 | Projetos próprios | Adaptadores locais para QuotaLantern, PeriGauge e estado salvo do FalaTrace | Validar os coletores reais, comunicar a idade da leitura e comprovar gravação ativa antes de indicá-la como ao vivo |
 | Calendário | Calendário e agenda pelo plugin PIM do KDE; acesso ao KOrganizer | Conectar Google pelo fluxo nativo e validar seleção, sincronização, fuso e recorrência |
 | Notificações | Avisos internos em texto/tooltip | Ilha compacta, HUD, toasts, política de prioridade e integração qualificada com notificações do KDE |
 | Barra superior | Componente ausente | Menu do sistema, menus do app ativo, status/systray e Central de Controle, todos opcionais |
-| Launcher estilo Raycast | Componente próprio ausente; KRunner e Milou instalados no sistema | Interface por teclado, comandos compartilhados, painel de ações e integração com perfis/projetos |
-| Updates e distribuição | Repositório público MIT, landing bilíngue, CI portátil, release alpha, bundle reproduzível e instalação/upgrade local | Matriz nativa de suporte, dependências dos novos componentes, verificação de atualizações, autenticidade e retorno à versão anterior |
+| Launcher estilo Raycast | Componente experimental no fonte, com build separado; KRunner/Milou como fallback | Interface por teclado, comandos compartilhados, painel de ações e integração com perfis/projetos |
+| Updates e distribuição | Repositório público MIT, landing bilíngue, CI portátil, release alpha, bundle reproduzível e instalação/upgrade local | Matriz nativa de suporte, dependências dos novos componentes, UI/cache de updates (CLI explícita no ZIP 0.2.5), autenticidade e retorno à versão anterior |
 | UX/UI e DX | Identidade Orla, três temas, documentação de contribuição e testes separados por ambiente | Tokens, galeria de estados, preview/desfazer, acessibilidade, onboarding e tooling de autoria |
 | Ecossistema | Contribuições ao código pelo GitHub | Formato declarativo, SDK, compatibilidade, catálogo e plugins com isolamento comprovado |
 | IA | Integração ausente | Provedores opcionais, API/cofre, acesso oficial a planos elegíveis, clientes locais e contexto consentido |
 
-Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, os componentes em `package/contents/ui/`, `package/contents/code/integrations.py`, `scripts/caiodock.py` e `tests/`. O recibo `.runtime/native-smoke.json` registra fixar/abrir/ativar/minimizar/restaurar em uma janela de teste nativa; isso ainda não comprova os fluxos prolongados no painel. O Google Agenda ainda não foi conectado, conforme informado pelo usuário. Nesta revisão foram feitas inspeção de código e pesquisa; as novas funcionalidades abaixo ainda não foram implementadas.
+Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, os componentes em `package/contents/ui/`, `package/contents/code/integrations.py`, `scripts/caiodock.py` e `tests/`. O recibo `.runtime/native-smoke.json` registra fixar/abrir/ativar/minimizar/restaurar em uma janela de teste nativa; isso ainda não comprova os fluxos prolongados no painel. O Google Agenda ainda não foi conectado, conforme informado pelo usuário. Os incrementos entregues e seus limites estão registrados acima; os checklists abaixo mantêm os critérios de aceite completos, incluindo funcionalidades ainda não implementadas.
 
 ## Arquitetura proposta
 
@@ -116,7 +118,7 @@ Arquivos principais: `DockView.qml`, `DockPopup.qml`, `main.qml`, `scripts/orla.
 - [ ] **M1: Spotify por MPRIS.** Escolha manual/automática do player, faixa/artista/capa, progresso e controles suportados; abrir o cliente. Aceite: Spotify real responde a play/pause/anterior/próxima, com segundo player aberto; capacidade não anunciada aparece desativada. O protocolo define capacidades e metadados, mas a implementação do cliente precisa ser testada. [MPRIS Player](https://specifications.freedesktop.org/mpris/latest/Player_Interface.html)
 - [ ] **B1: bateria do sistema.** Usar o provedor nativo KDE/UPower para percentual, carregando/descarregando, energia externa e tempo estimado quando informado. Manter PeriGauge para periféricos, com estimativas e leitura antiga identificadas. Aceite: notebook, desktop sem bateria, múltiplas baterias e serviço indisponível têm estados corretos, sem dispositivos duplicados. [UPower Device](https://upower.freedesktop.org/docs/Device.html)
 
-C1, M1 e B1 permanecem sem aceite completo: a 0.2.4 entrega somente os incrementos delimitados acima. C1 depende de R1/R2; M1 e B1 podem avançar independentemente. Compartilhar os modelos de mídia e bateria com a futura barra e Central de Controle.
+C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incrementos delimitados acima. C1 depende de R1/R2; M1 e B1 podem avançar independentemente. Compartilhar os modelos de mídia e bateria com a futura barra e Central de Controle.
 
 ### 0.5 — Perfis, Activities e áreas de trabalho
 
@@ -126,7 +128,7 @@ C1, M1 e B1 permanecem sem aceite completo: a 0.2.4 entrega somente os increment
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 
-P1 depende de C1; P2/W1 dependem de P1 e da prova de contexto. A implementação deve acrescentar filtro por Activity, separado do filtro de área virtual existente.
+P1 está parcialmente implementado no dock; falta escolher barra/launcher/eventos e qualificar os fluxos completos. A prova privada de seleção preservou o Pomodoro, mas resetou o timer antes do restart: retomada entre processos é UNRUN. P1 depende de C1; P2/W1 dependem de P1 e da prova de contexto. A implementação deve acrescentar filtro por Activity, separado do filtro de área virtual existente.
 
 ### 0.6 — Barra superior modular inspirada no macOS
 
@@ -168,7 +170,7 @@ Para eventos próprios, decidir um único caminho visual por evento. Antes de as
 
 ### 0.9 — Updates e beta pública
 
-**Consulta experimental no código:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes; cache, preferências/interface no desktop e recuperação continuam pendentes. A release 0.2.4 não contém esse comando novo; U1/U2 permanecem abertos.
+**Consulta experimental no código e no ZIP 0.2.5:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes; cache, preferências/interface no desktop e recuperação continuam pendentes. O ZIP 0.2.5 inclui `scripts/updates.py`; o `.plasmoid` sozinho não contém CLI nem UI de updates. U1/U2 permanecem abertos.
 
 - [ ] **U1: avisos de versão.** Fonte oficial de releases do Orla, versão instalada/disponível, canal estável/beta, última consulta, cache e estado indisponível. Aceite: offline, falha e limite de consultas não parecem “já atualizado”; consultar não instala.
 - [ ] **U2: atualizar com recuperação.** Download verificado, compatibilidade, cópia da configuração, instalação iniciada pelo usuário e retorno ao pacote anterior. Definir autenticidade dos artefatos e origem confiável antes de distribuir o updater. Aceite: pacote inválido é recusado e uma atualização interrompida preserva uma versão utilizável e os perfis.
@@ -179,7 +181,7 @@ U1/U2 dependem de R2/R4 e de uma fonte de releases definida. Para updates de jog
 
 ### Trilha opcional — Launcher inspirado no Raycast
 
-**Incremento experimental no código:** `launcher/` contém janela Qt Quick própria, busca por apps/cálculos, navegação e proteção contra seleção antiga. Build e três CTests privados passaram, com revisão independente. Consulte o [guia do componente](launcher/README.md). A release 0.2.4 não o inclui; instalação opcional, comandos Orla e foco/atalho global entre aplicativos continuam pendentes. O relato humano de abertura/retorno do foco foi preservado sem correspondência dos eventos instrumentados, e L0/L2 permanecem abertos.
+**Incremento experimental no código:** `launcher/` contém janela Qt Quick própria, busca por apps/cálculos, navegação e proteção contra seleção antiga. Build e três CTests privados passaram, com revisão independente. Consulte o [guia do componente](launcher/README.md). A release 0.2.5 também não o inclui; instalação opcional, comandos Orla e foco/atalho global entre aplicativos continuam pendentes. O relato humano de abertura/retorno do foco foi preservado sem correspondência dos eventos instrumentados, e L0/L2 permanecem abertos.
 
 **Avaliação: faz sentido.** O dock e a barra oferecem acesso visual; o launcher oferece acesso rápido por teclado às mesmas funções. O maior valor específico é reunir os projetos e contextos do Caio: consultar quotas, abrir projetos, ver a agenda, controlar mídia e entrar no perfil Jogos. O Raycast serve de referência para busca, listas, atalhos e painel de ações, além de recursos posteriores como clipboard e snippets. [Raycast](https://www.raycast.com/), [interface List](https://developers.raycast.com/api-reference/user-interface/list)
 
@@ -204,7 +206,7 @@ Não confundir as interfaces: `org.kde.krunner.App.query()` abre/alimenta a jane
 
 Compatibilidade com extensões `@raycast/api` não está incluída: a plataforma do Raycast fornece runtime e componentes React/Node/TypeScript próprios. Reaproveitar uma extensão exigiria portá-la; reproduzir o runtime/SDK seria outra iniciativa. [Raycast Developer API](https://developers.raycast.com/)
 
-Estado desta avaliação: documentação e módulos instalados inspecionados; L0 e o frontend não foram executados ou implementados. A prova está pronta para ser realizada; o compromisso com o MVP próprio depende do resultado de L0 e da definição de instalação em R2.
+Estado atual: frontend experimental implementado e verificado por build/CTest privado; isso não encerra L0/L2. O compromisso com o MVP distribuído depende da prova global de atalho/foco e da definição de instalação em R2.
 
 ### Trilha contínua — UX/UI e acessibilidade
 
@@ -301,7 +303,7 @@ Contribuições ao núcleo seguem MIT; um addon distribuído separadamente decla
 
 ## Verificação e decisões ainda abertas
 
-Os testes existentes podem ser executados com `python3 -m unittest discover -s tests -v`; integração D-Bus com `python3 tests/dbus_smoke.py`; tarefas/janelas nativas com `python3 tests/native_smoke.py`; pacote com `python3 scripts/caiodock.py build`. Esses comandos não substituem os testes de barra, perfis e notificações que serão acrescentados nem a validação no painel real. Cada entrega deve atualizar o checklist correspondente após a verificação.
+Os testes existentes podem ser executados com `python3 -m unittest discover -s tests -v`; integração D-Bus com `python3 tests/dbus_smoke.py`; tarefas/janelas nativas com `python3 tests/native_smoke.py`; pacote com `python3 scripts/caiodock.py build`. Os testes de perfis já existentes têm comandos em CONTRIBUTING.md. Esses comandos não substituem os futuros testes de barra/notificações nem a validação no painel real. Cada entrega deve atualizar o checklist correspondente após a verificação.
 
 Decisões propostas: manter o layout atual como padrão; oferecer preset inspirado no macOS; usar ícone configurável no menu do sistema e identidade própria nos assets distribuídos; integrar mídia local antes de Web APIs. Manter 0.2 sem mudanças continua sendo opção para uso básico, mas deixa sem resposta os contextos, a barra e as notificações pedidos. O painel KDE modular é a opção recomendada porque aproveita funções existentes e permite desativar componentes individualmente.
 
@@ -339,4 +341,4 @@ Cada lote deve mostrar o resultado, evidência, limitação e decisão de contin
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
 - **Maior dificuldade/decisões abertas:** ciclo de notificações, menus globais, desktops por monitor, foco Wayland, isolamento externo, ciclo de autorização IA e política de compatibilidade. R3/L0/A0/X5 resolvem essas incertezas antes da expansão correspondente. Usar `high` em provas nativas, contratos e autorização quando exigirem investigação; ferramentas/formatos já definidos podem seguir com `medium`.
 - **Recorrer a modelo mais capaz:** `gpt-6-astra`, `high`, se uma prova reproduzível revelar conflito D-Bus/foco não resolvido pela API documentada, escape do sandbox ou divergência entre protocolo e regras do fornecedor. Aumentar esforço depois de diagnosticar ambiente/versão, não apenas por uma falha de dependência.
-- **Pronto para execução:** o primeiro lote e as provas isoladas estão definidos com resultado, escopo, dependências e validação. N3, SDK estável, código externo, SIWC e marketplace têm gates próprios ainda pendentes; isso não impede começar a base. Recomenda-se revisar a arquitetura em Plan antes de cada expansão com escolhas abertas; a sessão atual não mudou de modo. A alpha já foi publicada; esta revisão entrega documentação e não implementa os recursos futuros.
+- **Pronto para execução:** o primeiro lote e as provas isoladas estão definidos com resultado, escopo, dependências e validação. N3, SDK estável, código externo, SIWC e marketplace têm gates próprios ainda pendentes; isso não impede começar a base. Recomenda-se revisar a arquitetura em Plan antes de cada expansão com escolhas abertas; a sessão atual não mudou de modo. As alphas anteriores já foram publicadas; a 0.2.5 está preparada como prerelease com os incrementos delimitados acima. Preparação/documentação não comprovam publicação nem encerram os gates futuros.
