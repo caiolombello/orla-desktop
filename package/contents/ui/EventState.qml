@@ -201,7 +201,7 @@ QtObject {
         const now = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : nowMs();
         cancelAudioAnnouncement();
         const survivors = pending.filter(event => event.deadline > now);
-        current = null; pending = [];
+        // Replace directly so a queued promotion never exposes an empty surface.
         applyPool(survivors, now, false);
         return true;
     }

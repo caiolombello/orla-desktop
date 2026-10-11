@@ -830,6 +830,168 @@ class LocalEventsProductTests(unittest.TestCase):
                 self.assertIsNone(state.property("current"))
                 self.assertIs(self.window.activeFocusItem(), add)
 
+    def submit_live_queue(self, include_second_audio=True):
+        import json
+        state = self.event_state()
+        self.evaluate("nowProvider = function() { return Date.now(); }", state)
+        scope = state.property("activeScope")
+        generation = state.property("activeContextGeneration")
+        targets = ("first", "second") if include_second_audio else ("first",)
+        for target in targets:
+            event = {"kind": "audio", "action": "volume", "targetId": target,
+                     "originScope": scope, "contextGeneration": generation, "value": 50,
+                     "title": "Volume · 50%", "detail": target}
+            self.assertTrue(self.evaluate(f"submit({json.dumps(event)}, nowMs())", state))
+        self.assertTrue(self.evaluate(
+            "submit({kind:'completion',key:'pomodoro:completion',scope:'global',"
+            "title:'Foco concluído',detail:'queued completion'}, nowMs())", state))
+        self.assertEqual(state.property("count"), len(targets) + 1)
+        return state
+
+    def test_queued_close_focus_survives_dismiss_keys_mouse_and_timer_until_final_drain(self):
+        self.config.setProperty("showLocalToasts", True)
+        self.config.setProperty("showAudioHud", True)
+        self.configure_dock(320, 102, 64)
+        add = self.window.findChild(QQuickItem, "addButton")
+        close = self.window.findChild(QQuickItem, "localEventClose")
+        surface = self.window.findChild(QQuickItem, "localEventSurface")
+        cases = (("dismiss", None), ("escape", Qt.Key_Escape),
+                 ("return", Qt.Key_Return), ("enter", Qt.Key_Enter),
+                 ("mouse", None), ("expiry", None))
+        for mode, key in cases:
+            with self.subTest(mode=mode):
+                self.evaluate("clear()", self.event_state())
+                self.settle()
+                self.window.requestActivate()
+                self.assertTrue(QTest.qWaitForWindowActive(self.window, 1000))
+                add.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                state = self.submit_live_queue(include_second_audio=mode != "expiry")
+                restores = QSignalSpy(surface.focusRestoreRequested)
+                close.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                self.assertIs(self.window.activeFocusItem(), close)
+                while state.property("count") > 1:
+                    count = state.property("count")
+                    if mode == "expiry":
+                        # Let the real current-audio Timer expire; the queued
+                        # completion has its own later, still-live deadline.
+                        for _ in range(60):
+                            if state.property("count") != count:
+                                break
+                            self.settle(50)
+                    elif mode == "dismiss":
+                        self.assertTrue(self.evaluate("dismiss()", state))
+                    elif mode == "mouse":
+                        point = close.mapToScene(QPointF(close.width() / 2, close.height() / 2))
+                        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+                    else:
+                        QTest.keyClick(self.window, key)
+                    self.settle()
+                    self.assertEqual(state.property("count"), count - 1)
+                    self.assertTrue(surface.isVisible())
+                    self.assertTrue(self.evaluate("current.deadline > nowMs()", state))
+                    self.assertIs(self.window.activeFocusItem(), close)
+                    self.assertEqual(restores.count(), 0)
+                self.assertEqual(self.evaluate("current.kind", state), "completion")
+                if mode == "expiry":
+                    self.assertTrue(self.evaluate("advance(current.deadline)", state))
+                elif mode == "mouse":
+                    point = close.mapToScene(QPointF(close.width() / 2, close.height() / 2))
+                    QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+                elif key is not None:
+                    QTest.keyClick(self.window, key)
+                else:
+                    self.assertTrue(self.evaluate("dismiss()", state))
+                self.settle()
+                self.assertIsNone(state.property("current"))
+                self.assertFalse(surface.isVisible())
+                self.assertEqual(restores.count(), 1)
+                self.assertIs(self.window.activeFocusItem(), add)
+
+    def test_queue_drain_preserves_unrelated_user_focus_in_an_owned_popup(self):
+        self.config.setProperty("showLocalToasts", True)
+        self.config.setProperty("showAudioHud", True)
+        self.configure_dock(320, 102, 64)
+        add = self.window.findChild(QQuickItem, "addButton")
+        close = self.window.findChild(QQuickItem, "localEventClose")
+        surface = self.window.findChild(QQuickItem, "localEventSurface")
+        add.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        state = self.submit_live_queue()
+        close.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        self.assertIs(self.window.activeFocusItem(), close)
+        popup = self.window.findChild(QObject, "addPopup")
+        popup.setProperty("popupType", 0)
+        self.evaluate("open()", popup)
+        self.settle()
+        user_focus = self.window.findChild(QQuickItem, "launcherInput")
+        user_focus.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        self.assertIs(self.window.activeFocusItem(), user_focus)
+        for key in (Qt.Key_O, Qt.Key_W, Qt.Key_N, Qt.Key_E, Qt.Key_D):
+            QTest.keyClick(self.window, key)
+        self.assertEqual(user_focus.property("text"), "owned")
+        restores = QSignalSpy(surface.focusRestoreRequested)
+        for remaining in (2, 1, 0):
+            self.assertTrue(self.evaluate("dismiss()", state))
+            self.settle()
+            self.assertEqual(state.property("count"), remaining)
+            self.assertIs(self.window.activeFocusItem(), user_focus)
+            self.assertEqual(restores.count(), 0)
+        self.evaluate("close()", popup)
+
+    def test_queue_final_drain_does_not_restore_into_an_inactive_owned_window(self):
+        self.config.setProperty("showLocalToasts", True)
+        self.config.setProperty("showAudioHud", True)
+        self.configure_dock(320, 102, 64)
+        add = self.window.findChild(QQuickItem, "addButton")
+        close = self.window.findChild(QQuickItem, "localEventClose")
+        surface = self.window.findChild(QQuickItem, "localEventSurface")
+        self.window.requestActivate()
+        self.assertTrue(QTest.qWaitForWindowActive(self.window, 1000))
+        add.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        state = self.submit_live_queue()
+        close.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        self.assertIs(self.window.activeFocusItem(), close)
+        restores = QSignalSpy(surface.focusRestoreRequested)
+        other_engine = QQmlApplicationEngine()
+        warnings = []
+        other_engine.warnings.connect(
+            lambda values: warnings.extend(value.toString() for value in values))
+        other_engine.load(QUrl.fromLocalFile(str(ROOT / "tests" / "QmlHarness.qml")))
+        self.assertTrue(other_engine.rootObjects(), warnings)
+        other = other_engine.rootObjects()[0]
+        try:
+            other.requestActivate()
+            self.assertTrue(QTest.qWaitForWindowActive(other, 1000))
+            self.assertFalse(self.window.isActive())
+            other_focus = other.findChild(QQuickItem, "settingsButton")
+            other_focus.forceActiveFocus(Qt.TabFocusReason)
+            self.settle()
+            for remaining in (2, 1, 0):
+                self.assertTrue(self.evaluate("dismiss()", state))
+                self.settle()
+                self.assertEqual(state.property("count"), remaining)
+                self.assertFalse(self.window.isActive())
+                self.assertTrue(other.isActive())
+                self.assertIs(other.activeFocusItem(), other_focus)
+                self.assertIsNot(self.window.activeFocusItem(), add)
+                # Real window deactivation relinquishes close-owned focus.
+                self.assertEqual(restores.count(), 0)
+        finally:
+            other.close()
+            other.deleteLater()
+            QCoreApplication.sendPostedEvents(other, QEvent.DeferredDelete)
+            QTest.qWait(10)
+            other_engine.deleteLater()
+            QCoreApplication.sendPostedEvents(other_engine, QEvent.DeferredDelete)
+            self.app.processEvents()
+        self.assertEqual(warnings, [])
+
     def test_task_menu_anchor_uses_real_scrolled_item_coordinates_without_opening_popup(self):
         self.config.setProperty("showLocalToasts", True)
         self.configure_dock(240, 102, 64)
