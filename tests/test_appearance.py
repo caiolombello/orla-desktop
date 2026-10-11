@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest, QSignalSpy
@@ -79,6 +79,46 @@ class AppearanceTests(unittest.TestCase):
     def set_theme(self, text):
         import json
         self.evaluate("setThemeText(" + json.dumps(text) + ")")
+
+    def contrast_ratio(self, foreground, background):
+        def luminance(color):
+            channels = []
+            for channel in (color.redF(), color.greenF(), color.blueF()):
+                channels.append(channel / 12.92 if channel <= 0.04045
+                                else ((channel + 0.055) / 1.055) ** 2.4)
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        lighter, darker = sorted((luminance(foreground), luminance(background)), reverse=True)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    def test_default_paper_secondary_text_contrasts_with_opaque_surfaces(self):
+        self.evaluate("selectTheme('paper')")
+        muted = QColor(self.evaluate("effective.tokens.muted"))
+        surface = QColor(self.evaluate("effective.tokens.surface"))
+        self.assertTrue(muted.isValid())
+        self.assertTrue(surface.isValid())
+        self.assertEqual((muted.alpha(), surface.alpha()), (255, 255))
+        self.assertGreaterEqual(self.contrast_ratio(muted, surface), 4.5)
+
+        engine = QQmlApplicationEngine()
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("QmlHarness.qml").resolve())))
+        self.assertTrue(engine.rootObjects())
+        window = engine.rootObjects()[0]
+        try:
+            config = window.findChild(QObject, "configuration")
+            dock = window.findChild(QQuickItem, "dock")
+            config.setProperty("theme", "paper")
+            QTest.qWait(50)
+            popup = window.findChild(QObject, "calendarPopup")
+            popup_background = QColor(popup.property("background").property("color"))
+            default_muted = QColor(dock.property("muted"))
+            self.assertTrue(default_muted.isValid())
+            self.assertTrue(popup_background.isValid())
+            self.assertEqual((default_muted.alpha(), popup_background.alpha()), (255, 255))
+            self.assertGreaterEqual(self.contrast_ratio(default_muted, popup_background), 4.5)
+        finally:
+            window.close()
+            engine.deleteLater()
+            self.app.processEvents()
 
     def test_theme_preview_preserves_base_and_only_apply_saves_normalized_tokens(self):
         import json

@@ -20,6 +20,8 @@ The 0.2.9 alpha prerelease ZIP includes the experimental local Steam inventory C
 
 Alpha 0.2.9 publishes the first experimental Control Center slice: an optional global dock button, off by default, with shared media and battery status plus explicit shortcuts to KDE settings. Independent Source review approved this slice, but native popup/KCM and service or hardware behavior remain unqualified; see the [Control Center guide](docs/control-center.md) and [validation record](docs/validation/control-center-peripherals-0.2.9.md).
 
+The current source checkout also has an [experimental KDE calendar slice](docs/calendar.md). It enables KDE's existing PIM event plugin in the calendar model only while the popup is open and reports only states the plugin API can support without guessing. Disabling the model entry does not prove that KDE backend processes stopped. Its tests use synthetic events and do not access Akonadi, Google accounts or personal calendars. This change is not a new release; the published 0.2.9 assets remain unchanged.
+
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
 - Start from Glass, Midnight or Paper and preview colors, opacity, spacing, corners, icon size and reduced motion. Apply saves; Cancel, Escape or closing settings discards the preview. Undo restores the previous applied appearance once per session.
 - Use the clock, Pomodoro timer, KDE calendar view, and MPRIS media controls with player selection, track/artist text, and capability-aware playback buttons. An optional local in-dock notice marks the completion of a Pomodoro focus or break period; it is off by default and does not use KDE notifications.
@@ -28,7 +30,7 @@ Alpha 0.2.9 publishes the first experimental Control Center slice: an optional g
 - Create and explicitly select manual profiles for pinned apps, appearance, widget order/visibility, calendar events and the current-desktop window filter. The Pomodoro remains shared.
 - Keep the dock in a Plasma panel and configure its position and visibility through Plasma.
 
-The calendar uses the same calendar selection as KDE's calendar components. Orla does not connect Google Calendar by itself. To use Google events, first add and configure a Google account through KOrganizer/KDE PIM, then enable synced events in Orla. Account setup and sync depend on KDE PIM resources installed on your system.
+The calendar reads the same calendar selection as KDE's calendar components without changing it. Changing that selection in KDE also changes KDE's clock/calendar. Orla does not connect Google Calendar by itself: use **Configure in KOrganizer** to add and authenticate the Google resource through KDE PIM, then enable synced events in the desired Orla profile. An empty day cannot distinguish no events from an unavailable or unconfigured KDE PIM backend; see the [calendar guide](docs/calendar.md).
 
 Media controls share one native Plasma MPRIS model. They initially prefer Spotify when discovered and keep a manual player choice for the session. Play, Pause, Previous and Next respect the selected player’s capabilities; track and artist render as bounded plain text. A private D-Bus fixture qualified the native model with two synthetic players, not the real Spotify client or audio playback. Artwork, progress and opening the client remain planned.
 
@@ -106,6 +108,8 @@ python3 scripts/orla.py build
 ```
 
 QML interaction tests require a running graphical KDE session. Native panel behavior, Wayland focus, global menus, notifications, and multi-monitor behavior are not covered by portable CI; report the exact Plasma version and session type when filing an issue.
+
+Calendar QML checks are the exception: run `python3 -B tests/run_calendar_tests.py` (and add `--style org.kde.desktop` for the KDE style). This stdlib supervisor starts Qt offscreen in a separate process with owned XDG directories and an unavailable session-bus endpoint. Do not combine `test_calendar` with graphical dock suites in one `unittest` process.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For security concerns, follow [SECURITY.md](SECURITY.md).
 

@@ -108,6 +108,7 @@ Item {
         readonly property date now: root.now
         readonly property color foreground: root.foreground
         readonly property color muted: root.muted
+        readonly property color background: root.surface
     }
     function widgetVisible(id) { const widget = presentation.widgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
@@ -552,8 +553,19 @@ Item {
         objectName: "calendarPopup"
         dock: root
         title: Qt.formatDate(root.now, "MMMM yyyy")
-        CalendarAgenda { objectName: "calendarAgenda"; dock: calendarContext }
-        Controls.Button { text: qsTr("Configurar no KOrganizer"); onClicked: root.openCalendarApp() }
+        CalendarAgenda {
+            objectName: "calendarAgenda"
+            dock: calendarContext
+            active: calendarPopup.visible
+        }
+        Controls.Button {
+            objectName: "calendarConfigureButton"
+            readonly property string accessibilityDescription: qsTr("Abre o KOrganizer. A seleção de calendários também é usada pelo relógio do KDE.")
+            text: qsTr("Configurar no KOrganizer")
+            Accessible.name: text
+            Accessible.description: accessibilityDescription
+            onClicked: root.openCalendarApp()
+        }
     }
     DockPopup {
         id: integrationPopup
