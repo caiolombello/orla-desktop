@@ -386,7 +386,12 @@ void AiTextController::cancelAll()
 {
     if (!busy()) return;
     m_deadline.stop();
-    if (!m_cancelRequested) m_cancelFailureCode = m_knownFailureCode;
+    if (!m_cancelRequested) {
+        m_cancelFailureCode = m_knownFailureCode;
+        if (m_cancelFailureCode.isEmpty() && !m_protocolInvalid && m_terminalEvent
+            && m_terminalType == QStringLiteral("failed"))
+            m_cancelFailureCode = m_terminalCode;
+    }
     m_cancelRequested = true;
     beginCancellation();
     emit changed();
@@ -537,7 +542,6 @@ bool AiTextController::consumeLine(const QByteArray &line)
         m_terminalEvent = true;
         m_terminalType = type;
         m_terminalCode = object.value(QStringLiteral("code")).toString();
-        if (m_knownFailureCode.isEmpty()) m_knownFailureCode = m_terminalCode;
     } else if (type == QStringLiteral("cancelled")) {
         if (!m_startedEvent || !exactKeys(object, base)) return false;
         m_terminalEvent = true;
@@ -640,6 +644,10 @@ void AiTextController::handleFinished(int exitCode, QProcess::ExitStatus exitSta
     }
     if (m_knownFailureCode.isEmpty() && (m_protocolInvalid || !m_terminalEvent))
         m_knownFailureCode = QStringLiteral("invalid_helper_response");
+    if (m_knownFailureCode.isEmpty() && !m_protocolInvalid && m_terminalEvent
+        && m_terminalType == QStringLiteral("failed")
+        && exitStatus == QProcess::NormalExit && exitCode == 0)
+        m_knownFailureCode = m_terminalCode;
     beginGroupCleanup();
 }
 
