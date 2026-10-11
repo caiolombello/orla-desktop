@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include "AiProviderController.h"
+#include "AiTextController.h"
 #include "LauncherController.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
@@ -21,10 +22,12 @@ private Q_SLOTS:
     {
         LauncherController controller;
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
         engine.rootContext()->setContextProperty("steamProvider", &steam);
         engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
         engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -59,10 +62,12 @@ private Q_SLOTS:
     {
         LauncherController controller;
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
         engine.rootContext()->setContextProperty("steamProvider", &steam);
         engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
         engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -119,10 +124,12 @@ private Q_SLOTS:
 
         LauncherController controller;
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
         engine.rootContext()->setContextProperty("steamProvider", &steam);
         engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
         engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -134,9 +141,18 @@ private Q_SLOTS:
         auto *back = window->findChild<QQuickItem *>(QStringLiteral("aiBackButton"));
         auto *discover = window->findChild<QQuickItem *>(QStringLiteral("aiDiscoverButton"));
         auto *probe = window->findChild<QQuickItem *>(QStringLiteral("aiProbeButton"));
+        auto *task = window->findChild<QQuickItem *>(QStringLiteral("aiTextTask"));
+        auto *model = window->findChild<QQuickItem *>(QStringLiteral("aiTextModel"));
+        auto *host = window->findChild<QQuickItem *>(QStringLiteral("aiTextHost"));
+        auto *port = window->findChild<QQuickItem *>(QStringLiteral("aiTextPort"));
+        auto *text = window->findChild<QQuickItem *>(QStringLiteral("aiTextInput"));
+        auto *consent = window->findChild<QQuickItem *>(QStringLiteral("aiTextConsent"));
+        auto *generate = window->findChild<QQuickItem *>(QStringLiteral("aiTextGenerate"));
         auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
         auto *header = window->findChild<QQuickItem *>(QStringLiteral("launcherHeader"));
-        QVERIFY(entry && panel && back && discover && probe && search && header);
+        auto *scroll = window->findChild<QQuickItem *>(QStringLiteral("aiSettingsScroll"));
+        QVERIFY(entry && panel && back && discover && probe && task && model && host && port
+                && text && consent && generate && search && header && scroll);
         const QString capture = qEnvironmentVariable("ORLA_UI_CAPTURE_DIR");
         const auto snapshot = [&](const QString &name) {
             if (capture.isEmpty()) return;
@@ -151,6 +167,24 @@ private Q_SLOTS:
         QVERIFY(back->hasActiveFocus());
         QVERIFY(!QFile::exists(marker));
         QCOMPARE(ai.status(), QStringLiteral("disabled"));
+        QCOMPARE(aiText.status(), QStringLiteral("disabled"));
+        QVERIFY(!aiText.busy());
+        QVERIFY(!generate->isEnabled());
+        QVERIFY(text->setProperty("text", QStringLiteral("Texto explícito de teste")));
+        QVERIFY(consent->setProperty("checked", true));
+        QTRY_VERIFY(generate->isEnabled());
+        QVERIFY(model->setProperty("text", QStringLiteral("modelo-teste:1")));
+        QVERIFY(QMetaObject::invokeMethod(model, "textEdited"));
+        QCOMPARE(consent->property("checked").toBool(), false);
+        QVERIFY(consent->setProperty("checked", true));
+        QVERIFY(host->setProperty("currentIndex", 1));
+        QVERIFY(QMetaObject::invokeMethod(host, "activated", Q_ARG(int, 1)));
+        QCOMPARE(consent->property("checked").toBool(), false);
+        QVERIFY(consent->setProperty("checked", true));
+        QVERIFY(port->setProperty("value", 11435));
+        QVERIFY(QMetaObject::invokeMethod(port, "valueModified"));
+        QCOMPARE(consent->property("checked").toBool(), false);
+        QVERIFY(!aiText.busy()); // Editing and granting consent never creates a process.
         window->resize(440, 380);
         snapshot(QStringLiteral("ai-disabled-narrow"));
         QTest::keyClick(window, Qt::Key_Tab);
@@ -170,6 +204,13 @@ private Q_SLOTS:
         QVERIFY(!ai.busy());
         QVERIFY(QFile::exists(probeMarker));
         snapshot(QStringLiteral("ai-protocol-narrow"));
+        auto *scrollContent = scroll->property("contentItem").value<QObject *>();
+        QVERIFY(scrollContent);
+        const qreal maximumContentY = qMax<qreal>(0, scrollContent->property("contentHeight").toReal()
+                                                     - scrollContent->property("height").toReal());
+        QVERIFY(maximumContentY > 0);
+        QVERIFY(scrollContent->setProperty("contentY", maximumContentY));
+        snapshot(QStringLiteral("ai-text-config-narrow"));
         QTest::keyClick(window, Qt::Key_Escape);
         QVERIFY(!panel->isVisible());
         QVERIFY(search->hasActiveFocus());
@@ -196,11 +237,13 @@ private Q_SLOTS:
         helperFile.close();
 
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
         LauncherController controller(&steam);
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
         engine.rootContext()->setContextProperty("steamProvider", &steam);
         engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
         engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -228,6 +271,73 @@ private Q_SLOTS:
         QVERIFY(search->hasActiveFocus());
     }
 
+    void aiTextPanelGeneratesStreamsLocksAndCancels()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("ai-text-started"));
+        const QString helper = directory.filePath(QStringLiteral("ai-text-stream.py"));
+        QFile helperFile(helper);
+        QVERIFY(helperFile.open(QIODevice::WriteOnly));
+        helperFile.write("import json,pathlib,sys,time\npathlib.Path(r'");
+        helperFile.write(marker.toUtf8());
+        helperFile.write("').touch()\nrequest=json.loads(sys.stdin.buffer.readline())\nbase={'schemaVersion':1,'requestId':request['requestId']}\nevents=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='resultado parcial')]\nfor event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\ntime.sleep(60)\n");
+        helperFile.close();
+
+        LauncherController controller;
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                      directory.filePath(QStringLiteral("missing-steam.py")));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *entry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        auto *back = window->findChild<QQuickItem *>(QStringLiteral("aiBackButton"));
+        auto *model = window->findChild<QQuickItem *>(QStringLiteral("aiTextModel"));
+        auto *text = window->findChild<QQuickItem *>(QStringLiteral("aiTextInput"));
+        auto *consent = window->findChild<QQuickItem *>(QStringLiteral("aiTextConsent"));
+        auto *generate = window->findChild<QQuickItem *>(QStringLiteral("aiTextGenerate"));
+        auto *result = window->findChild<QQuickItem *>(QStringLiteral("aiTextResult"));
+        auto *copy = window->findChild<QQuickItem *>(QStringLiteral("aiTextCopy"));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(entry && back && model && text && consent && generate && result && copy && search);
+
+        QVERIFY(!QFile::exists(marker));
+        QVERIFY(QMetaObject::invokeMethod(entry, "click"));
+        QVERIFY(text->setProperty("text", QStringLiteral("Texto controlado pela fixture")));
+        QVERIFY(consent->setProperty("checked", true));
+        QVERIFY(!QFile::exists(marker));
+        QTRY_VERIFY(generate->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(generate, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(aiText.busy() && QFile::exists(marker), 1500);
+        QVERIFY(!model->isEnabled());
+        QVERIFY(!text->isEnabled());
+        QCOMPARE(generate->property("text").toString(), QStringLiteral("Cancelar"));
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("resultado parcial"), 1500);
+        QCOMPARE(result->property("readOnly").toBool(), true);
+        QVERIFY(result->isVisible());
+        QVERIFY(copy->isEnabled()); // Copy remains explicit; the test does not touch the host clipboard.
+
+        QVERIFY(QMetaObject::invokeMethod(generate, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 2500);
+        QVERIFY(aiText.status() == QStringLiteral("cancelled_confirmed")
+                || aiText.status() == QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(aiText.output(), QStringLiteral("resultado parcial"));
+        QVERIFY(model->isEnabled());
+        QVERIFY(text->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(back, "click"));
+        QVERIFY(search->hasActiveFocus());
+    }
+
     void steamBusyStateDisablesCompetingActionsAndShowsCancel()
     {
         QTemporaryDir directory;
@@ -243,11 +353,14 @@ private Q_SLOTS:
 
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
                                 directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                directory.filePath(QStringLiteral("missing-ai-text.py")));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
         LauncherController controller(&steam);
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
         engine.rootContext()->setContextProperty("steamProvider", &steam);
         engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
         engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -267,6 +380,164 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(!scan->isEnabled() && cancel->isVisible() && !downloads->isEnabled(), 1000);
         QVERIFY(QMetaObject::invokeMethod(cancel, "click"));
         QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+    }
+
+    void threeOwnerCloseBarrierWaitsForSteamAndAiTextExactlyOnce()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString aiHelper = directory.filePath(QStringLiteral("ai-text-sleep.py"));
+        QFile aiHelperFile(aiHelper);
+        QVERIFY(aiHelperFile.open(QIODevice::WriteOnly));
+        aiHelperFile.write(
+            "import json,sys,time\n"
+            "request=json.loads(sys.stdin.buffer.readline())\n"
+            "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+            "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial')]\n"
+            "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n"
+            "time.sleep(60)\n");
+        aiHelperFile.close();
+
+        const QString steamHelper = directory.filePath(QStringLiteral("steam-resistant.py"));
+        QFile steamHelperFile(steamHelper);
+        QVERIFY(steamHelperFile.open(QIODevice::WriteOnly));
+        steamHelperFile.write("import signal,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\ntime.sleep(60)\n");
+        steamHelperFile.close();
+
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), aiHelper);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        aiText.generate(QStringLiteral("barrier-request"), QStringLiteral("summarize"),
+                        QVariant(), QStringLiteral("texto"), QStringLiteral("modelo:1"),
+                        QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(steam.busy() && aiText.busy(), 1500);
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial"), 1500);
+
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss",
+                                          Q_ARG(QVariant, QVariant(false))));
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 2000);
+        QVERIFY(steam.busy());
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+        QTRY_COMPARE_WITH_TIMEOUT(dismissed.count(), 1, 1000);
+        QCOMPARE(window->property("pendingDismiss").toBool(), false);
+        QTest::qWait(100);
+        QCOMPARE(dismissed.count(), 1);
+    }
+
+    void windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString providerHelper = directory.filePath(QStringLiteral("ai-provider-resistant.py"));
+        QFile providerHelperFile(providerHelper);
+        QVERIFY(providerHelperFile.open(QIODevice::WriteOnly));
+        providerHelperFile.write(
+            "import signal,time\n"
+            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            "time.sleep(60)\n");
+        providerHelperFile.close();
+
+        const QString textHelper = directory.filePath(QStringLiteral("ai-text-close.py"));
+        QFile textHelperFile(textHelper);
+        QVERIFY(textHelperFile.open(QIODevice::WriteOnly));
+        textHelperFile.write(
+            "import json,sys,time\n"
+            "request=json.loads(sys.stdin.buffer.readline())\n"
+            "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+            "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial-close')]\n"
+            "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n"
+            "time.sleep(60)\n");
+        textHelperFile.close();
+
+        const QString steamHelper = directory.filePath(QStringLiteral("steam-close-resistant.py"));
+        QFile steamHelperFile(steamHelper);
+        QVERIFY(steamHelperFile.open(QIODevice::WriteOnly));
+        steamHelperFile.write(
+            "import signal,time\n"
+            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            "time.sleep(60)\n");
+        steamHelperFile.close();
+
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper,
+                                {}, nullptr, {}, 500);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
+                                {}, nullptr, {}, 100);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+
+        ai.discover();
+        aiText.generate(QStringLiteral("window-close-request"), QStringLiteral("summarize"),
+                        QVariant(), QStringLiteral("texto"), QStringLiteral("modelo:1"),
+                        QStringLiteral("127.0.0.1"), 11434, true);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_VERIFY_WITH_TIMEOUT(ai.busy() && aiText.busy() && steam.busy(), 1500);
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial-close"), 1500);
+
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        QSignalSpy quitRequested(&engine, &QQmlApplicationEngine::quit);
+        QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss",
+                                          Q_ARG(QVariant, QVariant(true))));
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QCOMPARE(window->property("pendingQuit").toBool(), true);
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(quitRequested.count(), 0);
+
+        QVERIFY(!window->close()); // Real owned-window close reaches onClosing and is vetoed.
+        QVERIFY(window->isVisible());
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QCOMPARE(window->property("pendingQuit").toBool(), true);
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(quitRequested.count(), 0);
+
+        QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 1500);
+        QVERIFY(ai.busy() || steam.busy());
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(quitRequested.count(), 0);
+        QVERIFY(window->isVisible());
+
+        QTRY_VERIFY_WITH_TIMEOUT(!ai.busy(), 2500);
+        QVERIFY(steam.busy());
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(quitRequested.count(), 0);
+
+        QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+        QTRY_COMPARE_WITH_TIMEOUT(dismissed.count(), 1, 1000);
+        QTRY_COMPARE_WITH_TIMEOUT(quitRequested.count(), 1, 1000);
+        QCOMPARE(window->property("pendingDismiss").toBool(), false);
+        QCOMPARE(window->property("pendingQuit").toBool(), false);
+        QTest::qWait(100);
+        QCOMPARE(dismissed.count(), 1);
+        QCOMPARE(quitRequested.count(), 1);
     }
 };
 QTEST_MAIN(UiTests)

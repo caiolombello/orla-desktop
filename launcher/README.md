@@ -1,6 +1,6 @@
 # Orla Launcher — componente opcional experimental
 
-Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. Não há histórico de consultas do Orla, contexto automático, runner de shell, integrações de conta ou rede.
+Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
 ## Steam local — somente no fonte
 
@@ -21,6 +21,46 @@ Para executar clientes, o controlador exige um `XDG_RUNTIME_DIR` absoluto, priva
 A invocação `python3 -I -B scripts/ai.py detect` continua reconhecida. Sem a pasta privada fornecida pelo controlador, as consultas que exigem execução isolada ficam indisponíveis; o helper não cria uma pasta no checkout. O teste do protocolo anônimo continua sendo uma ação separada de consentimento na interface. CLI reconhecida ou troca mínima bem-sucedida não demonstra autorização do provedor, elegibilidade de conta, acesso a modelo, API suportada ou prontidão para inferência.
 
 A fatia Source recebeu aprovação independente e foi integrada pelo PR [#20](https://github.com/caiolombello/orla-desktop/pull/20); a CI portátil [também passou](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163). Esse run anterior não compilou o launcher C++/QML nem executou CTests. O job separado de build em Fedora 44 agora [compilou o launcher e passou os cinco CTests fechados](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). Não há versão de release própria para o launcher: os assets 0.2.9 excluem launcher C++/QML, painel de IA e barra. O ZIP do dock inclui somente `scripts/ai.py` e `tests/test_ai.py`, sem oferecer painel ou integração de IA ao usuário. Evidências sintéticas e one-shot delimitadas estão no [registro de validação](../docs/validation/ai-provider-source.md). Autenticação, inferência, semântica de cancelamento, uso, pedidos pagos, procedência do cliente instalado, isolamento de namespace/rede e comportamento nativo Wayland/QML permanecem sem qualificação.
+
+## Geração de texto Ollama — integração experimental neste Source
+
+Esta mudança Source integra ao painel **IA** uma transformação de texto
+limitada a Ollama: reescrever, resumir ou traduzir. A pessoa informa texto,
+modelo, porta, idioma quando necessário e escolhe somente `127.0.0.1` ou `::1`.
+Antes do envio, a interface mostra destino, modelo, tarefa, dados e **custo não
+informado**, explica que qualquer processo nesse endereço pode receber ou
+encaminhar o texto e pede consentimento para a sessão. Alterar host, porta ou
+modelo revoga esse consentimento. Abrir o painel, editar campos ou consentir não
+executa nada; somente **Gerar** inicia o pedido.
+
+Durante a execução, os campos ficam bloqueados e a ação principal vira
+**Cancelar**. Deltas aparecem numa área somente leitura; resposta parcial é
+preservada para revisão e **Copiar resultado** continua sendo uma ação manual.
+Fechar o painel cancela os dois controladores de IA. Fechar a janela espera os
+três proprietários de trabalho — compatibilidade de IA, texto e Steam — antes
+de concluir uma única vez.
+
+O controller inicia exatamente Python isolado com `-I -B`, o helper
+`ai_text_ollama.py` e `run-ollama`, em cwd privado e com ambiente filho vazio.
+O helper operacional seleciona somente o conector Ollama numérico e reutiliza o
+lifecycle T1/T2 protegido. O entrypoint direto `ai_text.py` continua falhando
+fechado com `unsupported_transport`; o adaptador HTTPS privado de OpenAI também
+permanece sem ligação operacional, credenciais ou UI. Não há probe automático,
+início de servidor, download de modelo, fallback, leitura de clipboard,
+histórico, arquivos/contexto, autenticação ou API paga.
+
+Esta mudança adota a composição Source validada. O shim, o controller R3 e a
+correção de UI receberam revisão independente delimitada. O build normal da composição, seis
+CTests isolados e 90 testes Python passaram (6 do shim, 23 T1 e 61 T2),
+usando somente processos e servidores HTTP privados e sintéticos. Não houve
+Ollama ou modelo real, validação semântica da resposta,
+clipboard nativo, acessibilidade nativa, instalação, pacote relocável, release
+ou admissão de usuário/Wayland. Loopback limita o destino de rede; não confirma
+identidade Ollama, processamento offline ou privacidade, e o processo que
+escuta ali pode encaminhar o conteúdo para outra rede. A CI hospedada desta
+fatia e sua integração na branch remota principal ainda não foram verificadas.
+Esta mudança não atualiza a instalação existente do launcher baseada no Source
+32, que continua sem a nova UI de texto.
 
 ## Fundação do pacote de dados — somente no fonte
 
@@ -49,7 +89,7 @@ um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
 
 ## Compilar e testar
 
-Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml, Quick; Test/DBus para testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
+Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
 
 ```sh
 cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON

@@ -1,18 +1,18 @@
 # Experimental AI provider compatibility — source validation
 
-**Status:** Experimental, integrated Source; not an end-user feature in the published 0.2.9 assets. The [PR #20](https://github.com/caiolombello/orla-desktop/pull/20) source commit `579e181a8dbe9b3cc690410cb1c0e9b0398e00db` was merged at 2026-10-11 05:36:17 UTC as `9d286eb2899c8e1c09b36d545eec4048745415f2`. [CI run 38115242191/job 114398735163](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) passed at 05:35:40 UTC. Release 0.2.9 bundles only `scripts/ai.py` and `tests/test_ai.py` in its ZIP; it still excludes the launcher C++/QML, AI panel, and bar. The helper files are not a published AI feature or proof of AI readiness.
+**Status:** The A0.1 compatibility slice is experimental, integrated Source; this Source change integrates the reviewed operational Ollama text slice described below. Neither is an end-user feature in the published 0.2.9 assets. The [PR #20](https://github.com/caiolombello/orla-desktop/pull/20) source commit `579e181a8dbe9b3cc690410cb1c0e9b0398e00db` was merged at 2026-10-11 05:36:17 UTC as `9d286eb2899c8e1c09b36d545eec4048745415f2`. [CI run 38115242191/job 114398735163](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) passed at 05:35:40 UTC. Release 0.2.9 bundles only `scripts/ai.py` and `tests/test_ai.py` in its ZIP; it still excludes the launcher C++/QML, AI panel, and bar. The helper files are not a published AI feature or proof of AI readiness.
 
-## What this slice does
+## What the A0.1 compatibility slice does
 
 The launcher adds an **IA** panel, initially off. Opening it starts no helper or provider process. The explicit **Verificar clientes instalados** action asks a fixed helper to inspect a fixed list: Codex, Claude Code, OpenCode, Ollama and LM Studio. Version commands are restricted to recognized CLIs; Ollama is presence-only because its version command may contact a live service. Each provider remains `enabled: false`.
 
 A separate explicit consent action tests one narrow Codex compatibility exchange, `initialize` followed by `initialized`, for the recognized Codex version. It is a protocol handshake, not authentication, session reuse, model startup, a turn, text generation, usage reporting, or an API entitlement check. Neither operation takes search text, selected text, or other user context. There is no credentials store, chat, text-selection workflow, or terminal handoff in this slice.
 
-## PR CI scope
+## Historical PR #20 CI scope
 
 The PR workflow passed portable Python/QML checks and produced a Source ZIP artifact. The ZIP contains `scripts/ai.py` and `tests/test_ai.py`; the launcher C++/QML files remain excluded. Its CI run passed the helper suite, 19 tests in 13.065 seconds. This workflow did **not** compile the launcher C++/QML or run the controller CTests. The 0.2.9 release reuses the helper files in its ZIP, but this does not package the launcher panel. This CI result is separate from the local controller/helper and one-shot evidence below.
 
-## Bounded source evidence
+## Historical A0.1 bounded source evidence
 
 - The controller/UI round-two Source review approved with zero blockers. Its focused CTest suite passed 4/4 in 30.69 seconds; a separate independent targeted run passed 6 cases in 3.492 seconds. These exercise fake helpers, private test buses, lifecycle/cancellation, and capability semantics.
 - The helper round-four Source review approved with zero blockers. The synthetic helper suite passed 19 tests in 12.866 seconds; eight independent targeted fixtures passed. These use synthetic ELF data and a Bubblewrap shim, not proof of real namespace enforcement.
@@ -100,15 +100,72 @@ The adapter checks the 64-header and 32-KiB metadata limits after the standard
 library has parsed headers. These checks do not provide an aggregate preparse
 allocation bound; the upstream parser has its own line and count limits.
 
-The adapter is not wired into the command-line entry point or a default
-transport factory. Signal/timer adapters, operational CLI, TLS/OpenAI transport,
-launcher text UI and real cancellation remain separate work. Authentication,
+At this historical T2.3 point, the adapter was not wired into the command-line
+entry point or a default transport factory. Signal/timer adapters, operational
+CLI, TLS/OpenAI transport, launcher text UI and real cancellation were separate
+work. Authentication,
 credentials stores, subscriptions, inference, usage and billing were not
 exercised. A local model endpoint or a provider subscription does not establish
 account permission or API credit. The module is a Source foundation; published
 0.2.9 assets remain unchanged.
 
-## Reviewed source pins
+## Private OpenAI adapter foundation (PR #34)
+
+[PR #34](https://github.com/caiolombello/orla-desktop/pull/34) historically
+integrated a bounded private HTTPS adapter for OpenAI into the transport module.
+It remains unwired: there is no operational entrypoint, credential acquisition,
+provider selection or launcher UI for it. The operational slice below does
+not import or select that connector and must not be described as generic cloud
+API support.
+
+## Operational Ollama text integrated in this Source change
+
+This Source change integrates `scripts/ai_text_ollama.py`, `AiTextController`
+and the explicit text UI. Its component reviews and fresh composition checks
+passed. Remote main integration, hosted CI, release and installation for this
+slice have not yet been verified; this is Source adoption, not runtime admission.
+
+The UI accepts only an explicitly chosen numeric loopback host (`127.0.0.1` or
+`::1`), port, model, task, text and translation language when required. It shows
+the normalized destination, model/task/data and unknown cost before session
+consent. Editing host, port or model revokes consent. Opening, editing and
+consenting do not execute anything; only **Gerar** starts a request. During the
+request inputs are locked, **Cancelar** stays available, deltas stream to a
+read-only review area, partial output is retained and copy is manual. Closing
+the panel cancels both AI controllers; the actual window-close barrier waits for AI compatibility, AI text and Steam owners before finishing once.
+
+The controller invokes exactly `python -I -B ai_text_ollama.py run-ollama` by
+absolute paths in a private cwd with an empty child environment. This is
+deliberately distinct from the isolated test runner preserving the parent
+`HOME` and `CODEX_HOME` literals. The shim supplies fd input/output and POSIX
+signal/timer boundaries to the protected T2 lifecycle and selects only the
+numeric Ollama connector. Direct T1/T2 execution remains fail-closed as
+`unsupported_transport`.
+
+The author evidence records six operational shim tests, a six-test full CTest
+union, twelve corrected controller cases and ten UI cases. The private integrated
+fixture covers controller → helper → ephemeral `QTcpServer`, fragmented
+streaming, EOF retention, cancellation/disconnect, preserved partial output and
+the three-owner close barrier. The fresh shim review and fresh UI correction
+review approved their bounded Source. The controller R3 fresh review also
+approved the confirmed-absence cleanup correction. A fresh normal composition
+build, all six isolated CTests and 90 selected Python tests passed (6 shim,
+23 T1 and 61 T2). UI had 10 passing cases and the controller had 12. These
+bounded results do not establish provider, native or installation readiness.
+
+No real Ollama, model, provider identity, semantic output, authentication,
+external service, clipboard, accessibility runtime, native Wayland session,
+package, install, release or deployment was used. There is no automatic probe,
+server start, model download, default context, clipboard read, history, context
+file, auth or paid API. Numeric loopback constrains the socket destination; it
+does not prove that Ollama owns the listener, that processing is offline or
+private, or that the listening process will not forward data to another network.
+The full Source ZIP does not install the launcher, and helper paths are currently
+compile-time absolute rather than finished relocatable packaging. This change
+does not upgrade the existing Source 32 launcher installation, which still has
+no new AI text UI.
+
+## Historical reviewed source pins
 
 The separately reviewed controller/UI and helper revisions used these source hashes:
 
@@ -123,4 +180,4 @@ a42be491343eeb05ac7748913a9c7275c6fea22280a1559cfbc99864e68e8306  launcher/CMake
 6b7662d364d7f0131e09cbbbf846dfd8975a7e48ffa39b245ff562b5e724221c  tests/test_ai.py
 ```
 
-See the [launcher build/source guide](../../launcher/README.md) and the [long-term integration proposal](../AI_INTEGRATIONS.md). The reviewed component-level reports and local one-shot receipt are preserved in the repository's private `.runtime` evidence area; they are not public API guarantees.
+See the [launcher build/source guide](../../launcher/README.md) and the [long-term integration proposal](../AI_INTEGRATIONS.md). The reviewed component-level reports and local one-shot receipt remain preserved as private evidence; they are not public API guarantees.

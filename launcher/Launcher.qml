@@ -22,7 +22,8 @@ Window {
         if (row) launcher.execute(launcher.selectedIndex, row.generation, row.id)
     }
     function closeAiPanel() {
-        aiProviders.cancel(aiProviders.requestId)
+        aiProviders.cancelAll()
+        aiText.cancelAll()
         activePanel = "search"
         search.forceActiveFocus()
     }
@@ -32,7 +33,7 @@ Window {
         search.forceActiveFocus()
     }
     function finishPendingClose() {
-        if (!pendingDismiss || aiProviders.busy || steamProvider.busy) return
+        if (!pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
         pendingDismiss = false
         launcher.dismiss()
         if (pendingQuit) Qt.quit()
@@ -40,8 +41,9 @@ Window {
     }
     function requestDismiss(quitApplication) {
         const aiReady = aiProviders.requestClose()
+        const textReady = aiText.requestClose()
         const steamReady = steamProvider.requestClose()
-        if (!aiReady || !steamReady) {
+        if (!aiReady || !textReady || !steamReady) {
             pendingDismiss = true
             pendingQuit = quitApplication
             return
@@ -52,8 +54,9 @@ Window {
     onActiveChanged: if (active && activePanel === "search") search.forceActiveFocus()
     onClosing: function(close) {
         const aiReady = aiProviders.requestClose()
+        const textReady = aiText.requestClose()
         const steamReady = steamProvider.requestClose()
-        if (!aiReady || !steamReady) {
+        if (!aiReady || !textReady || !steamReady) {
             close.accepted = false
             pendingDismiss = true
             pendingQuit = true
@@ -76,6 +79,10 @@ Window {
         function onCloseReady() {
             window.finishPendingClose()
         }
+    }
+    Connections {
+        target: aiText
+        function onCloseReady() { window.finishPendingClose() }
     }
     Connections {
         target: steamProvider
@@ -281,6 +288,7 @@ Window {
             Layout.minimumHeight: 0
             visible: window.activePanel === "ai"
             controller: aiProviders
+            textController: aiText
             onBackRequested: window.closeAiPanel()
         }
         SteamSettings {

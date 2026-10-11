@@ -4,11 +4,61 @@ Revisão do plano: 11/10/2026. O documento abaixo continua sendo a proposta de l
 
 ## Estado atual do fonte: compatibilidade A0.1 experimental
 
-O checkout inclui um painel **IA** no launcher opcional. Todos os provedores continuam desligados. Abrir o painel não inicia processos; a ação explícita **Verificar clientes instalados** consulta uma lista fixa de CLIs e, separadamente, o botão com consentimento testa uma troca mínima do protocolo anônimo do Codex para uma versão reconhecida. A consulta e o teste não recebem consulta de busca, prompt ou contexto de usuário; não há geração, autenticação, reaproveitamento de sessão, armazenamento de credenciais ou handoff para terminal.
+O checkout inclui um painel **IA** no launcher opcional. Todos os provedores continuam desligados. Abrir o painel não inicia processos; a ação explícita **Verificar clientes instalados** consulta uma lista fixa de CLIs e, separadamente, o botão com consentimento testa uma troca mínima do protocolo anônimo do Codex para uma versão reconhecida. A consulta e o teste de compatibilidade não recebem consulta de busca, prompt ou contexto de usuário; nessas ações não há geração, autenticação, reaproveitamento de sessão, armazenamento de credenciais ou handoff para terminal.
 
-O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 (texto escolhido enviado a um backend autorizado) não começou.
+O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 ainda não foi concluída.
 
 O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.9; a experiência exige build separado do launcher. O ZIP inclui somente os helpers de detecção/teste e seus testes. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
+
+### Fatia integrada nesta mudança Source: texto explícito via Ollama
+
+Esta mudança Source integra a menor parte local da A1 somente para Ollama,
+com validação delimitada da composição. A pessoa escolhe reescrever, resumir ou
+traduzir, digita o texto, modelo, porta e idioma de destino quando aplicável e
+seleciona `127.0.0.1` ou `::1`. A prévia revela destino, modelo, tarefa, dados e
+**custo não informado** antes de um consentimento de sessão. Editar host, porta
+ou modelo revoga o consentimento. Nada roda ao abrir, editar ou consentir;
+somente **Gerar** inicia a chamada.
+
+Em execução, todos os campos ficam travados e **Cancelar** permanece disponível.
+O streaming aparece numa saída somente leitura, a parcial continua revisável e
+a cópia exige **Copiar resultado**. Fechar o painel cancela compatibilidade e
+texto; fechar a janela espera compatibilidade, texto e Steam drenarem antes de
+prosseguir uma única vez.
+
+A cadeia operacional usa processos próprios:
+
+```text
+painel IA -> AiTextController -> python -I -B ai_text_ollama.py run-ollama
+          -> lifecycle T1/T2 -> conector HTTP Ollama numérico
+```
+
+O controller usa caminhos absolutos, cwd 0700 próprio e ambiente filho vazio.
+O helper aceita somente Ollama numérico em loopback. T1/T2 continuam protegidos:
+executar `ai_text.py` diretamente ainda retorna `unsupported_transport`, e o
+adaptador HTTPS privado de OpenAI integrado historicamente pelo PR 34 segue sem
+entrypoint, credenciais, seleção ou UI. Essa fatia não reutiliza a expressão
+genérica “API na nuvem” para OpenAI.
+
+O recorte exclui probe, descoberta, inicialização de servidor, download de
+modelo, contexto padrão, leitura de clipboard, histórico, arquivos, tools,
+autenticação, credenciais e API paga. Loopback identifica o destino da conexão,
+não o processo que escuta nele: esse processo pode encaminhar o texto para a
+rede. Por isso a interface não promete identidade Ollama, privacidade nem
+processamento offline.
+
+O plano R2, o shim, o controller R3 e a correção de UI têm revisão delimitada
+favorável. O build normal, seis CTests isolados e 90 testes Python da composição
+passaram (6 do shim, 23 T1 e 61 T2). Esta mudança adota esse Source; integração
+na branch remota principal e CI hospedada desta fatia ainda não foram verificadas. As fixtures
+cobriram a cadeia controller → helper → servidor HTTP Qt,
+streaming, cancelamento, parcial e a barreira dos três proprietários. Ollama e
+modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
+empacotamento relocável, instalação, CI hospedada para esta fatia, release e
+admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda
+exige também o backend API opt-in e os demais gates publicados. A instalação
+existente do launcher baseada no Source 32 continua sem a nova UI; esta mudança
+de fonte não instala nem atualiza esse executável.
 
 ## Resultado esperado
 
