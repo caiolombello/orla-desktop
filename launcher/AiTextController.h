@@ -31,7 +31,7 @@ public:
     explicit AiTextController(const QString &pythonPath, const QString &helperPath,
                               GroupObserver groupObserver = {}, QObject *parent = nullptr,
                               RuntimeRemover runtimeRemover = {},
-                              int cancellationGraceMs = 3000);
+                              int cancellationGraceMs = 3000, int outerDeadlineMs = 125000);
     ~AiTextController() override;
 
     QString status() const { return m_status; }
@@ -58,6 +58,7 @@ Q_SIGNALS:
     void closeReady();
 
 private:
+    friend class AiTextControllerTests;
     bool validateRequest(const QString &requestId, const QString &task,
                          const QVariant &targetLanguage, const QString &text,
                          const QString &model, const QString &numericHost,
@@ -85,6 +86,7 @@ private:
     GroupObserver m_groupObserver;
     RuntimeRemover m_runtimeRemover;
     int m_cancellationGraceMs;
+    int m_outerDeadlineMs;
     QProcess m_process;
     QTimer m_deadline;
     QTimer m_killGrace;
@@ -117,6 +119,7 @@ private:
     bool m_operationActive = false;
     bool m_cleanupActive = false;
     bool m_cancelRequested = false;
+    bool m_timedOut = false;
     bool m_closePending = false;
     bool m_killSent = false;
     bool m_protocolInvalid = false;

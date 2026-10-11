@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <cerrno>
+#include <csignal>
 #include "AiProviderController.h"
 #include "AiTextController.h"
 #include "LauncherController.h"
@@ -16,6 +18,21 @@
 class UiTests final : public QObject
 {
     Q_OBJECT
+    static bool helperReapedAndRuntimeRemoved(const QString &receipt)
+    {
+        QFile file(receipt);
+        if (!file.open(QIODevice::ReadOnly)) return false;
+        const QList<QByteArray> fields = file.readAll().split('\n');
+        if (fields.size() != 2) return false;
+        bool valid = false;
+        const qint64 pid = fields.first().toLongLong(&valid);
+        if (!valid || pid <= 0 || fields.last().isEmpty()) return false;
+        errno = 0;
+        if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+        errno = 0;
+        return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH
+            && !QFile::exists(QString::fromUtf8(fields.last()));
+    }
 private Q_SLOTS:
     void initTestCase() { verifyPrivateTestBus(); }
     void ownWindowRendersResultsWithoutExecuting()
@@ -336,6 +353,188 @@ private Q_SLOTS:
         QVERIFY(text->isEnabled());
         QVERIFY(QMetaObject::invokeMethod(back, "click"));
         QVERIFY(search->hasActiveFocus());
+    }
+
+    void aiTextUsageLabelReflectsReportedStatus_data()
+    {
+        QTest::addColumn<QByteArray>("usage");
+        QTest::addColumn<QString>("expectedLabel");
+        QTest::newRow("empty-running") << QByteArray()
+            << QStringLiteral("Uso: desconhecido · Custo: não informado");
+        QTest::newRow("unknown-completed")
+            << QByteArray(R"({"status":"unknown","inputTokens":null,"outputTokens":null,"totalTokens":null})")
+            << QStringLiteral("Uso: desconhecido · Custo: não informado");
+        QTest::newRow("reported-completed")
+            << QByteArray(R"({"status":"reported","inputTokens":3,"outputTokens":5,"totalTokens":8})")
+            << QStringLiteral("Uso: reportado · Custo: não informado");
+    }
+
+    void aiTextUsageLabelReflectsReportedStatus()
+    {
+        QFETCH(QByteArray, usage);
+        QFETCH(QString, expectedLabel);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString receipt = directory.filePath(QStringLiteral("text-receipt"));
+        const QString helper = directory.filePath(QStringLiteral("usage-helper.py"));
+        QFile file(helper);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("import base64,json,os,pathlib,sys,time\npathlib.Path(base64.b64decode('");
+        file.write(receipt.toUtf8().toBase64());
+        file.write("').decode()).write_text(str(os.getpid())+'\\n'+os.getcwd())\n"
+                   "request=json.loads(sys.stdin.buffer.readline())\n"
+                   "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+                   "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='resultado')]\n"
+                   "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n");
+        if (usage.isEmpty()) {
+            file.write("time.sleep(60)\n");
+        } else {
+            file.write("usage=json.loads(base64.b64decode('");
+            file.write(usage.toBase64());
+            file.write("'))\nprint(json.dumps(dict(base,sequence=2,type='completed',finishReason='stop',usage=usage,cost={'status':'unknown','currency':None,'amount':None}),separators=(',',':')),flush=True)\n");
+        }
+        file.close();
+
+        LauncherController controller;
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-steam.py")));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *entry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        QVERIFY(entry);
+        QVERIFY(QMetaObject::invokeMethod(entry, "click"));
+        aiText.generate(QStringLiteral("usage-request"), QStringLiteral("summarize"), QVariant(),
+                        QStringLiteral("texto"), QStringLiteral("modelo:1"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("resultado"), 1500);
+        if (usage.isEmpty()) {
+            QVERIFY(aiText.busy());
+            QVERIFY(aiText.usage().isEmpty());
+        } else {
+            QTRY_COMPARE_WITH_TIMEOUT(aiText.status(), QStringLiteral("completed"), 1500);
+            QCOMPARE(aiText.usage().size(), 4);
+        }
+        QQuickItem *label = nullptr;
+        for (auto *item : window->findChildren<QQuickItem *>()) {
+            if (item->property("text").toString().startsWith(QStringLiteral("Uso: "))) {
+                QVERIFY(!label);
+                label = item;
+            }
+        }
+        QVERIFY(label);
+        QVERIFY(label->isVisible());
+        QCOMPARE(label->property("text").toString(), expectedLabel);
+        aiText.cancelAll();
+        QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 2500);
+        QVERIFY(helperReapedAndRuntimeRemoved(receipt));
+    }
+
+    void departingAiPanelCancelsBothOwnersAndPreservesPartialOutput_data()
+    {
+        QTest::addColumn<QString>("departure");
+        QTest::newRow("steam-entry") << QStringLiteral("steam");
+        QTest::newRow("back-to-search") << QStringLiteral("back");
+        QTest::newRow("escape-to-search") << QStringLiteral("escape");
+        QTest::newRow("header-to-search") << QStringLiteral("search");
+    }
+
+    void departingAiPanelCancelsBothOwnersAndPreservesPartialOutput()
+    {
+        QFETCH(QString, departure);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString providerReceipt = directory.filePath(QStringLiteral("provider-receipt"));
+        const QString textReceipt = directory.filePath(QStringLiteral("text-receipt"));
+        const QString providerHelper = directory.filePath(QStringLiteral("provider-departure.py"));
+        const QString textHelper = directory.filePath(QStringLiteral("text-departure.py"));
+        for (const auto &pair : {qMakePair(providerHelper, providerReceipt), qMakePair(textHelper, textReceipt)}) {
+            QFile file(pair.first);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,json,os,pathlib,signal,sys,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n");
+            file.write(pair.first == providerHelper
+                ? "runtime=sys.argv[sys.argv.index('--runtime-root')+1]\n"
+                : "runtime=os.getcwd()\n");
+            file.write("pathlib.Path(base64.b64decode('");
+            file.write(pair.second.toUtf8().toBase64());
+            file.write("').decode()).write_text(str(os.getpid())+'\\n'+runtime)\n");
+            if (pair.first == textHelper) {
+                file.write("request=json.loads(sys.stdin.buffer.readline())\n"
+                           "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+                           "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial preservado')]\n"
+                           "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n");
+            }
+            file.write("time.sleep(60)\n");
+        }
+
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper, {}, nullptr, {}, 100);
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper, {}, nullptr, {}, 100);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-steam.py")));
+        LauncherController controller(&steam);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *entry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        auto *back = window->findChild<QQuickItem *>(QStringLiteral("aiBackButton"));
+        auto *discover = window->findChild<QQuickItem *>(QStringLiteral("aiDiscoverButton"));
+        auto *text = window->findChild<QQuickItem *>(QStringLiteral("aiTextInput"));
+        auto *consent = window->findChild<QQuickItem *>(QStringLiteral("aiTextConsent"));
+        auto *generate = window->findChild<QQuickItem *>(QStringLiteral("aiTextGenerate"));
+        auto *result = window->findChild<QQuickItem *>(QStringLiteral("aiTextResult"));
+        auto *steamEntry = window->findChild<QQuickItem *>(QStringLiteral("steamEntryButton"));
+        auto *steamPanel = window->findChild<QQuickItem *>(QStringLiteral("steamSettings"));
+        auto *steamBack = window->findChild<QQuickItem *>(QStringLiteral("steamBackButton"));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(entry && back && discover && text && consent && generate && result
+                && steamEntry && steamPanel && steamBack && search);
+        QVERIFY(QMetaObject::invokeMethod(entry, "click"));
+        QVERIFY(text->setProperty("text", QStringLiteral("texto da fixture")));
+        QVERIFY(consent->setProperty("checked", true));
+        QVERIFY(QMetaObject::invokeMethod(discover, "click"));
+        QVERIFY(QMetaObject::invokeMethod(generate, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(ai.busy() && aiText.busy() && QFile::exists(providerReceipt), 1500);
+        QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial preservado"), 1500);
+        QCOMPARE(window->property("activePanel").toString(), QStringLiteral("ai"));
+
+        if (departure == QStringLiteral("steam")) {
+            QVERIFY(QMetaObject::invokeMethod(steamEntry, "click"));
+            QCOMPARE(window->property("activePanel").toString(), QStringLiteral("steam"));
+            QVERIFY(steamPanel->isVisible());
+            QVERIFY(steamBack->hasActiveFocus());
+            QVERIFY(!steam.busy()); // Entering Steam does not implicitly scan or start a helper.
+        } else {
+            if (departure == QStringLiteral("escape")) QTest::keyClick(window, Qt::Key_Escape);
+            else QVERIFY(QMetaObject::invokeMethod(departure == QStringLiteral("back") ? back : entry, "click"));
+            QCOMPARE(window->property("activePanel").toString(), QStringLiteral("search"));
+            QVERIFY(search->hasActiveFocus());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!ai.busy() && !aiText.busy(), 2500);
+        QCOMPARE(ai.status(), QStringLiteral("disabled"));
+        QVERIFY(ai.errorCode().isEmpty());
+        QCOMPARE(aiText.status(), QStringLiteral("cancelled_unconfirmed")); // The fake helper sends no remote cancellation acknowledgement.
+        QCOMPARE(aiText.output(), QStringLiteral("parcial preservado"));
+        QCOMPARE(result->property("text").toString(), QStringLiteral("parcial preservado"));
+        QVERIFY(helperReapedAndRuntimeRemoved(providerReceipt));
+        QVERIFY(helperReapedAndRuntimeRemoved(textReceipt));
+        if (departure == QStringLiteral("steam")) {
+            QTest::keyClick(window, Qt::Key_Space); // Steam's focused Back control receives input.
+            QCOMPARE(window->property("activePanel").toString(), QStringLiteral("search"));
+            QVERIFY(search->hasActiveFocus());
+        }
     }
 
     void steamBusyStateDisablesCompetingActionsAndShowsCancel()

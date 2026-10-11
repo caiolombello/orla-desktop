@@ -22,9 +22,11 @@ somente **Gerar** inicia a chamada.
 
 Em execução, todos os campos ficam travados e **Cancelar** permanece disponível.
 O streaming aparece numa saída somente leitura, a parcial continua revisável e
-a cópia exige **Copiar resultado**. Fechar o painel cancela compatibilidade e
-texto; fechar a janela espera compatibilidade, texto e Steam drenarem antes de
-prosseguir uma única vez.
+a cópia exige **Copiar resultado**. Fechar o painel ou abrir Steam cancela
+compatibilidade e texto; fechar a janela espera compatibilidade, texto e Steam drenarem antes de
+prosseguir uma única vez. Timeout mantém sua causa após a limpeza. Uso
+desconhecido continua desconhecido, e uma resposta terminal rejeitada por custo
+inválido não publica tokens.
 
 A cadeia operacional usa processos próprios:
 

@@ -36,7 +36,7 @@ executa nada; somente **Gerar** inicia o pedido.
 Durante a execução, os campos ficam bloqueados e a ação principal vira
 **Cancelar**. Deltas aparecem numa área somente leitura; resposta parcial é
 preservada para revisão e **Copiar resultado** continua sendo uma ação manual.
-Fechar o painel cancela os dois controladores de IA. Fechar a janela espera os
+Fechar o painel ou abrir Steam cancela os dois controladores de IA. Fechar a janela espera os
 três proprietários de trabalho — compatibilidade de IA, texto e Steam — antes
 de concluir uma única vez.
 
@@ -52,7 +52,14 @@ histórico, arquivos/contexto, autenticação ou API paga.
 Esta mudança adota a composição Source validada. O shim, o controller R3 e a
 correção de UI receberam revisão independente delimitada. O build normal da composição, seis
 CTests isolados e 90 testes Python passaram (6 do shim, 23 T1 e 61 T2),
-usando somente processos e servidores HTTP privados e sintéticos. Não houve
+usando somente processos e servidores HTTP privados e sintéticos. Após as
+correções do PR [#36](https://github.com/caiolombello/orla-desktop/pull/36), um
+novo build normal e os seis CTests passaram, com 19 entradas do controller e
+17 da UI. Timeout continua sendo falha de prazo após a limpeza; uso só é
+rotulado como reportado quando o estado validado informa isso. Uma resposta
+terminal com custo inválido não publica os tokens daquela resposta. A fixture
+do shim também passou em Python 3.12.3 e 3.14.7 em harnesses próprios que
+preservam HOME/CODEX_HOME. Não houve
 Ollama ou modelo real, validação semântica da resposta,
 clipboard nativo, acessibilidade nativa, instalação, pacote relocável, release
 ou admissão de usuário/Wayland. Loopback limita o destino de rede; não confirma

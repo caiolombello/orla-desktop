@@ -130,7 +130,14 @@ Window {
                 Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
                 onClicked: {
                     if (window.activePanel === "steam") window.closeSteamPanel()
-                    else { window.activePanel = "steam"; steamPanel.focusFirst() }
+                    else {
+                        if (window.activePanel === "ai") {
+                            aiProviders.cancelAll()
+                            aiText.cancelAll()
+                        }
+                        window.activePanel = "steam"
+                        steamPanel.focusFirst()
+                    }
                 }
                 contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }

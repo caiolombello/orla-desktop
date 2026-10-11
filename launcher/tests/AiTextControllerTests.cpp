@@ -237,6 +237,226 @@ for event in events: print(json.dumps(event,separators=(',',':')),flush=True)
                  QStringLiteral("failed:invalid_helper_response"));
     }
 
+    void invalidCostDoesNotPublishOtherwiseValidUsage_data()
+    {
+        QTest::addColumn<QJsonObject>("cost");
+        QTest::newRow("wrong-status") << QJsonObject{{"status", "reported"},
+            {"currency", QJsonValue(QJsonValue::Null)}, {"amount", QJsonValue(QJsonValue::Null)}};
+        QTest::newRow("unexpected-currency") << QJsonObject{{"status", "unknown"},
+            {"currency", "USD"}, {"amount", QJsonValue(QJsonValue::Null)}};
+    }
+
+    void invalidCostDoesNotPublishOtherwiseValidUsage()
+    {
+        QFETCH(QJsonObject, cost);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString requestId = QStringLiteral("request.invalid-cost");
+        QJsonObject terminal = QJsonDocument::fromJson(completed(requestId, 2)).object();
+        terminal.insert(QStringLiteral("cost"), cost);
+        const QByteArray events = started(requestId, 11434, QStringLiteral("model"))
+            + eventLine(requestId, 1, QStringLiteral("delta"), {{"text", "retained"}})
+            + QJsonDocument(terminal).toJson(QJsonDocument::Compact) + '\n';
+        const QString helper = writeHelper(directory,
+            QByteArray("import base64,sys\nsys.stdin.buffer.read()\n")
+            + "sys.stdout.buffer.write(base64.b64decode(b'" + events.toBase64()
+            + "'));sys.stdout.flush()\n");
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        bool usageWasPublished = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            usageWasPublished = usageWasPublished || !controller.usage().isEmpty();
+        });
+        controller.generate(requestId, QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_helper_response"));
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QVERIFY(controller.usage().isEmpty());
+        QVERIFY(!usageWasPublished);
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+    }
+
+    void outerTimeoutRetainsCauseThroughCleanupAndAllowsNewRequest_data()
+    {
+        QTest::addColumn<QString>("termination");
+        QTest::addColumn<bool>("closeAfterTimeout");
+        QTest::newRow("cooperative-cancelled") << QStringLiteral("cancelled") << false;
+        QTest::newRow("cooperative-late-completed") << QStringLiteral("completed") << false;
+        QTest::newRow("forced-kill") << QStringLiteral("ignore") << true;
+    }
+
+    void outerTimeoutRetainsCauseThroughCleanupAndAllowsNewRequest()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Process-group timeout cleanup is Unix-specific");
+#else
+        QFETCH(QString, termination);
+        QFETCH(bool, closeAfterTimeout);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString identity = directory.filePath(QStringLiteral("identity"));
+        const QByteArray script = QByteArray(R"PY(import json,os,pathlib,signal,sys,time
+r=json.loads(sys.stdin.buffer.read())
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+def completed():
+ emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':2,'outputTokens':3,'totalTokens':5},cost={'status':'unknown','currency':None,'amount':None})
+if r['requestId'].endswith('.retry'):
+ emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+ emit(1,'delta',text='fresh')
+ completed()
+ sys.exit(0)
+def terminated(signum,frame):
+ if ')PY") + termination.toUtf8() + QByteArray(R"PY(' == 'completed': completed()
+ else: emit(2,'cancelled')
+ sys.exit(0)
+signal.signal(signal.SIGTERM,signal.SIG_IGN if ')PY") + termination.toUtf8()
+            + QByteArray(R"PY(' == 'ignore' else terminated)
+pathlib.Path(r')PY") + identity.toUtf8() + QByteArray(R"PY(').write_text(str(os.getpid()))
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='retained')
+time.sleep(60)
+)PY");
+        const QString helper = writeHelper(directory, script);
+        int removalAttempts = 0;
+        bool allowRemoval = false;
+        QString runtimePath;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            {}, nullptr, [&](const QString &path) {
+                ++removalAttempts;
+                runtimePath = path;
+                return allowRemoval && QDir(path).removeRecursively();
+            }, 100, 400);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        bool timeoutNotified = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            timeoutNotified = timeoutNotified || controller.errorCode() == QStringLiteral("operation_timeout");
+        });
+        controller.generate(QStringLiteral("request.timeout"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.output(), QStringLiteral("retained"), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        QVERIFY(controller.busy());
+        QVERIFY(timeoutNotified);
+        QVERIFY(removalAttempts > 0);
+        QVERIFY(QFileInfo::exists(runtimePath));
+        QFile identityFile(identity);
+        QVERIFY(identityFile.open(QIODevice::ReadOnly));
+        const qint64 pid = identityFile.readAll().trimmed().toLongLong();
+        QVERIFY(pid > 0);
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        if (closeAfterTimeout) QVERIFY(!controller.requestClose());
+        else controller.cancel(QStringLiteral("request.timeout"));
+        QCOMPARE(closeReady.size(), 0);
+        allowRemoval = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("operation_timeout"));
+        QCOMPARE(closeReady.size(), closeAfterTimeout ? 1 : 0);
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QVERIFY(!QFileInfo::exists(runtimePath));
+
+        controller.generate(QStringLiteral("request.timeout.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5);
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+#endif
+    }
+
+    void actualDeadlineBeforeProcessStartFinishesWithoutLaunchingAHelper()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("unexpected-start"));
+        const QString helper = writeHelper(directory,
+            QByteArray("import pathlib\npathlib.Path(r'") + marker.toUtf8() + "').touch()\n");
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        QSignalSpy processStarted(&controller.m_process, &QProcess::started);
+        bool armed = false;
+        bool deadlineObserved = false;
+        bool processWasNotRunning = false;
+        QEventLoop beforeStart;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (armed) {
+                deadlineObserved = deadlineObserved || controller.errorCode() == QStringLiteral("operation_timeout");
+                if (!controller.busy()) beforeStart.quit();
+                return;
+            }
+            if (controller.status() != QStringLiteral("running")) return;
+            armed = true;
+            processWasNotRunning = controller.m_process.state() == QProcess::NotRunning;
+            // The real timer callback runs while generate's changed signal is still on the stack.
+            controller.m_deadline.start(1);
+            QTimer::singleShot(1000, &beforeStart, &QEventLoop::quit);
+            beforeStart.exec();
+        });
+        controller.generate(QStringLiteral("request.before-start-timeout"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QVERIFY(armed);
+        QVERIFY(processWasNotRunning);
+        QVERIFY(!controller.busy());
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("operation_timeout"));
+        QVERIFY(deadlineObserved);
+        QCOMPARE(processStarted.size(), 0);
+        QVERIFY(!QFileInfo::exists(marker));
+        QVERIFY(controller.usage().isEmpty());
+    }
+
+    void explicitCancellationKeepsItsCauseBeyondTheOuterDeadline()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Process-group cancellation is Unix-specific");
+#else
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray script = R"PY(import json,signal,sys,time
+r=json.loads(sys.stdin.buffer.read())
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+def terminated(signum,frame):
+ signal.signal(signal.SIGTERM,signal.SIG_IGN)
+ time.sleep(.5)
+ emit(2,'cancelled')
+ sys.exit(0)
+signal.signal(signal.SIGTERM,terminated)
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='retained')
+time.sleep(60)
+)PY";
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+                                    writeHelper(directory, script), {}, nullptr, {}, 1000, 300);
+        bool timeoutNotified = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            timeoutNotified = timeoutNotified || controller.errorCode() == QStringLiteral("operation_timeout");
+        });
+        controller.generate(QStringLiteral("request.explicit-cancel"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.output(), QStringLiteral("retained"), 3000);
+        controller.cancel(QStringLiteral("request.explicit-cancel"));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("cancelled_confirmed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QVERIFY(!timeoutNotified);
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+#endif
+    }
+
     void destroyingRunningHelperReapsItsCapturedGroupAndRemovesOwnedRuntime()
     {
 #ifndef Q_OS_UNIX

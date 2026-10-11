@@ -170,11 +170,13 @@ bool boundedCount(const QJsonValue &value, qint64 *result)
 
 AiTextController::AiTextController(const QString &pythonPath, const QString &helperPath,
                                    GroupObserver groupObserver, QObject *parent,
-                                   RuntimeRemover runtimeRemover, int cancellationGraceMs)
+                                   RuntimeRemover runtimeRemover, int cancellationGraceMs,
+                                   int outerDeadlineMs)
     : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath),
       m_groupObserver(std::move(groupObserver)), m_runtimeRemover(std::move(runtimeRemover)),
       m_cancellationGraceMs(cancellationGraceMs > 0 ? cancellationGraceMs
-                                                    : kDefaultCancellationGraceMs)
+                                                    : kDefaultCancellationGraceMs),
+      m_outerDeadlineMs(outerDeadlineMs > 0 ? outerDeadlineMs : kOuterDeadlineMs)
 {
     m_deadline.setSingleShot(true);
     m_killGrace.setSingleShot(true);
@@ -203,17 +205,20 @@ AiTextController::AiTextController(const QString &pythonPath, const QString &hel
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart || !m_operationActive) return;
         m_deadline.stop();
-        recordFailure(QStringLiteral("helper_unavailable"));
+        recordFailure(m_timedOut ? QStringLiteral("operation_timeout")
+                                 : QStringLiteral("helper_unavailable"));
         m_pendingExitCode = -1;
         m_pendingExitStatus = QProcess::CrashExit;
         m_cleanupActive = true;
         finishAfterCleanup(true);
     });
     connect(&m_deadline, &QTimer::timeout, this, [this] {
-        if (!busy()) return;
+        if (!busy() || m_cancelRequested) return;
+        m_timedOut = true;
         recordFailure(QStringLiteral("operation_timeout"));
         m_cancelRequested = true;
         beginCancellation();
+        emit changed();
     });
     connect(&m_killGrace, &QTimer::timeout, this, [this] {
         if (!busy()) return;
@@ -330,6 +335,7 @@ void AiTextController::generate(const QString &requestId, const QString &task,
     m_operationActive = true;
     m_cleanupActive = false;
     m_cancelRequested = false;
+    m_timedOut = false;
     m_killSent = false;
     m_protocolInvalid = false;
     m_pendingExitCode = -1;
@@ -362,7 +368,7 @@ void AiTextController::generate(const QString &requestId, const QString &task,
 #endif
     emit changed();
     if (!m_operationActive || m_processGeneration != m_generation) return;
-    m_deadline.start(kOuterDeadlineMs);
+    m_deadline.start(m_outerDeadlineMs);
     m_process.start(m_pythonPath,
                     {QStringLiteral("-I"), QStringLiteral("-B"), m_helperPath,
                      QStringLiteral("run-ollama")}, QIODevice::ReadWrite);
@@ -376,6 +382,7 @@ void AiTextController::cancel(const QString &requestId)
 void AiTextController::cancelAll()
 {
     if (!busy()) return;
+    m_deadline.stop();
     m_cancelRequested = true;
     beginCancellation();
     emit changed();
@@ -488,6 +495,7 @@ bool AiTextController::consumeLine(const QByteArray &line)
         m_output.append(delta);
         emit changed();
     } else if (type == QStringLiteral("completed")) {
+        QVariantMap usage;
         if (!m_startedEvent || !exactKeys(object, base | QSet<QString>{QStringLiteral("finishReason"),
                 QStringLiteral("usage"), QStringLiteral("cost")})
             || !object.value(QStringLiteral("finishReason")).isString()
@@ -495,13 +503,14 @@ bool AiTextController::consumeLine(const QByteArray &line)
                 QStringLiteral("completed"), QStringLiteral("incomplete")}
                     .contains(object.value(QStringLiteral("finishReason")).toString())
             || !object.value(QStringLiteral("usage")).isObject()
-            || !validateUsage(object.value(QStringLiteral("usage")).toObject(), &m_usage)
+            || !validateUsage(object.value(QStringLiteral("usage")).toObject(), &usage)
             || !object.value(QStringLiteral("cost")).isObject()) return false;
         const QJsonObject cost = object.value(QStringLiteral("cost")).toObject();
         if (!exactKeys(cost, {QStringLiteral("status"), QStringLiteral("currency"), QStringLiteral("amount")})
             || cost.value(QStringLiteral("status")).toString() != QStringLiteral("unknown")
             || !cost.value(QStringLiteral("currency")).isNull()
             || !cost.value(QStringLiteral("amount")).isNull()) return false;
+        m_usage = std::move(usage);
         m_terminalEvent = true;
         m_terminalType = type;
     } else if (type == QStringLiteral("failed")) {
@@ -538,7 +547,7 @@ void AiTextController::protocolFailure()
 {
     if (m_protocolInvalid) return;
     m_protocolInvalid = true;
-    recordFailure(QStringLiteral("invalid_helper_response"));
+    if (!m_timedOut) recordFailure(QStringLiteral("invalid_helper_response"));
     beginCancellation();
 }
 
@@ -635,6 +644,8 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
     if (current) {
         if (!cleanupConfirmed) {
             recordFailure(QStringLiteral("process_cleanup_failed"));
+        } else if (m_timedOut) {
+            recordFailure(QStringLiteral("operation_timeout"));
         } else if (m_cancelRequested) {
             if (!m_killSent && m_terminalEvent && m_terminalType == QStringLiteral("cancelled")
                 && m_pendingExitStatus == QProcess::NormalExit && m_pendingExitCode == 0) {
@@ -690,6 +701,7 @@ void AiTextController::resetOperation()
     m_requestFrame.clear();
     m_stdout.clear();
     m_cancelRequested = false;
+    m_timedOut = false;
     m_killSent = false;
 }
 

@@ -419,7 +419,7 @@ Item {
                             Layout.fillWidth: true
                             Text { text: qsTr("Resultado revisável"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
                             Item { Layout.fillWidth: true }
-                            Text { text: qsTr("Uso: %1 · Custo: não informado").arg(Object.keys(textController.usage).length ? qsTr("reportado") : qsTr("desconhecido")); color: "#91A5B4"; font.pixelSize: 9; textFormat: Text.PlainText }
+                            Text { text: qsTr("Uso: %1 · Custo: não informado").arg(textController.usage.status === "reported" ? qsTr("reportado") : qsTr("desconhecido")); color: "#91A5B4"; font.pixelSize: 9; textFormat: Text.PlainText }
                         }
                         TextArea {
                             id: resultOutput

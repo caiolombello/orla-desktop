@@ -132,7 +132,9 @@ consent. Editing host, port or model revokes consent. Opening, editing and
 consenting do not execute anything; only **Gerar** starts a request. During the
 request inputs are locked, **Cancelar** stays available, deltas stream to a
 read-only review area, partial output is retained and copy is manual. Closing
-the panel cancels both AI controllers; the actual window-close barrier waits for AI compatibility, AI text and Steam owners before finishing once.
+the panel or switching from AI to Steam cancels both AI controllers before
+leaving that panel; the actual window-close barrier waits for AI compatibility,
+AI text and Steam owners before finishing once.
 
 The controller invokes exactly `python -I -B ai_text_ollama.py run-ollama` by
 absolute paths in a private cwd with an empty child environment. This is
@@ -151,7 +153,27 @@ review approved their bounded Source. The controller R3 fresh review also
 approved the confirmed-absence cleanup correction. A fresh normal composition
 build, all six isolated CTests and 90 selected Python tests passed (6 shim,
 23 T1 and 61 T2). UI had 10 passing cases and the controller had 12. These
-bounded results do not establish provider, native or installation readiness.
+bounded results describe the initial composition and do not establish provider,
+native or installation readiness.
+
+The [PR #36](https://github.com/caiolombello/orla-desktop/pull/36) follow-up
+corrects four reviewed behaviors: outer timeout remains `operation_timeout`
+after cleanup; unknown usage is labelled unknown; leaving AI through Steam
+cancels both AI owners; and usage is published only after the full completion
+event, including cost, validates. A fresh combined normal build and all six
+isolated CTests passed with 19 controller and 17 UI entries. An extra owned Qt
+case first showed reported zero usage, then rejected malformed cost on the same
+controller and showed empty usage and the actual unknown QML label. These are
+synthetic helpers and offscreen interactions, not a real model or native focus.
+
+The first portable job on `6364572` failed on Python 3.12.3 because test
+fixtures handed a manually closed stdin to `communicate()`. Commit `1f59e0c`
+sets that reference to `None` after close, preserving the EOF assertion and
+existing test bodies. All six shim tests passed in Python 3.12.3 and 3.14.7,
+including independent runs in an owned harness that preserves actual parent
+HOME/CODEX_HOME literals. The exact hosted command was not replayed locally.
+Hosted checks and remote main integration of the final follow-up still require
+verification; the original failure evidence is retained.
 
 No real Ollama, model, provider identity, semantic output, authentication,
 external service, clipboard, accessibility runtime, native Wayland session,
