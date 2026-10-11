@@ -32,6 +32,10 @@ class ReleaseBundleTests(unittest.TestCase):
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir()
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
+            for name in ("test_bar.py", "BarHarness.qml"):
+                (root / "tests" / name).write_text("source-only fixture\n", encoding="utf-8")
+            (root / "bar").mkdir()
+            (root / "bar/main.qml").write_text("source-only applet\n", encoding="utf-8")
             (root / ".runtime").mkdir()
             (root / ".runtime/private.json").write_text("private", encoding="utf-8")
             (root / "themes/private-link.json").symlink_to(root / ".runtime/private.json")
@@ -56,6 +60,8 @@ class ReleaseBundleTests(unittest.TestCase):
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
+                for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml"):
+                    self.assertNotIn(prefix + name, archive.namelist())
                 unpacked = root / "unpacked"
                 archive.extractall(unpacked)
             kit = unpacked / "orla-dock-1.2.3"

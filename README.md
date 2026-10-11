@@ -4,11 +4,13 @@
 
 **A personal dock for KDE Plasma, with a calm coastal identity and room to grow.**
 
-Orla Dock is an open-source Plasma applet for pinning applications, switching between open windows, and keeping a few useful tools close by. It is an early alpha: the dock works today, while the optional top bar, launcher, notification surfaces, system controls, and several integrations remain planned.
+Orla Dock is an open-source Plasma applet for pinning applications, switching between open windows, and keeping a few useful tools close by. It is an early alpha: the dock works today. The source checkout also has first experimental components for an optional menu bar and launcher; full integration, notification surfaces, Control Center, and several integrations remain planned.
 
 > [Project website](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [Português brasileiro](README.pt-BR.md) · [Roadmap](ROADMAP.md) · [Brand guide](docs/brand.md)
 
 The source checkout also includes an [experimental standalone launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.5 does not package or install it; global Wayland focus and complete launcher integration remain open.
+
+The source checkout includes [Menu Orla, the first experimental bar component](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), with a system menu and active application name for Plasma 6.7.x. It requires separate manual installation and is excluded from release 0.2.5. Native session dialogs, panel/focus behavior and multi-monitor composition remain untested. Global Menu, tray and clock are future sibling KDE widgets.
 
 The 0.2.5 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
 
@@ -55,7 +57,7 @@ The current validation baseline is Fedora 44, Plasma 6.7.5, Qt 6.11.2, and Wayla
 
 ## Install a release
 
-These commands target the 0.2.5 alpha prerelease; use them when its assets are published. Download the release `.zip` from the [GitHub Releases page](https://github.com/caiolombello/orla-desktop/releases), verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
+These commands target the published [0.2.5 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.5). Download its release `.zip`, verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
 
 ```bash
 cd ~/Downloads
@@ -105,7 +107,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For securi
 
 Orla Desktop is an alpha project. The current component keeps the existing Plasma package identifier `org.caiodock.dock` and D-Bus service `org.caiodock.Integrations` to preserve existing installations and settings. The name shown to users is Orla Dock; these internal identifiers are compatibility details.
 
-Manual dock profiles and widget organization are the partial P1/C1 increment prepared for 0.2.5. The system battery reader and player selection/control increment shipped in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The macOS-inspired optional menu bar, Control Center, Raycast-like launcher, Dynamic Island/HUD/toasts, Spotify artwork/progress/client opening, Steam, profile association with desktops/Activities, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
+Manual dock profiles and widget organization are the partial P1/C1 increment shipped in 0.2.5. The system battery reader and player selection/control increment shipped in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The full macOS-inspired optional bar, Control Center, complete Raycast-like launcher integration, Dynamic Island/HUD/toasts, Spotify artwork/progress/client opening, Steam, profile association with desktops/Activities, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
 
 See the [complete roadmap](ROADMAP.md) for sequencing, dependencies, and acceptance criteria, with companion proposals for [UX/UI](docs/UX_UI.md), [themes and extensions](docs/EXTENSIONS.md), [AI access and providers](docs/AI_INTEGRATIONS.md), and [developer experience](docs/DX.md). Declarative themes come before executable plugins; AI adapters use each provider's supported authorization route. The core remains useful without an Orla account, paid addon, or AI subscription. Marketplace checkout and the extension SDK have not been implemented.
 

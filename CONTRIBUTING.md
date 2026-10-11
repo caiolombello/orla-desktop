@@ -49,6 +49,16 @@ The profile core also runs independently in portable CI with offscreen Qt; the d
 
 The source checkout has a separate experimental [C++/Qt Quick launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
 
+The source checkout also includes [Menu Orla, an experimental optional bar component](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), independently identified as `org.orla.bar` 0.1.0. It is excluded from release 0.2.5. Its injected-backend tests need Python/PySide6 and Qt Quick Controls, but no graphical session or native session/task adapters:
+
+```bash
+python3 bar/run_tests.py
+# Optional, with the KDE style installed:
+python3 bar/run_tests.py --style org.kde.desktop
+```
+
+The wrapper owns temporary XDG roots and unavailable private bus addresses, removes inherited display/session-starter variables, and uses offscreen/software Qt. The default Fusion run is suitable for portable CI. Ten mocks check explicit actions, capabilities, keyboard/Escape, errors, bounded plain text, label preservation throughout menu opening/closure, and native-loader isolation. Native dialogs/Cancel, real actions/settings dispatch, panel/focus and two-monitor composition remain UNRUN. Compilation and mock dispatch are separate from native qualification; do not mark T1/T2/T3 complete from these checks.
+
 The experimental [release-check CLI](docs/updates.md) uses Python's standard library on Linux. Run its offline tests in their own process with `python3 -m unittest discover -s tests -p 'test_updates.py' -v`; no network or provider account is required. These tests are included in portable CI. Live release checks are explicit commands and never run during tests.
 
 Contributions and CI must not require paid AI calls, an AI subscription, or private account credentials. Future provider tests use synthetic mocks by default; live tests are separate, manually initiated, and opt-in. UI changes include the relevant loading, empty, error, long-text, keyboard/focus, contrast, and reduced-motion states. Captures should use synthetic data.

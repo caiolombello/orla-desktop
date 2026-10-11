@@ -11,6 +11,10 @@ import zipfile
 import caiodock
 
 
+# The optional menu is Source-only; its fixtures need bar/, which is not bundled.
+SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml"))
+
+
 def bundle(root: Path) -> tuple[Path, Path, Path]:
     package, version = caiodock.package_inputs(root)
     plasmoid = caiodock.build(root)
@@ -23,7 +27,8 @@ def bundle(root: Path) -> tuple[Path, Path, Path]:
         sources.extend(path for path in directory.rglob("*")
                        if path.is_file() and not path.is_symlink()
                        and "__pycache__" not in path.parts
-                       and path.suffix not in (".pyc", ".pyo"))
+                       and path.suffix not in (".pyc", ".pyo")
+                       and path.relative_to(root).as_posix() not in SOURCE_ONLY_TESTS)
     entries = [(path, path.relative_to(root).as_posix()) for path in sources]
     entries.append((plasmoid, plasmoid.name))
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

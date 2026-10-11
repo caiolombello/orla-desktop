@@ -48,6 +48,9 @@ jobs:
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_updates.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
 
+      - name: Run optional menu mock tests
+        run: $ORLA_CI_PYTHON bar/run_tests.py
+
       - name: Build release bundle and checksums
         run: $ORLA_CI_PYTHON scripts/release.py
 
