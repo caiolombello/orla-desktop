@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Templates as Templates
 import QtQuick.Layouts
 
 // Presentation only: providers, panel geometry and app menus have other owners.
@@ -62,12 +63,19 @@ Item {
         id: row
         anchors.fill: parent
         spacing: 8
-        Controls.ToolButton {
+        Templates.ToolButton {
             id: menuButton
             objectName: "orlaMenuButton"
             text: root.boundedText(root.menuLabel, 32) || "Orla"
             icon.source: root.menuIcon === "none" ? "" : Qt.resolvedUrl("../images/orla.svg")
+            implicitWidth: Math.max(32, (menuGlyph.visible ? 26 : 0)
+                + Math.min(120, menuLabelText.implicitWidth) + leftPadding + rightPadding)
+            implicitHeight: 32
+            padding: 6
+            focusPolicy: Qt.StrongFocus
+            hoverEnabled: true
             Layout.minimumWidth: 32
+            Layout.maximumWidth: Math.max(32, root.width)
             Layout.fillHeight: true
             Accessible.name: qsTr("Menu Orla")
             Accessible.role: Accessible.ButtonMenu
@@ -75,9 +83,37 @@ Item {
             Controls.ToolTip.visible: hovered
             Controls.ToolTip.text: qsTr("Menu Orla")
             contentItem: RowLayout {
-                spacing: 4
-                Image { source: menuButton.icon.source; visible: source.toString() !== ""; sourceSize.width: 20; sourceSize.height: 20; fillMode: Image.PreserveAspectFit }
-                Text { text: menuButton.text; textFormat: Text.PlainText; color: menuButton.palette.buttonText; elide: Text.ElideRight; Layout.maximumWidth: 120 }
+                spacing: 6
+                Image {
+                    id: menuGlyph
+                    objectName: "orlaMenuIcon"
+                    source: menuButton.icon.source
+                    visible: source.toString() !== ""
+                    sourceSize.width: 20; sourceSize.height: 20
+                    Layout.preferredWidth: 20; Layout.preferredHeight: 20
+                    Layout.minimumWidth: 20; Layout.maximumWidth: 20
+                    fillMode: Image.PreserveAspectFit
+                }
+                Text {
+                    id: menuLabelText
+                    objectName: "orlaMenuLabel"
+                    text: menuButton.text
+                    visible: menuButton.availableWidth >= 48 || menuButton.icon.source.toString() === ""
+                    textFormat: Text.PlainText
+                    font: menuButton.font
+                    color: menuButton.palette.buttonText
+                    elide: Text.ElideRight
+                    Layout.minimumWidth: 0; Layout.maximumWidth: 120
+                    Layout.fillWidth: true
+                }
+            }
+            background: Rectangle {
+                radius: 6
+                color: Qt.rgba(menuButton.palette.highlight.r, menuButton.palette.highlight.g,
+                    menuButton.palette.highlight.b, menuButton.down ? 0.24 : menuButton.hovered ? 0.12 : 0)
+                border.width: menuButton.visualFocus ? 1 : 0
+                border.color: menuButton.palette.highlight
+                visible: menuButton.down || menuButton.hovered || menuButton.visualFocus
             }
         }
         Controls.ToolButton {
@@ -98,6 +134,7 @@ Item {
             font.weight: Font.DemiBold
             color: menuButton.palette.windowText
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             Layout.maximumWidth: 240
             Accessible.name: text
         }
