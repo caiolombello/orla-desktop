@@ -38,7 +38,16 @@ versioned from Orla. These commands do not install or apply a theme.
 
 QML interaction tests need the KDE/Qt runtime and a graphical session. Before changing a Plasma API or claiming native behavior, verify it on the stated Plasma version and record that version in the pull request. The continuous integration job checks portable behavior and package generation; it does not prove panel, Wayland, multi-monitor, or notification behavior.
 
-The source checkout has a separate experimental [C++/Qt Quick launcher](launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
+Manual dock profiles use the experimental `0.1-experimental` JSON format, independently versioned from Orla. Read the [profile guide](docs/profiles.md) and [validation bounds](docs/validation/profiles-0.2.5.md) before changing it. Preserve flat preferences and invalid/future JSON; profile selection is explicit. Profile QML checks can run sequentially with each supported style:
+
+```bash
+PYTHONPATH=tests QT_QUICK_CONTROLS_STYLE=Fusion python3 -B -m unittest test_profiles test_profiles_dock test_qml test_appearance -v
+PYTHONPATH=tests QT_QUICK_CONTROLS_STYLE=org.kde.desktop python3 -B -m unittest test_profiles test_profiles_dock test_qml test_appearance -v
+```
+
+The profile core also runs independently in portable CI with offscreen Qt; the dock integration suites above need KDE/Qt. These synthetic checks do not qualify native popups or human panel gestures. The private KConfig proof covers a frozen snapshot and one owned remove/re-add cycle with the new applet explicitly seeded from saved JSON; timer resume across processes, real apps and full release qualification remain separate.
+
+The source checkout has a separate experimental [C++/Qt Quick launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
 
 The experimental [release-check CLI](docs/updates.md) uses Python's standard library on Linux. Run its offline tests in their own process with `python3 -m unittest discover -s tests -p 'test_updates.py' -v`; no network or provider account is required. These tests are included in portable CI. Live release checks are explicit commands and never run during tests.
 

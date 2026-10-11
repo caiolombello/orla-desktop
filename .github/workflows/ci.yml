@@ -31,6 +31,11 @@ jobs:
       - name: Install QtDBus test runtime
         run: $ORLA_CI_PYTHON -m pip install --disable-pip-version-check PySide6-Essentials==6.12.0
 
+      - name: Install offscreen Qt GUI library
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libegl1
+
       - name: Verify private D-Bus runner
         run: command -v dbus-run-session
 
@@ -41,6 +46,7 @@ jobs:
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_themes.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_updates.py' -v
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
 
       - name: Build release bundle and checksums
         run: $ORLA_CI_PYTHON scripts/release.py

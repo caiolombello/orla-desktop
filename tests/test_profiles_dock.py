@@ -1,0 +1,353 @@
+import json
+import os
+from pathlib import Path
+import time
+import tempfile
+import unittest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DISPLAY") else "offscreen")
+os.environ.setdefault("QT_QUICK_BACKEND", "software")
+
+from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
+
+
+class ProfilesDockTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QGuiApplication.instance() or QGuiApplication([])
+
+    def setUp(self):
+        self.engine = QQmlApplicationEngine()
+        self.warnings = []
+        self.engine.warnings.connect(lambda values: self.warnings.extend(value.toString() for value in values))
+        self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("ProfilesDockHarness.qml").resolve())))
+        self.assertTrue(self.engine.rootObjects(), self.warnings)
+        self.window = self.engine.rootObjects()[0]
+        self.config = self.window.findChild(QObject, "configuration")
+        self.dock = self.window.findChild(QQuickItem, "dock")
+        self.popup = self.window.findChild(QObject, "settingsPopup")
+        self.popup.setProperty("popupType", 0)
+        self.popup.setProperty("y", 0)
+        self.window.findChild(QQuickItem, "calendarAgenda").setProperty("fixtureEvents", [])
+        self.evaluate("integrations.active = false")
+        self.window.findChild(QQuickItem, "systemBattery").setProperty("transport", self.window.findChild(QObject, "batteryTransport"))
+        QTest.qWait(50)
+
+    def dispose(self):
+        self.window.close()
+        self.window.deleteLater()
+        QCoreApplication.sendPostedEvents(self.window, QEvent.DeferredDelete)
+        # Popup/style items can schedule their own deferred cleanup while the
+        # root is destroyed. Their incubators must finish before their engine.
+        QTest.qWait(10)
+        self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(self.engine, QEvent.DeferredDelete)
+        self.app.processEvents()
+
+    def tearDown(self):
+        self.dispose()
+        self.assertEqual(self.warnings, [])
+
+    def evaluate(self, source, target=None):
+        expression = QQmlExpression(self.engine.rootContext(), target or self.dock, source)
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value
+
+    def command(self, name, *args):
+        return self.evaluate(f"profiles.{name}({','.join(json.dumps(value) for value in args)},profiles.activeProfileId,profiles.revision)")
+
+    def initialize(self):
+        self.assertTrue(self.evaluate("profiles.initializeDefaults(profiles.activeProfileId,profiles.revision)"))
+        self.assertTrue(self.command("select", "work"))
+
+    def owned_item(self, name):
+        source = "(function find(item) { if (item.objectName === " + json.dumps(name) + ") return item; for (let child of item.children) { const result = find(child); if (result) return result; } return null; })(this)"
+        return self.evaluate(source, self.window.contentItem())
+
+    def focus(self, control):
+        control.forceActiveFocus(Qt.TabFocusReason)
+        deadline = time.monotonic() + 1
+        while self.window.activeFocusItem() != control and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertEqual(self.window.activeFocusItem(), control)
+
+    def settle(self, predicate):
+        deadline = time.monotonic() + 1
+        while not predicate() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertTrue(predicate(), "Owned model must settle before its next gesture")
+
+    def widgets(self, visible=True, reverse=False):
+        ids = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"]
+        return [{"id": key, "visible": visible} for key in (reversed(ids) if reverse else ids)]
+
+    def flat(self):
+        return self.evaluate("JSON.stringify({launchers:Array.from(configuration.launchers),theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,iconSize:configuration.iconSize,animations:configuration.animations,showClock:configuration.showClock,showMusic:configuration.showMusic,showSystemBattery:configuration.showSystemBattery,showPomodoro:configuration.showPomodoro,showQuota:configuration.showQuota,showPeripherals:configuration.showPeripherals,showRecording:configuration.showRecording,calendarEvents:configuration.calendarEvents,currentDesktopOnly:configuration.currentDesktopOnly})")
+
+    def test_scoped_apply_retains_immediate_widgets_and_dirty_preview_blocks_switch(self):
+        self.initialize()
+        self.evaluate("appearance.begin()")
+        self.assertFalse(self.evaluate("appearance.dirty"))
+        self.evaluate("appearance.setToken('accent','#123456')")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        self.assertFalse(self.command("select", "personal"))
+        self.assertTrue(self.command("commitPresentation", {"calendarEvents": True}))
+        self.assertTrue(self.evaluate("appearance.apply()"))
+        saved = json.loads(self.config.property("profilesJSON"))
+        work = next(profile for profile in saved["profiles"] if profile["id"] == "work")
+        self.assertTrue(work["calendarEvents"])
+        self.assertTrue(self.window.findChild(QQuickItem, "calendarAgenda").property("usePimEvents"))
+        self.assertIn('"accent":"#123456"', work["appearance"]["appearanceJSON"])
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        self.assertFalse(self.evaluate("appearance.dirty"))
+        self.assertTrue(self.command("select", "personal"))
+        self.assertFalse(self.evaluate("appearance.canUndo"))
+        self.assertEqual(self.warnings, [])
+    def test_invalid_raw_keeps_presentation_and_disables_presentation_checkboxes(self):
+        self.initialize()
+        before = self.evaluate("JSON.stringify(presentation)")
+        raw = '{"formatVersion":"unsupported"}'
+        self.config.setProperty("profilesJSON", raw)
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup); QTest.qWait(30)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        for name in ("filterDesktop", "calendarEvents", "widgetVisibleclock", "widgetVisiblemusic"):
+            control = self.owned_item(name)
+            self.assertFalse(control.property("enabled"), name)
+        self.assertEqual(self.evaluate("JSON.stringify(presentation)"), before)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertFalse(self.command("commitPresentation", {"calendarEvents": True}))
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.warnings, [])
+
+    def test_scoped_undo_restores_only_appearance_after_immediate_widget_commit(self):
+        self.initialize()
+        self.evaluate("appearance.begin(); appearance.setToken('radius',8); appearance.apply()")
+        widgets = self.widgets(False, True)
+        self.assertTrue(self.command("commitPresentation", {"widgets": widgets}))
+        self.assertTrue(self.evaluate("appearance.undo()"))
+        self.assertEqual(self.evaluate("presentation.appearance.appearanceJSON"), "")
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.widgets)")), widgets)
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+
+    def test_transition_closes_stale_task_widget_and_add_context_but_keeps_settings(self):
+        self.initialize()
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        menu.setProperty("popupType", 0)
+        self.evaluate("open()", self.popup)
+        calendar = self.window.findChild(QObject, "calendarPopup")
+        add = self.window.findChild(QObject, "addPopup")
+        calendar.setProperty("popupType", 0); add.setProperty("popupType", 0)
+        self.assertTrue(self.evaluate("openWidget('clock')"))
+        self.evaluate("open()", add)
+        self.evaluate("showTaskMenu(0,{AppName:'Owned',LauncherUrlWithoutIcon:'applications:org.kde.dolphin.desktop',IsLauncher:true})")
+        self.assertTrue(menu.property("visible"))
+        self.assertTrue(self.command("select", "personal"))
+        self.assertFalse(self.evaluate("menuRow >= 0"))
+        self.assertFalse(self.evaluate("Boolean(menuIndex())"))
+        self.settle(lambda: not menu.property("visible") and not calendar.property("visible") and not add.property("visible"))
+        self.assertTrue(self.popup.property("visible"))
+        self.assertFalse(self.evaluate("appearance.dirty"))
+
+    def test_external_appearance_change_rejects_old_draft_and_old_undo(self):
+        self.initialize()
+        self.evaluate("appearance.begin(); appearance.setToken('accent','#123456')")
+        self.assertTrue(self.command("commitPresentation", {"appearance": {"theme": "paper"}}))
+        saved = self.config.property("profilesJSON")
+        self.assertTrue(self.evaluate("appearance.stale"))
+        self.assertFalse(self.evaluate("appearance.apply()"))
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        self.evaluate("appearance.cancel(); appearance.begin(); appearance.setToken('radius',8)")
+        self.assertTrue(self.evaluate("appearance.apply()"))
+        self.assertTrue(self.evaluate("appearance.canUndo"))
+        self.assertTrue(self.command("commitPresentation", {"appearance": {"iconSize": 48}}))
+        self.assertFalse(self.evaluate("appearance.undo()"))
+        self.assertEqual(self.evaluate("presentation.appearance.iconSize"), 48)
+
+    def test_timer_identity_deadline_and_single_completion_survive_hidden_widgets_and_switches(self):
+        self.initialize()
+        self.evaluate("timerWitness = contentItem.children.find(item => item.objectName === 'dock').pomodoro", self.window)
+        self.evaluate("pomodoro.toggle()")
+        deadline = self.config.property("timerDeadline")
+        self.assertTrue(self.command("commitPresentation", {"widgets": self.widgets(False)}))
+        self.assertTrue(self.command("select", "personal"))
+        self.assertTrue(self.command("select", "work"))
+        self.assertTrue(self.evaluate("timerWitness === contentItem.children.find(item => item.objectName === 'dock').pomodoro", self.window))
+        self.assertEqual(self.config.property("timerDeadline"), deadline)
+        self.assertTrue(self.evaluate("pomodoro.running"))
+        self.evaluate("pomodoro.poll(configuration.timerDeadline + 1); pomodoro.poll(Date.now())")
+        self.assertEqual(self.config.property("completedFocus"), 1)
+        self.assertTrue(self.command("select", "games"))
+        self.evaluate("pomodoro.poll(Date.now())")
+        self.assertEqual(self.config.property("completedFocus"), 1)
+
+    def test_managed_lifecycle_preserves_flat_preferences_and_reload_restores_selector(self):
+        self.config.setProperty("appearanceJSON", '{"unknown":"preserve raw"}')
+        before = self.flat()
+        self.initialize()
+        self.assertTrue(self.command("commitPresentation", {"widgets": self.widgets(False, True), "appearance": {"theme": "paper"}, "calendarEvents": True, "currentDesktopOnly": True}))
+        self.assertTrue(self.command("create", "Meu perfil"))
+        custom = self.evaluate("profiles.activeProfileId")
+        self.assertTrue(self.command("select", "legacy"))
+        self.assertEqual(self.flat(), before)
+        self.assertTrue(self.command("select", custom))
+        self.assertTrue(self.command("commitPresentation", {"calendarEvents": False}))
+        raw = self.config.property("profilesJSON")
+        self.dispose()
+        self.engine = QQmlApplicationEngine()
+        self.engine.warnings.connect(lambda values: self.warnings.extend(value.toString() for value in values))
+        self.engine.setInitialProperties({"fixtureProfilesJSON": raw})
+        self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("ProfilesDockHarness.qml").resolve())))
+        self.window = self.engine.rootObjects()[0]
+        self.config = self.window.findChild(QObject, "configuration")
+        self.dock = self.window.findChild(QQuickItem, "dock")
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), custom)
+        self.assertEqual(self.evaluate("presentation.appearance.theme"), "paper")
+        self.assertFalse(self.evaluate("presentation.calendarEvents"))
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+
+    def test_launchers_edit_active_profile_only_preserve_missing_and_reject_stale_context(self):
+        self.initialize()
+        missing = "applications:owned-missing-app.desktop"
+        self.assertTrue(self.command("commitPresentation", {"launchers": [missing, "applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]}))
+        scope = self.evaluate("profiles.activeProfileId"); revision = self.evaluate("profiles.revision")
+        self.assertTrue(self.evaluate("addLauncher('systemsettings.desktop')"))
+        work = json.loads(self.config.property("profilesJSON"))["profiles"][0]
+        self.assertIn(missing, work["launchers"])
+        self.assertIn("applications:systemsettings.desktop", work["launchers"])
+        self.assertTrue(self.command("select", "personal"))
+        saved = self.config.property("profilesJSON")
+        self.assertFalse(self.evaluate(f"addLauncher('systemsettings.desktop',{json.dumps(scope)},{revision})"))
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        self.assertEqual(self.evaluate("JSON.stringify(Array.from(tasksModel.launcherList))"), json.dumps(["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"], separators=(",", ":")))
+
+    def test_legacy_pretty_decoded_desktop_can_be_captured_and_removed_in_managed_profile(self):
+        with tempfile.TemporaryDirectory(prefix="legacy-", dir=Path(__file__).resolve().parents[1] / ".runtime/profiles-dock") as directory:
+            desktop = Path(directory) / "Legacy App.desktop"
+            desktop.write_text("[Desktop Entry]\nType=Application\nName=Owned Legacy Fixture\nExec=/usr/bin/true\n", encoding="utf-8")
+            pretty = QUrl.fromLocalFile(str(desktop)).toString()
+            self.config.setProperty("launchers", [pretty])
+            before = self.flat()
+            self.initialize()
+            self.assertEqual(self.evaluate("presentation.launchers[0]"), pretty)
+            self.assertTrue(self.command("create", "Legacy clone"))
+            self.assertTrue(self.evaluate("removeLauncher(" + json.dumps(pretty) + ")"))
+            self.assertEqual(self.evaluate("presentation.launchers.length"), 0)
+            self.assertEqual(self.flat(), before)
+            self.assertTrue(self.command("select", "legacy"))
+            self.assertEqual(self.evaluate("presentation.launchers[0]"), pretty)
+            self.assertEqual(self.flat(), before)
+
+    def test_widget_visibility_keyboard_keeps_focus_after_repeater_replacement(self):
+        self.initialize()
+        self.evaluate("open()", self.popup); QTest.qWait(30)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        checkbox = self.owned_item("widgetVisibleclock")
+        self.focus(checkbox); QTest.keyClick(self.window, Qt.Key_Space); QTest.qWait(30)
+        self.assertFalse(self.evaluate("presentation.widgets[0].visible"))
+        self.assertEqual(self.window.activeFocusItem().objectName(), "widgetVisibleclock")
+        QTest.keyClick(self.window, Qt.Key_Space); QTest.qWait(30)
+        self.assertTrue(self.evaluate("presentation.widgets[0].visible"))
+        self.assertEqual(self.window.activeFocusItem().objectName(), "widgetVisibleclock")
+
+    def test_encoded_owned_desktop_urls_add_move_and_remove_without_normalizing_saved_bytes(self):
+        self.initialize()
+        with tempfile.TemporaryDirectory(prefix="desktop-", dir=Path(__file__).resolve().parents[1] / ".runtime/profiles-dock") as directory:
+            desktop = Path(directory) / "My Ação %20 App.desktop"
+            desktop.write_text("[Desktop Entry]\nType=Application\nName=Owned URL Fixture\nExec=/usr/bin/true\nIcon=application-x-executable\n", encoding="utf-8")
+            url = QUrl.fromLocalFile(str(desktop)).toString(QUrl.FullyEncoded)
+            self.assertTrue(self.evaluate("addLauncher(" + json.dumps(url) + ")"))
+            self.assertEqual(self.evaluate("presentation.launchers[2]"), url)
+            self.settle(lambda: self.evaluate("tasksModel.count") == 3)
+            self.assertTrue(self.evaluate("moveTask(2,0)"))
+            self.assertEqual(self.evaluate("presentation.launchers[0]"), url)
+            self.assertTrue(self.evaluate("removeLauncher(" + json.dumps(url) + ")"))
+            self.assertNotIn(url, json.loads(self.evaluate("JSON.stringify(presentation.launchers)")))
+            aliases = [url, url.replace("My%20", "%4Dy%20"), "applications:org.kde.dolphin.desktop"]
+            self.assertTrue(self.command("commitPresentation", {"launchers": aliases}))
+            self.settle(lambda: self.evaluate("tasksModel.count") == 2)
+            self.assertTrue(self.evaluate("moveTask(1,0)"))
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), [aliases[2], aliases[0], aliases[1]])
+            self.assertTrue(self.evaluate("removeLauncher(" + json.dumps(url) + ")"))
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), [aliases[2]])
+            self.assertEqual(self.warnings, [])
+
+    def test_fixed_widget_order_has_no_hidden_gaps_and_battery_only_keeps_divider(self):
+        self.initialize()
+        self.assertTrue(self.command("commitPresentation", {"widgets": self.widgets(True, True)}))
+        strip = self.window.findChild(QQuickItem, "widgetStrip")
+        self.assertEqual(self.evaluate("children.filter(item => item.visible && item.objectName.endsWith('Tile') || item.visible && item.objectName === 'pomodoroButton').map(item => item.objectName).join(',')", strip), "recordingTile,peripheralsTile,quotaTile,systemBatteryTile,musicTile,pomodoroButton,clockTile")
+        self.assertTrue(self.command("commitPresentation", {"widgets": self.widgets(False)}))
+        self.assertFalse(strip.property("visible"))
+        self.assertFalse(self.window.findChild(QQuickItem, "widgetDivider").property("visible"))
+        self.assertTrue(self.window.findChild(QQuickItem, "settingsButton").property("visible"))
+        self.assertTrue(self.window.findChild(QQuickItem, "addButton").property("visible"))
+        battery_only = self.widgets(False); battery_only[3]["visible"] = True
+        self.assertTrue(self.command("commitPresentation", {"widgets": battery_only}))
+        self.assertTrue(self.window.findChild(QQuickItem, "widgetDivider").property("visible"))
+        self.assertEqual(self.evaluate("children.filter(item => item.objectName === 'systemBatteryTile')[0].x", strip), 0)
+        strip.ensurePolished()
+        self.assertEqual(strip.property("implicitWidth"), 132)
+
+    def test_selector_keyboard_is_pending_until_use_and_focus_reveals_at_420_height(self):
+        self.assertTrue(self.evaluate("profiles.initializeDefaults(profiles.activeProfileId,profiles.revision)"))
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        QTest.qWait(30)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 2)
+        selector = self.window.findChild(QQuickItem, "profileSelector")
+        self.focus(selector)
+        saved = self.config.property("profilesJSON")
+        QTest.keyClick(self.window, Qt.Key_Down)
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "legacy")
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        use = self.window.findChild(QQuickItem, "profileUse")
+        self.assertTrue(use.property("enabled"))
+        self.focus(use); QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        name = self.window.findChild(QQuickItem, "profileName")
+        name.setProperty("text", "Novo")
+        create = self.window.findChild(QQuickItem, "profileCreate")
+        self.focus(create)
+        ancestor = create.parentItem()
+        while ancestor is not None and ancestor.property("contentY") is None:
+            ancestor = ancestor.parentItem()
+        self.assertIsNotNone(ancestor)
+        point = create.mapToItem(ancestor, QPointF(0, 0))
+        self.assertGreaterEqual(point.y(), 0)
+        self.assertLessEqual(point.y() + create.height(), ancestor.height() + 1)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertNotIn(self.evaluate("profiles.activeProfileId"), ["legacy", "work", "personal", "games"])
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_reorder_keyboard_and_appearance_draft_survive_tabs(self):
+        self.initialize()
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup); QTest.qWait(30)
+        self.evaluate("appearance.setToken('radius',8)")
+        tabs = self.window.findChild(QObject, "settingsTabs")
+        tabs.setProperty("currentIndex", 1)
+        button = self.owned_item("widgetDownclock")
+        self.focus(button); QTest.keyClick(self.window, Qt.Key_Space); QTest.qWait(30)
+        self.assertEqual(self.evaluate("presentation.widgets[1].id"), "clock")
+        self.assertEqual(self.window.activeFocusItem().objectName(), "widgetDownclock")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        tabs.setProperty("currentIndex", 2)
+        self.assertFalse(self.window.findChild(QObject, "profileUse").property("enabled"))
+        self.assertIn("Aparência", self.window.findChild(QObject, "profileStatus").property("text"))
+        tabs.setProperty("currentIndex", 0)
+        apply = self.window.findChild(QQuickItem, "appearanceApply")
+        self.focus(apply); QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate("presentation.widgets[1].id"), "clock")
+        self.assertFalse(self.evaluate("appearance.dirty"))
+        self.assertEqual(self.warnings, [])
+
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -110,7 +110,8 @@ ColumnLayout {
         objectName: "appearanceError"
         Layout.fillWidth: true
         visible: text.length > 0
-        text: editor.appearance.error || (editor.appearance.saved.error ? qsTr("Aparência salva inválida; usando as preferências anteriores.") : "")
+        text: editor.appearance.error || (editor.appearance.stale ? qsTr("A aparência salva mudou. Cancele e abra novamente antes de aplicar.")
+            : editor.appearance.saved.error ? qsTr("Aparência salva inválida; usando as preferências anteriores.") : "")
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
         Accessible.role: Accessible.AlertMessage
