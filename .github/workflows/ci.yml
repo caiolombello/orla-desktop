@@ -38,6 +38,8 @@ jobs:
         run: |
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_package_cli.py' -v
+          $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_themes.py' -v
+          $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
 
       - name: Build release bundle and checksums
         run: $ORLA_CI_PYTHON scripts/release.py

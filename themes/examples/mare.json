@@ -1,0 +1,20 @@
+{
+  "formatVersion": "0.1-experimental",
+  "id": "org.orla.example.mare",
+  "name": "Maré",
+  "author": "Orla contributors",
+  "license": "MIT",
+  "version": "1.0.0",
+  "tokens": {
+    "foreground": "#edf1f9",
+    "muted": "#9da9bf",
+    "accent": "#69d7c2",
+    "surface": "#111923",
+    "border": "#7f91b0",
+    "radius": 20,
+    "spacing": 5,
+    "opacity": 1,
+    "iconSize": 42,
+    "reducedMotion": true
+  }
+}
