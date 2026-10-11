@@ -1,12 +1,16 @@
 # Experimental AI provider compatibility — source validation
 
-**Status:** Source-only candidate. This panel is part of the optional standalone launcher checkout; it is not included in the published 0.2.8 `.plasmoid` or ZIP. No version, PR/CI result, or release publication is claimed here. The public downloads remain the immutable 0.2.8 assets.
+**Status:** Experimental, integrated Source; not a published feature. The [PR #20](https://github.com/caiolombello/orla-desktop/pull/20) source commit `579e181a8dbe9b3cc690410cb1c0e9b0398e00db` was merged at 2026-10-11 05:36:17 UTC as `9d286eb2899c8e1c09b36d545eec4048745415f2`. [CI run 38115242191/job 114398735163](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) passed at 05:35:40 UTC. The published 0.2.8 `.plasmoid` and ZIP remain unchanged and exclude the launcher/AI panel; no AI release version or public assets have been created.
 
 ## What this slice does
 
 The launcher adds an **IA** panel, initially off. Opening it starts no helper or provider process. The explicit **Verificar clientes instalados** action asks a fixed helper to inspect a fixed list: Codex, Claude Code, OpenCode, Ollama and LM Studio. Version commands are restricted to recognized CLIs; Ollama is presence-only because its version command may contact a live service. Each provider remains `enabled: false`.
 
 A separate explicit consent action tests one narrow Codex compatibility exchange, `initialize` followed by `initialized`, for the recognized Codex version. It is a protocol handshake, not authentication, session reuse, model startup, a turn, text generation, usage reporting, or an API entitlement check. Neither operation takes search text, selected text, or other user context. There is no credentials store, chat, text-selection workflow, or terminal handoff in this slice.
+
+## PR CI scope
+
+The PR workflow passed portable Python/QML checks and produced a Source ZIP artifact. The ZIP contains `scripts/ai.py` and `tests/test_ai.py`; the launcher C++/QML files remain excluded. Its CI run passed the helper suite, 19 tests in 13.065 seconds. This workflow did **not** compile the launcher C++/QML or run the controller CTests. This CI result is separate from the local controller/helper and one-shot evidence below.
 
 ## Bounded source evidence
 
