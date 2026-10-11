@@ -4,6 +4,7 @@ User-visible changes are recorded here for each published release.
 
 ## Unreleased
 
+- Add an explicit Linux CLI for official stable/beta release checks, with bounded anonymous HTTPS requests, safe version/link parsing and structured offline/rate-limit errors. It compares a supplied version without installing packages or inspecting the running session. Seventeen offline tests and independent review passed; see [usage and limits](docs/updates.md). Release 0.2.4 excludes this newer command.
 - Add an experimental standalone Qt Quick launcher in the source checkout, using public KRunner application/calculator APIs with anonymous configuration and stale-selection guards.
 - Three CTests passed with private D-Bus, temporary XDG/runtime and automatic service activation blocked; independent review approved the component. Actual global Wayland shortcut/focus, daily use and optional installation remain open. Release 0.2.4 excludes this component.
 
