@@ -79,7 +79,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.6.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.7.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:

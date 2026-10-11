@@ -25,6 +25,7 @@ Window {
         property bool showQuota: false
         property bool showPeripherals: false
         property bool showRecording: false
+        property bool showLocalToasts: false
         property bool calendarEvents: false
         property bool currentDesktopOnly: false
         property int focusMinutes: 25

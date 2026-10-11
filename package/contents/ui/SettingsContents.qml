@@ -57,7 +57,7 @@ ColumnLayout {
         if (point.y < 0) viewport.contentY += point.y;
         else if (point.y + control.height > viewport.height) viewport.contentY += point.y + control.height - viewport.height;
     }
-    Controls.Label { text: "Orla Dock 0.2.6 alpha · Plasma 6.7+"; opacity: 0.6 }
+    Controls.Label { text: "Orla Dock 0.2.7 alpha · Plasma 6.7+"; opacity: 0.6 }
     Controls.TabBar {
         id: tabs
         objectName: "settingsTabs"
@@ -88,6 +88,21 @@ ColumnLayout {
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Widgets e filtro de janelas são salvos imediatamente. Cancelar aparência não desfaz estas opções."); wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Controls.CheckBox { objectName: "filterDesktop"; enabled: settings.profiles.writable; text: qsTr("Janelas apenas da área de trabalho atual"); checked: settings.profiles.effective.currentDesktopOnly; onToggled: settings.setPreference("currentDesktopOnly", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
                 Controls.CheckBox { objectName: "calendarEvents"; enabled: settings.profiles.writable; text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.profiles.effective.calendarEvents; onToggled: settings.setPreference("calendarEvents", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
+                Controls.CheckBox {
+                    objectName: "showLocalToasts"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar conclusões do Pomodoro dentro do dock (global)")
+                    checked: Boolean(settings.configuration.showLocalToasts)
+                    onToggled: settings.configuration.showLocalToasts = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Preferência global. Mostra apenas eventos próprios dentro do dock; as notificações do KDE continuam independentes.")
+                    wrapMode: Text.WordWrap
+                    textFormat: Text.PlainText
+                    opacity: 0.65
+                }
                 Controls.Label { text: qsTr("Widgets"); font.bold: true }
                 Controls.Label { Layout.fillWidth: true; visible: settings.profiles.activeProfileId === "legacy"; text: qsTr("Crie/use um perfil para organizar os widgets. Aqui você pode mudar a visibilidade."); textFormat: Text.PlainText; wrapMode: Text.WordWrap }
                 Repeater {

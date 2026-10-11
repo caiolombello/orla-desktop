@@ -16,6 +16,7 @@ Item {
     property string notice: ""
     property var menuData: ({})
     property int menuRow: -1
+    property real menuAnchorX: 0
     property bool ready: false
     property alias tasksModel: tasks
     property alias pomodoro: focusTimer
@@ -34,7 +35,24 @@ Item {
     readonly property int motion: appearanceState.effective.tokens.reducedMotion ? 0 : Kirigami.Units.shortDuration
     readonly property int requestedIconSize: appearanceState.effective.tokens.iconSize
     readonly property int tileSize: Math.max(16, Math.min(requestedIconSize, height > 0 ? height - 36 : requestedIconSize))
-    implicitWidth: content.implicitWidth + 24
+    readonly property int outerMargin: 10
+    readonly property int laneGap: 6
+    readonly property bool localEventsRequested: Boolean(configuration.showLocalToasts)
+    readonly property int settingsLaneWidth: settingsButton.implicitWidth
+    readonly property int minimumTaskWidth: tileSize + 16
+    readonly property int innerWidth: Math.max(0, width - outerMargin * 2)
+    readonly property int candidateEventSlotWidth: Math.min(224, Math.floor(innerWidth * 0.30),
+        Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - minimumTaskWidth))
+    readonly property bool localEventsProfileReady: profileState.writable
+        && (profileState.initialized || profileState.savedJSON === "")
+    readonly property bool localEventsActive: localEventsRequested && localEventsProfileReady
+        && candidateEventSlotWidth >= 48
+    readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
+    readonly property int centerViewportWidth: localEventsActive
+        ? Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - eventSlotWidth) : innerWidth
+    implicitWidth: localEventsRequested
+        ? settingsLaneWidth + content.implicitWidth + laneGap * 2 + 144 + outerMargin * 2
+        : content.implicitWidth + 24
     implicitHeight: requestedIconSize + 38
 
     ProfileState {
@@ -163,6 +181,10 @@ Item {
         return saveLaunchers(original.filter(value => removed.indexOf(launcherKey(value)) === -1), scope, revision);
     }
     function showTaskMenu(row, data) {
+        captureTaskMenu(row, data, null);
+        taskMenu.open();
+    }
+    function captureTaskMenu(row, data, sourceItem) {
         // Capture identity: model rows may change while a menu is open.
         menuRow = row;
         menuData = { title: data.AppName || data.display, url: String(data.LauncherUrlWithoutIcon || ""),
@@ -170,6 +192,12 @@ Item {
             window: Boolean(data.IsWindow), pinned: Boolean(data.HasLauncher || data.IsLauncher),
             ids: JSON.stringify(data.WinIdList || []), minimizable: Boolean(data.IsMinimizable),
             closable: Boolean(data.IsClosable), canLaunch: Boolean(data.CanLaunchNewInstance) };
+        if (sourceItem) menuAnchorX = sourceItem.mapToItem(root, sourceItem.width / 2, 0).x;
+        else menuAnchorX = (row + 1) * (root.tileSize + 16);
+        return menuAnchorX;
+    }
+    function showTaskMenuAt(row, data, sourceItem) {
+        captureTaskMenu(row, data, sourceItem);
         taskMenu.open();
     }
     function menuIndex() {
@@ -185,6 +213,14 @@ Item {
     function moveMenuTask(delta) {
         const index = menuIndex();
         if (index) moveTask(index.row, index.row + delta);
+    }
+    function revealInViewport(control) {
+        if (!localEventsActive || !control || !control.activeFocus) return;
+        const point = control.mapToItem(content, 0, 0);
+        const maximum = Math.max(0, viewport.contentWidth - viewport.width);
+        if (point.x < viewport.contentX) viewport.contentX = Math.max(0, point.x);
+        else if (point.x + control.width > viewport.contentX + viewport.width)
+            viewport.contentX = Math.min(maximum, control.width > viewport.width ? point.x : point.x + control.width - viewport.width);
     }
 
     TaskManager.TasksModel {
@@ -233,8 +269,17 @@ Item {
     Pomodoro {
         id: focusTimer
         configuration: root.configuration
-        onFinished: root.notice = root.configuration.timerBreak ? qsTr("Foco concluído. Hora de uma pausa!") : qsTr("Pausa concluída. Pronto para focar?")
+        onFinished: {
+            const accepted = localEventState.submit({
+                kind: "completion", key: "pomodoro:completion", scope: "global",
+                title: root.configuration.timerBreak ? qsTr("Foco concluído") : qsTr("Pausa concluída"),
+                detail: root.configuration.timerBreak ? qsTr("Hora de uma pausa!") : qsTr("Pronto para focar?")
+            }, focusTimer.now);
+            if (!accepted) root.notice = root.configuration.timerBreak
+                ? qsTr("Foco concluído. Hora de uma pausa!") : qsTr("Pausa concluída. Pronto para focar?");
+        }
     }
+    EventState { id: localEventState; enabled: root.localEventsActive }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
     Rectangle {
@@ -248,10 +293,53 @@ Item {
         Behavior on color { ColorAnimation { duration: root.motion } }
         Rectangle { x: 16; y: 1; width: parent.width - 32; height: 1; color: root.light ? "#ffffff" : "#526482"; opacity: 0.55 }
     }
+    Item {
+        id: settingsLane
+        objectName: "localSettingsLane"
+        x: root.outerMargin
+        y: root.outerMargin
+        width: root.settingsLaneWidth
+        height: Math.max(0, root.height - root.outerMargin * 2)
+        visible: root.localEventsActive
+        z: 3
+    }
+    Item {
+        id: settingsDividerLane
+        objectName: "localSettingsDividerLane"
+        x: settingsLane.x + settingsLane.width
+        y: settingsLane.y
+        width: root.laneGap
+        height: settingsLane.height
+        visible: root.localEventsActive
+        z: 3
+    }
+    Tile {
+        id: settingsButton
+        objectName: "settingsButton"
+        parent: root.localEventsActive ? settingsLane : settingsPlaceholder
+        anchors.verticalCenter: parent.verticalCenter
+        iconSource: Qt.resolvedUrl("../images/orla.svg")
+        iconSize: root.tileSize - 10
+        foreground: root.accent; accent: root.accent; animationDuration: root.motion
+        tooltip: qsTr("Personalizar Orla Dock")
+        onClicked: settings.open()
+    }
+    Rectangle {
+        id: settingsDivider
+        parent: root.localEventsActive ? settingsDividerLane : settingsDividerPlaceholder
+        anchors.centerIn: parent
+        width: 1
+        height: 30
+        color: root.muted
+        opacity: 0.3
+    }
     Flickable {
         id: viewport
-        anchors.fill: parent
-        anchors.margins: 10
+        objectName: "appsViewport"
+        x: root.localEventsActive ? settingsLane.x + settingsLane.width + root.laneGap : root.outerMargin
+        y: root.outerMargin
+        width: root.centerViewportWidth
+        height: Math.max(0, root.height - root.outerMargin * 2)
         contentWidth: content.width
         contentHeight: height
         clip: true
@@ -263,17 +351,22 @@ Item {
             objectName: "dockContent"
             height: viewport.height
             spacing: appearanceState.effective.tokens.spacing
-            Tile {
-                objectName: "settingsButton"
-                anchors.verticalCenter: parent.verticalCenter
-                iconSource: Qt.resolvedUrl("../images/orla.svg")
-                iconSize: root.tileSize - 10
-                foreground: root.accent; accent: root.accent; animationDuration: root.motion
-                tooltip: qsTr("Personalizar Orla Dock")
-                onClicked: settings.open()
+            Item {
+                id: settingsPlaceholder
+                objectName: "settingsPlaceholder"
+                visible: !root.localEventsActive
+                width: root.localEventsActive ? 0 : settingsButton.implicitWidth
+                height: parent.height
             }
-            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 30; color: root.muted; opacity: 0.3 }
+            Item {
+                id: settingsDividerPlaceholder
+                objectName: "settingsDividerPlaceholder"
+                visible: !root.localEventsActive
+                width: root.localEventsActive ? 0 : 1
+                height: parent.height
+            }
             Repeater {
+                id: taskRepeater
                 model: tasks
                 delegate: Tile {
                     id: taskTile
@@ -289,16 +382,17 @@ Item {
                     running: Boolean(model.IsWindow || model.IsStartup)
                     activeTask: Boolean(model.IsActive)
                     attention: Boolean(model.IsDemandingAttention)
+                    onActiveFocusChanged: if (activeFocus) root.revealInViewport(taskTile)
                     onClicked: root.activateTask(index)
-                    onPressAndHold: root.showTaskMenu(index, model)
-                    Keys.onMenuPressed: root.showTaskMenu(index, model)
+                    onPressAndHold: root.showTaskMenuAt(index, model, taskTile)
+                    Keys.onMenuPressed: root.showTaskMenuAt(index, model, taskTile)
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_F10 && event.modifiers === Qt.ShiftModifier) {
-                            root.showTaskMenu(index, model);
+                            root.showTaskMenuAt(index, model, taskTile);
                             event.accepted = true;
                         }
                     }
-                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: root.showTaskMenu(taskTile.index, taskTile.model) }
+                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: root.showTaskMenuAt(taskTile.index, taskTile.model, taskTile) }
                 }
             }
             Tile {
@@ -308,12 +402,29 @@ Item {
                 iconSize: Math.max(12, root.tileSize - 16)
                 foreground: root.muted; accent: root.accent; animationDuration: root.motion
                 tooltip: qsTr("Fixar aplicativo · ou arraste um app para o dock")
+                onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
                 onClicked: addDialog.open()
             }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: 1; height: 30; color: root.muted; opacity: 0.3 }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
 
         }
+    }
+    EventSurface {
+        id: localEventSurface
+        x: root.width - root.outerMargin - width
+        y: root.outerMargin
+        width: root.eventSlotWidth
+        height: Math.max(0, root.height - root.outerMargin * 2)
+        visible: root.localEventsActive
+        z: 3
+        eventState: localEventState
+        surfaceColor: root.surface
+        borderColor: appearanceState.effective.tokens.border
+        foregroundColor: root.foreground
+        mutedColor: root.muted
+        accentColor: root.accent
+        animationDuration: root.motion
     }
     DropArea {
         anchors.fill: parent
@@ -328,7 +439,7 @@ Item {
         id: taskMenu
         objectName: "taskContextMenu"
         popupType: Controls.Popup.Window
-        x: Math.max(0, Math.min(root.width - width, (root.menuRow + 1) * (root.tileSize + 16)))
+        x: Math.max(0, Math.min(root.width - width, root.menuAnchorX - width / 2))
         y: root.popAbove ? -height - 8 : root.height + 8
         Controls.MenuItem { text: root.menuData.title || ""; enabled: false }
         Controls.MenuSeparator {}
