@@ -124,7 +124,20 @@ não publica uso; conclusão válida publica uso reportado ou desconhecido,
 e fechamento preserva a barreira e a ordem de notificação.
 A composição do código passou build novo de 40 passos e os seis CTests uma vez
 em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
-CI do novo commit e integração na branch remota principal continuam pendentes.
+Os dois jobs hospedados passaram em `8d137cf`, com os seis CTests em 78,72 s.
+A build local desse commit passou os seis em 79,47 s, mas não foi instalada
+antes de dois novos comentários de revisão. A correção seguinte preserva a
+primeira falha observada quando cancelamento ou fechamento começam depois dela
+e drena stdout sem interpretar eventos após o primeiro erro de protocolo.
+O cancelamento anterior à falha permanece cancelamento; o parcial aceito antes
+do erro continua revisável. Dezessete regressões com helpers reais e retries
+foram adicionadas: quinze falharam causalmente na base, com dois controles
+pré-início aprovados. A composição final passou build novo de 40 passos e os
+seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
+A revisão independente passou controller 51 e um desafio QML de quatro
+entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
+ficaram UNRUN; o trace serializado null não comprova ordem temporal.
+CI do novo commit e integração na branch remota principal estão pendentes.
 Esta mudança não atualiza a instalação existente do launcher baseada no Source
 32, que continua sem a nova UI de texto.
 

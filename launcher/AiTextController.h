@@ -117,6 +117,8 @@ private:
     bool m_terminalEvent = false;
     QString m_terminalType;
     QString m_terminalCode;
+    QString m_knownFailureCode;
+    QString m_cancelFailureCode;
     bool m_operationActive = false;
     bool m_cleanupActive = false;
     bool m_cancelRequested = false;

@@ -342,3 +342,51 @@ behavior fixture retained its expected skip, separately covered by owned-app.
 This follow-up remains Source validation. New-head CI and main integration are
 pending; real KDE/Wayland, provider/model, native clipboard/accessibility,
 installation, relocatable packaging, release and the full roadmap remain open.
+
+
+### Failure precedence during cancellation and rejected stdout
+
+The fifth follow-up preserves the first observed failure when cancellation or
+close begins after it, including protocol/provider failures, actual abnormal
+exit, FailedToStart and cleanup rejection. The first cancellation captures
+that private failure once; an earlier ordinary cancellation cannot be promoted
+by later cancel/close calls. Timeout precedence and pre-start cancellation
+remain intact. No default exit status is inferred as process-exit evidence.
+After the first protocol error, stdout is drained without parsing and residual
+framing is cleared; only previously accepted partial text survives. Private
+usage and the changed-before-closeReady barrier remain unchanged.
+
+Seventeen new actual-helper rows cover twelve late-failure cancel/close cases,
+two pre-start negative controls and three stdout delivery paths. Each checks
+owned process/group/runtime cleanup before the causal outcome and valid retry.
+Baseline controller/header with the final tests reported fifteen causal
+failures and two passing controls (plus init/cleanup), exit15, after cleanup.
+Thirty-three old test bodies remain byte-exact; one shared late-close cleanup
+body now requires the demonstrated original failure instead of masked cancel.
+The final normal controller suite passed 51 entries once, with no failures or
+skips and the unchanged 40-second cap.
+
+Independent Source review passed a fresh ALL40 and controller51 once. An
+additional real-helper/QtObject challenge proves ordinary cancellation before
+failure remains ordinary across repeated cancel/close and real runtime mode
+rejection; recovered cleanup, final consumer bindings, blocked reentrant
+generation and valid retry were observed. Its initial Qt setup failed before
+helpers (2FAIL, exit2); the original component status was unrecorded and stays
+UNKNOWN. A separately approved owned harness correction used a local file URL
+and logged/bounded component readiness; its first execution passed four
+entries, exit0. No production repair or normal-suite replay occurred. The
+serialized QML event array is null and is not chronological evidence; asserted
+consumer flags and unchanged Source ordering support only the stated bounds.
+Inspection guard failures are retained separately, not test failures.
+
+The exact three-path composition passed a fresh ALL40 and all six isolated
+CTests once in 81.147 seconds: controller51 and UI27, with UI24.663 seconds
+under the unchanged 30-second cap. Six child exit-zero/private-bus cleanup
+receipts were retained; other179 Source paths and all182 modes were preserved.
+The behavior fixture's expected skip remains separately covered by owned-app.
+The prior 8d137cf hosted jobs both passed (six CTests78.72s); its local cold
+build passed six in79.47s but was not installed before these new reviews.
+Historical 2c8b750 SIGSEGV and the earlier cooperative supplemental challenge
+retain UNKNOWN causes. New-head CI/main integration and real native/provider,
+clipboard/accessibility, install, distribution/release and full-roadmap
+admission remain open at this Source publication checkpoint.

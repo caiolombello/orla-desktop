@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -132,6 +133,323 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void lateCancellationPreservesAlreadyObservedFailure_data()
+    {
+        QTest::addColumn<QString>("cause");
+        QTest::addColumn<bool>("close");
+        for (const char *cause : {"malformed", "provider", "provider-held", "nonzero", "runtime", "failed-start"}) {
+            QTest::newRow((QByteArray(cause) + "-cancel").constData()) << QString::fromLatin1(cause) << false;
+            QTest::newRow((QByteArray(cause) + "-close").constData()) << QString::fromLatin1(cause) << true;
+        }
+    }
+
+    void lateCancellationPreservesAlreadyObservedFailure()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Owned PID/group checks are Unix-specific");
+#else
+        QFETCH(QString, cause);
+        QFETCH(bool, close);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString gate = directory.filePath(QStringLiteral("allow-eof"));
+        const QByteArray body = QByteArray(R"PY(import json,os,pathlib,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as f: f.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra): print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+retry=r['requestId'].endswith('.retry')
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='fresh' if retry else 'retained')
+cause=')PY") + cause.toUtf8() + QByteArray(R"PY('
+if retry or cause in ('nonzero','runtime'):
+ emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4 if retry else 2,'outputTokens':5 if retry else 3,'totalTokens':9 if retry else 5},cost={'status':'unknown','currency':None,'amount':None})
+else:
+ if cause=='malformed': print('{broken}',flush=True)
+ else: emit(2,'failed',code='provider_failed',retryable=False)
+if not retry and cause=='provider-held':
+ while not pathlib.Path(r')PY") + gate.toUtf8() + QByteArray(R"PY(').exists(): time.sleep(.005)
+sys.exit(7 if not retry and cause=='nonzero' else 0)
+)PY");
+        const QString helper = writeHelper(directory, body);
+        QString python = QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE);
+        if (cause == QStringLiteral("failed-start")) {
+            python = directory.filePath(QStringLiteral("broken-python"));
+            QFile broken(python);
+            QVERIFY(broken.open(QIODevice::WriteOnly));
+            const QByteArray shebang = "#!" + directory.filePath(QStringLiteral("missing-interpreter")).toUtf8() + "\n";
+            QCOMPARE(broken.write(shebang), qint64(shebang.size()));
+            broken.close();
+            QVERIFY(QFile::setPermissions(python, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        }
+        bool allowCleanup = false;
+        QStringList runtimePaths;
+        AiTextController controller(python, helper, {}, nullptr, [&](const QString &path) {
+            runtimePaths.append(path);
+            return allowCleanup && QDir(path).removeRecursively();
+        }, 100);
+        const auto cleanupGuard = qScopeGuard([&] { allowCleanup = true; });
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        controller.generate(QStringLiteral("request.failure"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        bool failureParsedBeforeEof = false;
+        if (cause == QStringLiteral("provider-held")) {
+            QTRY_VERIFY_WITH_TIMEOUT(controller.m_terminalEvent
+                && controller.m_terminalType == QStringLiteral("failed")
+                && controller.m_process.state() == QProcess::Running, 3000);
+            failureParsedBeforeEof = true;
+        } else {
+            QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        }
+        const bool protocolObserved = controller.m_protocolInvalid;
+        const QString terminalBeforeCancel = controller.m_terminalType;
+        const int exitBeforeCancel = controller.m_pendingExitCode;
+        const bool startFailed = controller.m_process.error() == QProcess::FailedToStart;
+        if (close) QVERIFY(!controller.requestClose());
+        else controller.cancelAll();
+        if (failureParsedBeforeEof)
+            QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        allowCleanup = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QByteArray identities;
+        if (cause == QStringLiteral("failed-start")) {
+            QVERIFY(!QFileInfo::exists(marker));
+            QCOMPARE(controller.m_process.state(), QProcess::NotRunning);
+        } else {
+            QFile record(marker);
+            QVERIFY(record.open(QIODevice::ReadOnly));
+            identities = record.readAll();
+            QCOMPARE(identities.count('\n'), 1);
+            const qint64 pid = identities.left(identities.indexOf(' ')).toLongLong();
+            QVERIFY(pid > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        }
+        QVERIFY(!runtimePaths.isEmpty());
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        qInfo() << "OWNED_FAILURE_CLEANUP" << cause << close << identities.trimmed()
+                << "protocol" << protocolObserved << "terminal" << terminalBeforeCancel
+                << "exit" << exitBeforeCancel << "failedStart" << startFailed
+                << "beforeEof" << failureParsedBeforeEof << "runtimeGone" << runtimePaths;
+        // All failure-precedence oracles below run after genuine owned cleanup.
+        if (cause == QStringLiteral("malformed")) QVERIFY(protocolObserved);
+        if (cause == QStringLiteral("provider")) QCOMPARE(terminalBeforeCancel, QStringLiteral("failed"));
+        if (cause == QStringLiteral("provider-held")) QVERIFY(failureParsedBeforeEof);
+        if (cause == QStringLiteral("nonzero")) QCOMPARE(exitBeforeCancel, 7);
+        if (cause == QStringLiteral("failed-start")) QVERIFY(startFailed);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        const QString expected = cause == QStringLiteral("runtime") ? QStringLiteral("process_cleanup_failed")
+            : cause == QStringLiteral("failed-start") ? QStringLiteral("helper_unavailable")
+            : cause.startsWith(QStringLiteral("provider")) ? QStringLiteral("provider_failed")
+            : QStringLiteral("invalid_helper_response");
+        QCOMPARE(controller.errorCode(), expected);
+        QVERIFY(!controller.error().isEmpty());
+        QCOMPARE(controller.output(), cause == QStringLiteral("failed-start") ? QString() : QStringLiteral("retained"));
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(closeReady.size(), close ? 1 : 0);
+        if (cause == QStringLiteral("failed-start")) {
+            QVERIFY(QFile::remove(python));
+            QVERIFY(::symlink(QFile::encodeName(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE)).constData(),
+                              QFile::encodeName(python).constData()) == 0);
+        }
+        controller.generate(QStringLiteral("request.failure.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(closeReady.size(), close ? 1 : 0);
+        QFile retryRecord(marker);
+        QVERIFY(retryRecord.open(QIODevice::ReadOnly));
+        const QByteArray allIdentities = retryRecord.readAll();
+        QCOMPARE(allIdentities.count('\n'), cause == QStringLiteral("failed-start") ? 1 : 2);
+        for (const QByteArray &identity : allIdentities.split('\n')) {
+            if (identity.isEmpty()) continue;
+            const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+            QVERIFY(pid > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
+    void cancellationBeforeStartDoesNotInventAnExitFailure_data()
+    {
+        QTest::addColumn<bool>("close");
+        QTest::newRow("cancel-before-start") << false;
+        QTest::newRow("close-before-start") << true;
+    }
+
+    void cancellationBeforeStartDoesNotInventAnExitFailure()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Owned PID/group checks are Unix-specific");
+#else
+        QFETCH(bool, close);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, reportedResultHelper(marker)), {}, nullptr, [&](const QString &path) {
+                runtimePaths.append(path);
+                return QDir(path).removeRecursively();
+            }, 100);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        qint64 capturedPid = 0;
+        connect(&controller.m_process, &QProcess::started, this, [&] { capturedPid = controller.m_process.processId(); });
+        bool requested = false;
+        bool observedBeforeStart = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (requested || controller.status() != QStringLiteral("running")) return;
+            requested = true;
+            observedBeforeStart = controller.m_process.state() == QProcess::NotRunning;
+            if (close) controller.requestClose();
+            else controller.cancelAll();
+        });
+        controller.generate(QStringLiteral("request.prestart"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        if (capturedPid > 0) {
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(capturedPid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(capturedPid), 0) == -1 && errno == ESRCH);
+        }
+        QVERIFY(!runtimePaths.isEmpty());
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        qInfo() << "OWNED_PRESTART_CLEANUP" << close << capturedPid << observedBeforeStart << runtimePaths;
+        QVERIFY(requested);
+        QVERIFY(observedBeforeStart);
+        QCOMPARE(controller.status(), QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("cancelled_unconfirmed"));
+        QVERIFY(controller.output().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QVERIFY(!QFileInfo::exists(marker));
+        QCOMPARE(closeReady.size(), close ? 1 : 0);
+#endif
+    }
+
+    void rejectedProtocolDrainsBufferedAndLaterStdout_data()
+    {
+        QTest::addColumn<QString>("delivery");
+        QTest::newRow("buffered-residual-next-read") << QStringLiteral("buffered");
+        QTest::newRow("later-ready-read-event") << QStringLiteral("later");
+        QTest::newRow("finished-consumes-residual") << QStringLiteral("finished");
+    }
+
+    void rejectedProtocolDrainsBufferedAndLaterStdout()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Owned PID/group checks are Unix-specific");
+#else
+        QFETCH(QString, delivery);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString gate = directory.filePath(QStringLiteral("send-late"));
+        const QString exitGate = directory.filePath(QStringLiteral("allow-exit"));
+        const QByteArray body = QByteArray(R"PY(import json,os,pathlib,signal,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as f: f.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def line(sequence,kind,**extra): return (json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':'))+'\n').encode()
+if r['requestId'].endswith('.retry'):
+ os.write(1,line(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])+line(1,'delta',text='fresh')+line(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4,'outputTokens':5,'totalTokens':9},cost={'status':'unknown','currency':None,'amount':None}))
+ sys.exit(0)
+signal.signal(signal.SIGTERM,signal.SIG_IGN)
+delivery=')PY") + delivery.toUtf8() + QByteArray(R"PY('
+late=line(2,'delta',text='rejected')
+initial=line(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])+line(1,'delta',text='partial')+b'{broken}\n'
+os.write(1,initial+(late if delivery!='later' else b''))
+if delivery=='finished': sys.exit(0)
+while not pathlib.Path(r')PY") + gate.toUtf8() + QByteArray(R"PY(').exists(): time.sleep(.005)
+os.write(1,late if delivery=='later' else b'\n')
+while not pathlib.Path(r')PY") + exitGate.toUtf8() + QByteArray(R"PY(').exists(): time.sleep(.005)
+)PY");
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, body), {}, nullptr, [&](const QString &path) {
+                runtimePaths.append(path);
+                return QDir(path).removeRecursively();
+            });
+        int lateOutputProcessState = -1;
+        int rejectedReadyReads = 0;
+        connect(&controller.m_process, &QProcess::readyReadStandardOutput, this, [&] {
+            if (controller.m_protocolInvalid) ++rejectedReadyReads;
+        });
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (controller.m_protocolInvalid && controller.output().contains(QStringLiteral("rejected")))
+                lateOutputProcessState = controller.m_process.state();
+        });
+        controller.generate(QStringLiteral("request.drain"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        bool residualWitness = false;
+        if (delivery != QStringLiteral("finished")) {
+            QTRY_VERIFY_WITH_TIMEOUT(controller.m_protocolInvalid, 3000);
+            residualWitness = controller.m_stdout.contains("rejected");
+            const int readsBeforeRelease = rejectedReadyReads;
+            QFile release(gate);
+            QVERIFY(release.open(QIODevice::WriteOnly));
+            QCOMPARE(release.write("send"), qint64(4));
+            release.close();
+            QTRY_VERIFY_WITH_TIMEOUT(rejectedReadyReads > readsBeforeRelease, 3000);
+            QFile finish(exitGate);
+            QVERIFY(finish.open(QIODevice::WriteOnly));
+            QCOMPARE(finish.write("exit"), qint64(4));
+            finish.close();
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 4000);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        record.close();
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        QVERIFY(!runtimePaths.isEmpty());
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        qInfo() << "OWNED_DRAIN_CLEANUP" << delivery << pid << "residualWitness" << residualWitness
+                << "lateOutputProcessState" << lateOutputProcessState << "rejectedReadyReads" << rejectedReadyReads
+                << "runtimeGone" << runtimePaths;
+        // Compare the accepted output only after real PID/group/runtime cleanup.
+        QCOMPARE(controller.output(), QStringLiteral("partial"));
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_helper_response"));
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(lateOutputProcessState, -1);
+        controller.generate(QStringLiteral("request.drain.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identities = record.readAll();
+        QCOMPARE(identities.count('\n'), 2);
+        for (const QByteArray &line : identities.split('\n')) {
+            if (line.isEmpty()) continue;
+            const qint64 captured = line.left(line.indexOf(' ')).toLongLong();
+            QVERIFY(captured > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
     void reportedUsageWaitsForValidatedEofExitAndCleanup_data()
     {
         QTest::addColumn<QString>("boundary");
@@ -506,7 +824,8 @@ time.sleep(60)
         syntheticGroupExists = false;
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
         QCOMPARE(closeReady.size(), 1);
-        QCOMPARE(controller.status(), QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("process_cleanup_failed"));
         QCOMPARE(controller.output(), QStringLiteral("retained"));
         QVERIFY(removalAttempts > 0);
         QVERIFY(!QFileInfo::exists(runtimePath));

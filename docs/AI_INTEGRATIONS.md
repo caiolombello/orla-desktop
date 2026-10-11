@@ -106,6 +106,19 @@ após falharem causalmente no código anterior. A revisão independente passou
 padrão fechada e processo ainda vivo, incluindo uso desconhecido e fechamento.
 A composição do código passou build novo de 40 passos e os seis CTests uma vez
 em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
+Os dois jobs hospedados passaram em `8d137cf`, com os seis CTests em 78,72 s.
+A build local desse commit passou os seis em 79,47 s, mas não foi instalada
+antes de dois novos comentários de revisão. A correção seguinte preserva a
+primeira falha observada quando cancelamento ou fechamento começam depois dela
+e drena stdout sem interpretar eventos após o primeiro erro de protocolo.
+O cancelamento anterior à falha permanece cancelamento; o parcial aceito antes
+do erro continua revisável. Dezessete regressões com helpers reais e retries
+foram adicionadas: quinze falharam causalmente na base, com dois controles
+pré-início aprovados. A composição final passou build novo de 40 passos e os
+seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
+A revisão independente passou controller 51 e um desafio QML de quatro
+entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
+ficaram UNRUN; o trace serializado null não comprova ordem temporal.
 CI do novo commit e integração na branch remota principal estão pendentes.
 Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
 empacotamento relocável, instalação, release e
