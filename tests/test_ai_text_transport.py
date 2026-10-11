@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import ast
 import contextlib
+import http.client
 import io
 import json
 from pathlib import Path
@@ -177,6 +178,138 @@ class FakeConnector:
             raise RuntimeError("synthetic close failure")
 
 
+class FakeSocket:
+    def __init__(self):
+        self.calls = []
+
+    def settimeout(self, timeout):
+        self.calls.append(("settimeout", timeout))
+
+    def connect(self, address):
+        self.calls.append(("connect", address))
+
+    def close(self):
+        self.calls.append(("close",))
+
+
+class FakeHTTPResponse:
+    def __init__(self, chunks=(), *, status=200, headers=(), close_error=False):
+        self.status = status
+        self.headers = list(headers)
+        self.chunks = list(chunks)
+        self.calls = []
+        self.close_calls = 0
+        self.close_error = close_error
+
+    def getheaders(self):
+        self.calls.append(("getheaders",))
+        return list(self.headers)
+
+    def read1(self, limit):
+        self.calls.append(("read1", limit))
+        if not self.chunks:
+            raise AssertionError("HTTP response exhausted without EOF fixture")
+        value = self.chunks.pop(0)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_error:
+            raise OSError("synthetic response close fault")
+
+
+class FakeHTTPConnection:
+    def __init__(self, response):
+        self.response = response
+        self.sock = FakeSocket()
+        self.timeout = None
+        self.calls = []
+
+    def connect(self):
+        self.calls.append(("connect", self.timeout))
+
+    def putrequest(self, method, path, **kwargs):
+        self.calls.append(("putrequest", method, path, kwargs))
+
+    def putheader(self, name, value):
+        self.calls.append(("putheader", name, value))
+
+    def endheaders(self, body, *, encode_chunked):
+        self.calls.append(("endheaders", body, encode_chunked))
+
+    def getresponse(self):
+        self.calls.append(("getresponse",))
+        return self.response
+
+    def close(self):
+        self.calls.append(("close",))
+        self.sock.close()
+
+
+class RefCountedFile(io.BytesIO):
+    def __init__(self, wire, sock, fragment):
+        super().__init__(wire)
+        self.sock = sock
+        self.fragment = fragment
+
+    def read1(self, limit=-1):
+        return super().read(min(limit, self.fragment) if limit >= 0 else self.fragment)
+
+    def close(self):
+        if not self.closed:
+            self.sock.refs -= 1
+            if self.sock.closed and not self.sock.refs:
+                self.sock.fd_open = False
+            self.sock.calls.append(("release_file",))
+        super().close()
+
+
+class RefCountedSocket(FakeSocket):
+    """Memory socket matching socket.makefile deferred-close ownership."""
+
+    def __init__(self, wire=b"", *, fragment=8192, connect_fault=False,
+                 settimeout_fault=False, close_fault=False):
+        super().__init__()
+        self.wire = wire
+        self.fragment = fragment
+        self.connect_fault = connect_fault
+        self.settimeout_fault = settimeout_fault
+        self.close_fault = close_fault
+        self.refs = 0
+        self.closed = False
+        self.fd_open = True
+
+    def settimeout(self, timeout):
+        super().settimeout(timeout)
+        if self.settimeout_fault:
+            raise OSError("synthetic timeout setup fault")
+        if not self.fd_open:
+            raise OSError("synthetic closed descriptor")
+
+    def connect(self, address):
+        super().connect(address)
+        if self.connect_fault:
+            raise ConnectionRefusedError("synthetic partial connect")
+
+    def sendall(self, data):
+        self.calls.append(("sendall", bytes(data)))
+
+    def makefile(self, mode):
+        self.assert_mode = mode
+        self.refs += 1
+        return RefCountedFile(self.wire, self, self.fragment)
+
+    def close(self):
+        self.calls.append(("close",))
+        if self.close_fault:
+            raise OSError("synthetic close fault")
+        self.closed = True
+        if not self.refs:
+            self.fd_open = False
+
+
 class AiTextTransportTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -225,6 +358,436 @@ class AiTextTransportTests(unittest.TestCase):
             clock=clock, signal_boundary=signals, sink=sink,
         )
         return outcome, sink, connector, response, signals, trace, specs
+
+    @staticmethod
+    def ollama_body():
+        return {
+            "model": "gemma3:4b",
+            "messages": [
+                {"role": "system", "content": "Rewrite exactly."},
+                {"role": "user", "content": "Revise this sentence."},
+            ],
+            "stream": True,
+            "options": {"num_predict": 1024},
+        }
+
+    def make_numeric_connector(self, *, url="http://127.0.0.1:11434/api/chat",
+                               response=None):
+        connection = FakeHTTPConnection(response or FakeHTTPResponse())
+        connector = self.target._OllamaNumericConnector(
+            {"provider": "ollama_local", "url": url},
+            connection_factory=lambda **_kwargs: connection,
+        )
+        return connector, connection
+
+    def test_numeric_connection_uses_exact_family_sockaddr_and_no_name_resolution(self):
+        cases = (
+            ("127.0.0.1", 11434, socket.AF_INET, ("127.0.0.1", 11434)),
+            ("::1", 3210, socket.AF_INET6, ("::1", 3210, 0, 0)),
+        )
+        for host, port, family, address in cases:
+            with self.subTest(host=host):
+                created = []
+
+                def socket_factory(actual_family, actual_type):
+                    sock = FakeSocket()
+                    created.append((actual_family, actual_type, sock))
+                    return sock
+
+                connection = self.target._NumericHTTPConnection(
+                    host=host, port=port, family=family, sockaddr=address,
+                    socket_factory=socket_factory, timeout=4.25,
+                )
+                connection.connect()
+                self.assertEqual(created[:1], [(family, socket.SOCK_STREAM, created[0][2])])
+                self.assertEqual(created[0][2].calls, [
+                    ("settimeout", 4.25), ("connect", address),
+                ])
+
+    def test_numeric_connector_rejects_every_nonclosed_ollama_destination(self):
+        rejected = (
+            "http://localhost:11434/api/chat",
+            "http://127.0.0.2:11434/api/chat",
+            "http://127.0.0.1:11434/",
+            "http://127.0.0.1:11434/api/chat?x=1",
+            "https://127.0.0.1:11434/api/chat",
+            "http://user@127.0.0.1:11434/api/chat",
+        )
+        for url in rejected:
+            with self.subTest(url=url):
+                with self.assertRaises(self.target._contract.ContractError) as caught:
+                    self.target._OllamaNumericConnector(
+                        {"provider": "ollama_local", "url": url},
+                        connection_factory=lambda **_kwargs: self.fail("factory called"),
+                    )
+                self.assertEqual(caught.exception.code, "endpoint_rejected")
+
+    def test_numeric_connector_sends_exact_ordered_request_for_ipv4_and_ipv6(self):
+        expected_body = (
+            b'{"model":"gemma3:4b","messages":[{"role":"system",'
+            b'"content":"Rewrite exactly."},{"role":"user","content":'
+            b'"Revise this sentence."}],"stream":true,"options":'
+            b'{"num_predict":1024}}'
+        )
+        for url, host in (
+            ("http://127.0.0.1:11434/api/chat", "127.0.0.1:11434"),
+            ("http://[::1]:3210/api/chat", "[::1]:3210"),
+        ):
+            with self.subTest(url=url):
+                connector, connection = self.make_numeric_connector(url=url)
+                connector.connect(5.0)
+                connector.send((), self.ollama_body(), 3.25)
+                self.assertEqual(connection.sock.calls, [("settimeout", 3.25)])
+                self.assertEqual(connection.calls, [
+                    ("connect", 5.0),
+                    ("putrequest", "POST", "/api/chat", {
+                        "skip_host": True, "skip_accept_encoding": True,
+                    }),
+                    ("putheader", "Host", host),
+                    ("putheader", "Content-Type", "application/json"),
+                    ("putheader", "Accept", "application/x-ndjson"),
+                    ("putheader", "Accept-Encoding", "identity"),
+                    ("putheader", "Content-Length", str(len(expected_body))),
+                    ("putheader", "Connection", "close"),
+                    ("endheaders", expected_body, False),
+                ])
+
+    def test_numeric_response_applies_phase_timeouts_and_accepts_exact_content_length(self):
+        terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
+        raw = FakeHTTPResponse(
+            [terminal, b""],
+            headers=(("Content-Type", "application/x-ndjson"),
+                     ("Content-Length", str(len(terminal)))),
+        )
+        connector, connection = self.make_numeric_connector(response=raw)
+        connector.connect(5.0)
+        connector.send((), self.ollama_body(), 4.0)
+        response = connector.receive_headers(17.0)
+        self.assertEqual(response.read1(8192, 9.0), terminal)
+        self.assertEqual(response.read1(8192, 8.0), b"")
+        self.assertEqual(connection.sock.calls, [
+            ("settimeout", 4.0), ("settimeout", 17.0),
+            ("settimeout", 9.0),
+        ])
+        self.assertEqual(raw.calls, [
+            ("getheaders",), ("read1", 8192),
+        ])
+
+    def test_public_httpresponse_exact_cl_completes_after_socket_reference_release(self):
+        terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
+        wire = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: application/x-ndjson\r\n"
+            b"Connection: close\r\nContent-Length: " +
+            str(len(terminal)).encode() + b"\r\n\r\n" + terminal
+        )
+        sock = RefCountedSocket(wire)
+        connector = self.target._OllamaNumericConnector(
+            {"provider": "ollama_local",
+             "url": "http://127.0.0.1:11434/api/chat"},
+            socket_factory=lambda *_args: sock,
+        )
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([self.request_wire(), b""]),
+            connector_factory=lambda _spec: connector,
+            clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual(outcome.terminal, "completed")
+        self.assertEqual([event["type"] for event in sink.events],
+                         ["started", "delta", "completed"])
+        self.assertFalse(sock.fd_open)
+        release_index = max(index for index, call in enumerate(sock.calls)
+                            if call == ("release_file",))
+        self.assertNotIn(
+            "settimeout", [call[0] for call in sock.calls[release_index + 1:]],
+        )
+
+    def test_partial_numeric_setup_close_fault_has_cleanup_failure_precedence(self):
+        for fault in ("connect", "settimeout"):
+            with self.subTest(fault=fault):
+                sock = RefCountedSocket(
+                    connect_fault=(fault == "connect"),
+                    settimeout_fault=(fault == "settimeout"),
+                    close_fault=True,
+                )
+                connector = self.target._OllamaNumericConnector(
+                    {"provider": "ollama_local",
+                     "url": "http://127.0.0.1:11434/api/chat"},
+                    socket_factory=lambda *_args: sock,
+                )
+                sink = RecordingSink()
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda _spec: connector,
+                    clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+                )
+                self.assertEqual(outcome.code, "process_cleanup_failed")
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", "failed"])
+                self.assertIsNone(connector._connection.sock)
+                self.assertIs(connector._connection._owned_socket, sock)
+                self.assertTrue(sock.fd_open)
+                self.assertGreaterEqual(sum(call == ("close",) for call in sock.calls), 2)
+
+    def test_content_length_decimal_is_bounded_before_integer_conversion(self):
+        accepted = ("0", "0" * 5000, "0" * 5000 + "524288", "524288")
+        rejected = ("524289", "9" * 5000)
+        for value in accepted:
+            with self.subTest(kind="accepted", digits=len(value)):
+                raw = FakeHTTPResponse([], headers=(
+                    ("Content-Type", "application/x-ndjson"),
+                    ("Content-Length", value),
+                ))
+                connector, _connection = self.make_numeric_connector(response=raw)
+                connector.connect(5.0)
+                connector.receive_headers(30.0)
+        for value in rejected:
+            with self.subTest(kind="rejected", digits=len(value)):
+                raw = FakeHTTPResponse([], headers=(
+                    ("Content-Type", "application/x-ndjson"),
+                    ("Content-Length", value),
+                ))
+                connector, _connection = self.make_numeric_connector(response=raw)
+                connector.connect(5.0)
+                with self.assertRaises(self.target._contract.ContractError) as caught:
+                    connector.receive_headers(30.0)
+                self.assertEqual(caught.exception.code, "response_limit")
+
+    def test_rejected_persistent_response_is_closed_without_gc(self):
+        cases = (
+            ("non200", b"HTTP/1.1 503 Unavailable\r\n"
+             b"Content-Type: application/x-ndjson\r\nContent-Length: 8\r\n\r\nprivate!",
+             "provider_unavailable"),
+            ("badmedia", b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+             b"Content-Length: 8\r\n\r\nprivate!", "protocol_invalid"),
+        )
+        for name, wire, code in cases:
+            with self.subTest(name=name):
+                sock = RefCountedSocket(wire)
+                connector = self.target._OllamaNumericConnector(
+                    {"provider": "ollama_local",
+                     "url": "http://127.0.0.1:11434/api/chat"},
+                    socket_factory=lambda *_args: sock,
+                )
+                sink = RecordingSink()
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda _spec: connector,
+                    clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+                )
+                self.assertEqual(outcome.code, code)
+                self.assertEqual(sock.refs, 0)
+                self.assertFalse(sock.fd_open)
+                self.assertNotIn("private!", json.dumps(sink.events))
+
+    def test_rejected_response_close_fault_keeps_cleanup_precedence_and_closes_socket(self):
+        raw = FakeHTTPResponse(status=503, close_error=True)
+        connector, connection = self.make_numeric_connector(response=raw)
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([self.request_wire(), b""]),
+            connector_factory=lambda _spec: connector,
+            clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual(outcome.code, "process_cleanup_failed")
+        self.assertEqual(raw.close_calls, 1)
+        self.assertIn(("close",), connection.sock.calls)
+        self.assertEqual([event["type"] for event in sink.events],
+                         ["started", "failed"])
+
+    def test_short_content_length_invalidates_a_withheld_terminal(self):
+        terminal = b'{"message":{"role":"assistant","content":"hidden"},"done":true}\n'
+        raw = FakeHTTPResponse(
+            [terminal, b""],
+            headers=(("Content-Type", "application/x-ndjson"),
+                     ("Content-Length", str(len(terminal) + 1))),
+        )
+        connector, _connection = self.make_numeric_connector(response=raw)
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([self.request_wire(), b""]),
+            connector_factory=lambda _spec: connector,
+            clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual(outcome.code, "protocol_invalid")
+        self.assertEqual([event["type"] for event in sink.events], ["started", "failed"])
+        self.assertNotIn("hidden", json.dumps(sink.events))
+
+    def test_truncated_chunked_public_read_error_is_protocol_invalid(self):
+        terminal = b'{"message":{"role":"assistant","content":"hidden"},"done":true}\n'
+        raw = FakeHTTPResponse(
+            [terminal, http.client.IncompleteRead(b"", 1)],
+            headers=(("Content-Type", "application/x-ndjson"),
+                     ("Transfer-Encoding", "chunked")),
+        )
+        connector, _connection = self.make_numeric_connector(response=raw)
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([self.request_wire(), b""]),
+            connector_factory=lambda _spec: connector,
+            clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual(outcome.code, "protocol_invalid")
+        self.assertEqual([event["type"] for event in sink.events], ["started", "failed"])
+        self.assertNotIn("hidden", json.dumps(sink.events))
+
+    def test_hostile_response_headers_fail_closed_before_body_read(self):
+        cases = {
+            "duplicate-content-type": ("protocol_invalid", [
+                ("Content-Type", "application/x-ndjson"),
+                ("content-type", "application/x-ndjson"),
+            ]),
+            "te-and-cl": ("protocol_invalid", [
+                ("Content-Type", "application/x-ndjson"),
+                ("Transfer-Encoding", "chunked"), ("Content-Length", "1"),
+            ]),
+            "bad-transfer": ("protocol_invalid", [
+                ("Content-Type", "application/x-ndjson"),
+                ("Transfer-Encoding", "gzip"),
+            ]),
+            "compressed": ("protocol_invalid", [
+                ("Content-Type", "application/x-ndjson"),
+                ("Content-Encoding", "gzip"),
+            ]),
+            "oversized-cl": ("response_limit", [
+                ("Content-Type", "application/x-ndjson"),
+                ("Content-Length", "524289"),
+            ]),
+            "wrong-media": ("protocol_invalid", [
+                ("Content-Type", "application/json"),
+            ]),
+            "too-many": ("response_limit", [
+                ("X-Test", str(index)) for index in range(65)
+            ]),
+            "too-large": ("response_limit", [
+                ("Content-Type", "application/x-ndjson"),
+                ("X-Large", "x" * (32 * 1024)),
+            ]),
+        }
+        for name, (code, headers) in cases.items():
+            with self.subTest(name=name):
+                raw = FakeHTTPResponse([b"must-not-read"], headers=headers)
+                connector, _connection = self.make_numeric_connector(response=raw)
+                connector.connect(5.0)
+                with self.assertRaises(self.target._contract.ContractError) as caught:
+                    connector.receive_headers(30.0)
+                self.assertEqual(caught.exception.code, code)
+                self.assertNotIn(("read1", 8192), raw.calls)
+
+    def test_non_200_status_maps_without_reading_response_body(self):
+        raw = FakeHTTPResponse(
+            [b"secret upstream body"], status=503,
+            headers=(("X-Secret", "secret upstream header"),),
+        )
+        connector, _connection = self.make_numeric_connector(response=raw)
+        connector.connect(5.0)
+        with self.assertRaises(self.target._TransportFailure) as caught:
+            connector.receive_headers(30.0)
+        self.assertEqual((caught.exception.code, caught.exception.retryable),
+                         ("provider_unavailable", True))
+        self.assertEqual(raw.calls, [])
+
+    def test_numeric_request_rejects_drift_and_body_limit_before_putrequest(self):
+        connector, connection = self.make_numeric_connector()
+        connector.connect(5.0)
+        cases = (
+            {**self.ollama_body(), "tools": []},
+            {**self.ollama_body(), "stream": False},
+            {**self.ollama_body(), "options": {"num_predict": 1025}},
+            {**self.ollama_body(), "messages": [
+                {"role": "system", "content": "x" * (96 * 1024)},
+                {"role": "user", "content": "y"},
+            ]},
+        )
+        for body in cases:
+            with self.subTest(keys=tuple(body)):
+                with self.assertRaises(self.target._contract.ContractError):
+                    connector.send((), body, 5.0)
+        self.assertEqual([call for call in connection.calls if call[0] == "putrequest"], [])
+
+    def test_numeric_adapter_completes_for_each_allowed_response_framing(self):
+        terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
+        cases = (
+            (("Content-Type", "application/x-ndjson"),),
+            (("Content-Type", "application/x-ndjson"),
+             ("Content-Length", str(len(terminal)))),
+            (("Content-Type", "application/x-ndjson; charset=utf-8"),
+             ("Transfer-Encoding", "chunked")),
+        )
+        for headers in cases:
+            with self.subTest(headers=headers):
+                raw = FakeHTTPResponse([terminal, b""], headers=headers)
+                connector, _connection = self.make_numeric_connector(response=raw)
+                sink = RecordingSink()
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda _spec: connector,
+                    clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+                )
+                self.assertEqual(outcome.terminal, "completed")
+                self.assertEqual(outcome.exit_code, 0)
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", "delta", "completed"])
+                self.assertEqual(sum(event["type"] in {
+                    "completed", "failed", "cancelled",
+                } for event in sink.events), 1)
+
+    def test_numeric_adapter_classifies_boundary_failures_once(self):
+        cases = (
+            (301, "provider_failed", False),
+            (404, "model_unavailable", False),
+            (408, "operation_timeout", True),
+            (429, "rate_limited", True),
+            (503, "provider_unavailable", True),
+        )
+        for status, code, retryable in cases:
+            with self.subTest(status=status):
+                raw = FakeHTTPResponse([b"must-not-read"], status=status)
+                connector, _connection = self.make_numeric_connector(response=raw)
+                sink = RecordingSink()
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda _spec: connector,
+                    clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+                )
+                self.assertEqual((outcome.code, outcome.retryable), (code, retryable))
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", "failed"])
+                self.assertEqual(sum(event["type"] == "failed"
+                                     for event in sink.events), 1)
+                self.assertNotIn(("read1", 8192), raw.calls)
+
+        connector, connection = self.make_numeric_connector()
+        connection.connect = mock.Mock(side_effect=ConnectionRefusedError())
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([self.request_wire(), b""]),
+            connector_factory=lambda _spec: connector,
+            clock=FakeClock(), signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual((outcome.code, outcome.retryable),
+                         ("connection_failed", True))
+        self.assertEqual([event["type"] for event in sink.events],
+                         ["started", "failed"])
+
+    def test_numeric_response_enforces_declared_and_absolute_body_caps(self):
+        cases = (
+            ([b"ab"], (("Content-Type", "application/x-ndjson"),
+                       ("Content-Length", "1")), "protocol_invalid"),
+            ([b"x" * 8192 for _ in range(64)] + [b"x"],
+             (("Content-Type", "application/x-ndjson"),), "response_limit"),
+        )
+        for chunks, headers, code in cases:
+            with self.subTest(code=code):
+                raw = FakeHTTPResponse(chunks, headers=headers)
+                connector, _connection = self.make_numeric_connector(response=raw)
+                connector.connect(5.0)
+                response = connector.receive_headers(30.0)
+                with self.assertRaises(self.target._contract.ContractError) as caught:
+                    while response.read1(8192, 30.0):
+                        pass
+                self.assertEqual(caught.exception.code, code)
 
     def test_invalid_preflight_rolls_back_setup_without_output_or_connector(self):
         clock = FakeClock()
@@ -945,7 +1508,7 @@ class AiTextTransportTests(unittest.TestCase):
             "retryable": True,
         })
 
-    def test_source_and_cli_keep_every_real_transport_boundary_disabled(self):
+    def test_source_allows_only_numeric_http_and_cli_remains_disabled(self):
         tree = ast.parse(HELPER.read_text(encoding="utf-8"))
         imported = set()
         for node in ast.walk(tree):
@@ -953,10 +1516,19 @@ class AiTextTransportTests(unittest.TestCase):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module.split(".")[0])
+        self.assertTrue({"http", "socket"}.issubset(imported))
         self.assertTrue(imported.isdisjoint({
-            "http", "urllib", "socket", "ssl", "signal", "requests", "openai",
-            "ollama", "subprocess", "os", "dotenv", "httpx", "aiohttp",
+            "urllib", "ssl", "signal", "requests", "openai", "ollama",
+            "subprocess", "os", "dotenv", "httpx", "aiohttp",
         }))
+        forbidden_calls = []
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and
+                    isinstance(node.func.value, ast.Name) and
+                    node.func.value.id == "socket" and
+                    node.func.attr in {"create_connection", "getaddrinfo"}):
+                forbidden_calls.append(node.func.attr)
+        self.assertEqual(forbidden_calls, [])
         output = io.StringIO()
         errors = io.StringIO()
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
