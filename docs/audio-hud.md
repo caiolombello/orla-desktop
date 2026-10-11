@@ -16,8 +16,10 @@ mesmo controle atualizam o aviso existente; a confirmação expira em 1,8 segund
 As conclusões do Pomodoro mantêm sua preferência global separada e duração
 de até oito segundos. Desativar somente o HUD de áudio preserva esses avisos.
 Textos acompanham o tema, usam movimento reduzido quando escolhido e têm uma
-ação para fechar. A área local ainda reserva espaço quando está habilitada;
-sua apresentação transitória está em desenvolvimento.
+ação para fechar. Sem avisos, a área de eventos fica oculta e não reserva
+espaço. Um aviso aparece temporariamente sobre a extremidade direita do dock,
+sem alterar sua largura ou a posição de rolagem. O aviso não pede foco; ao
+fechá-lo pelo teclado, o foco pode retornar ao controle anterior do dock.
 
 Widgets de música, bateria e integrações ficam como ícones compactos quando
 não têm dados úteis. Continuam clicáveis e acessíveis pelo teclado, com o
@@ -49,8 +51,10 @@ an audio confirmation expires after 1.8 seconds.
 Pomodoro completions retain their separate global preference and up to eight
 seconds of visibility. Disabling audio feedback preserves those notices.
 Notices follow the theme and reduced-motion preference and have a dismiss
-action. The current local presentation still reserves space when enabled;
-a transient presentation is under development.
+action. With no notice, the event surface stays hidden and reserves no space.
+A notice temporarily overlays the right end of the dock without changing its
+width or scroll position. Arrival does not request focus; keyboard dismissal
+can restore focus to the previous dock control.
 
 Music, battery and integration widgets use compact icons when useful data
 is absent. They remain clickable and keyboard accessible, with their complete

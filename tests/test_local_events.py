@@ -1,21 +1,27 @@
 import os
 from pathlib import Path
+import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OWNED = ROOT / ".runtime" / "local-toast-product" / "environment"
+PROTECTED_ENV = {name: (name in os.environ, os.environ.get(name))
+                 for name in ("HOME", "CODEX_HOME")}
+OWNED_ROOT = ROOT / ".runtime" / "tests" / "local-events"
+OWNED_ROOT.mkdir(parents=True, exist_ok=True)
+OWNED_ROOT.chmod(0o700)
+OWNED = Path(tempfile.mkdtemp(prefix="qml-", dir=OWNED_ROOT))
 for directory in ("config", "data", "cache", "runtime", "empty"):
     path = OWNED / directory
     path.mkdir(parents=True, exist_ok=True)
-(OWNED / "runtime").chmod(0o700)
+    path.chmod(0o700)
 for variable in ("DISPLAY", "WAYLAND_DISPLAY", "DBUS_STARTER_ADDRESS",
-                 "DBUS_STARTER_BUS_ADDRESS", "DBUS_STARTER_BUS_TYPE"):
+                 "DBUS_STARTER_BUS_ADDRESS", "DBUS_STARTER_BUS_TYPE",
+                 "LD_LIBRARY_PATH", "LD_PRELOAD"):
     os.environ.pop(variable, None)
 os.environ.update({
     "QT_QPA_PLATFORM": "offscreen",
     "QT_QUICK_BACKEND": "software",
-    "QT_QUICK_CONTROLS_STYLE": "Fusion",
     "QT_QPA_PLATFORMTHEME": "",
     "QML_DISK_CACHE_PATH": str(OWNED / "cache" / "qml"),
     "XDG_CONFIG_HOME": str(OWNED / "config"),
@@ -27,18 +33,34 @@ os.environ.update({
     "DBUS_SESSION_BUS_ADDRESS": "unix:path=" + str(OWNED / "runtime" / "absent-session-bus"),
     "DBUS_SYSTEM_BUS_ADDRESS": "unix:path=" + str(OWNED / "runtime" / "absent-system-bus"),
 })
+os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Fusion")
+assert PROTECTED_ENV == {name: (name in os.environ, os.environ.get(name))
+                         for name in ("HOME", "CODEX_HOME")}
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
+from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QSignalSpy, QTest
+
+APP = QGuiApplication.instance() or QGuiApplication([])
 
 
 class LocalEventsProductTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QGuiApplication.instance() or QGuiApplication([])
+        cls.app = APP
+        cls.runtime_style = QQuickStyle.name()
+        print(f"RUNTIME_QT_QUICK_CONTROLS_STYLE={cls.runtime_style}")
+        print(f"LOCAL_EVENTS_OWNED={OWNED}")
+        if (OWNED_ROOT.stat().st_mode & 0o777) != 0o700 or (OWNED.stat().st_mode & 0o777) != 0o700:
+            raise AssertionError("Local-events test directories must be private")
+        if cls.runtime_style != os.environ["QT_QUICK_CONTROLS_STYLE"]:
+            raise AssertionError((cls.runtime_style, os.environ["QT_QUICK_CONTROLS_STYLE"]))
+        if PROTECTED_ENV != {name: (name in os.environ, os.environ.get(name))
+                             for name in ("HOME", "CODEX_HOME")}:
+            raise AssertionError("HOME or CODEX_HOME changed before QML startup")
 
     def setUp(self):
         self.engine = QQmlApplicationEngine()
@@ -113,44 +135,32 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertIn("Controls.ScrollBar.AlwaysOff", source)
         self.assertIn("Flickable.HorizontalFlick", source)
 
-    def test_enabled_layout_uses_fixed_settings_center_viewport_and_reserved_toast(self):
+    def test_empty_and_rest_geometry_is_event_independent_across_widths_and_gates(self):
         settings = self.window.findChild(QQuickItem, "settingsButton")
         placeholder = self.window.findChild(QQuickItem, "settingsPlaceholder")
-        original_identity = settings
-        self.config.setProperty("showLocalToasts", True)
-        expected = {
-            (240, 102, 64): (70, 80, 58),
-            (320, 102, 64): (70, 128, 90),
-            (640, 102, 64): (70, 352, 186),
-            (240, 64, 64): (34, 108, 66),
-            (240, 102, 32): (38, 104, 66),
-        }
-        for fixture, widths in expected.items():
-            self.configure_dock(*fixture)
-            self.assertTrue(self.evaluate("localEventsActive"), fixture)
-            self.assertEqual((self.evaluate("settingsLaneWidth"), self.evaluate("centerViewportWidth"),
-                              self.evaluate("eventSlotWidth")), widths, fixture)
-            self.assertEqual(self.viewport.x(), 10 + widths[0] + 6)
-            self.assertEqual(self.viewport.width(), widths[1])
-            surface = self.window.findChild(QQuickItem, "localEventSurface")
-            self.assertEqual(surface.x(), fixture[0] - 10 - widths[2])
-            self.assertEqual(surface.x(), self.viewport.x() + self.viewport.width() + 6)
-
-        self.assertEqual(settings.parentItem().objectName(), "localSettingsLane")
-        self.evaluate("appearance.begin(); appearance.setToken('spacing', 14)")
-        self.assertEqual(self.window.findChild(QQuickItem, "dockContent").property("spacing"), 14)
-        add = self.window.findChild(QQuickItem, "addButton")
         content = self.window.findChild(QQuickItem, "dockContent")
-        self.assertEqual(add.mapToItem(content, QPointF(0, 0)).x(), 0)
-        self.config.setProperty("showLocalToasts", False)
-        self.settle()
-        self.assertIs(self.window.findChild(QQuickItem, "settingsButton"), original_identity)
         self.assertEqual(settings.parentItem(), placeholder)
-        self.assertEqual(self.viewport.x(), 10)
-        self.config.setProperty("showLocalToasts", True)
-        self.settle()
-        self.assertIs(self.window.findChild(QQuickItem, "settingsButton"), original_identity)
-        self.assertEqual(settings.parentItem().objectName(), "localSettingsLane")
+        surface = self.window.findChild(QQuickItem, "localEventSurface")
+        close = self.window.findChild(QQuickItem, "localEventClose")
+        for width in (230, 240, 320, 640):
+            self.configure_dock(width, 102, 64)
+            baseline = (self.dock.width(), self.dock.height(), self.dock.implicitWidth(),
+                        self.viewport.x(), self.viewport.width(),
+                        self.viewport.property("contentWidth"), self.viewport.property("contentX"))
+            self.assertEqual(self.viewport.x(), 10)
+            self.assertEqual(self.viewport.width(), width - 20)
+            self.assertEqual(self.dock.implicitWidth(), content.implicitWidth() + 24)
+            for completion, audio in ((False, False), (True, False), (False, True), (True, True)):
+                self.config.setProperty("showLocalToasts", completion)
+                self.config.setProperty("showAudioHud", audio)
+                self.settle()
+                self.assertEqual((self.dock.width(), self.dock.height(), self.dock.implicitWidth(),
+                                  self.viewport.x(), self.viewport.width(),
+                                  self.viewport.property("contentWidth"), self.viewport.property("contentX")),
+                                 baseline, (width, completion, audio))
+                self.assertFalse(surface.isVisible(), (width, completion, audio))
+                self.assertFalse(close.isVisible(), (width, completion, audio))
+                self.assertFalse(close.property("activeFocusOnTab"), (width, completion, audio))
 
     def test_settings_control_is_explicitly_global_and_does_not_rewrite_profiles(self):
         checkbox = self.window.findChild(QQuickItem, "showLocalToasts")
@@ -482,21 +492,32 @@ class LocalEventsProductTests(unittest.TestCase):
         add.forceActiveFocus(Qt.TabFocusReason)
         self.settle()
         focused = self.window.activeFocusItem()
-        before = (self.dock.width(), self.dock.height(), focused,
+        before = (self.dock.width(), self.dock.height(), self.dock.implicitWidth(), focused,
+                  self.viewport.x(), self.viewport.width(), self.viewport.property("contentWidth"),
                   self.viewport.property("contentX"), self.evaluate("eventSlotWidth"))
         state = self.event_state()
         accepted = self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
         self.assertTrue(accepted)
         self.settle()
-        after = (self.dock.width(), self.dock.height(), self.window.activeFocusItem(),
-                 self.viewport.property("contentX"), self.evaluate("eventSlotWidth"))
-        self.assertEqual(after, before)
+        during = (self.dock.width(), self.dock.height(), self.dock.implicitWidth(),
+                  self.window.activeFocusItem(), self.viewport.x(), self.viewport.width(),
+                  self.viewport.property("contentWidth"), self.viewport.property("contentX"),
+                  self.evaluate("eventSlotWidth"))
+        self.assertEqual(during, before)
         surface = self.window.findChild(QQuickItem, "localEventSurface")
         one_line = self.window.findChild(QQuickItem, "localEventOneLine")
         self.assertEqual(surface.width(), 90)
         self.assertTrue(one_line.property("truncated"))
         self.assertEqual(surface.property("accessibleName"), "Foco concluído. Hora de uma pausa!")
         self.assertTrue(self.evaluate("textFormat === 0", one_line))
+        self.assertTrue(self.evaluate("advance(9000)", state))
+        self.settle()
+        after = (self.dock.width(), self.dock.height(), self.dock.implicitWidth(),
+                 self.window.activeFocusItem(), self.viewport.x(), self.viewport.width(),
+                 self.viewport.property("contentWidth"), self.viewport.property("contentX"),
+                 self.evaluate("eventSlotWidth"))
+        self.assertEqual(after, before)
+        self.assertFalse(surface.isVisible())
 
     def test_minimum_compact_surface_keeps_glyph_clear_of_full_close_target(self):
         self.config.setProperty("showLocalToasts", True)
@@ -524,6 +545,7 @@ class LocalEventsProductTests(unittest.TestCase):
         for dock_width, slot_width in ((230, 48), (231, 49), (233, 51), (237, 55)):
             self.configure_dock(dock_width, 102, 64)
             self.assertEqual(surface.width(), slot_width)
+            self.assertEqual(surface.x(), dock_width - 10 - slot_width)
             self.assertEqual(surface.property("mode"), 0)
             glyph = self.evaluate(
                 "(function(){const g=children.find(item => item.text === '✓');"
@@ -550,39 +572,51 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertIs(self.window.activeFocusItem(), expiry_focus)
 
     def test_deliberate_focus_reveals_add_without_event_driven_scrolling(self):
-        self.config.setProperty("showLocalToasts", True)
-        self.configure_dock(240, 102, 64)
-        add = self.window.findChild(QQuickItem, "addButton")
-        maximum = max(0, self.viewport.property("contentWidth") - self.viewport.width())
-        self.assertGreater(maximum, 0)
-        self.viewport.setProperty("contentX", maximum)
-        add.forceActiveFocus(Qt.TabFocusReason)
-        self.settle()
-        revealed = self.viewport.property("contentX")
-        self.assertLess(revealed, maximum)
-        state = self.event_state()
-        self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
-        self.settle()
-        self.assertEqual(self.viewport.property("contentX"), revealed)
+        for enabled in (False, True):
+            with self.subTest(local_events_enabled=enabled):
+                self.config.setProperty("showLocalToasts", enabled)
+                self.configure_dock(240, 102, 64)
+                add = self.window.findChild(QQuickItem, "addButton")
+                settings = self.window.findChild(QQuickItem, "settingsButton")
+                maximum = max(0, self.viewport.property("contentWidth") - self.viewport.width())
+                self.assertGreater(maximum, 0)
+                add.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                self.viewport.setProperty("contentX", maximum)
+                settings.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                self.assertEqual(self.viewport.property("contentX"), 0)
+                self.viewport.setProperty("contentX", maximum)
+                add.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                revealed = self.viewport.property("contentX")
+                self.assertLess(revealed, maximum)
+                if enabled:
+                    state = self.event_state()
+                    self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
+                    self.settle()
+                    self.assertEqual(self.viewport.property("contentX"), revealed)
+                    self.evaluate("clear()", state)
 
-    def test_fixed_settings_and_close_receive_real_clicks_after_center_scroll(self):
+    def test_click_outside_overlay_reaches_dock_and_close_receives_real_click(self):
         self.config.setProperty("showLocalToasts", True)
-        self.configure_dock(240, 102, 64)
+        self.configure_dock(640, 102, 64)
         settings = self.window.findChild(QQuickItem, "settingsButton")
         popup = self.window.findChild(QObject, "settingsPopup")
         popup.setProperty("popupType", 0)
         maximum = max(0, self.viewport.property("contentWidth") - self.viewport.width())
         self.viewport.setProperty("contentX", maximum)
+        state = self.event_state()
+        self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
+        surface = self.window.findChild(QQuickItem, "localEventSurface")
         settings_point = settings.mapToScene(QPointF(settings.width() / 2, settings.height() / 2))
+        self.assertLess(settings_point.x(), surface.mapToScene(QPointF(0, 0)).x())
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, settings_point.toPoint())
         self.settle()
         self.assertTrue(popup.property("visible"))
         self.assertEqual(self.viewport.property("contentX"), maximum)
         self.evaluate("close()", popup)
 
-        state = self.event_state()
-        self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
-        surface = self.window.findChild(QQuickItem, "localEventSurface")
         close = self.window.findChild(QQuickItem, "localEventClose")
         close_point = close.mapToScene(QPointF(close.width() / 2, close.height() / 2))
         self.assertGreaterEqual(close_point.x(), surface.mapToScene(QPointF(0, 0)).x())
@@ -595,6 +629,8 @@ class LocalEventsProductTests(unittest.TestCase):
         self.config.setProperty("showLocalToasts", True)
         self.configure_dock(240, 102, 64)
         settings = self.window.findChild(QQuickItem, "settingsButton")
+        state = self.event_state()
+        self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'},1000)", state)
         settings.forceActiveFocus(Qt.TabFocusReason)
         self.settle()
         visited = []
@@ -607,6 +643,47 @@ class LocalEventsProductTests(unittest.TestCase):
                 break
         self.assertIn("addButton", visited)
         self.assertEqual(visited[-1], "localEventClose")
+
+    def test_close_owned_focus_restores_last_visible_dock_control_for_dismiss_expiry_and_keys(self):
+        self.config.setProperty("showLocalToasts", True)
+        self.configure_dock(320, 102, 64)
+        add = self.window.findChild(QQuickItem, "addButton")
+        close = self.window.findChild(QQuickItem, "localEventClose")
+        settings = self.window.findChild(QQuickItem, "settingsButton")
+        state = self.event_state()
+        add.forceActiveFocus(Qt.TabFocusReason)
+        self.assertTrue(self.evaluate(
+            "submit({kind:'completion',key:'pomodoro:completion',scope:'global',"
+            "title:'Foco concluído',detail:'outside'}, 500)", state))
+        settings.forceActiveFocus(Qt.TabFocusReason)
+        self.settle()
+        self.evaluate("dismiss(501)", state)
+        self.settle()
+        self.assertIs(self.window.activeFocusItem(), settings)
+        cases = (("dismiss", None), ("expiry", None), ("escape", Qt.Key_Escape),
+                 ("return", Qt.Key_Return), ("enter", Qt.Key_Enter))
+        for index, (mode, key) in enumerate(cases):
+            with self.subTest(mode=mode):
+                add.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                self.assertIs(self.window.activeFocusItem(), add)
+                started = 1000 + index * 10000
+                self.assertTrue(self.evaluate(
+                    "submit({kind:'completion',key:'pomodoro:completion',scope:'global',"
+                    f"title:'Foco concluído',detail:'{mode}'}}, {started})", state))
+                self.settle()
+                close.forceActiveFocus(Qt.TabFocusReason)
+                self.settle()
+                self.assertIs(self.window.activeFocusItem(), close)
+                if mode == "dismiss":
+                    self.evaluate(f"dismiss({started + 1})", state)
+                elif mode == "expiry":
+                    self.evaluate(f"advance({started + 8000})", state)
+                else:
+                    QTest.keyClick(self.window, key)
+                self.settle()
+                self.assertIsNone(state.property("current"))
+                self.assertIs(self.window.activeFocusItem(), add)
 
     def test_task_menu_anchor_uses_real_scrolled_item_coordinates_without_opening_popup(self):
         self.config.setProperty("showLocalToasts", True)
@@ -675,8 +752,9 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertEqual(warnings, [])
 
     def test_settled_product_captures_are_written_after_motion_completes(self):
-        output = ROOT / ".runtime/local-toast-product/captures"
+        output = OWNED / "captures"
         output.mkdir(parents=True, exist_ok=True)
+        output.chmod(0o700)
         self.config.setProperty("showLocalToasts", True)
         self.evaluate("appearance.begin(); appearance.setToken('reducedMotion', true)")
         self.assertEqual(self.dock.property("motion"), 0)
