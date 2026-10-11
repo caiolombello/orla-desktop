@@ -159,6 +159,19 @@ Python. O SIGSEGV após Totals do desafio dirigido continua UNKNOWN: um GDB não
 reproduziu e a suíte completa aprovada não explica a falha. CI/merge da nova
 revisão estão pendentes; a instalação local continua no canary `5aaf518`.
 
+A revisão seguinte valida eventos de falha somente após EOF limpo e saída normal
+zero do helper. Eventos extras, bytes sem terminador e saída não zero preservam
+`invalid_helper_response`; o primeiro cancelamento explícito continua registrando
+a causa já observada. O launcher passa a abrir em 660×420, com entradas IA/Steam
+de pelo menos 40×40 e conteúdo IA contido na largura disponível, incluindo versões
+longas. A combinação passou build novo ALL40 e os seis CTests uma vez em 84,38 s:
+UI 32/26,588 s Qt (limite 30 s) e controller 57/12,621 s Qt (limite 40 s).
+Os 93 testes Python aprovados na revisão anterior não foram repetidos porque seus
+arquivos permaneceram iguais. Revisões independentes aprovaram cada mudança de
+código. CI/merge desta combinação e os testes do layout compacto no KDE permanecem
+pendentes; a instalação local ainda está no canary `5aaf518`, e as causas dos
+crashes históricos continuam UNKNOWN.
+
 ## Fundação do pacote de dados — somente no fonte
 
 `launcher/package.py` contém um builder determinístico e um verificador externo

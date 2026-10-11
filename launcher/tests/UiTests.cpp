@@ -82,6 +82,55 @@ private Q_SLOTS:
         snapshot(QStringLiteral("error"));
         controller.dismiss();
     }
+    void headerEntryTargetsFitAndKeepKeyboardControl_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 440;
+        QTest::newRow("standard") << 660;
+    }
+
+    void headerEntryTargetsFitAndKeepKeyboardControl()
+    {
+        QFETCH(int, width);
+        LauncherController controller;
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        window->resize(width, 420);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *aiEntry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        auto *steamEntry = window->findChild<QQuickItem *>(QStringLiteral("steamEntryButton"));
+        auto *steamBack = window->findChild<QQuickItem *>(QStringLiteral("steamBackButton"));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(aiEntry && steamEntry && steamBack && search);
+        for (auto *entry : {aiEntry, steamEntry}) {
+            QTRY_VERIFY_WITH_TIMEOUT(entry->width() >= 40 && entry->height() >= 40, 1000);
+            const QRectF bounds = entry->mapRectToItem(window->contentItem(), QRectF(0, 0, entry->width(), entry->height()));
+            QVERIFY(bounds.left() >= 0 && bounds.right() <= window->width());
+            QVERIFY(bounds.top() >= 0 && bounds.bottom() <= search->mapToItem(window->contentItem(), QPointF()).y());
+        }
+        aiEntry->forceActiveFocus();
+        QTest::keyClick(window, Qt::Key_Tab);
+        QVERIFY(steamEntry->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_Space);
+        QCOMPARE(window->property("activePanel").toString(), QStringLiteral("steam"));
+        QVERIFY(steamBack->hasActiveFocus());
+        QVERIFY(!ai.busy() && !aiText.busy() && !steam.busy());
+        QTest::keyClick(window, Qt::Key_Escape);
+        QCOMPARE(window->property("activePanel").toString(), QStringLiteral("search"));
+        QVERIFY(search->hasActiveFocus());
+    }
+
     void searchKeyboardAndEscape()
     {
         LauncherController controller;
@@ -124,9 +173,10 @@ private Q_SLOTS:
         const QString marker = directory.filePath(QStringLiteral("started"));
         const QString probeMarker = directory.filePath(QStringLiteral("probe-started"));
         const QByteArray caps = R"({"installation":"absent","anonymous_protocol":"absent","authentication":"unknown","inference":"absent","cancellation":"absent","usage_reporting":"unknown"})";
+        const QByteArray presentCaps = R"({"installation":"supported","anonymous_protocol":"unknown","authentication":"unknown","inference":"unknown","cancellation":"unknown","usage_reporting":"unknown"})";
         const QByteArray providers = QByteArray("[")
             + R"({"id":"codex","displayName":"Codex","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"owned_app_server","messageCode":"cli_not_found"},)"
-            + R"({"id":"claude","displayName":"Claude Code","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"official_terminal_handoff","messageCode":"cli_not_found"},)"
+            + R"({"id":"claude","displayName":"Claude Code","enabled":false,"clientVersion":"0.162.1+WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","capabilities":)" + presentCaps + R"(,"route":"official_terminal_handoff","messageCode":"client_version_recognized"},)"
             + R"({"id":"opencode","displayName":"OpenCode","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"},)"
             + R"({"id":"ollama","displayName":"Ollama","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"},)"
             + R"({"id":"lmstudio","displayName":"LM Studio","enabled":false,"clientVersion":null,"capabilities":)" + caps + R"(,"route":"selected_local_server","messageCode":"cli_not_found"}])";
@@ -217,6 +267,26 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(ai.providers().size(), 5, 3000);
         QVERIFY(!ai.busy());
         QVERIFY(header->mapToScene(QPointF()).y() >= 20);
+        // A valid long version must wrap inside the viewport, not enlarge a hidden horizontal range.
+        const auto fitsAiViewport = [&] {
+            if (scroll->property("contentWidth").toReal() > scroll->property("availableWidth").toReal() + 1)
+                return false;
+            QList<QQuickItem *> items{panel};
+            for (int i = 0; i < items.size(); ++i) {
+                auto *item = items[i];
+                if (!item->isVisible()) continue;
+                items.append(item->childItems());
+                const QRectF bounds = item->mapRectToItem(panel, QRectF(0, 0, item->width(), item->height()));
+                if (bounds.left() < -1 || bounds.right() > panel->width() + 1) return false;
+            }
+            return true;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(fitsAiViewport(), 1000);
+        window->resize(660, 420);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->width() > 500 && fitsAiViewport(), 1000);
+        snapshot(QStringLiteral("ai-detected-standard"));
+        window->resize(440, 380);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->width() < 400 && fitsAiViewport(), 1000);
         QVERIFY(QFile::exists(marker));
         snapshot(QStringLiteral("ai-detected-narrow"));
         QVERIFY(!QFile::exists(probeMarker));

@@ -7,7 +7,7 @@ Window {
     objectName: "launcherWindow"
     visible: true
     width: 660
-    height: 520
+    height: 420
     minimumWidth: 440
     minimumHeight: 380
     title: qsTr("Orla Launcher")
@@ -93,21 +93,25 @@ Window {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
-        spacing: 16
+        spacing: 12
         RowLayout {
             objectName: "launcherHeader"
             Layout.fillWidth: true
+            spacing: 8
             Rectangle {
                 width: 32; height: 32; radius: 11; color: "#69D7C2"
                 Text { anchors.centerIn: parent; text: "o"; color: "#111923"; font.pixelSize: 26; font.weight: Font.Medium; textFormat: Text.PlainText }
             }
-            Text { text: "Orla"; color: "#EAF4F1"; font.pixelSize: 23; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-            Text { text: qsTr("LAUNCHER"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 2; textFormat: Text.PlainText }
-            Item { Layout.fillWidth: true }
-            Text { text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: "#9FAFBC"; font.pixelSize: 11; textFormat: Text.PlainText }
+            Text { text: "Orla"; color: "#EAF4F1"; font.pixelSize: 20; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; wrapMode: Text.Wrap; text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: "#9FAFBC"; font.pixelSize: 11; textFormat: Text.PlainText }
             Button {
                 id: aiEntry
                 objectName: "aiEntryButton"
+                Layout.minimumWidth: 40
+                Layout.minimumHeight: 40
+                Layout.preferredHeight: 40
+                leftPadding: 12
+                rightPadding: 12
                 text: window.activePanel === "ai" ? qsTr("Busca") : qsTr("IA")
                 enabled: !window.pendingDismiss || window.activePanel === "ai"
                 Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
@@ -115,12 +119,17 @@ Window {
                     if (window.activePanel === "ai") window.closeAiPanel()
                     else if (!window.pendingDismiss) { window.activePanel = "ai"; aiPanel.focusFirst() }
                 }
-                contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
             }
             Button {
                 id: steamEntry
                 objectName: "steamEntryButton"
+                Layout.minimumWidth: 40
+                Layout.minimumHeight: 40
+                Layout.preferredHeight: 40
+                leftPadding: 12
+                rightPadding: 12
                 text: window.activePanel === "steam" ? qsTr("Busca") : qsTr("Steam")
                 enabled: !window.pendingDismiss || window.activePanel === "steam"
                 Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
@@ -135,7 +144,7 @@ Window {
                         steamPanel.focusFirst()
                     }
                 }
-                contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
             }
         }
@@ -143,11 +152,11 @@ Window {
             id: search
             objectName: "searchInput"
             Layout.fillWidth: true
-            Layout.preferredHeight: 58
+            Layout.preferredHeight: 54
             color: "#EAF4F1"
             placeholderText: qsTr("Buscar aplicativo, jogo ou calcular…")
             placeholderTextColor: "#A7B7C4"
-            font.pixelSize: 19
+            font.pixelSize: 18
             leftPadding: 18
             rightPadding: 18
             selectByMouse: true
@@ -195,7 +204,7 @@ Window {
                     property var rowData: modelData
                     property var executionTicket: null
                     width: results.width
-                    height: 70
+                    height: 60
                     enabled: rowData.enabled && !window.executionBlocked
                     hoverEnabled: true
                     Accessible.name: rowData.title + ", " + rowData.source
@@ -208,7 +217,7 @@ Window {
                     contentItem: RowLayout {
                         spacing: 12
                         Rectangle {
-                            Layout.preferredWidth: 38; Layout.preferredHeight: 38
+                            Layout.preferredWidth: 34; Layout.preferredHeight: 34
                             radius: 10; color: "#283542"
                             Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : "▦"; color: "#69D7C2"; font.pixelSize: 23; textFormat: Text.PlainText }
                         }

@@ -475,3 +475,48 @@ CI at preceding Source5f898ce passed both jobs (run38177233983, six CTests80.42s
 with GDB skipped. CI and merge for this follow-up remain pending. The permanent
 launcher canary remains5aaf518; no new installed payload, real provider, personal
 calendar, native clipboard or full roadmap acceptance is claimed.
+
+### Failed-event validation and compact launcher — subsequent composition
+
+A parsed `failed` provider code remains staged until all stdout has been drained,
+framing is valid, and the actual process exits normally with code0. Actual bad
+exit cause staging still precedes stdout drain. The first explicit cancellation
+snapshots an already-known cause or a syntactically accepted failed event when
+protocol-valid; later cancellation does not recapture it. Without that earlier
+explicit cancellation, a failed event followed by another event, unterminated
+bytes, or actual exit7 reports `invalid_helper_response` after cleanup. Partial
+accepted text remains reviewable; invalid usage remains unpublished.
+
+Four new real-helper rows hold EOF after the failed line, then exercise those
+three invalid outcomes and a clean failed control through synthetic runtime
+removal refusal and real recovery. They verify captured PID/group/runtime
+absence before final cause, notification, partial text and fresh-retry oracles.
+RED produced three causal failures and a passing valid control; GREEN focused6
+and the normal controller57 passed. All53 prior test entries and the header
+remain byte-exact. Independent Source review approved this bounded correction.
+
+The separate compact UI changes the default to660×420 while preserving the
+440×380 minimum. IA/Steam header targets and AI Back remain at least40×40;
+keyboard actions and pending-close guards are preserved. AI content uses the
+ScrollView available width; provider names and valid long versions wrap.
+Two header geometry/keyboard rows and the existing narrow-provider scenario
+cover440/660 widths and long-version containment. The compact author's one
+normal UI run passed32 in27.41s CTest under cap30. A prior CTest-tool loader127
+occurred before Qt; using prefix libraries only for the CTest tool corrected
+that setup, while the registered Qt child still strips LD_LIBRARY_PATH.
+Mock renders are local layout evidence, not native KDE validation.
+
+Root then built the exact five-path code/test combination from baseabee586 in
+40 fresh build steps and ran all six registered CTests once. All passed in
+84.38s CTest (84.425s driver): behavior7 with one expected skip, owned-app3,
+UI32/26.588s Qt (26.72s CTest, cap30), provider22, Steam12, and controller57/
+12.621s Qt (12.76s CTest, cap40). Six child-exit0 and owned-private-bus-stopped
+receipts were retained; owned TMP0700 was empty afterward. Python scripts/tests
+are byte-exact to the preceding93PASS record; Python was not rerun here.
+No timer, cap, runner, CMake, helper, API or ownership policy changed.
+
+CI/merge for this combined revision and compact native-layout checks remain
+pending. The permanent installed launcher is still5aaf518. Historical UI,
+behavior and supplemental challenge SIGSEGV causes remain UNKNOWN; these
+passing checks do not establish a crash fix, actual model generation, native
+clipboard/accessibility, multiple-display coverage, release or full admission.

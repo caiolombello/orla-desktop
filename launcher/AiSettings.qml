@@ -68,22 +68,28 @@ Item {
     }
 
     ScrollView {
+        id: settingsScroll
         objectName: "aiSettingsScroll"
         anchors.fill: parent
         clip: true
+        rightPadding: effectiveScrollBarWidth + 6
+        contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ColumnLayout {
-            width: panel.width - 14
+            width: settingsScroll.availableWidth
             spacing: 12
             RowLayout {
                 Layout.fillWidth: true
                 Button {
                     id: backButton
                     objectName: "aiBackButton"
+                    Layout.minimumWidth: 40
+                    Layout.minimumHeight: 40
+                    Layout.preferredHeight: 40
                     text: qsTr("← Busca")
                     Accessible.name: qsTr("Voltar à busca local")
                     onClicked: panel.backRequested()
-                    contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 12; textFormat: Text.PlainText }
+                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; textFormat: Text.PlainText }
                     background: Rectangle { radius: 8; color: "#1B2733"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
                 }
                 Item { Layout.fillWidth: true }
@@ -129,9 +135,9 @@ Item {
                         anchors.fill: parent; anchors.margins: 12; spacing: 5
                         RowLayout {
                             Layout.fillWidth: true
-                            Text { text: modelData.displayName; color: "#EAF4F1"; font.pixelSize: 15; font.weight: Font.Medium; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap; text: modelData.displayName; color: "#EAF4F1"; font.pixelSize: 15; font.weight: Font.Medium; textFormat: Text.PlainText }
                             Item { Layout.fillWidth: true }
-                            Text { text: modelData.clientVersion ? "v" + modelData.clientVersion : qsTr("sem versão"); color: "#91A5B4"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { Layout.maximumWidth: providerColumn.width / 2; wrapMode: Text.WrapAnywhere; text: modelData.clientVersion ? "v" + modelData.clientVersion : qsTr("sem versão"); color: "#91A5B4"; font.pixelSize: 10; textFormat: Text.PlainText }
                         }
                         Text { Layout.fillWidth: true; text: panel.installationText(modelData); color: "#B9CCC7"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText }
                         Text { Layout.fillWidth: true; text: panel.protocolText(modelData); color: panel.capability(modelData, "anonymous_protocol") === "supported" ? "#69D7C2" : "#91A5B4"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText }
@@ -189,6 +195,8 @@ Item {
                         Layout.fillWidth: true
                         Text {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            wrapMode: Text.Wrap
                             text: qsTr("Transformar texto")
                             color: "#EAF4F1"
                             font.pixelSize: 17
