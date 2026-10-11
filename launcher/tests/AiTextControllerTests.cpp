@@ -132,6 +132,137 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void closingPublishesFinalStateBeforeReadyAndRejectsReentrantGenerate_data()
+    {
+        QTest::addColumn<bool>("cooperative");
+        QTest::newRow("cooperative-cancellation") << true;
+        QTest::newRow("forced-cancellation") << false;
+    }
+
+    void closingPublishesFinalStateBeforeReadyAndRejectsReentrantGenerate()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QFETCH(bool, cooperative);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QByteArray script = QByteArray(R"PY(import json,os,pathlib,signal,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as record:
+ record.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+def terminated(signum,frame):
+ emit(2,'cancelled')
+ sys.exit(0)
+if r['requestId'] != 'request.close-original':
+ emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+ emit(1,'delta',text='fresh')
+ emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4,'outputTokens':5,'totalTokens':9},cost={'status':'unknown','currency':None,'amount':None})
+ sys.exit(0)
+signal.signal(signal.SIGTERM,)PY")
+            + (cooperative ? QByteArray("terminated") : QByteArray("signal.SIG_IGN"))
+            + QByteArray(R"PY()
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='retained')
+time.sleep(60)
+)PY");
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                runtimePaths.append(path);
+                return QDir(path).removeRecursively();
+            }, 100);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        QStringList order;
+        QVariantMap notifiedFinal;
+        QVariantMap readyFinal;
+        bool closePhase = false;
+        bool reentrantAttempted = false;
+        bool reentrantIgnored = false;
+        const auto snapshot = [&] {
+            return QVariantMap{{QStringLiteral("busy"), controller.busy()},
+                {QStringLiteral("status"), controller.status()},
+                {QStringLiteral("errorCode"), controller.errorCode()},
+                {QStringLiteral("error"), controller.error()},
+                {QStringLiteral("output"), controller.output()},
+                {QStringLiteral("requestId"), controller.requestId()}};
+        };
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (!closePhase || controller.busy()) return;
+            order.append(QStringLiteral("changed"));
+            notifiedFinal = snapshot();
+            if (reentrantAttempted) return;
+            reentrantAttempted = true;
+            controller.generate(QStringLiteral("request.close-reentrant"), QStringLiteral("summarize"),
+                                QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                                QStringLiteral("127.0.0.1"), 11434, true);
+            reentrantIgnored = !controller.busy()
+                && controller.requestId() == QStringLiteral("request.close-original")
+                && controller.output() == QStringLiteral("retained");
+        });
+        connect(&controller, &AiTextController::closeReady, this, [&] {
+            if (!closePhase) return;
+            order.append(QStringLiteral("closeReady"));
+            readyFinal = snapshot();
+        });
+        controller.generate(QStringLiteral("request.close-original"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.output(), QStringLiteral("retained"), 3000);
+        closePhase = true;
+        QVERIFY(!controller.requestClose());
+        // Any wrongly admitted reentrant helper also exits promptly, so causal assertions follow cleanup.
+        QTRY_VERIFY_WITH_TIMEOUT(closeReady.size() == 1 && !controller.busy(), 5000);
+        closePhase = false;
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identities = record.readAll();
+        record.close();
+        for (const QByteArray &identity : identities.split('\n')) {
+            if (identity.isEmpty()) continue;
+            const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+            QVERIFY(pid > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        }
+        QVERIFY(!runtimePaths.isEmpty());
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        // These ordinary failures occur only after all captured helpers/groups/runtime paths are gone.
+        QCOMPARE(order, QStringList({QStringLiteral("changed"), QStringLiteral("closeReady")}));
+        QVERIFY(reentrantAttempted);
+        QVERIFY(reentrantIgnored);
+        QCOMPARE(identities.count('\n'), 1);
+        QCOMPARE(notifiedFinal, readyFinal);
+        QVERIFY(!notifiedFinal.value(QStringLiteral("busy")).toBool());
+        QCOMPARE(notifiedFinal.value(QStringLiteral("status")).toString(), cooperative
+            ? QStringLiteral("cancelled_confirmed") : QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("errorCode")).toString(), cooperative
+            ? QString() : QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("error")).toString().isEmpty(), cooperative);
+        QCOMPARE(notifiedFinal.value(QStringLiteral("output")).toString(), QStringLiteral("retained"));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("requestId")).toString(), QStringLiteral("request.close-original"));
+
+        controller.generate(QStringLiteral("request.close.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(closeReady.size(), 1);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        QCOMPARE(record.readAll().count('\n'), 2);
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
     void cleanupFailureNotifiesOnceAndKeepsTheCloseBarrier_data()
     {
         QTest::addColumn<bool>("unconfirmedGroup");

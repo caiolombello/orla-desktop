@@ -680,11 +680,10 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
     }
     const bool closePending = m_closePending;
     resetOperation();
+    emit changed();
     if (closePending) {
         m_closePending = false;
         emit closeReady();
-    } else {
-        emit changed();
     }
 }
 

@@ -89,7 +89,32 @@ A UI terminou em 24,75 s, dentro do limite preservado de 30 s. O teste de ação
 lê somente o buffer de clipboard privado da plataforma offscreen. A revisão
 detectou uma referência obsoleta no novo teste Steam; o teste foi corrigido
 para conferir o controle vivo após a reconstrução do modelo.
-CI da revisão seguinte e integração na branch remota principal continuam pendentes.
+Os dois jobs também passaram em `28c5ef4`; os seis CTests hospedados terminaram
+em 74,04 s e a UI em 24,27 s. Esse log aprovado não imprime os contadores Qt
+dos processos filhos.
+
+As duas correções seguintes publicam a notificação final antes de liberar o
+fechamento e mantêm a intenção de sair mesmo após novos pedidos de ocultação.
+O estado final chega aos bindings da UI com a barreira de geração preservada
+durante a notificação; depois a prontidão é emitida uma vez. O pedido de saída
+faz parte do mesmo fechamento após a limpeza dos três proprietários, incluindo
+o caminho em que todos já ficaram prontos. Os flags são consumidos antes de
+despachar ocultação/saída, sem herdar um quit no ciclo seguinte.
+A composição conjunta passou build novo de 40 passos e os seis CTests isolados
+em 75,925 s, com 27 entradas do controller e 27 da UI, sem falhas nesses dois
+processos. A UI levou 24,60 s, dentro do limite preservado de 30 s.
+A revisão do controller aprovou o Source com uma limitação explícita: um
+desafio QML cooperativo adicional falhou ao exigir cancelamento confirmado
+(apresentou cancelamento não confirmado, causa exata desconhecida); os casos
+QML forced/timeout e os 27 testes normais passaram. A falha foi preservada.
+A revisão independente da saída passou os 27 testes normais e um desafio
+adicional com os três helpers reais: o último controlador notificou todos
+prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
+único e a prontidão posterior não duplicou ocultação/saída. O ciclo seguinte
+sem quit também passou. A primeira fixture desse desafio pressupunha um
+prazo Steam errado e falhou antes da verificação causal; ficou preservada.
+A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
+CI da nova revisão e integração na branch remota principal continuam pendentes.
 Esta mudança não atualiza a instalação existente do launcher baseada no Source
 32, que continua sem a nova UI de texto.
 

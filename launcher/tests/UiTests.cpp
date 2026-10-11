@@ -1081,37 +1081,41 @@ private Q_SLOTS:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-
-        const QString providerHelper = directory.filePath(QStringLiteral("ai-provider-resistant.py"));
-        QFile providerHelperFile(providerHelper);
-        QVERIFY(providerHelperFile.open(QIODevice::WriteOnly));
-        providerHelperFile.write(
-            "import signal,time\n"
-            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
-            "time.sleep(60)\n");
-        providerHelperFile.close();
-
-        const QString textHelper = directory.filePath(QStringLiteral("ai-text-close.py"));
-        QFile textHelperFile(textHelper);
-        QVERIFY(textHelperFile.open(QIODevice::WriteOnly));
-        textHelperFile.write(
-            "import json,sys,time\n"
-            "request=json.loads(sys.stdin.buffer.readline())\n"
-            "base={'schemaVersion':1,'requestId':request['requestId']}\n"
-            "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial-close')]\n"
-            "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n"
-            "time.sleep(60)\n");
-        textHelperFile.close();
-
-        const QString steamHelper = directory.filePath(QStringLiteral("steam-close-resistant.py"));
-        QFile steamHelperFile(steamHelper);
-        QVERIFY(steamHelperFile.open(QIODevice::WriteOnly));
-        steamHelperFile.write(
-            "import signal,time\n"
-            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
-            "time.sleep(60)\n");
-        steamHelperFile.close();
-
+        const QString providerReceipt = directory.filePath(QStringLiteral("quit-provider-receipt"));
+        const QString textReceipt = directory.filePath(QStringLiteral("quit-text-receipt"));
+        const QString steamReceipt = directory.filePath(QStringLiteral("quit-steam-receipt"));
+        const QString providerHelper = directory.filePath(QStringLiteral("quit-provider.py"));
+        const QString textHelper = directory.filePath(QStringLiteral("quit-text.py"));
+        const QString steamHelper = directory.filePath(QStringLiteral("quit-steam.py"));
+        for (const auto &pair : {qMakePair(providerHelper, providerReceipt),
+                                 qMakePair(textHelper, textReceipt), qMakePair(steamHelper, steamReceipt)}) {
+            QFile file(pair.first);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,json,os,pathlib,signal,sys,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n");
+            file.write(pair.first == providerHelper
+                ? "runtime=sys.argv[sys.argv.index('--runtime-root')+1]\n" : "runtime=os.getcwd()\n");
+            file.write("pathlib.Path(base64.b64decode('");
+            file.write(pair.second.toUtf8().toBase64());
+            file.write("').decode()).write_text(str(os.getpid())+'\\n'+runtime)\n");
+            if (pair.first == textHelper) {
+                file.write("request=json.loads(sys.stdin.buffer.readline())\n"
+                           "base={'schemaVersion':1,'requestId':request['requestId']}\n"
+                           "events=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='parcial-close')]\n"
+                           "for event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\n");
+            }
+            file.write("time.sleep(60)\n");
+        }
+        const auto steamReaped = [&] {
+            QFile file(steamReceipt);
+            if (!file.open(QIODevice::ReadOnly)) return false;
+            bool valid = false;
+            const qint64 pid = file.readAll().split('\n').first().toLongLong(&valid);
+            if (!valid || pid <= 0) return false;
+            errno = 0;
+            if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+            errno = 0;
+            return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH;
+        };
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper,
                                 {}, nullptr, {}, 500);
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
@@ -1129,17 +1133,53 @@ private Q_SLOTS:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         QVERIFY(window);
         QVERIFY(QTest::qWaitForWindowExposed(window));
-
+        window->requestActivate(); // Actual owned offscreen activity; no global registration or native key.
+        QTRY_VERIFY_WITH_TIMEOUT(window->isActive(), 1000);
+        WindowSession session(&controller, window, false, QString());
+        QVERIFY(session.shortcutText().isEmpty());
+        connect(&controller, &LauncherController::closeRequested, &ai, &AiProviderController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &aiText, &AiTextController::cancelAll);
+        connect(&controller, &LauncherController::closeRequested, &steam, &SteamProviderController::cancelAll);
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            ai.cancelAll();
+            aiText.cancelAll();
+            steam.cancelAll();
+            QElapsedTimer timer;
+            timer.start();
+            while ((ai.busy() || aiText.busy() || steam.busy()) && timer.elapsed() < 7000)
+                QTest::qWait(10);
+            QVERIFY(!ai.busy() && !aiText.busy() && !steam.busy());
+            if (QFile::exists(providerReceipt)) QVERIFY(helperReapedAndRuntimeRemoved(providerReceipt));
+            if (QFile::exists(textReceipt)) QVERIFY(helperReapedAndRuntimeRemoved(textReceipt));
+            if (QFile::exists(steamReceipt)) QVERIFY(steamReaped());
+        });
         ai.discover();
         aiText.generate(QStringLiteral("window-close-request"), QStringLiteral("summarize"),
                         QVariant(), QStringLiteral("texto"), QStringLiteral("modelo:1"),
                         QStringLiteral("127.0.0.1"), 11434, true);
         steam.scan({QStringLiteral("native=/synthetic/root")});
-        QTRY_VERIFY_WITH_TIMEOUT(ai.busy() && aiText.busy() && steam.busy(), 1500);
+        QTRY_VERIFY_WITH_TIMEOUT(ai.busy() && aiText.busy() && steam.busy()
+            && QFile::exists(providerReceipt) && QFile::exists(textReceipt) && QFile::exists(steamReceipt), 1500);
         QTRY_COMPARE_WITH_TIMEOUT(aiText.output(), QStringLiteral("parcial-close"), 1500);
-
+        for (const auto &receipt : {providerReceipt, textReceipt, steamReceipt}) {
+            QFile file(receipt);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            qInfo().noquote() << "ORLA_QUIT_HELPER" << QFileInfo(receipt).fileName() << file.readAll();
+        }
         QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
         QSignalSpy quitRequested(&engine, &QQmlApplicationEngine::quit);
+        QSignalSpy visibility(window, &QWindow::visibleChanged);
+        bool hiddenAfterCleanup = false;
+        connect(window, &QWindow::visibleChanged, &session, [&] {
+            if (!window->isVisible()) hiddenAfterCleanup = !ai.busy() && !aiText.busy() && !steam.busy()
+                && helperReapedAndRuntimeRemoved(providerReceipt)
+                && helperReapedAndRuntimeRemoved(textReceipt) && steamReaped();
+        });
+        session.showFromShortcut(); // Actual shortcut target starts a nonquit close.
+        QCOMPARE(window->property("pendingDismiss").toBool(), true);
+        QCOMPARE(window->property("pendingQuit").toBool(), false);
+        QCOMPARE(dismissed.count(), 0);
+        QCOMPARE(quitRequested.count(), 0);
         QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss",
                                           Q_ARG(QVariant, QVariant(true))));
         QCOMPARE(window->property("pendingDismiss").toBool(), true);
@@ -1153,26 +1193,62 @@ private Q_SLOTS:
         QCOMPARE(window->property("pendingQuit").toBool(), true);
         QCOMPARE(dismissed.count(), 0);
         QCOMPARE(quitRequested.count(), 0);
+        QVERIFY(window->isActive());
+        session.showFromShortcut(); // Repeated nonquit requests must not downgrade the pending quit.
+        bool quitIntentStayedLatched = window->property("pendingQuit").toBool();
+        QVERIFY(QMetaObject::invokeMethod(window, "requestDismiss", Q_ARG(QVariant, QVariant(false))));
+        quitIntentStayedLatched &= window->property("pendingQuit").toBool();
 
         QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 1500);
+        QVERIFY(helperReapedAndRuntimeRemoved(textReceipt));
         QVERIFY(ai.busy() || steam.busy());
         QCOMPARE(dismissed.count(), 0);
         QCOMPARE(quitRequested.count(), 0);
         QVERIFY(window->isVisible());
+        QVERIFY(window->isActive());
+        session.showFromShortcut();
+        quitIntentStayedLatched &= window->property("pendingQuit").toBool();
 
         QTRY_VERIFY_WITH_TIMEOUT(!ai.busy(), 2500);
+        QVERIFY(helperReapedAndRuntimeRemoved(providerReceipt));
         QVERIFY(steam.busy());
         QCOMPARE(dismissed.count(), 0);
         QCOMPARE(quitRequested.count(), 0);
+        QVERIFY(window->isActive());
+        session.showFromShortcut();
+        quitIntentStayedLatched &= window->property("pendingQuit").toBool();
 
         QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+        QVERIFY(steamReaped());
+        // Delay the causal regression assertion until all actual helpers have been reaped.
+        QVERIFY(quitIntentStayedLatched);
         QTRY_COMPARE_WITH_TIMEOUT(dismissed.count(), 1, 1000);
         QTRY_COMPARE_WITH_TIMEOUT(quitRequested.count(), 1, 1000);
+        QCOMPARE(visibility.count(), 1);
+        QVERIFY(!window->isVisible());
+        QVERIFY(hiddenAfterCleanup);
+        QCOMPARE(aiText.output(), QStringLiteral("parcial-close"));
         QCOMPARE(window->property("pendingDismiss").toBool(), false);
         QCOMPARE(window->property("pendingQuit").toBool(), false);
         QTest::qWait(100);
         QCOMPARE(dismissed.count(), 1);
         QCOMPARE(quitRequested.count(), 1);
+        QCOMPARE(visibility.count(), 1);
+
+        // A later independent idle close must not inherit the committed quit intent.
+        window->show();
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        window->requestActivate();
+        QTRY_VERIFY_WITH_TIMEOUT(window->isActive(), 1000);
+        QVERIFY(window->isVisible());
+        session.showFromShortcut();
+        QCOMPARE(dismissed.count(), 2);
+        QCOMPARE(quitRequested.count(), 1);
+        QCOMPARE(visibility.count(), 3);
+        QVERIFY(!window->isVisible());
+        QCOMPARE(window->property("pendingDismiss").toBool(), false);
+        QCOMPARE(window->property("pendingQuit").toBool(), false);
+        qInfo() << "ORLA_QUIT_BARRIER_PASS intent_upgraded=true nonquit_downgrade_blocked=true quit_committed_once=true idle_nonquit_immediate=true fresh_nonquit_preserved=true three_helpers_reaped=true";
     }
 };
 QTEST_MAIN(UiTests)

@@ -264,3 +264,50 @@ a42be491343eeb05ac7748913a9c7275c6fea22280a1559cfbc99864e68e8306  launcher/CMake
 ```
 
 See the [launcher build/source guide](../../launcher/README.md) and the [long-term integration proposal](../AI_INTEGRATIONS.md). The reviewed component-level reports and local one-shot receipt remain preserved as private evidence; they are not public API guarantees.
+
+### Final close notification and pending quit follow-up
+
+Both hosted jobs passed on `28c5ef4`; its launcher job reports six CTests passing
+in 74.04 s, including UI in 24.27 s. Successful child output does not directly
+print the Qt entry counts. The failure-only GDB diagnostic was skipped; the
+historical2c crash cause remains UNKNOWN.
+
+The next two corrections publish the final property notification before
+`closeReady`, retaining the close barrier against reentrant generation during
+that notification, and latch quit intent until owner cleanup completes.
+Repeated active shortcut dismissal cannot downgrade a pending quit. An
+immediately ready dismissal uses the same final commit and consumes its flags
+before dispatch, preventing a second close and an inherited quit in a later
+non-quit cycle.
+
+The exact four-code-path composition passed a fresh 40-step ALL build and all
+six isolated CTests once in 75.925 s. Controller and UI each reported 27 entries,
+zero failures/skips and actual child exit zero; UI took 24.60 s under its
+unchanged 30-second cap. Six private-bus cleanup receipts were retained. The
+separate behavior fixture retains its expected skip, covered by the owned-app
+test. The other 178 Source paths and all 182 modes stayed unchanged.
+
+Independent controller Source review passed its normal 27 entries and actual
+unchanged AiSettings forced/timeout rows. Its supplemental cooperative row
+passed final bindings/order/cleanup assertions, then failed an additional
+confirmed-only cancellation oracle: actual cancellation was unconfirmed and
+the exact cause remains UNKNOWN. The earlier supplemental empty-Python
+harness failure and both failed logs are retained, without a passing claim
+or a normal-suite rerun.
+
+Independent quit Source review passed a fresh normal ALL build and all 27 UI
+entries once (24.88 s). A separate combined challenge used the frozen P1
+controller and three actual helpers; final changed observed all owners idle,
+pending quit/dismiss still true, all captured helpers/groups/runtimes removed
+and the distinct final text closeReady not yet emitted. The actual active
+WindowSession shortcut committed immediately once. Later closeReady caused no
+second close/hide/engine quit, and a fresh nonquit cycle inherited no quit.
+The first supplemental attempt failed its last-owner ordering precondition
+because it assumed Steam grace was 2 s instead of the actual 3 s. Causal checks
+were UNRUN there. Its source/binary/log remain preserved; the corrected fresh
+supplemental build changed only an exposed fixture grace value, not production
+timers/caps or the normal candidate, and passed its single challenge.
+
+This follow-up remains Source validation. New-head CI and main integration are
+pending; real KDE/Wayland, provider/model, native clipboard/accessibility,
+installation, relocatable packaging, release and the full roadmap remain open.

@@ -40,36 +40,24 @@ Window {
     }
     function finishPendingClose() {
         if (!pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
+        const quitApplication = pendingQuit
         pendingDismiss = false
-        launcher.dismiss()
-        if (pendingQuit) Qt.quit()
         pendingQuit = false
-    }
-    function requestDismiss(quitApplication) {
-        const aiReady = aiProviders.requestClose()
-        const textReady = aiText.requestClose()
-        const steamReady = steamProvider.requestClose()
-        if (!aiReady || !textReady || !steamReady) {
-            pendingDismiss = true
-            pendingQuit = quitApplication
-            return
-        }
         launcher.dismiss()
         if (quitApplication) Qt.quit()
     }
-    onActiveChanged: if (active && activePanel === "search") search.forceActiveFocus()
-    onClosing: function(close) {
+    function requestDismiss(quitApplication) {
+        pendingQuit = pendingQuit || quitApplication
+        pendingDismiss = true
         const aiReady = aiProviders.requestClose()
         const textReady = aiText.requestClose()
         const steamReady = steamProvider.requestClose()
-        if (!aiReady || !textReady || !steamReady) {
-            close.accepted = false
-            pendingDismiss = true
-            pendingQuit = true
-            return
-        }
-        launcher.dismiss()
-        Qt.quit()
+        if (aiReady && textReady && steamReady) finishPendingClose()
+        return !pendingDismiss
+    }
+    onActiveChanged: if (active && activePanel === "search") search.forceActiveFocus()
+    onClosing: function(close) {
+        close.accepted = requestDismiss(true)
     }
     Shortcut {
         sequence: "Escape"; context: Qt.WindowShortcut

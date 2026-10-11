@@ -76,7 +76,28 @@ passaram na composição exata: build novo, os seis CTests, 25 entradas do
 controller e 27 da UI (24,75 s, limite preservado de 30 s). O novo teste Steam
 teve seu controle obsoleto corrigido após diagnóstico; a ação de cópia é
 observada somente no clipboard privado da plataforma offscreen.
-CI da revisão seguinte e integração na branch remota principal estão pendentes.
+Os dois jobs passaram também em `28c5ef4`, com os seis CTests hospedados em
+74,04 s e a UI em 24,27 s; o log de sucesso não imprime os contadores Qt filhos.
+
+As duas correções seguintes notificam o estado final antes de `closeReady` e
+mantêm um pedido de saída até a conclusão da limpeza, mesmo quando o atalho
+repete um pedido de ocultação. A geração reentrante continua bloqueada durante
+a notificação final. O caminho imediatamente pronto usa o mesmo fechamento;
+a intenção é consumida antes de ocultar/sair, sem duplicação nem quit herdado.
+A composição conjunta passou um build novo de 40 passos e os seis CTests
+isolados em 75,925 s, com controller 27 e UI 27. A UI levou 24,60 s, dentro
+do limite preservado de 30 s. A revisão do controller aprovou esse Source
+com uma limitação preservada: um desafio QML cooperativo adicional exigiu
+confirmação de cancelamento e observou cancelamento não confirmado, com causa
+exata desconhecida. Os casos QML forced/timeout e os 27 testes normais passaram.
+A revisão independente da saída passou os 27 testes normais e um desafio
+adicional com os três helpers reais: o último controlador notificou todos
+prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
+único e a prontidão posterior não duplicou ocultação/saída. O ciclo seguinte
+sem quit também passou. A primeira fixture desse desafio pressupunha um
+prazo Steam errado e falhou antes da verificação causal; ficou preservada.
+A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
+CI da nova revisão e integração na branch remota principal estão pendentes.
 Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
 empacotamento relocável, instalação, release e
 admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda
