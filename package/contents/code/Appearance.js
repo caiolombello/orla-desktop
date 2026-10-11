@@ -65,7 +65,7 @@ function legacy(configuration, theme) {
     const light = theme === "paper";
     return {formatVersion: formatVersion, baseTheme: theme, tokens: {
         foreground: light ? "#252b35" : "#edf1f9",
-        muted: light ? "#657180" : "#9da9bf",
+        muted: light ? "#606c79" : "#9da9bf",
         accent: light ? "#167361" : "#69d7c2",
         surface: light ? "#f4f0e8" : theme === "midnight" ? "#111923" : "#283542",
         border: light ? "#cec9bf" : "#3c4b65",

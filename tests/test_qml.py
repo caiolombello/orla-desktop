@@ -148,7 +148,7 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(self.evaluate("integrations.batterySummary"), "Mouse · 64%")
         self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 1, quota: {status: 'stale', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: true}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}))")
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "Dados desatualizados")
-        self.assertEqual(self.evaluate("integrations.batterySummary"), "Sem leitura disponível")
+        self.assertEqual(self.evaluate("integrations.batterySummary"), "Sem cache local")
         self.assertFalse(self.evaluate("integrations.acceptSnapshot('{\"schemaVersion\": 999}')"))
 
     def test_failed_integration_neutralizes_previously_fresh_details(self):

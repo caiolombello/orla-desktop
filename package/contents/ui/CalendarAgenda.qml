@@ -1,23 +1,88 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Templates as Templates
+import org.kde.kirigami as Kirigami
 import org.kde.plasma.workspace.calendar as PlasmaCalendar
 
 ColumnLayout {
     id: root
     required property var dock
+    property bool active: false
     property var fixtureEvents: null
+    // Test-only nullable override. null always inspects the installed metadata model.
+    property var pimPluginMetadataAvailableOverride: null
     property bool usePimEvents: dock.configuration && dock.configuration.calendarEvents !== undefined
         ? dock.configuration.calendarEvents : true
     property alias selectedDate: monthView.currentDate
     readonly property alias enabledPlugins: plugins.enabledPlugins
+    readonly property bool pimPluginMetadataAvailable: pluginMetadataAvailable("pimevents")
+    readonly property string providerState: !usePimEvents ? "disabled"
+        : agendaEvents.length > 0 ? "events-present"
+        : !pimPluginMetadataAvailable ? "plugin-metadata-missing" : "no-events-observed"
     property var agendaEvents: []
     spacing: 8
+    Kirigami.Theme.inherit: false
+    Kirigami.Theme.colorSet: Kirigami.Theme.Window
+    Kirigami.Theme.textColor: root.dock.foreground
+    Kirigami.Theme.disabledTextColor: root.dock.muted
+    Kirigami.Theme.backgroundColor: root.dock.background
 
+    function pluginMetadataAvailable(pluginId) {
+        if (pimPluginMetadataAvailableOverride !== null)
+            return pimPluginMetadataAvailableOverride === true;
+        const metadata = plugins.model;
+        if (!metadata) return false;
+        for (let row = 0; row < metadata.rowCount(); row++) {
+            if (String(metadata.get(row, "pluginId")) === pluginId) return true;
+        }
+        return false;
+    }
     function refreshAgenda() {
         if (!monthView) return;
         agendaEvents = fixtureEvents !== null ? fixtureEvents
-            : usePimEvents ? monthView.daysModel.eventsForDate(monthView.currentDate) : [];
+            : active && usePimEvents ? monthView.daysModel.eventsForDate(monthView.currentDate) : [];
+    }
+    function applyMonthLabelTheme(item) {
+        // Plasma 6.7 DayDelegate switches disabled dates to the system palette;
+        // bind every MonthView text item back to this dock's foreground.
+        if (item.text !== undefined && item.color !== undefined) {
+            item.Kirigami.Theme.inherit = false;
+            item.Kirigami.Theme.textColor = Qt.binding(() => root.dock.foreground);
+            item.Kirigami.Theme.disabledTextColor = Qt.binding(() => root.dock.foreground);
+            item.color = Qt.binding(() => root.dock.foreground);
+        }
+        for (let child of item.children) applyMonthLabelTheme(child);
+    }
+    function applyMonthNavigationTheme() {
+        const header = monthView.viewHeader;
+        for (let button of [header.previousButton, header.nextButton]) {
+            if (!button) continue;
+            button.Kirigami.Theme.inherit = false;
+            button.Kirigami.Theme.textColor = root.dock.foreground;
+            button.Kirigami.Theme.buttonTextColor = root.dock.foreground;
+            button.icon.name = "";
+            button.icon.source = "";
+            button.display = Templates.AbstractButton.TextOnly;
+            applyNavigationGlyph(button.contentItem,
+                button === header.previousButton ? "‹" : "›");
+        }
+    }
+    function applyNavigationGlyph(item, glyph) {
+        if (item.text !== undefined && item.color !== undefined) {
+            item.text = glyph;
+            item.color = Qt.binding(() => root.dock.foreground);
+            item.font.pixelSize = 18;
+            return true;
+        }
+        for (let child of item.children) {
+            if (applyNavigationGlyph(child, glyph)) return true;
+        }
+        return false;
+    }
+    function scheduleMonthLabelTheme() {
+        monthThemeTimer.remainingPasses = 12;
+        monthThemeTimer.restart();
     }
     function previousMonth() { monthView.showMonthView(); monthView.previousView(); }
     function nextMonth() { monthView.showMonthView(); monthView.nextView(); }
@@ -33,21 +98,65 @@ ColumnLayout {
         return Qt.formatTime(start, "HH:mm") + " – " + endLabel;
     }
     onFixtureEventsChanged: refreshAgenda()
+    onActiveChanged: refreshAgenda()
     onUsePimEventsChanged: refreshAgenda()
-    Component.onCompleted: refreshAgenda()
+    Component.onCompleted: {
+        refreshAgenda();
+        scheduleMonthLabelTheme();
+    }
 
     PlasmaCalendar.EventPluginsManager {
         id: plugins
-        enabledPlugins: root.fixtureEvents === null && root.usePimEvents ? ["pimevents"] : []
+        enabledPlugins: root.active && root.usePimEvents && root.fixtureEvents === null
+            ? ["pimevents"] : []
     }
-    PlasmaCalendar.MonthView {
-        id: monthView
-        objectName: "calendarMonthView"
+    Timer {
+        id: monthThemeTimer
+        property int remainingPasses: 0
+        interval: 25
+        repeat: true
+        onTriggered: {
+            root.applyMonthNavigationTheme();
+            root.applyMonthLabelTheme(monthView);
+            remainingPasses--;
+            if (remainingPasses <= 0) stop();
+        }
+    }
+    Controls.Control {
+        id: calendarPalette
         Layout.fillWidth: true
         Layout.preferredHeight: 290
-        today: root.dock.now !== undefined ? root.dock.now : new Date()
-        eventPluginsManager: plugins
-        onCurrentDateChanged: root.refreshAgenda()
+        padding: 0
+        palette.window: root.dock.background
+        palette.windowText: root.dock.foreground
+        palette.text: root.dock.foreground
+        palette.buttonText: root.dock.foreground
+        palette.disabled.windowText: root.dock.muted
+        palette.disabled.text: root.dock.muted
+        palette.disabled.buttonText: root.dock.muted
+        Kirigami.Theme.inherit: false
+        Kirigami.Theme.colorSet: Kirigami.Theme.Window
+        Kirigami.Theme.textColor: root.dock.foreground
+        Kirigami.Theme.disabledTextColor: root.dock.muted
+        Kirigami.Theme.backgroundColor: root.dock.background
+        contentItem: PlasmaCalendar.MonthView {
+            id: monthView
+            objectName: "calendarMonthView"
+            today: root.dock.now !== undefined ? root.dock.now : new Date()
+            eventPluginsManager: plugins
+            onCurrentDateChanged: {
+                root.refreshAgenda();
+                root.scheduleMonthLabelTheme();
+            }
+            onCurrentIndexChanged: root.scheduleMonthLabelTheme()
+            onSelectedMonthChanged: root.scheduleMonthLabelTheme()
+            onSelectedYearChanged: root.scheduleMonthLabelTheme()
+        }
+    }
+    Connections {
+        target: root.dock
+        ignoreUnknownSignals: true
+        function onForegroundChanged() { root.scheduleMonthLabelTheme(); }
     }
     Connections {
         target: monthView.daysModel
@@ -58,6 +167,7 @@ ColumnLayout {
         color: root.dock.foreground
         text: Qt.formatDate(root.selectedDate, Qt.DefaultLocaleLongDate)
         textFormat: Text.PlainText
+        Accessible.name: text
         wrapMode: Text.WordWrap
         font.bold: true
     }
@@ -65,10 +175,14 @@ ColumnLayout {
         objectName: "calendarEmptyState"
         Layout.fillWidth: true
         visible: root.agendaEvents.length === 0
-        text: root.usePimEvents ? qsTr("Nenhum evento disponível para esta data. Confira os calendários selecionados no KDE.")
-            : qsTr("Eventos do KDE desativados. Ative-os nas preferências do dock.")
+        text: root.providerState === "disabled"
+            ? qsTr("Eventos do KDE desativados neste perfil.")
+            : root.providerState === "plugin-metadata-missing"
+                ? qsTr("O componente de eventos PIM do KDE não foi encontrado.")
+                : qsTr("Nenhum evento foi recebido para esta data. Isso também pode ocorrer sem calendário selecionado ou com o KDE PIM indisponível.")
         color: root.dock.muted
         textFormat: Text.PlainText
+        Accessible.name: text
         wrapMode: Text.WordWrap
     }
     ListView {
@@ -84,8 +198,12 @@ ColumnLayout {
         Controls.ScrollBar.vertical: Controls.ScrollBar {}
         delegate: ColumnLayout {
             required property var modelData
+            readonly property string accessibilityLabel: (modelData.title || qsTr("Sem título"))
+                + ". " + root.eventTime(modelData)
             width: agenda.width - 14
             spacing: 2
+            Accessible.role: Accessible.ListItem
+            Accessible.name: accessibilityLabel
             Controls.Label {
                 objectName: "calendarEventTitle"
                 Layout.fillWidth: true
@@ -106,15 +224,20 @@ ColumnLayout {
         }
     }
     Controls.Label {
+        objectName: "calendarProviderExplanation"
         Layout.fillWidth: true
-        text: qsTr("Usa a seleção de calendários compartilhada com o relógio do KDE. Para Google, configure a sincronização no KOrganizer.")
+        text: qsTr("O Orla usa, sem alterá-la, a seleção compartilhada com o relógio/calendário do KDE. Mudar essa seleção no KDE também muda o relógio. Contas e sincronização, inclusive Google, são configuradas no KOrganizer; atualidade e disponibilidade são geridas pelo KDE.")
         textFormat: Text.PlainText
+        Accessible.name: text
         color: root.dock.muted
         wrapMode: Text.WordWrap
         font.pixelSize: 11
     }
     Controls.Button {
+        objectName: "calendarGoogleButton"
         text: qsTr("Abrir Google Agenda")
+        Accessible.name: text
+        Accessible.description: qsTr("Abre o site do Google Agenda no navegador.")
         onClicked: Qt.openUrlExternally("https://calendar.google.com/")
     }
 }

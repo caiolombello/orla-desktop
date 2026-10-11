@@ -19,7 +19,7 @@ python3 -m unittest discover -s tests -p 'test_package_cli.py' -v
 python3 scripts/orla.py build
 ```
 
-`doctor`, `build`, `install` e `uninstall` são comandos atuais do helper. Para interações QML, testes da sessão privada D-Bus ou comportamento nativo, consulte [CONTRIBUTING.md](../CONTRIBUTING.md) e [ROADMAP.md](../ROADMAP.md); esses testes exigem runtimes/ambientes específicos e não são cobertos pela CI portátil inteira. A CI contém um job candidato separado para compilar o launcher e executar seus cinco CTests fechados em Fedora 44; a capacidade permanece candidata até o primeiro run hospedado verde. Alterações de UI precisam ser conferidas numa sessão Plasma compatível antes de afirmar que comportamento nativo está validado.
+`doctor`, `build`, `install` e `uninstall` são comandos atuais do helper. Para interações QML, testes da sessão privada D-Bus ou comportamento nativo, consulte [CONTRIBUTING.md](../CONTRIBUTING.md) e [ROADMAP.md](../ROADMAP.md); esses testes exigem runtimes/ambientes específicos e não são cobertos pela CI portátil inteira. O job separado do launcher já compilou o componente e [passou seus cinco CTests fechados em Fedora 44](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). Alterações de UI precisam ser conferidas numa sessão Plasma compatível antes de afirmar que comportamento nativo está validado.
 
 ### Bateria e mídia na 0.2.4
 
@@ -29,7 +29,7 @@ Testes sintéticos Qt, mesmo em Wayland, não comprovam gesto humano, foco/grab 
 
 ### Regras para documentação de comandos
 
-O checkout inclui o [launcher experimental](../launcher/README.md), compilado separadamente com C++/Qt/KF6. Seus cinco CTests usam D-Bus privado sem ativação, XDG/runtime próprios, helpers falsos e uma árvore Steam sintética. O job candidato `launcher-build-and-ctest` usa uma imagem Fedora 44 fixada por digest para configurar, compilar e executar esses testes; seu primeiro run hospedado verde ainda é necessário para confirmar a capacidade. Esse resultado não configura required check nem comprova Plasma/Wayland, foco/atalho global, Steam ou IA reais, instalação ou release. A release pública continua excluindo o componente.
+O checkout inclui o [launcher experimental](../launcher/README.md), compilado separadamente com C++/Qt/KF6. Seus cinco CTests usam D-Bus privado sem ativação, XDG/runtime próprios, helpers falsos e uma árvore Steam sintética. O job `launcher-build-and-ctest` usa uma imagem Fedora 44 fixada por digest para configurar, compilar e executar esses testes; [o run hospedado passou os cinco CTests](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). Esse resultado não configura required check nem comprova Plasma/Wayland, foco/atalho global, Steam ou IA reais, instalação ou release. A release pública continua excluindo o componente.
 
 Desde 0.2.2, `doctor` identifica PySide6.QtDBus, `busctl` e sessão D-Bus como dependências opcionais das integrações. A instalação do dock continua sem elas; restaurar as dependências e reinstalar ativa o serviço. A suíte de integração D-Bus ainda requer PySide6 e `dbus-run-session`. Veja a [validação da base](validation/foundation-0.2.2.md) para escopo e limites.
 
