@@ -28,8 +28,10 @@ Item {
     property alias contextBindings: contextBindingsState
     property var contextSnapshotOverride: null
     property var controlCenterBackendOverride: null
+    property var audioBackendOverride: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
+    readonly property bool nativeAudioBackendLoaded: nativeAudioBackend.item !== null
     readonly property var presentation: profileState.effective
     readonly property string launcherSnapshot: JSON.stringify(presentation.launchers)
     property string selectedIntegration: "quota"
@@ -577,6 +579,18 @@ Item {
         backend: root.controlCenterBackendOverride !== null ? root.controlCenterBackendOverride
             : nativeControlCenterBackend.item
     }
+    Loader {
+        id: nativeAudioBackend
+        objectName: "controlCenterAudioNativeLoader"
+        active: controlCenterPopup.visible && root.audioBackendOverride === null
+        source: active ? Qt.resolvedUrl("NativePulseAudio.qml") : ""
+    }
+    AudioControlState {
+        id: audioControlState
+        objectName: "audioControlState"
+        active: controlCenterPopup.visible
+        backend: root.audioBackendOverride !== null ? root.audioBackendOverride : nativeAudioBackend.item
+    }
     DockPopup {
         id: controlCenterPopup
         objectName: "controlCenterPopup"
@@ -599,6 +613,7 @@ Item {
             actions: kdeControlActions
             player: root.player
             battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle})
+            audio: audioControlState
             foreground: root.foreground
             muted: root.muted
         }
