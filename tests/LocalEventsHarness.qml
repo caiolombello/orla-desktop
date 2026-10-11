@@ -12,6 +12,10 @@ Window {
     DockUI.EventState {
         id: state
         enabled: true
+        completionEnabled: true
+        audioEnabled: true
+        activeScope: "profile:work"
+        activeContextGeneration: 4
     }
 
     Item {

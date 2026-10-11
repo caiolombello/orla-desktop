@@ -4,6 +4,8 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DISPLAY") else "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
+os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Fusion")
+os.environ.setdefault("QT_QPA_PLATFORMTHEME", "")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPoint, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication

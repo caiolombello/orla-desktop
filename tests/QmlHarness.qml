@@ -37,6 +37,7 @@ Window {
         property bool showPeripherals: false
         property bool showRecording: false
         property bool showLocalToasts: false
+        property bool showAudioHud: false
         property bool showControlCenter: false
         property bool calendarEvents: false
         property bool currentDesktopOnly: false

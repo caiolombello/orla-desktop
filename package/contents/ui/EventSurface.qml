@@ -27,8 +27,11 @@ Item {
 
     Connections {
         target: surface.eventState
-        function onCurrentChanged() {
-            if (surface.eventState.current) surface.Accessible.announce(surface.fullAccessibleName, Accessible.Polite);
+        function onAnnouncementRequested(event) {
+            if (!event) return;
+            const name = event.accessibleName || (event.title
+                + (event.detail ? ". " + event.detail : ""));
+            surface.Accessible.announce(name, Accessible.Polite);
         }
     }
     Behavior on contentOpacity {
