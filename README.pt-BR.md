@@ -14,6 +14,8 @@ O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https
 
 O bundle da release 0.2.5 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
 
+O checkout inclui uma [CLI experimental de inventário local do Steam](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md). Ela lê metadados limitados de bibliotecas em raízes informadas explicitamente e distingue estados parciais/desconhecidos; não inicia jogos, acessa contas nem comprova titularidade. Busca/favoritos no dock e validação com Steam real continuam planejados. Os assets publicados da 0.2.5 não a incluem.
+
 ## O que funciona hoje
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
