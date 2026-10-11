@@ -27,6 +27,11 @@ class ReleaseBundleTests(unittest.TestCase):
                 "KPlugin": {"Id": "org.caiodock.dock", "Version": "1.2.3"}
             }), encoding="utf-8")
             (root / "package/contents/ui/main.qml").write_text("Item {}\n", encoding="utf-8")
+            for name in ("contents/code/Theme.js", "contents/code/Appearance.js",
+                         "contents/ui/AppearanceState.qml", "contents/ui/AppearanceEditor.qml"):
+                target = root / "package" / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / "package" / name, target)
             shutil.copytree(source / "themes", root / "themes")
             (root / "docs").mkdir()
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
@@ -55,7 +60,9 @@ class ReleaseBundleTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 required = ("themes/examples/essential.json", "themes/examples/mare.json",
                             "themes/schema/theme-0.1-experimental.schema.json",
-                            "scripts/themes.py", "docs/theme-format.md", "tests/test_themes.py")
+                            "scripts/themes.py", "docs/theme-format.md", "tests/test_themes.py",
+                            "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
+                            "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml")
                 for name in required:
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name

@@ -35,6 +35,7 @@ Window {
         property int completedFocus: 0
     }
     QtObject {
+        id: ownedBatteryTransport
         objectName: "batteryTransport"
         property bool fail: false
         property var calls: []
@@ -72,5 +73,29 @@ Window {
         width: Math.min(implicitWidth, parent.width - 64)
         height: implicitHeight
         configuration: config
+        integrations.active: false
+        systemBattery.transport: ownedBatteryTransport
     }
+    function findFixtureObject(node, name, seen) {
+        if (!node || seen.has(node)) return null;
+        seen.add(node);
+        if (node.objectName === name) return node;
+        const descendants = [];
+        if (node.data) descendants.push(...Array.from(node.data));
+        if (node.children) descendants.push(...Array.from(node.children));
+        if (node.contentItem) descendants.push(node.contentItem);
+        for (const child of descendants) {
+            const found = findFixtureObject(child, name, seen);
+            if (found) return found;
+        }
+        return null;
+    }
+    Component.onCompleted: {
+        // Initial fixture calendarEvents is false. Set synthetic events before
+        // a test may enable calendarEvents; no PIM provider is then requested.
+        const agenda = findFixtureObject(dockView, "calendarAgenda", new Set());
+        if (agenda) agenda.fixtureEvents = [];
+        else throw new Error("Owned calendar fixture was not found");
+    }
+
 }

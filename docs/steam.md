@@ -1,12 +1,13 @@
 # Descoberta local Steam experimental
 
-A CLI de fonte `scripts/steam.py` consulta somente metadados de bibliotecas em
-raízes explícitas. Esta é uma fatia de S1: favoritos, busca, interface do dock,
-provedor, abertura de cliente/jogo e qualificação com dois jogos reais continuam
-pendentes. A rodada atual usou exclusivamente diretórios sintéticos próprios.
-Não houve leitura de uma biblioteca pessoal nem chamada ao cliente Steam.
-O componente está disponível somente no checkout de código; não integra os
-assets já publicados da release 0.2.5.
+`scripts/steam.py` consulta somente metadados de bibliotecas em raízes explícitas.
+Esta é uma fatia de S1: favoritos, busca, interface do dock, provedor, abertura
+de cliente/jogo e qualificação com dois jogos reais continuam pendentes. A
+rodada usou exclusivamente diretórios sintéticos próprios. Não houve leitura de
+biblioteca pessoal nem chamada ao cliente Steam. A CLI está incluída no ZIP da
+prerelease 0.2.6. Os assets da
+release 0.2.5 publicada não a incluem. O Menu Orla experimental continua fora do
+bundle 0.2.6.
 
 O contrato JSON é `0.1-experimental`, independente da versão do Orla. O futuro
 consumidor deve tratar nomes como texto simples e distinguir inventário completo,

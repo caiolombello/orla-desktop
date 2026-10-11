@@ -1,5 +1,6 @@
 import QtQuick
 import "../code/Appearance.js" as Appearance
+import "../code/Theme.js" as Theme
 
 QtObject {
     id: state
@@ -14,6 +15,12 @@ QtObject {
     property var draft: null
     property var preview: null
     property bool defaultsDraft: false
+    property string themeText: ""
+    property bool themePending: false
+    property string themeError: ""
+    property var themeErrors: []
+    property var themeMetadata: null
+    property bool themeModified: false
     property string error: ""
     property string message: ""
     property var previousJSON: null
@@ -26,13 +33,53 @@ QtObject {
         iconSize: configuration.iconSize, animations: configuration.animations})
     readonly property bool stale: editing && (beginScope !== scopeKey || beginSignature !== signature)
     readonly property bool dirty: editing && draft !== null && (error.length > 0
+        || themeText.length > 0 || themeError.length > 0
         || (defaultsDraft ? savedJSON.length > 0 : JSON.stringify(draft) !== beginDraftJSON))
     readonly property bool canUndo: previousJSON !== null && previousScope === scopeKey && undoSignature === signature
-    readonly property bool canApply: editing && !stale && error.length === 0 && draft !== null
+    readonly property bool canApply: editing && !stale && error.length === 0 && !themePending && themeError.length === 0 && draft !== null
     readonly property var effective: editing && preview ? preview : active
     readonly property bool overridden: editing && preview ? !defaultsDraft : Boolean(saved.value)
 
+    function clearThemeInput() {
+        themeText = "";
+        themePending = false;
+        themeError = "";
+        themeErrors = [];
+        themeMetadata = null;
+        themeModified = false;
+    }
+    function setThemeText(text) {
+        if (!editing) return;
+        if (themeText === text) return;
+        themeText = text;
+        themePending = text.length > 0;
+        themeError = "";
+        themeErrors = [];
+    }
+    function previewTheme() {
+        if (!editing || stale || !draft) return false;
+        const parsed = Theme.parse(themeText);
+        if (!parsed.value) {
+            themePending = themeText.length > 0;
+            themeError = parsed.error;
+            themeErrors = parsed.errors;
+            return false;
+        }
+        const next = Appearance.validate({formatVersion: Appearance.formatVersion,
+            baseTheme: draft.baseTheme, tokens: parsed.value.tokens});
+        if (!next.value) return false;
+        defaultsDraft = false;
+        refreshDraft(next.value);
+        themeMetadata = {id: parsed.value.id, name: parsed.value.name, author: parsed.value.author,
+            license: parsed.value.license, version: parsed.value.version};
+        themeModified = false;
+        themePending = false;
+        themeError = "";
+        themeErrors = [];
+        return true;
+    }
     function begin() {
+        clearThemeInput();
         draft = Appearance.copy(active);
         beginScope = scopeKey;
         beginSignature = signature;
@@ -55,15 +102,18 @@ QtObject {
         const next = Appearance.copy(draft);
         next.tokens[key] = value;
         defaultsDraft = false;
+        if (themeMetadata) themeModified = true;
         refreshDraft(next);
     }
     function selectTheme(theme) {
         if (!editing) return;
+        clearThemeInput();
         defaultsDraft = false;
         refreshDraft(Appearance.legacy(configuration, theme));
     }
     function restoreDefaults() {
         if (!editing) return;
+        clearThemeInput();
         refreshDraft(Appearance.copy(legacy));
         defaultsDraft = true;
     }
@@ -85,6 +135,7 @@ QtObject {
         return true;
     }
     function cancel() {
+        clearThemeInput();
         editing = false;
         preview = null;
         draft = null;

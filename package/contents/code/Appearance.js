@@ -14,27 +14,46 @@ function validate(value) {
     if (!exactKeys(value, ["formatVersion", "baseTheme", "tokens"]) || value.formatVersion !== formatVersion
             || ["glass", "midnight", "paper"].indexOf(value.baseTheme) === -1)
         return {error: "Aparência inválida. Use um tema e formato conhecidos."};
-    const tokens = value.tokens;
-    if (!exactKeys(tokens, colorKeys.concat(Object.keys(ranges), ["reducedMotion"])))
-        return {error: "Aparência inválida. Verifique os campos de aparência."};
-    const result = {formatVersion: formatVersion, baseTheme: value.baseTheme, tokens: {}};
+    const result = validateTokens(value.tokens);
+    if (!result.value) return result;
+    return {value: {formatVersion: formatVersion, baseTheme: value.baseTheme, tokens: result.value}, error: ""};
+}
+function tokenFailure(key, code, message) {
+    return {error: message, errors: [{field: key ? "$/tokens/" + key : "$/tokens", code: code, message: message}]};
+}
+function validateTokens(tokens) {
+    const keys = colorKeys.concat(Object.keys(ranges), ["reducedMotion"]);
+    if (tokens === null || typeof tokens !== "object" || Array.isArray(tokens))
+        return tokenFailure("", "type", "Aparência inválida. Verifique os campos de aparência.");
+    if (Object.keys(tokens).some(key => keys.indexOf(key) === -1))
+        return tokenFailure("", "unknown_key", "Aparência inválida. Verifique os campos de aparência.");
+    for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(tokens, key))
+            return tokenFailure(key, "required", "Aparência inválida. Verifique os campos de aparência.");
+    }
+    const result = {};
     for (const key of colorKeys) {
-        if (typeof tokens[key] !== "string" || !/^#[0-9a-fA-F]{6}$/.test(tokens[key]))
-            return {error: key + ": use uma cor no formato #RRGGBB."};
-        result.tokens[key] = tokens[key].toLowerCase();
+        const message = key + ": use uma cor no formato #RRGGBB.";
+        if (typeof tokens[key] !== "string") return tokenFailure(key, "type", message);
+        if (tokens[key].length < 1 || tokens[key].length > 7) return tokenFailure(key, "length", message);
+        if (!/^#[0-9a-fA-F]{6}(?![\s\S])/.test(tokens[key])) return tokenFailure(key, "format", message);
+        result[key] = tokens[key].toLowerCase();
     }
     for (const key of Object.keys(ranges)) {
         const number = tokens[key];
         const bounds = ranges[key];
-        if (typeof number !== "number" || !isFinite(number) || number < bounds[0] || number > bounds[1])
-            return {error: key + ": use um número entre " + bounds[0] + " e " + bounds[1] + "."};
-        result.tokens[key] = number;
+        const message = key + ": use um número entre " + bounds[0] + " e " + bounds[1] + ".";
+        if (typeof number !== "number") return tokenFailure(key, "type", message);
+        if (!isFinite(number)) return tokenFailure(key, "nonfinite", message);
+        if (number < bounds[0] || number > bounds[1]) return tokenFailure(key, "range", message);
+        result[key] = number;
     }
     if (typeof tokens.reducedMotion !== "boolean")
-        return {error: "reducedMotion: escolha ativado ou desativado."};
-    result.tokens.reducedMotion = tokens.reducedMotion;
-    return {value: result, error: ""};
+        return tokenFailure("reducedMotion", "type", "reducedMotion: escolha ativado ou desativado.");
+    result.reducedMotion = tokens.reducedMotion;
+    return {value: result, error: "", errors: []};
 }
+
 function parse(raw) {
     if (typeof raw !== "string" || raw.length > 4096) return {error: "Aparência salva inválida."};
     try { return validate(JSON.parse(raw)); }
