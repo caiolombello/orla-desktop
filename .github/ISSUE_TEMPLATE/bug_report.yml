@@ -1,0 +1,45 @@
+name: Bug report
+description: Report an issue with Orla Dock
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove personal information from logs and screenshots. Do not include calendar details, window titles, account names, tokens, or private cache files.
+  - type: input
+    id: version
+    attributes:
+      label: Orla version
+      placeholder: 0.2.1
+    validations:
+      required: true
+  - type: input
+    id: plasma
+    attributes:
+      label: Distribution and KDE Plasma version
+      placeholder: Fedora 44, Plasma 6.7.5
+    validations:
+      required: true
+  - type: input
+    id: session
+    attributes:
+      label: Session type
+      placeholder: Wayland or X11
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Remove personal data and paths before posting.

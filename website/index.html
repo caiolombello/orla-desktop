@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1820">
+  <meta name="description" content="Orla Desktop — um dock nativo, personalizável e aberto para o KDE Plasma.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Orla Desktop — seu espaço, à sua maneira">
+  <meta property="og:description" content="Um dock nativo e personalizável para KDE Plasma. Feito com cuidado, aberto para todo mundo.">
+  <meta property="og:image" content="https://orla-desktop.sunlit-duck-7687.chatgpt.site/assets/share.png">
+  <meta property="og:url" content="https://orla-desktop.sunlit-duck-7687.chatgpt.site/">
+  <link rel="canonical" href="https://orla-desktop.sunlit-duck-7687.chatgpt.site/">
+  <title>Orla Desktop — seu espaço, à sua maneira</title>
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo" data-pt="Pular para o conteúdo" data-en="Skip to content">Pular para o conteúdo</a>
+  <header class="site-header">
+    <a class="brand" href="#topo" aria-label="Orla Desktop, início" data-pt-aria="Orla Desktop, início" data-en-aria="Orla Desktop, home">
+      <img src="assets/logo.svg" width="38" height="38" alt="">
+      <span>orla<span class="brand-light"> desktop</span></span>
+    </a>
+    <nav class="desktop-nav" aria-label="Navegação principal" data-pt-aria="Navegação principal" data-en-aria="Main navigation">
+      <a href="#recursos" data-pt="O dock" data-en="The dock">O dock</a>
+      <a href="#personalize" data-pt="Personalização" data-en="Make it yours">Personalização</a>
+      <a href="#roadmap" data-pt="Roadmap" data-en="Roadmap">Roadmap</a>
+      <a href="#instalar" data-pt="Instalação" data-en="Install">Instalação</a>
+    </nav>
+    <div class="header-actions">
+      <button class="language-button" type="button" aria-label="Mudar idioma para inglês" data-pt="EN" data-en="PT">EN</button>
+      <a class="header-github" href="https://github.com/caiolombello/orla-desktop" target="_blank" rel="noreferrer">
+        <span data-pt="Ver no GitHub" data-en="View on GitHub">Ver no GitHub</span><span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="conteudo">
+    <section class="hero" id="topo">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="live-dot"></span><span data-pt="FEITO PARA O KDE PLASMA" data-en="MADE FOR KDE PLASMA">FEITO PARA O KDE PLASMA</span></p>
+        <h1 data-pt="Seu desktop.<br><em>Seu ritmo.</em>" data-en="Your desktop.<br><em>Your rhythm.</em>">Seu desktop.<br><em>Seu ritmo.</em></h1>
+        <p class="hero-lede" data-pt="Um dock para o Plasma que acompanha o seu jeito de trabalhar. Aconchegante, flexível e feito para você ajustar até parecer seu." data-en="A Plasma dock that moves with the way you work. Calm, flexible, and made for you to shape until it feels like yours.">Um dock para o Plasma que acompanha o seu jeito de trabalhar. Aconchegante, flexível e feito para você ajustar até parecer seu.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#instalar"><span data-pt="Conheça a versão alpha" data-en="Explore the alpha">Conheça a versão alpha</span><span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="https://github.com/caiolombello/orla-desktop" target="_blank" rel="noreferrer"><span data-pt="Código aberto" data-en="Open source">Código aberto</span> <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="hero-meta"><span class="version-pill">ORLA DOCK <i>0.2.1 alpha</i></span><span data-pt="KDE Plasma 6.7+" data-en="KDE Plasma 6.7+">KDE Plasma 6.7+</span><span class="meta-divider"></span><span data-pt="MIT · comunidade aberta" data-en="MIT · open community">MIT · comunidade aberta</span></div>
+      </div>
+
+      <div class="hero-art" aria-label="Prévia ilustrativa de um desktop KDE com o Orla Dock" data-pt-aria="Prévia ilustrativa de um desktop KDE com o Orla Dock" data-en-aria="Illustrative preview of a KDE desktop with Orla Dock">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="desktop-scene">
+          <div class="scene-top"><span class="scene-brand"><img src="assets/logo.svg" alt=""> ORLA</span><span data-pt="SEGUNDA-FEIRA, 09:41" data-en="MONDAY, 09:41">SEGUNDA-FEIRA, 09:41</span><span class="scene-status"><i></i><i></i><i></i></span></div>
+          <div class="scene-landscape" aria-hidden="true"><div class="sun"></div><div class="ridge ridge-back"></div><div class="ridge ridge-front"></div><div class="water"></div><div class="water-line"></div></div>
+          <div class="desktop-note"><span class="note-mark">✳</span><span data-pt="um lugar para<br>as coisas acontecerem" data-en="a place for<br>things to happen">um lugar para<br>as coisas acontecerem</span><small>PLASMA · 6.7+</small></div>
+          <div class="dock-demo" id="dockDemo" data-theme="midnight" aria-label="Dock ilustrativo interativo">
+            <span class="dock-app app-dolphin" aria-label="Dolphin"><span>◧</span><i></i></span>
+            <span class="dock-app app-terminal" aria-label="Terminal"><span>›_</span><i></i></span>
+            <span class="dock-app app-browser" aria-label="Navegador"><span>◉</span><i></i></span>
+            <span class="dock-separator"></span>
+            <span class="dock-app app-music" aria-label="Música"><span>♫</span><i></i></span>
+            <span class="dock-app app-calendar" aria-label="Calendário"><span><b>SEG</b>10</span><i></i></span>
+            <span class="dock-app app-grid" aria-label="Aplicativos"><span>⠿</span></span>
+          </div>
+          <span class="illustrative-label" data-pt="PRÉVIA ILUSTRATIVA · O VISUAL DO SEU PLASMA PODE SER DIFERENTE" data-en="ILLUSTRATIVE PREVIEW · YOUR PLASMA DESKTOP MAY LOOK DIFFERENT">PRÉVIA ILUSTRATIVA · O VISUAL DO SEU PLASMA PODE SER DIFERENTE</span>
+        </div>
+        <div class="art-spark spark-a">✳</div><div class="art-spark spark-b">·</div>
+      </div>
+      <div class="hero-bottom"><span data-pt="Um projeto independente para KDE Plasma" data-en="An independent project for KDE Plasma">Um projeto independente para KDE Plasma</span><span class="scroll-cue"><span data-pt="ROLE PARA DESCOBRIR" data-en="SCROLL TO EXPLORE">ROLE PARA DESCOBRIR</span><i></i></span></div>
+    </section>
+
+    <section class="intro section-pad" id="recursos">
+      <div class="section-kicker"><span>01</span><span data-pt="UM DOCK, DO SEU JEITO" data-en="A DOCK THAT FEELS LIKE YOURS">UM DOCK, DO SEU JEITO</span></div>
+      <div class="intro-grid"><h2 data-pt="Tudo por perto.<br><em>Nada no caminho.</em>" data-en="Close at hand.<br><em>Out of the way.</em>">Tudo por perto.<br><em>Nada no caminho.</em></h2><p data-pt="O Orla Dock fica onde você precisa e se adapta ao que está fazendo. Fixe seus apps, acompanhe as janelas abertas e deixe o resto do desktop respirar." data-en="Orla Dock stays close when you need it and adapts to what you’re doing. Pin your apps, keep track of open windows, and let the rest of your desktop breathe.">O Orla Dock fica onde você precisa e se adapta ao que está fazendo. Fixe seus apps, acompanhe as janelas abertas e deixe o resto do desktop respirar.</p></div>
+      <div class="feature-grid">
+        <article class="feature-card card-large"><div class="feature-illustration window-illustration"><span class="mini-window"><i></i><i></i><i></i><b>Notas do projeto</b><small>Suas janelas aparecem no dock.</small></span><span class="mini-dock"><i>◧</i><i>›_</i><i>◉</i><i>♫</i></span></div><h3 data-pt="Apps e janelas, juntos" data-en="Apps and windows, together">Apps e janelas, juntos</h3><p data-pt="Fixe seus favoritos, veja o que está aberto e volte ao trabalho com um clique." data-en="Pin your favorites, see what’s open, and get back to work in a click.">Fixe seus favoritos, veja o que está aberto e volte ao trabalho com um clique.</p></article>
+        <article class="feature-card"><div class="feature-illustration reorder-illustration"><span class="reorder-icon">◧</span><span class="reorder-arrow">⟷</span><span class="reorder-icon">›_</span><span class="reorder-icon">◉</span><small data-pt="ORGANIZE COMO QUISER" data-en="ARRANGE IT YOUR WAY">ORGANIZE COMO QUISER</small></div><h3 data-pt="A ordem é sua" data-en="Your order">A ordem é sua</h3><p data-pt="Reorganize seus apps e arraste lançadores .desktop para fixar novos apps." data-en="Reorder your apps and drop .desktop launchers onto the dock.">Reorganize seus apps e arraste lançadores .desktop para fixar novos apps.</p></article>
+        <article class="feature-card"><div class="feature-illustration time-illustration"><div class="clock-face"><span>09</span><i></i><b>41</b></div><div class="pomodoro-mark"><span>◷</span><small data-pt="FOCO · 25:00" data-en="FOCUS · 25:00">FOCO · 25:00</small></div></div><h3 data-pt="Seu tempo, visível" data-en="Time in view">Seu tempo, visível</h3><p data-pt="Relógio e Pomodoro nativos mantêm seu ritmo ao alcance." data-en="A native clock and Pomodoro timer keep your rhythm close.">Relógio e Pomodoro nativos mantêm seu ritmo ao alcance.</p></article>
+        <article class="feature-card"><div class="feature-illustration calendar-illustration"><div class="calendar-sheet"><span>OUTUBRO 2026</span><b>10</b><i></i><i></i><i></i></div><span class="calendar-orbit">✳</span></div><h3 data-pt="Agenda do KDE" data-en="KDE calendar">Agenda do KDE</h3><p data-pt="Consulte sua agenda do Plasma. O Google Agenda depende da configuração no KOrganizer/Akonadi." data-en="Check your Plasma calendar. Google Calendar requires setup in KOrganizer/Akonadi.">Consulte sua agenda do Plasma. O Google Agenda depende da configuração no KOrganizer/Akonadi.</p></article>
+        <article class="feature-card"><div class="feature-illustration music-illustration"><div class="waveform"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>♫</span><small>MPRIS · MEDIA</small></div><h3 data-pt="Controles de mídia" data-en="Media controls">Controles de mídia</h3><p data-pt="Use os controles de reprodução via MPRIS, com o player compatível ativo no Plasma." data-en="Use MPRIS playback controls with a compatible player running in Plasma.">Use os controles de reprodução via MPRIS, com o player compatível ativo no Plasma.</p></article>
+        <article class="feature-card card-wide"><div class="feature-illustration integration-illustration"><div class="integration-node node-one">Q</div><div class="integration-node node-two">P</div><div class="integration-node node-three">F</div><div class="integration-lines"><i></i><i></i><i></i></div><div class="integration-center"><img src="assets/logo.svg" alt=""></div><span class="integration-label label-one">QuotaLantern</span><span class="integration-label label-two">PeriGauge</span><span class="integration-label label-three">FalaTrace</span></div><h3 data-pt="Seus projetos também" data-en="Your projects, too">Seus projetos também</h3><p data-pt="O dock pode exibir dados locais de QuotaLantern, PeriGauge e FalaTrace. Os widgets indicam quando os dados estão ausentes ou desatualizados." data-en="The dock can show local data from QuotaLantern, PeriGauge, and FalaTrace. Widgets show when data is missing or out of date.">O dock pode exibir dados locais de QuotaLantern, PeriGauge e FalaTrace. Os widgets indicam quando os dados estão ausentes ou desatualizados.</p></article>
+      </div>
+    </section>
+
+    <section class="customize section-pad" id="personalize">
+      <div class="section-kicker"><span>02</span><span data-pt="SEU PLASMA, SUAS REGRAS" data-en="YOUR PLASMA, YOUR RULES">SEU PLASMA, SUAS REGRAS</span></div>
+      <div class="customize-grid"><div><h2 data-pt="Encontre a<br><em>sua atmosfera.</em>" data-en="Find your<br><em>own atmosphere.</em>">Encontre a<br><em>sua atmosfera.</em></h2><p data-pt="Três temas para começar. Ajuste o tamanho dos ícones, escolha as animações e deixe ativos só os widgets que fazem sentido no seu dia." data-en="Three themes to start with. Tune icon size, choose your animations, and keep only the widgets that make sense for your day.">Três temas para começar. Ajuste o tamanho dos ícones, escolha as animações e deixe ativos só os widgets que fazem sentido no seu dia.</p><div class="theme-options" role="group" aria-label="Escolha um tema para a prévia" data-pt-aria="Escolha um tema para a prévia" data-en-aria="Choose a theme for the preview">
+        <button class="theme-option" type="button" data-theme-choice="midnight" aria-pressed="true"><span class="theme-swatch swatch-midnight"></span><span data-pt="Midnight" data-en="Midnight">Midnight</span><i>✓</i></button>
+        <button class="theme-option" type="button" data-theme-choice="glass" aria-pressed="false"><span class="theme-swatch swatch-glass"></span><span data-pt="Glass" data-en="Glass">Glass</span><i>✓</i></button>
+        <button class="theme-option" type="button" data-theme-choice="paper" aria-pressed="false"><span class="theme-swatch swatch-paper"></span><span data-pt="Paper" data-en="Paper">Paper</span><i>✓</i></button>
+      </div><p class="theme-hint" data-pt="Experimente os temas nesta prévia ilustrativa. O tema real é escolhido nas configurações do dock." data-en="Try the themes in this illustrative preview. Set the actual theme in dock settings.">Experimente os temas nesta prévia ilustrativa. O tema real é escolhido nas configurações do dock.</p></div>
+      <div class="theme-stage"><div class="stage-glow"></div><div class="stage-caption"><span data-pt="PRÉVIA DO TEMA" data-en="THEME PREVIEW">PRÉVIA DO TEMA</span><span id="themeName">MIDNIGHT</span></div><div class="theme-demo" id="themeDemo" data-theme="midnight"><div class="demo-wallpaper"><div class="demo-sun"></div><div class="demo-hill hill-a"></div><div class="demo-hill hill-b"></div><span>19:41</span></div><div class="demo-dock"><i class="mini-app tone-a">◧</i><i class="mini-app tone-b">›_</i><i class="mini-app tone-c">◉</i><span></span><i class="mini-app tone-d">♫</i><i class="mini-app tone-e">10</i></div></div><span class="stage-footnote" data-pt="PRÉVIA ILUSTRATIVA · O TEMA PODE SER DIFERENTE NO SEU SISTEMA" data-en="ILLUSTRATIVE PREVIEW · YOUR SYSTEM MAY LOOK DIFFERENT">PRÉVIA ILUSTRATIVA · O TEMA PODE SER DIFERENTE NO SEU SISTEMA</span></div></div>
+    </section>
+
+    <section class="open-source section-pad">
+      <div class="opensource-art"><div class="open-orbit"></div><div class="open-glyph">⌘</div><div class="open-spark spark-left">✳</div><div class="open-spark spark-right">✦</div><span class="opensource-stamp">OPEN<br>SOURCE<br>BY NATURE</span></div>
+      <div class="opensource-copy"><div class="section-kicker"><span>03</span><span data-pt="FEITO PARA COMPARTILHAR" data-en="MADE TO BE SHARED">FEITO PARA COMPARTILHAR</span></div><h2 data-pt="Feito com carinho.<br><em>Aberto por escolha.</em>" data-en="Made with care.<br><em>Open by choice.</em>">Feito com carinho.<br><em>Aberto por escolha.</em></h2><p data-pt="Orla é um projeto independente, com licença MIT. Explore o código, acompanhe o roadmap ou ajude a construir o próximo pedaço." data-en="Orla is an independent project under the MIT license. Explore the code, follow the roadmap, or help build what comes next.">Orla é um projeto independente, com licença MIT. Explore o código, acompanhe o roadmap ou ajude a construir o próximo pedaço.</p><a class="button button-dark" href="https://github.com/caiolombello/orla-desktop" target="_blank" rel="noreferrer"><span data-pt="Explore o projeto" data-en="Explore the project">Explore o projeto</span><span aria-hidden="true">↗</span></a></div>
+    </section>
+
+    <section class="roadmap section-pad" id="roadmap">
+      <div class="section-kicker"><span>04</span><span data-pt="O CAMINHO PELA FRENTE" data-en="WHAT'S AHEAD">O CAMINHO PELA FRENTE</span></div>
+      <div class="roadmap-header"><h2 data-pt="Uma ideia que<br><em>vai mais longe.</em>" data-en="An idea that<br><em>goes further.</em>">Uma ideia que<br><em>vai mais longe.</em></h2><p data-pt="A versão alpha começa pelo dock. Estas ideias estão no roadmap e ainda não fazem parte da versão atual." data-en="The alpha starts with the dock. These ideas are on the roadmap and are not part of the current release yet.">A versão alpha começa pelo dock. Estas ideias estão no roadmap e ainda não fazem parte da versão atual.</p></div>
+      <div class="roadmap-list"><div class="roadmap-item"><span class="roadmap-num">A</span><div><h3 data-pt="Mais desktop, num só lugar" data-en="More desktop, in one place">Mais desktop, num só lugar</h3><p data-pt="Barra superior opcional, menus globais compatíveis e uma Central de Controle configurável." data-en="An optional top bar, compatible global menus, and a configurable Control Center.">Barra superior opcional, menus globais compatíveis e uma Central de Controle configurável.</p></div><span class="roadmap-status" data-pt="PLANEJADO" data-en="PLANNED">PLANEJADO</span></div>
+        <div class="roadmap-item"><span class="roadmap-num">B</span><div><h3 data-pt="Um launcher para suas ideias" data-en="A launcher for your ideas">Um launcher para suas ideias</h3><p data-pt="Busca rápida no estilo Raycast, com apps, comandos e extensões para o Plasma." data-en="Raycast-style quick search for apps, commands, and Plasma extensions.">Busca rápida no estilo Raycast, com apps, comandos e extensões para o Plasma.</p></div><span class="roadmap-status" data-pt="PLANEJADO" data-en="PLANNED">PLANEJADO</span></div>
+        <div class="roadmap-item"><span class="roadmap-num">C</span><div><h3 data-pt="Seu setup, mais conectado" data-en="A more connected setup">Seu setup, mais conectado</h3><p data-pt="Bateria, Spotify, Steam, áreas de trabalho e perfis para diferentes momentos." data-en="Battery, Spotify, Steam, virtual desktops, and profiles for different moments.">Bateria, Spotify, Steam, áreas de trabalho e perfis para diferentes momentos.</p></div><span class="roadmap-status" data-pt="PLANEJADO" data-en="PLANNED">PLANEJADO</span></div>
+        <div class="roadmap-item"><span class="roadmap-num">D</span><div><h3 data-pt="Notificações que encontram você" data-en="Notifications that find you">Notificações que encontram você</h3><p data-pt="Toast, HUD e Dynamic Island, integrados com as notificações nativas do Plasma." data-en="Toast, HUD, and Dynamic Island integrated with native Plasma notifications.">Toast, HUD e Dynamic Island, integrados com as notificações nativas do Plasma.</p></div><span class="roadmap-status" data-pt="PLANEJADO" data-en="PLANNED">PLANEJADO</span></div>
+      </div><a class="roadmap-link" href="https://github.com/caiolombello/orla-desktop/blob/main/ROADMAP.md" target="_blank" rel="noreferrer"><span data-pt="Veja o roadmap completo no GitHub" data-en="See the full roadmap on GitHub">Veja o roadmap completo no GitHub</span><span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="install section-pad" id="instalar">
+      <div class="install-orbit install-orbit-a"></div><div class="install-orbit install-orbit-b"></div>
+      <div class="install-content"><div class="section-kicker"><span>05</span><span data-pt="PRIMEIROS PASSOS" data-en="GETTING STARTED">PRIMEIROS PASSOS</span></div><h2 data-pt="Um dock novo<br><em>na sua orla.</em>" data-en="A new dock<br><em>on your desktop.</em>">Um dock novo<br><em>na sua orla.</em></h2><p data-pt="Orla Dock 0.2.1 alpha é para quem quer experimentar e ajudar o projeto a crescer." data-en="Orla Dock 0.2.1 alpha is for people who want to try it out and help the project grow.">Orla Dock 0.2.1 alpha é para quem quer experimentar e ajudar o projeto a crescer.</p>
+        <div class="requirements"><span data-pt="REQUISITOS" data-en="REQUIREMENTS">REQUISITOS</span><div><b>KDE Plasma 6.7+</b><i>·</i><b>Python 3.10+</b><i>·</i><b>Qt 6 / PySide6</b></div></div>
+        <div class="install-command"><code id="installCommand">git clone https://github.com/caiolombello/orla-desktop.git</code><button type="button" id="copyCommand" aria-label="Copiar comando de clonagem" title="Copiar"><span class="copy-label" data-pt="Copiar" data-en="Copy">Copiar</span><span aria-hidden="true">▢</span></button></div>
+        <p class="install-next" data-pt="Depois, entre na pasta do projeto e siga os passos de instalação do README. O pacote pode ser gerado localmente pelo script de build." data-en="Then enter the project folder and follow the README installation steps. Build the package locally with the build script.">Depois, entre na pasta do projeto e siga os passos de instalação do README. O pacote pode ser gerado localmente pelo script de build.</p>
+        <div class="install-actions"><a class="button button-light" href="https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.1"><span data-pt="Baixar versão alpha" data-en="Download the alpha">Baixar versão alpha</span><span aria-hidden="true">↗</span></a><a class="install-readme" href="https://github.com/caiolombello/orla-desktop/blob/main/README.pt-BR.md#instalar-uma-versao-publicada" data-pt-href="https://github.com/caiolombello/orla-desktop/blob/main/README.pt-BR.md#instalar-uma-versao-publicada" data-en-href="https://github.com/caiolombello/orla-desktop#install-a-release" data-pt="Leia a instalação completa" data-en="Read full installation guide">Leia a instalação completa</a></div>
+        <p class="install-note" data-pt="Versão alpha: alguns recursos dependem de serviços do Plasma e da configuração do seu sistema. Consulte as notas da versão e o README." data-en="Alpha release: some features depend on Plasma services and your system setup. Check the release notes and README.">Versão alpha: alguns recursos dependem de serviços do Plasma e da configuração do seu sistema. Consulte as notas da versão e o README.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><a class="footer-brand" href="#topo"><img src="assets/logo.svg" alt="" width="30" height="30"><span>orla desktop</span></a><span class="footer-note" data-pt="Um projeto independente para KDE Plasma · MIT" data-en="An independent project for KDE Plasma · MIT">Um projeto independente para KDE Plasma · MIT</span><div class="footer-links"><a href="https://github.com/caiolombello/orla-desktop" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://github.com/caiolombello/orla-desktop/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer" data-pt="Contribua" data-en="Contribute">Contribua</a><a href="https://kde.org" target="_blank" rel="noreferrer">KDE ↗</a></div><span class="footer-year">© 2026</span></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

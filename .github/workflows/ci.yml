@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  portable-tests-and-package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        run: |
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/orla-ci-venv"
+          echo "ORLA_CI_PYTHON=$RUNNER_TEMP/orla-ci-venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Install QtDBus test runtime
+        run: $ORLA_CI_PYTHON -m pip install --disable-pip-version-check PySide6-Essentials==6.12.0
+
+      - name: Verify private D-Bus runner
+        run: command -v dbus-run-session
+
+      - name: Run portable tests
+        run: |
+          $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v
+          $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_package_cli.py' -v
+
+      - name: Build release bundle and checksums
+        run: $ORLA_CI_PYTHON scripts/release.py
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: orla-dock-plasmoid
+          path: |
+            dist/orla-dock-*.plasmoid
+            dist/orla-dock-*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7

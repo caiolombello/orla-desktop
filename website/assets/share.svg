@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="93" y1="14" x2="1018" y2="690" gradientUnits="userSpaceOnUse"><stop stop-color="#111923"/><stop offset="1" stop-color="#283542"/></linearGradient>
+    <linearGradient id="sea" x1="739" y1="186" x2="1088" y2="593" gradientUnits="userSpaceOnUse"><stop stop-color="#89E5D1"/><stop offset="1" stop-color="#3D948B"/></linearGradient>
+    <linearGradient id="hill" x1="863" y1="334" x2="921" y2="576" gradientUnits="userSpaceOnUse"><stop stop-color="#547A7C"/><stop offset="1" stop-color="#20383F"/></linearGradient>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h1200v630H0z"/>
+  <circle cx="1000" cy="121" r="196" fill="#69D7C2" fill-opacity=".06"/>
+  <circle cx="1020" cy="310" r="218" stroke="#A7DBCE" stroke-opacity=".16"/>
+  <circle cx="1020" cy="310" r="274" stroke="#A7DBCE" stroke-opacity=".09"/>
+  <path fill="#111923" d="M748 183h404v289H748z"/>
+  <rect x="748" y="183" width="404" height="289" rx="9" fill="#1B343C" stroke="#A7DBCE" stroke-opacity=".55"/>
+  <path fill="#718B7E" d="M757 192h386v272H757z"/>
+  <circle cx="1021" cy="280" r="56" fill="#E6D09F"/>
+  <path d="M757 374c88-54 145-40 211-76 68-37 127-43 189-10v176H757V374Z" fill="url(#hill)"/>
+  <path d="M757 403c111-11 164 20 248-7 62-18 111-6 152 12v56H757v-61Z" fill="url(#sea)"/>
+  <rect x="854" y="407" width="191" height="39" rx="12" fill="#111923" fill-opacity=".88" stroke="#EAF4F1" stroke-opacity=".4"/>
+  <rect x="868" y="415" width="23" height="23" rx="6" fill="#69D7C2"/><rect x="899" y="415" width="23" height="23" rx="6" fill="#EAF4F1"/><rect x="930" y="415" width="23" height="23" rx="6" fill="#E7BDAA"/><rect x="975" y="415" width="23" height="23" rx="6" fill="#A3D7C4"/><rect x="1006" y="415" width="23" height="23" rx="6" fill="#EAF4F1"/>
+  <rect x="71" y="78" width="56" height="56" rx="18" fill="#111923" stroke="#69D7C2" stroke-opacity=".75"/>
+  <path d="M84 115a15 15 0 0 1 30 0M80 119h38" stroke="#69D7C2" stroke-width="3" stroke-linecap="round"/>
+  <text x="145" y="116" fill="#EAF4F1" font-family="system-ui,sans-serif" font-size="33" font-weight="650" letter-spacing="-1">orla desktop</text>
+  <text x="74" y="249" fill="#69D7C2" font-family="system-ui,sans-serif" font-size="15" font-weight="700" letter-spacing="3">UM ESPAÇO FEITO PARA VOCÊ</text>
+  <text x="72" y="332" fill="#F4F0E8" font-family="Georgia,serif" font-size="67" letter-spacing="-3">Seu desktop.</text>
+  <text x="72" y="402" fill="#69D7C2" font-family="Georgia,serif" font-size="67" font-style="italic" letter-spacing="-3">Seu ritmo.</text>
+  <text x="76" y="470" fill="#C1D2CC" font-family="system-ui,sans-serif" font-size="20">Um dock nativo e personalizável para KDE Plasma.</text>
+  <rect x="75" y="526" width="140" height="34" rx="2" fill="#69D7C2"/>
+  <text x="91" y="548" fill="#111923" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="1.2">OPEN SOURCE · MIT</text>
+</svg>

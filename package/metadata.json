@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Id": "org.caiodock.dock",
+        "Name": "Orla Dock",
+        "Description": "A customizable native dock for KDE Plasma — Orla Desktop alpha",
+        "Description[pt_BR]": "Um dock nativo e personalizável para KDE Plasma — Orla Desktop alpha",
+        "Icon": "preferences-desktop-launch-feedback",
+        "Category": "Application Launchers",
+        "Version": "0.2.1",
+        "License": "MIT",
+        "Authors": [{ "Name": "Caio Barbieri", "Website": "https://github.com/caiolombello" }],
+        "Website": "https://github.com/caiolombello/orla-desktop",
+        "BugReportUrl": "https://github.com/caiolombello/orla-desktop/issues"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.7",
+    "X-Plasma-FormFactors": ["horizontal", "planar"]
+}
