@@ -139,6 +139,14 @@ Item {
         }
     }
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: surface.hasEvent
+        acceptedButtons: Qt.AllButtons
+        preventStealing: true
+        onWheel: wheel => wheel.accepted = true
+    }
+
     Controls.Button {
         id: closeButton
         objectName: "localEventClose"

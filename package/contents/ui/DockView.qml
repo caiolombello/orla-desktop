@@ -250,11 +250,23 @@ Item {
     }
     function revealInViewport(control) {
         if (!control || !control.activeFocus) return;
+        let item = control;
+        while (item && item !== content) item = item.parent;
+        if (item !== content) return;
         const point = control.mapToItem(content, 0, 0);
+        const coveredWidth = localEventSurface.visible ? root.eventSlotWidth : 0;
+        const visibleWidth = Math.max(0, viewport.width - coveredWidth);
         const maximum = Math.max(0, viewport.contentWidth - viewport.width);
         if (point.x < viewport.contentX) viewport.contentX = Math.max(0, point.x);
-        else if (point.x + control.width > viewport.contentX + viewport.width)
-            viewport.contentX = Math.min(maximum, control.width > viewport.width ? point.x : point.x + control.width - viewport.width);
+        else if (point.x + control.width > viewport.contentX + visibleWidth)
+            viewport.contentX = Math.min(maximum, control.width > visibleWidth ? point.x : point.x + control.width - visibleWidth);
+    }
+    function revealAfterGeometryChange() {
+        Qt.callLater(() => {
+            const window = root.Window.window;
+            if (root.ready && localEventSurface.visible && window)
+                root.revealInViewport(window.activeFocusItem);
+        });
     }
     function rememberStableDockControl(control) {
         let item = control;
@@ -279,7 +291,9 @@ Item {
         target: root.Window.window
         enabled: target !== null
         function onActiveFocusItemChanged() {
-            root.rememberStableDockControl(root.Window.window.activeFocusItem);
+            const control = root.Window.window.activeFocusItem;
+            root.rememberStableDockControl(control);
+            root.revealInViewport(control);
         }
     }
 
@@ -388,7 +402,9 @@ Item {
         y: root.outerMargin
         width: root.centerViewportWidth
         height: Math.max(0, root.height - root.outerMargin * 2)
-        contentWidth: content.width
+        // Extend Qt's actual bounds without moving or resizing ordinary controls.
+        contentWidth: content.width + (localEventSurface.visible ? root.eventSlotWidth : 0)
+        onWidthChanged: root.revealAfterGeometryChange()
         contentHeight: height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -397,6 +413,7 @@ Item {
         Row {
             id: content
             objectName: "dockContent"
+            onWidthChanged: root.revealAfterGeometryChange()
             height: viewport.height
             spacing: appearanceState.effective.tokens.spacing
             Item {
