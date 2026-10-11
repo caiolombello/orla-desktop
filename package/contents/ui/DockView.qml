@@ -46,6 +46,7 @@ Item {
     readonly property int outerMargin: 10
     readonly property int laneGap: 6
     readonly property bool localEventsRequested: Boolean(configuration.showLocalToasts)
+        || Boolean(presentation.showAudioHud)
     readonly property int settingsLaneWidth: settingsButton.implicitWidth
     readonly property int minimumTaskWidth: tileSize + 16
     readonly property int innerWidth: Math.max(0, width - outerMargin * 2)
@@ -313,7 +314,14 @@ Item {
                 ? qsTr("Foco concluído. Hora de uma pausa!") : qsTr("Pausa concluída. Pronto para focar?");
         }
     }
-    EventState { id: localEventState; enabled: root.localEventsActive }
+    EventState {
+        id: localEventState
+        enabled: root.localEventsProfileReady && root.candidateEventSlotWidth >= 48
+        completionEnabled: enabled && Boolean(root.configuration.showLocalToasts)
+        audioEnabled: enabled && Boolean(root.presentation.showAudioHud)
+        activeScope: "profile:" + profileState.activeProfileId
+        activeContextGeneration: profileState.revision
+    }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
     Rectangle {
@@ -379,7 +387,7 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
-        Controls.ScrollBar.horizontal: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
+        Controls.ScrollBar.horizontal: Controls.ScrollBar { policy: Controls.ScrollBar.AlwaysOff }
         Row {
             id: content
             objectName: "dockContent"
@@ -602,6 +610,20 @@ Item {
         objectName: "audioControlState"
         active: controlCenterPopup.visible
         backend: root.audioBackendOverride !== null ? root.audioBackendOverride : nativeAudioBackend.item
+        requestOriginScope: "profile:" + profileState.activeProfileId
+        requestContextGeneration: profileState.revision
+        onConfirmed: receipt => {
+            let title = "";
+            let detail = receipt.targetLabel;
+            if (receipt.action === "volume") title = qsTr("Volume · %1%").arg(receipt.value);
+            else if (receipt.action === "mute") title = receipt.value ? qsTr("Som silenciado") : qsTr("Som ativado");
+            else title = qsTr("Saída de áudio alterada");
+            localEventState.submit({
+                kind: "audio", action: receipt.action, targetId: receipt.targetId,
+                originScope: receipt.originScope, contextGeneration: receipt.contextGeneration,
+                value: receipt.value, title: title, detail: detail
+            }, Date.now());
+        }
     }
     DockPopup {
         id: controlCenterPopup

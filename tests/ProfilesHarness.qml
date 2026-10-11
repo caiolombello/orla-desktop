@@ -20,6 +20,7 @@ Item {
         property bool showQuota: true
         property bool showPeripherals: true
         property bool showRecording: true
+        property bool showAudioHud: false
         property bool calendarEvents: true
         property bool currentDesktopOnly: false
         property int focusMinutes: 25

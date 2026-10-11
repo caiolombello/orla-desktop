@@ -32,7 +32,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 
 
 class LocalEventsProductTests(unittest.TestCase):
@@ -101,6 +101,18 @@ class LocalEventsProductTests(unittest.TestCase):
         defaults = [child.text for child in entries[0] if child.tag.endswith("default")]
         self.assertEqual(defaults, ["false"])
 
+    def test_audio_hud_kconfig_is_typed_default_off_and_scrollbar_chrome_is_hidden(self):
+        import xml.etree.ElementTree as ET
+        document = ET.parse(ROOT / "package/contents/config/main.xml")
+        entries = [entry for entry in document.iter() if entry.tag.endswith("entry")
+                   and entry.attrib.get("name") == "showAudioHud"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].attrib.get("type"), "Bool")
+        self.assertEqual([child.text for child in entries[0] if child.tag.endswith("default")], ["false"])
+        source = (ROOT / "package/contents/ui/DockView.qml").read_text()
+        self.assertIn("Controls.ScrollBar.AlwaysOff", source)
+        self.assertIn("Flickable.HorizontalFlick", source)
+
     def test_enabled_layout_uses_fixed_settings_center_viewport_and_reserved_toast(self):
         settings = self.window.findChild(QQuickItem, "settingsButton")
         placeholder = self.window.findChild(QQuickItem, "settingsPlaceholder")
@@ -149,6 +161,44 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertTrue(self.config.property("showLocalToasts"))
         self.assertEqual(self.config.property("profilesJSON"), before)
         self.assertTrue(checkbox.property("checked"))
+
+    def test_audio_hud_setting_is_profile_projection_and_confirmed_dock_action_is_local(self):
+        checkbox = self.window.findChild(QQuickItem, "showAudioHud")
+        self.assertIsNotNone(checkbox)
+        before = self.config.property("profilesJSON")
+        self.evaluate("click()", checkbox)
+        self.settle()
+        self.assertTrue(self.config.property("showAudioHud"))
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.configure_dock(320, 102, 64)
+        self.assertTrue(self.evaluate("localEventsRequested"))
+        self.assertTrue(self.evaluate("localEventsActive"))
+
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        self.evaluate("open()", popup)
+        self.settle()
+        audio = self.window.findChild(QObject, "audioControlState")
+        backend = self.window.findChild(QObject, "dockAudioBackend")
+        self.assertTrue(self.evaluate("requestVolume(80)", audio))
+        self.evaluate("snapshot={status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes sintéticos',volumeRaw:52429,muted:false,writable:true,isDefault:true}]}; revision+=1", backend)
+        self.settle()
+        current = self.event_state().property("current")
+        current = current.toVariant() if hasattr(current, "toVariant") else current
+        self.assertEqual(current["kind"], "audio")
+        self.assertEqual(current["value"], 80)
+        self.assertEqual(current["originScope"], "profile:legacy")
+        self.assertEqual(current["contextGeneration"], self.evaluate("profiles.revision"))
+
+        self.dock.setProperty("notice", "")
+        self.config.setProperty("completedFocus", 0)
+        self.config.setProperty("timerBreak", False)
+        self.config.setProperty("timerDeadline", 1000)
+        self.evaluate("pomodoro.poll(1001)")
+        self.assertEqual(self.dock.property("notice"), "Foco concluído. Hora de uma pausa!")
+        still_current = self.event_state().property("current")
+        still_current = still_current.toVariant() if hasattr(still_current, "toVariant") else still_current
+        self.assertEqual(still_current["kind"], "audio")
 
     def test_pomodoro_routes_completion_to_exactly_one_destination(self):
         state = self.event_state()
@@ -240,6 +290,188 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertFalse(self.evaluate(f"advance({current['deadline'] - 1})", state))
         self.assertTrue(self.evaluate(f"advance({current['deadline']})", state))
         self.assertIsNone(state.property("current"))
+
+    def test_audio_and_completion_admission_are_independent_and_scope_clears_only_audio(self):
+        state = self.event_state()
+        state.setProperty("enabled", True)
+        state.setProperty("activeScope", "profile:work")
+        state.setProperty("activeContextGeneration", 4)
+        state.setProperty("completionEnabled", False)
+        state.setProperty("audioEnabled", True)
+        audio = "{kind:'audio',action:'volume',targetId:'speakers',originScope:'profile:work',contextGeneration:4,value:80,title:'Volume · 80%',detail:'Alto-falantes'}"
+        completion = "{kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Hora de uma pausa!'}"
+        self.assertTrue(self.evaluate(f"submit({audio},Date.now())", state))
+        self.assertFalse(self.evaluate(f"submit({completion},Date.now())", state))
+        state.setProperty("completionEnabled", True)
+        self.assertTrue(self.evaluate(f"submit({completion},Date.now())", state))
+        self.assertEqual(state.property("count"), 2)
+        state.setProperty("activeContextGeneration", 5)
+        events = self.evaluate("JSON.stringify(allEvents())", state)
+        events = __import__("json").loads(events)
+        self.assertEqual([event["kind"] for event in events], ["completion"])
+        state.setProperty("audioEnabled", False)
+        self.assertIsNotNone(state.property("current"))
+        state.setProperty("completionEnabled", False)
+        self.assertIsNone(state.property("current"))
+
+    def test_audio_union_origin_coalescence_public_capacity_and_private_selector(self):
+        import json
+        state = self.event_state()
+        state.setProperty("enabled", True)
+        state.setProperty("completionEnabled", True)
+        state.setProperty("audioEnabled", True)
+        state.setProperty("activeScope", "profile:work")
+        state.setProperty("activeContextGeneration", 4)
+
+        def audio(target, value=50):
+            return {"kind": "audio", "action": "volume", "targetId": target,
+                    "originScope": "profile:work", "contextGeneration": 4, "value": value,
+                    "title": f"Volume · {value}%", "detail": target}
+
+        valid = audio("speaker")
+        for mutation in (
+            {**valid, "originScope": "profile:other"},
+            {**valid, "contextGeneration": 3},
+            {**valid, "value": 101},
+            {**valid, "extra": True},
+            {**valid, "action": "unknown"},
+            {**valid, "targetId": "bad\noutput"},
+        ):
+            self.assertFalse(self.evaluate(f"submit({json.dumps(mutation)},1000)", state))
+        self.assertTrue(self.evaluate(f"submit({json.dumps(valid)},1000)", state))
+        self.assertTrue(self.evaluate(f"submit({json.dumps({**valid, 'value': 60, 'title': 'Volume · 60%'})},1100)", state))
+        self.assertEqual(state.property("count"), 1)
+        self.assertEqual(self.evaluate("current.value", state), 60)
+
+        completion = {"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                      "title": "Foco concluído", "detail": "Pausa"}
+        self.evaluate("clear()", state)
+        for index in range(8):
+            self.assertTrue(self.evaluate(f"submit({json.dumps(audio(f'out{index}'))},{1200 + index})", state))
+        self.assertFalse(self.evaluate(f"submit({json.dumps(completion)},1300)", state))
+        self.assertEqual(state.property("count"), 8)
+
+        self.evaluate("clear()", state)
+        for index in range(7):
+            self.assertTrue(self.evaluate(f"submit({json.dumps(audio(f'out{index}'))},{1400 + index})", state))
+        self.assertTrue(self.evaluate(f"submit({json.dumps(completion)},1410)", state))
+        self.assertTrue(self.evaluate(f"submit({json.dumps(audio('out7'))},1411)", state))
+        kinds = json.loads(self.evaluate("JSON.stringify(allEvents().map(event=>event.kind))", state))
+        self.assertEqual(kinds, ["audio"] * 8)
+
+        self.evaluate("clear()", state)
+        for index in range(8):
+            self.assertTrue(self.evaluate(f"submit({json.dumps(audio(f'out{index}'))},{1500 + index})", state))
+        self.assertTrue(self.evaluate(f"submit({json.dumps(audio('out8'))},1510)", state))
+        targets = json.loads(self.evaluate("JSON.stringify(allEvents().map(event=>event.targetId))", state))
+        self.assertIn("out8", targets)
+        self.assertNotIn("out1", targets)
+
+        selected = json.loads(self.evaluate("JSON.stringify(selectPrevalidated(["
+            "{priority:10,sequence:1},{priority:10,sequence:2},{priority:10,sequence:3},"
+            "{priority:10,sequence:4},{priority:10,sequence:5},{priority:10,sequence:6},"
+            "{priority:10,sequence:7},{priority:10,sequence:8},{priority:20,sequence:9}]))", state))
+        self.assertEqual(selected["current"]["sequence"], 9)
+        self.assertEqual(len(selected["pending"]), 7)
+        self.assertNotIn(1, [entry["sequence"] for entry in selected["pending"]])
+
+    def test_completion_and_debounced_audio_announcements_are_state_owned(self):
+        import json
+        state = self.event_state()
+        state.setProperty("enabled", True)
+        state.setProperty("completionEnabled", True)
+        state.setProperty("audioEnabled", True)
+        state.setProperty("activeScope", "profile:work")
+        state.setProperty("activeContextGeneration", 4)
+        announced = QSignalSpy(state.announcementRequested)
+        completion = "{kind:'completion',key:'pomodoro:completion',scope:'global',title:'Foco concluído',detail:'Pausa'}"
+        self.assertTrue(self.evaluate(f"submit({completion},1000)", state))
+        self.assertEqual(announced.count(), 1)
+        self.assertTrue(self.evaluate(f"submit({completion},1100)", state))
+        self.assertEqual(announced.count(), 1)
+        self.evaluate("clear()", state)
+
+        audio = "{kind:'audio',action:'volume',targetId:'speaker',originScope:'profile:work',contextGeneration:4,value:20,title:'Volume · 20%',detail:'Speaker'}"
+        self.assertTrue(self.evaluate(f"submit({audio},2000); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertEqual(announced.count(), 1)
+        self.assertTrue(self.evaluate("fireAudioQuiet(2200)", state))
+        self.assertEqual(announced.count(), 2)
+
+        updated = audio.replace("20", "30")
+        self.assertTrue(self.evaluate(f"submit({updated},2300); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertTrue(self.evaluate("fireAudioMaximum(3300)", state))
+        self.assertEqual(announced.count(), 3)
+        payload = announced.at(2)[0]
+        payload = payload.toVariant() if hasattr(payload, "toVariant") else payload
+        self.assertIn("30%", payload["accessibleName"])
+
+        self.evaluate("clear()", state)
+        first = audio.replace("speaker", "one").replace("Speaker", "One")
+        second = audio.replace("speaker", "two").replace("Speaker", "Two")
+        self.assertTrue(self.evaluate(f"submit({first},4000); submit({second},4001); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertEqual(announced.count(), 3)
+        self.assertTrue(self.evaluate("dismiss(4100); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertTrue(self.evaluate("fireAudioQuiet(4300)", state))
+        self.assertEqual(announced.count(), 4)
+        current = json.loads(self.evaluate("JSON.stringify(current)", state))
+        self.assertEqual(current["targetId"], "two")
+
+    def test_completion_resume_unseen_drop_audio_maximum_and_cancellation_are_deterministic(self):
+        import json
+        state = self.event_state()
+        state.setProperty("enabled", True)
+        state.setProperty("completionEnabled", True)
+        state.setProperty("audioEnabled", True)
+        state.setProperty("activeScope", "profile:work")
+        state.setProperty("activeContextGeneration", 4)
+        announced = QSignalSpy(state.announcementRequested)
+        completion = {"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                      "title": "Foco concluído", "detail": "Pausa"}
+
+        def audio(target, value):
+            return {"kind": "audio", "action": "volume", "targetId": target,
+                    "originScope": "profile:work", "contextGeneration": 4, "value": value,
+                    "title": f"Volume · {value}%", "detail": target}
+
+        self.assertTrue(self.evaluate(f"submit({json.dumps(completion)},1000)", state))
+        self.assertEqual(announced.count(), 1)
+        self.assertTrue(self.evaluate(f"submit({json.dumps(audio('speaker', 20))},1001); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertTrue(self.evaluate("dismiss(1100)", state))
+        self.assertEqual(announced.count(), 1)
+
+        self.evaluate("clear()", state)
+        for index in range(8):
+            self.assertTrue(self.evaluate(f"submit({json.dumps(audio(f'out{index}', 40))},{2000 + index}); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertFalse(self.evaluate(f"submit({json.dumps(completion)},2010)", state))
+        self.assertEqual(announced.count(), 1)
+
+        self.evaluate("clear()", state)
+        for timestamp, value in ((3000, 10), (3100, 20), (3190, 30), (3380, 40), (3570, 50), (3760, 60), (3950, 70)):
+            self.assertTrue(self.evaluate(f"submit({json.dumps(audio('burst', value))},{timestamp}); audioQuiet.stop(); audioMaximum.stop(); true", state))
+        self.assertTrue(self.evaluate("fireAudioMaximum(4000)", state))
+        self.assertEqual(announced.count(), 2)
+        payload = announced.at(1)[0]
+        payload = payload.toVariant() if hasattr(payload, "toVariant") else payload
+        self.assertIn("70%", payload["accessibleName"])
+
+        for mode in ("scope", "disable", "dismiss", "expiry"):
+            with self.subTest(mode=mode):
+                self.evaluate("clear()", state)
+                state.setProperty("audioEnabled", True)
+                state.setProperty("activeScope", "profile:work")
+                state.setProperty("activeContextGeneration", 4)
+                self.assertTrue(self.evaluate(f"submit({json.dumps(audio(mode, 55))},5000); audioQuiet.stop(); audioMaximum.stop(); true", state))
+                before = announced.count()
+                if mode == "scope":
+                    state.setProperty("activeContextGeneration", 5)
+                elif mode == "disable":
+                    state.setProperty("audioEnabled", False)
+                elif mode == "dismiss":
+                    self.evaluate("dismiss(5100)", state)
+                else:
+                    self.evaluate("advance(6800)", state)
+                self.assertFalse(self.evaluate("fireAudioQuiet(7000)", state))
+                self.assertEqual(announced.count(), before)
 
     def test_enabled_arrival_does_not_move_focus_scroll_or_resize_and_90px_keeps_full_name(self):
         self.config.setProperty("showLocalToasts", True)

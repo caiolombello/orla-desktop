@@ -69,6 +69,37 @@ class ProfilesTests(unittest.TestCase):
             self.assertEqual(self.configuration_value(key), baseline[key])
         self.assertEqual(self.warnings, [])
 
+    def test_audio_hud_defaults_off_migrates_in_memory_and_serializes_only_on_commit(self):
+        self.assertFalse(self.snapshot()["showAudioHud"])
+        saved = self.initialize()
+        self.assertTrue(all(profile["showAudioHud"] is False for profile in saved["profiles"]))
+        old = json.loads(json.dumps(saved))
+        for profile in old["profiles"]:
+            profile.pop("showAudioHud")
+        old_raw = json.dumps(old, separators=(",", ":"))
+        self.config.setProperty("profilesJSON", old_raw)
+        self.assertTrue(self.state.property("writable"))
+        self.assertEqual(self.config.property("profilesJSON"), old_raw)
+        self.assertFalse(self.snapshot()["showAudioHud"])
+
+        self.assertTrue(self.command("select", "work"))
+        self.assertTrue(self.command("commitPresentation", {"showAudioHud": True}))
+        canonical = json.loads(self.config.property("profilesJSON"))
+        work = next(profile for profile in canonical["profiles"] if profile["id"] == "work")
+        personal = next(profile for profile in canonical["profiles"] if profile["id"] == "personal")
+        self.assertTrue(work["showAudioHud"])
+        self.assertFalse(personal["showAudioHud"])
+        self.assertFalse(self.config.property("showAudioHud"))
+        self.assertTrue(self.command("select", "personal"))
+        self.assertFalse(self.snapshot()["showAudioHud"])
+
+        invalid = json.loads(json.dumps(canonical))
+        invalid["profiles"][0]["showAudioHud"] = "true"
+        invalid_raw = json.dumps(invalid)
+        self.config.setProperty("profilesJSON", invalid_raw)
+        self.assertFalse(self.state.property("writable"))
+        self.assertEqual(self.config.property("profilesJSON"), invalid_raw)
+
     def test_invalid_document_and_composition_are_rejected_without_rewriting(self):
         saved = self.initialize()
         invalid = [{**saved, "activeProfileId": "missing"}, {**saved, "profiles": []},

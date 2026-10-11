@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Private lifecycle and numeric Ollama adapter for bounded AI text transport.
+"""Private lifecycle and injected HTTP adapters for bounded AI text transport.
 
 The T2.3 stdlib adapter accepts only literal loopback IPv4/IPv6 destinations.
-Its factories remain injectable for offline tests, and the command-line entry
-point remains unavailable.
+The T2.4 OpenAI adapter requires an injected TCP acquisition port and performs
+no operational name resolution or socket creation. All factories remain
+injectable for offline tests, and the command-line entry point remains
+unavailable.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import json
 from pathlib import Path
 import re
 import socket
+import ssl
 import sys
 
 
@@ -34,6 +37,10 @@ _OLLAMA_URL = re.compile(
     r"^http://(?P<host>127\.0\.0\.1|\[::1\]):(?P<port>[0-9]{1,5})/api/chat$"
 )
 _OLLAMA_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_OPENAI_URL = "https://api.openai.com/v1/responses"
+_OPENAI_HOST = "api.openai.com"
+_OPENAI_PORT = 443
+_OPENAI_PATH = "/v1/responses"
 
 
 def _load_contract():
@@ -127,6 +134,93 @@ class _NumericHTTPConnection(http.client.HTTPConnection):
             raise OSError("numeric socket cleanup failed")
 
 
+class _OpenAIHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection with an explicit injected TCP acquisition boundary."""
+
+    def __init__(self, *, host, port, context, tcp_port, clock, timeout=None):
+        super().__init__(host, port, timeout=timeout, context=context)
+        self._tls_context = context
+        self._tcp_port = tcp_port
+        self._clock = clock
+        self._owned_raw_socket = None
+        self._owned_tls_socket = None
+        self._tcp_acquisition_unconfirmed = False
+        self._wrap_transfer_unconfirmed = False
+        self._cleanup_failed = False
+
+    def _remaining_connect(self, deadline):
+        remaining = deadline - self._clock()
+        if remaining <= 0:
+            raise TimeoutError()
+        return remaining
+
+    def connect(self):
+        deadline = self._clock() + self.timeout
+        budget = self._remaining_connect(deadline)
+        try:
+            raw = self._tcp_port.acquire(
+                host=self.host, port=self.port, budget=budget,
+            )
+        except Exception:
+            self._tcp_acquisition_unconfirmed = True
+            self._cleanup_failed = True
+            raise
+
+        self._owned_raw_socket = raw
+        self.sock = raw
+        raw.settimeout(self._remaining_connect(deadline))
+        self._remaining_connect(deadline)
+        try:
+            wrapped = self._tls_context.wrap_socket(
+                raw, server_hostname=_OPENAI_HOST,
+                do_handshake_on_connect=False,
+            )
+        except Exception:
+            self._wrap_transfer_unconfirmed = True
+            self._cleanup_failed = True
+            raise
+
+        self._owned_tls_socket = wrapped
+        self.sock = wrapped
+        self._owned_raw_socket = None
+        wrapped.settimeout(self._remaining_connect(deadline))
+        self._remaining_connect(deadline)
+        wrapped.do_handshake()
+        self._remaining_connect(deadline)
+
+    def close(self):
+        raw = self._owned_raw_socket
+        wrapped = self._owned_tls_socket
+        prior_failure = self._cleanup_failed
+        parent_failed = False
+        wrapped_failed = False
+        raw_failed = False
+        self.sock = None
+        try:
+            super().close()
+        except Exception:
+            self._cleanup_failed = True
+            parent_failed = True
+        if wrapped is not None:
+            try:
+                wrapped.close()
+            except Exception:
+                self._cleanup_failed = True
+                wrapped_failed = True
+            else:
+                self._owned_tls_socket = None
+        if raw is not None:
+            try:
+                raw.close()
+            except Exception:
+                self._cleanup_failed = True
+                raw_failed = True
+            else:
+                self._owned_raw_socket = None
+        if prior_failure or parent_failed or wrapped_failed or raw_failed:
+            raise OSError("HTTPS connection cleanup failed")
+
+
 def _validate_ollama_body(body):
     if not isinstance(body, dict) or set(body) != {
             "model", "messages", "stream", "options"}:
@@ -162,7 +256,32 @@ def _validate_ollama_body(body):
     return encoded
 
 
-def _validated_ollama_headers(response):
+def _validate_openai_body(body):
+    if not isinstance(body, dict) or set(body) != {
+            "model", "instructions", "input", "stream", "store", "tools",
+            "max_output_tokens"}:
+        raise _contract.ContractError("invalid_request")
+    for name in ("model", "instructions", "input"):
+        value = body[name]
+        if (not isinstance(value, str) or not value or "\x00" in value):
+            raise _contract.ContractError("invalid_request")
+    if (body["stream"] is not True or body["store"] is not False or
+            type(body["tools"]) is not list or body["tools"] or
+            type(body["max_output_tokens"]) is not int or
+            body["max_output_tokens"] != 1024):
+        raise _contract.ContractError("invalid_request")
+    try:
+        encoded = json.dumps(
+            body, ensure_ascii=False, allow_nan=False, separators=(",", ":"),
+        ).encode("utf-8", errors="strict")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        raise _contract.ContractError("invalid_request") from None
+    if len(encoded) > MAX_HTTP_REQUEST_BODY_BYTES:
+        raise _contract.ContractError("response_limit")
+    return encoded
+
+
+def _validated_response_headers(response, media_types):
     try:
         headers = response.getheaders()
     except (http.client.HTTPException, OSError):
@@ -195,9 +314,7 @@ def _validated_ollama_headers(response):
             values[lower] = value
 
     media = values.get("content-type")
-    if media not in (
-            "application/x-ndjson",
-            "application/x-ndjson; charset=utf-8"):
+    if media not in media_types:
         raise _contract.ContractError("protocol_invalid")
     transfer = values.get("transfer-encoding")
     length_text = values.get("content-length")
@@ -219,6 +336,20 @@ def _validated_ollama_headers(response):
             raise _contract.ContractError("response_limit")
         length = int(normalized)
     return length, transfer
+
+
+def _validated_ollama_headers(response):
+    return _validated_response_headers(response, (
+        "application/x-ndjson",
+        "application/x-ndjson; charset=utf-8",
+    ))
+
+
+def _validated_openai_headers(response):
+    return _validated_response_headers(response, (
+        "text/event-stream",
+        "text/event-stream; charset=utf-8",
+    ))
 
 
 class _ValidatedHTTPResponse:
@@ -387,6 +518,143 @@ class _OllamaNumericConnector:
             cleanup_failed = True
         if cleanup_failed:
             raise OSError("numeric connector cleanup failed")
+
+
+class _OpenAIHTTPSConnector:
+    """Closed HTTPS adapter requiring a caller-supplied TCP acquisition port."""
+
+    def __init__(self, spec, *, tcp_port, clock, context_factory=None,
+                 connection_factory=None):
+        if (not isinstance(spec, dict) or
+                set(spec) != {"provider", "url"} or
+                spec.get("provider") != "openai_api" or
+                spec.get("url") != _OPENAI_URL):
+            raise _contract.ContractError("endpoint_rejected")
+        acquire = getattr(tcp_port, "acquire", None)
+        if not callable(acquire) or not callable(clock):
+            raise _contract.ContractError("endpoint_rejected")
+
+        make_context = ssl.create_default_context if context_factory is None else context_factory
+        context = make_context()
+        if (getattr(context, "verify_mode", None) != ssl.CERT_REQUIRED or
+                getattr(context, "check_hostname", None) is not True or
+                getattr(context, "keylog_filename", None) is not None):
+            raise _contract.ContractError("endpoint_rejected")
+
+        factory = (_OpenAIHTTPSConnection if connection_factory is None
+                   else connection_factory)
+        self._connection = factory(
+            host=_OPENAI_HOST, port=_OPENAI_PORT, context=context,
+            tcp_port=tcp_port, clock=clock, timeout=None,
+        )
+        self._pending_response = None
+        self._cleanup_failed = False
+
+    def connect(self, timeout):
+        self._connection.timeout = timeout
+        try:
+            self._connection.connect()
+        except TimeoutError:
+            raise
+        except ssl.SSLError:
+            raise _TransportFailure("tls_failed", False) from None
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+
+    def _set_socket_timeout(self, timeout):
+        sock = self._connection.sock
+        if sock is None:
+            raise _TransportFailure("connection_failed", True)
+        try:
+            sock.settimeout(timeout)
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        return sock
+
+    def send(self, headers, body, timeout):
+        if (not isinstance(headers, tuple) or len(headers) != 1 or
+                not isinstance(headers[0], tuple) or len(headers[0]) != 2 or
+                headers[0][0] != "Authorization" or
+                not isinstance(headers[0][1], bytearray)):
+            raise _contract.ContractError("invalid_request")
+        credential = headers[0][1]
+        if (not 20 <= len(credential) <= 512 or
+                _CREDENTIAL.fullmatch(credential) is None):
+            raise _contract.ContractError("invalid_request")
+        encoded = _validate_openai_body(body)
+        bearer = bytearray(b"Bearer ")
+        bearer.extend(credential)
+        try:
+            self._set_socket_timeout(timeout)
+            self._connection.putrequest(
+                "POST", _OPENAI_PATH,
+                skip_host=True, skip_accept_encoding=True,
+            )
+            for name, value in (
+                    ("Host", _OPENAI_HOST),
+                    ("Content-Type", "application/json"),
+                    ("Accept", "text/event-stream"),
+                    ("Accept-Encoding", "identity"),
+                    ("Content-Length", str(len(encoded))),
+                    ("Connection", "close"),
+                    ("Authorization", bytes(bearer))):
+                self._connection.putheader(name, value)
+            self._connection.endheaders(encoded, encode_chunked=False)
+        except TimeoutError:
+            raise
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        except http.client.HTTPException:
+            raise _contract.ContractError("protocol_invalid") from None
+        finally:
+            try:
+                _wipe(bearer)
+            except Exception:
+                self._cleanup_failed = True
+
+    def receive_headers(self, timeout):
+        sock = self._set_socket_timeout(timeout)
+        try:
+            response = self._connection.getresponse()
+        except TimeoutError:
+            raise
+        except (ConnectionError, http.client.RemoteDisconnected):
+            raise _TransportFailure("connection_failed", True) from None
+        except http.client.HTTPException:
+            raise _contract.ContractError("protocol_invalid") from None
+        except OSError:
+            raise _TransportFailure("connection_failed", True) from None
+        self._pending_response = response
+        if response.status != 200:
+            code, retryable = _contract.map_http_status(response.status)
+            raise _TransportFailure(code, retryable)
+        content_length, transfer_encoding = _validated_openai_headers(response)
+        validated = _ValidatedHTTPResponse(
+            response, sock, content_length, transfer_encoding,
+        )
+        self._pending_response = None
+        return validated
+
+    def close(self):
+        cleanup_failed = self._cleanup_failed
+        response = self._pending_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                self._cleanup_failed = True
+                cleanup_failed = True
+            else:
+                self._pending_response = None
+        try:
+            self._connection.close()
+        except Exception:
+            self._cleanup_failed = True
+            cleanup_failed = True
+        if cleanup_failed:
+            raise OSError("HTTPS connector cleanup failed")
 
 
 @dataclass(frozen=True)
@@ -877,7 +1145,9 @@ def _run_call(*, input_reader, connector_factory, clock, signal_boundary, sink):
             clock, deadline, token, CONNECT_TIMEOUT,
         ))
         _check_operational(clock, deadline, token)
-        connector.send((), built["body"], _boundary_timeout(
+        request_headers = (() if request["provider"] == "ollama_local" else
+                           (("Authorization", credential),))
+        connector.send(request_headers, built["body"], _boundary_timeout(
             clock, deadline, token, SEND_TIMEOUT,
         ))
         _check_operational(clock, deadline, token)

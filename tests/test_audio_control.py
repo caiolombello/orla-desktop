@@ -42,6 +42,10 @@ class AudioControlStateTests(unittest.TestCase):
         calls = self.backend.property("calls")
         return calls.toVariant() if hasattr(calls, "toVariant") else calls
 
+    def receipts(self):
+        receipts = self.window.property("receipts")
+        return receipts.toVariant() if hasattr(receipts, "toVariant") else receipts
+
     def publish(self, expression):
         self.evaluate(f"publish({expression})", self.backend)
         QTest.qWait(10)
@@ -86,6 +90,166 @@ class AudioControlStateTests(unittest.TestCase):
         self.assertEqual(self.audio.property("pendingKind"), "")
         self.assertEqual(self.audio.property("confirmedVolume"), 80)
         self.assertEqual(self.audio.property("error"), "")
+        self.assertEqual(self.receipts(), [{"serial": 1, "action": "volume", "targetId": "speakers",
+            "targetLabel": "Alto-falantes", "value": 80, "originScope": "profile:work",
+            "contextGeneration": 4}])
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:52429,muted:false,writable:true,isDefault:true}]})")
+        self.assertEqual(len(self.receipts()), 1)
+
+    def test_reentrant_match_waits_for_true_and_false_or_throw_never_receipts(self):
+        matching = "({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:value,muted:false,writable:true,isDefault:true}]})"
+        self.evaluate("dispatchHook=function(kind,id,value){publish(%s); receiptSource.receiptCountDuringDispatch=receiptSource.receipts.length}" % matching, self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.window.property("receiptCountDuringDispatch"), 0)
+        self.assertEqual(len(self.receipts()), 1)
+
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+        self.window.setProperty("receipts", [])
+        self.backend.setProperty("rejectWrites", True)
+        self.assertFalse(self.evaluate("requestVolume(70)"))
+        self.assertEqual(self.window.property("receiptCountDuringDispatch"), 0)
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("enviar", self.audio.property("error"))
+
+        self.backend.setProperty("rejectWrites", False)
+        self.backend.setProperty("throwWrites", True)
+        self.assertFalse(self.evaluate("requestVolume(60)"))
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("enviar", self.audio.property("error"))
+
+    def test_reentrant_context_and_deadline_invalidation_cannot_recreate_serial(self):
+        self.evaluate("dispatchHook=function(kind,id,value){publish({status:'ready',normalVolume:65536,defaultOutputId:id,outputs:[{id:id,label:'Alto-falantes',volumeRaw:value,muted:false,writable:true,isDefault:true}]}); audioTarget.requestContextGeneration=5}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(self.receipts(), [])
+
+        self.audio.setProperty("requestContextGeneration", 6)
+        self.window.setProperty("fakeNow", 1000)
+        self.evaluate("dispatchHook=function(kind,id,value){publish({status:'ready',normalVolume:65536,defaultOutputId:id,outputs:[{id:id,label:'Alto-falantes',volumeRaw:value,muted:false,writable:true,isDefault:true}]}); receiptSource.fakeNow=4001}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(70)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("confirm", self.audio.property("error").lower())
+
+    def test_reentrant_service_and_target_loss_use_distinct_existing_failures(self):
+        self.evaluate("dispatchHook=function(){publish({status:'unavailable',normalVolume:65536,defaultOutputId:'',outputs:[]})}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("confirm", self.audio.property("error").lower())
+
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+        self.evaluate("dispatchHook=function(){publish({status:'ready',normalVolume:65536,defaultOutputId:'headphones',outputs:[{id:'headphones',label:'Fones',volumeRaw:16384,muted:false,writable:true,isDefault:true}]})}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("não está mais disponível", self.audio.property("error"))
+
+    def test_reentrant_historical_match_does_not_override_latest_nonmatch(self):
+        self.evaluate("dispatchHook=function(kind,id,value){publish({status:'ready',normalVolume:65536,defaultOutputId:id,outputs:[{id:id,label:'Alto-falantes',volumeRaw:value,muted:false,writable:true,isDefault:true}]}); publish({status:'ready',normalVolume:65536,defaultOutputId:id,outputs:[{id:id,label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.receipts(), [])
+        self.assertEqual(self.audio.property("pendingKind"), "volume")
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:52429,muted:false,writable:true,isDefault:true}]})")
+        self.assertEqual(len(self.receipts()), 1)
+
+    def test_displaced_outer_true_cannot_mutate_reentrant_successor_and_deactivation_is_immediate(self):
+        self.evaluate("dispatchHook=function(){dispatchHook=null; audioTarget.resetPending(); audioTarget.requestVolume(60)}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.assertEqual(self.audio.property("pendingKind"), "volume")
+        self.assertEqual(self.calls()[-1]["value"], 39322)
+        self.assertEqual(self.receipts(), [])
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:39322,muted:false,writable:true,isDefault:true}]})")
+        self.assertEqual(self.receipts()[0]["value"], 60)
+
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+        self.window.setProperty("receipts", [])
+        self.evaluate("dispatchHook=function(){audioTarget.active=false}", self.backend)
+        self.assertTrue(self.evaluate("requestVolume(70)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(self.audio.property("status"), "inactive")
+        self.assertEqual(self.receipts(), [])
+
+    def test_rejected_supersession_rechecks_old_latest_snapshot_and_preserves_failure(self):
+        self.assertTrue(self.evaluate("beginVolumeGesture()"))
+        self.assertTrue(self.evaluate("requestGestureVolume(80)"))
+        self.backend.setProperty("rejectWrites", True)
+        self.evaluate("dispatchHook=function(){publish({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:52429,muted:false,writable:true,isDefault:true}]})}", self.backend)
+        self.assertFalse(self.evaluate("requestGestureVolume(30)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(len(self.receipts()), 1)
+        self.assertEqual(self.receipts()[0]["value"], 80)
+        self.assertIn("novo volume", self.audio.property("error"))
+
+    def test_rejected_supersession_new_match_never_receipts_and_old_deadline_is_not_renewed(self):
+        self.assertTrue(self.evaluate("beginVolumeGesture()"))
+        self.assertTrue(self.evaluate("requestGestureVolume(80)"))
+        self.backend.setProperty("rejectWrites", True)
+        self.evaluate("dispatchHook=function(kind,id,value){publish({status:'ready',normalVolume:65536,defaultOutputId:id,outputs:[{id:id,label:'Alto-falantes',volumeRaw:value,muted:false,writable:true,isDefault:true}]})}", self.backend)
+        self.assertFalse(self.evaluate("requestGestureVolume(30)"))
+        self.assertEqual(self.receipts(), [])
+        self.assertEqual(self.audio.property("pendingKind"), "volume")
+        self.assertIn("novo volume", self.audio.property("error"))
+
+        self.window.setProperty("fakeNow", 4001)
+        self.evaluate("dispatchHook=null", self.backend)
+        self.assertFalse(self.evaluate("requestGestureVolume(40)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(self.receipts(), [])
+        self.assertIn("confirm", self.audio.property("error").lower())
+
+    def test_rejected_supersession_context_change_or_third_serial_prevents_restore(self):
+        self.assertTrue(self.evaluate("beginVolumeGesture()"))
+        self.assertTrue(self.evaluate("requestGestureVolume(80)"))
+        self.backend.setProperty("rejectWrites", True)
+        self.evaluate("dispatchHook=function(){audioTarget.requestContextGeneration=5}", self.backend)
+        self.assertFalse(self.evaluate("requestGestureVolume(30)"))
+        self.assertEqual(self.audio.property("pendingKind"), "")
+        self.assertEqual(self.receipts(), [])
+
+        self.audio.setProperty("requestContextGeneration", 6)
+        self.backend.setProperty("rejectWrites", False)
+        self.evaluate("dispatchHook=null", self.backend)
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+        self.assertTrue(self.evaluate("beginVolumeGesture()"))
+        self.assertTrue(self.evaluate("requestGestureVolume(80)"))
+        self.backend.setProperty("rejectWrites", True)
+        self.evaluate("dispatchHook=function(){dispatchHook=null; rejectWrites=false; audioTarget.resetPending(); audioTarget.requestVolume(60); rejectWrites=true}", self.backend)
+        self.assertFalse(self.evaluate("requestGestureVolume(30)"))
+        self.assertEqual(self.audio.property("pendingKind"), "volume")
+        self.assertEqual(self.calls()[-1]["value"], 39322)
+        self.assertEqual(self.receipts(), [])
+
+    def test_rejected_supersession_old_service_or_target_loss_overrides_replacement_error(self):
+        for snapshot, expected in (
+            ("{status:'unavailable',normalVolume:65536,defaultOutputId:'',outputs:[]}", "confirm"),
+            ("{status:'ready',normalVolume:65536,defaultOutputId:'headphones',outputs:[{id:'headphones',label:'Fones',volumeRaw:16384,muted:false,writable:true,isDefault:true}]}", "não está mais disponível"),
+        ):
+            with self.subTest(expected=expected):
+                self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+                self.backend.setProperty("rejectWrites", False)
+                self.evaluate("dispatchHook=null", self.backend)
+                self.assertTrue(self.evaluate("beginVolumeGesture()"))
+                self.assertTrue(self.evaluate("requestGestureVolume(80)"))
+                self.backend.setProperty("rejectWrites", True)
+                self.evaluate("dispatchHook=function(){publish((%s))}" % snapshot, self.backend)
+                self.assertFalse(self.evaluate("requestGestureVolume(30)"))
+                self.assertEqual(self.audio.property("pendingKind"), "")
+                self.assertIn(expected, self.audio.property("error").lower())
+                self.assertNotIn("novo volume", self.audio.property("error"))
+                self.evaluate("endVolumeGesture()")
+
+    def test_scope_generation_switches_cancel_a_to_b_and_a_to_b_to_a(self):
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.audio.setProperty("requestOriginScope", "profile:personal")
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:52429,muted:false,writable:true,isDefault:true}]})")
+        self.assertEqual(self.receipts(), [])
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:32768,muted:false,writable:true,isDefault:true}]})")
+        self.audio.setProperty("requestOriginScope", "profile:work")
+        self.audio.setProperty("requestContextGeneration", 8)
+        self.assertTrue(self.evaluate("requestVolume(80)"))
+        self.audio.setProperty("requestContextGeneration", 9)
+        self.audio.setProperty("requestContextGeneration", 10)
+        self.publish("({status:'ready',normalVolume:65536,defaultOutputId:'speakers',outputs:[{id:'speakers',label:'Alto-falantes',volumeRaw:52429,muted:false,writable:true,isDefault:true}]})")
+        self.assertEqual(self.receipts(), [])
 
     def test_latest_request_restarts_timeout_and_timeout_restores_confirmed_state(self):
         self.audio.setProperty("confirmationTimeout", 100)

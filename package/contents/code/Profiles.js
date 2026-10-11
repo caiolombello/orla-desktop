@@ -4,7 +4,8 @@
 var formatVersion = "0.1-experimental";
 var widgetIds = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"];
 var widgetKeys = ["showClock", "showPomodoro", "showMusic", "showSystemBattery", "showQuota", "showPeripherals", "showRecording"];
-var presentationKeys = ["launchers", "appearance", "widgets", "calendarEvents", "currentDesktopOnly"];
+var legacyPresentationKeys = ["launchers", "appearance", "widgets", "calendarEvents", "currentDesktopOnly"];
+var presentationKeys = legacyPresentationKeys.concat(["showAudioHud"]);
 var appearanceKeys = ["theme", "iconSize", "animations", "appearanceJSON"];
 var controls = /[\u0000-\u001f\u007f-\u009f]/;
 
@@ -21,7 +22,8 @@ function flat(configuration) {
         theme: configuration.theme, iconSize: configuration.iconSize,
         animations: configuration.animations, appearanceJSON: configuration.appearanceJSON
     }, widgets: widgetIds.map((id, index) => ({id: id, visible: configuration[widgetKeys[index]]})),
-        calendarEvents: configuration.calendarEvents, currentDesktopOnly: configuration.currentDesktopOnly};
+        calendarEvents: configuration.calendarEvents, currentDesktopOnly: configuration.currentDesktopOnly,
+        showAudioHud: Boolean(configuration.showAudioHud)};
 }
 function capture(value) {
     const next = copy(value);
@@ -59,7 +61,7 @@ function fieldError(key, value) {
                     && widgetIds.indexOf(entry.id) !== -1 && typeof entry.visible === "boolean")
                 || new Set(value.map(entry => entry.id)).size !== widgetIds.length)
             return "Organização inválida. Use cada widget conhecido uma vez.";
-    } else if (key === "calendarEvents" || key === "currentDesktopOnly") {
+    } else if (key === "calendarEvents" || key === "currentDesktopOnly" || key === "showAudioHud") {
         if (typeof value !== "boolean") return "Preferência inválida. Escolha ativado ou desativado.";
     } else if (key === "theme") {
         if (["glass", "midnight", "paper"].indexOf(value) === -1) return "Tema inválido.";
@@ -90,9 +92,12 @@ function validatePatch(patch) {
     return {value: copy(patch), error: ""};
 }
 function validatePresentation(value) {
-    if (!Appearance.exactKeys(value, presentationKeys) || !Appearance.exactKeys(value.appearance, appearanceKeys))
+    if ((!Appearance.exactKeys(value, presentationKeys) && !Appearance.exactKeys(value, legacyPresentationKeys))
+            || !Appearance.exactKeys(value.appearance, appearanceKeys))
         return {error: "Configuração de perfil inválida."};
-    return validatePatch(value);
+    const normalized = copy(value);
+    if (!("showAudioHud" in normalized)) normalized.showAudioHud = false;
+    return validatePatch(normalized);
 }
 function presentation(profile) {
     const value = {};
@@ -115,7 +120,8 @@ function validate(value) {
     const ids = new Set();
     const names = new Set();
     for (const profile of value.profiles) {
-        if (!Appearance.exactKeys(profile, presentationKeys.concat(["id", "name"]))
+        if ((!Appearance.exactKeys(profile, presentationKeys.concat(["id", "name"]))
+                && !Appearance.exactKeys(profile, legacyPresentationKeys.concat(["id", "name"])))
                 || typeof profile.id !== "string" || profile.id.length > 48
                 || !/^[a-z0-9][a-z0-9_-]*$/.test(profile.id) || profile.id === "legacy"
                 || !validName(profile.name) || ids.has(profile.id) || names.has(profile.name))
@@ -127,7 +133,13 @@ function validate(value) {
     }
     if (value.activeProfileId !== "legacy" && !ids.has(value.activeProfileId))
         return {error: "O perfil selecionado não existe."};
-    return {value: copy(value), error: ""};
+    const normalized = copy(value);
+    normalized.profiles = value.profiles.map(profile => {
+        const next = copy(profile);
+        if (!("showAudioHud" in next)) next.showAudioHud = false;
+        return next;
+    });
+    return {value: normalized, error: ""};
 }
 function parse(raw) {
     if (raw === "") return {value: null, error: ""};

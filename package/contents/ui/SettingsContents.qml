@@ -108,6 +108,15 @@ ColumnLayout {
                     opacity: 0.65
                 }
                 Controls.CheckBox {
+                    objectName: "showAudioHud"
+                    Layout.fillWidth: true
+                    enabled: settings.profiles.writable
+                    text: qsTr("Mostrar confirmações de áudio dentro do dock")
+                    checked: Boolean(settings.profiles.effective.showAudioHud)
+                    onToggled: settings.setPreference("showAudioHud", checked)
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.CheckBox {
                     objectName: "showControlCenter"
                     Layout.fillWidth: true
                     text: qsTr("Mostrar Central de Controle no dock (global)")
