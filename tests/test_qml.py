@@ -344,8 +344,10 @@ class DockInterfaceTests(unittest.TestCase):
             QTest.qWait(30)
             self.assertTrue(popup.property("visible"))
             self.assertTrue(battery.property("active"))
+            closed = QSignalSpy(popup.closed)
             self.config.setProperty("showControlCenter", False)
-            QTest.qWait(30)
+            if not closed.count():
+                self.assertTrue(closed.wait(1000))
             self.assertFalse(popup.property("visible"))
             self.assertFalse(loader.property("active"))
             self.assertFalse(self.dock.property("nativeControlCenterBackendLoaded"))

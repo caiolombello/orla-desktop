@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
@@ -29,6 +30,7 @@ Item {
     property var contextSnapshotOverride: null
     property var controlCenterBackendOverride: null
     property var audioBackendOverride: null
+    property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
     readonly property bool nativeAudioBackendLoaded: nativeAudioBackend.item !== null
@@ -57,11 +59,8 @@ Item {
     readonly property bool localEventsActive: localEventsRequested && localEventsProfileReady
         && candidateEventSlotWidth >= 48
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
-    readonly property int centerViewportWidth: localEventsActive
-        ? Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - eventSlotWidth) : innerWidth
-    implicitWidth: localEventsRequested
-        ? settingsLaneWidth + content.implicitWidth + laneGap * 2 + 144 + outerMargin * 2
-        : content.implicitWidth + 24
+    readonly property int centerViewportWidth: innerWidth
+    implicitWidth: content.implicitWidth + 24
     implicitHeight: requestedIconSize + 38
 
     ProfileState {
@@ -250,12 +249,52 @@ Item {
         if (index) moveTask(index.row, index.row + delta);
     }
     function revealInViewport(control) {
-        if (!localEventsActive || !control || !control.activeFocus) return;
+        if (!control || !control.activeFocus) return;
+        let item = control;
+        while (item && item !== content) item = item.parent;
+        if (item !== content) return;
         const point = control.mapToItem(content, 0, 0);
+        const coveredWidth = localEventSurface.visible ? root.eventSlotWidth : 0;
+        const visibleWidth = Math.max(0, viewport.width - coveredWidth);
         const maximum = Math.max(0, viewport.contentWidth - viewport.width);
         if (point.x < viewport.contentX) viewport.contentX = Math.max(0, point.x);
-        else if (point.x + control.width > viewport.contentX + viewport.width)
-            viewport.contentX = Math.min(maximum, control.width > viewport.width ? point.x : point.x + control.width - viewport.width);
+        else if (point.x + control.width > viewport.contentX + visibleWidth)
+            viewport.contentX = Math.min(maximum, control.width > visibleWidth ? point.x : point.x + control.width - visibleWidth);
+    }
+    function revealAfterGeometryChange() {
+        Qt.callLater(() => {
+            const window = root.Window.window;
+            if (root.ready && localEventSurface.visible && window)
+                root.revealInViewport(window.activeFocusItem);
+        });
+    }
+    function rememberStableDockControl(control) {
+        let item = control;
+        while (item && item !== content) item = item.parent;
+        if (item === content && control.visible && control.enabled)
+            lastStableDockControl = control;
+    }
+    function restoreStableDockControl(closingControl) {
+        const target = lastStableDockControl;
+        Qt.callLater(() => {
+            const window = root.Window.window;
+            if (!window || !window.active || !target || !target.visible || !target.enabled) return;
+            let item = target;
+            while (item && item !== content) item = item.parent;
+            if (item !== content) return;
+            const focused = window.activeFocusItem;
+            if (focused && focused !== closingControl && focused !== window.contentItem) return;
+            target.forceActiveFocus(Qt.TabFocusReason);
+        });
+    }
+    Connections {
+        target: root.Window.window
+        enabled: target !== null
+        function onActiveFocusItemChanged() {
+            const control = root.Window.window.activeFocusItem;
+            root.rememberStableDockControl(control);
+            root.revealInViewport(control);
+        }
     }
 
     TaskManager.TasksModel {
@@ -335,40 +374,21 @@ Item {
         Behavior on color { ColorAnimation { duration: root.motion } }
         Rectangle { x: 16; y: 1; width: parent.width - 32; height: 1; color: root.light ? "#ffffff" : "#526482"; opacity: 0.55 }
     }
-    Item {
-        id: settingsLane
-        objectName: "localSettingsLane"
-        x: root.outerMargin
-        y: root.outerMargin
-        width: root.settingsLaneWidth
-        height: Math.max(0, root.height - root.outerMargin * 2)
-        visible: root.localEventsActive
-        z: 3
-    }
-    Item {
-        id: settingsDividerLane
-        objectName: "localSettingsDividerLane"
-        x: settingsLane.x + settingsLane.width
-        y: settingsLane.y
-        width: root.laneGap
-        height: settingsLane.height
-        visible: root.localEventsActive
-        z: 3
-    }
     Tile {
         id: settingsButton
         objectName: "settingsButton"
-        parent: root.localEventsActive ? settingsLane : settingsPlaceholder
+        parent: settingsPlaceholder
         anchors.verticalCenter: parent.verticalCenter
         iconSource: Qt.resolvedUrl("../images/orla.svg")
         iconSize: root.tileSize - 10
         foreground: root.accent; accent: root.accent; animationDuration: root.motion
         tooltip: qsTr("Personalizar Orla Dock")
+        onActiveFocusChanged: if (activeFocus) root.revealInViewport(settingsButton)
         onClicked: settings.open()
     }
     Rectangle {
         id: settingsDivider
-        parent: root.localEventsActive ? settingsDividerLane : settingsDividerPlaceholder
+        parent: settingsDividerPlaceholder
         anchors.centerIn: parent
         width: 1
         height: 30
@@ -378,11 +398,13 @@ Item {
     Flickable {
         id: viewport
         objectName: "appsViewport"
-        x: root.localEventsActive ? settingsLane.x + settingsLane.width + root.laneGap : root.outerMargin
+        x: root.outerMargin
         y: root.outerMargin
         width: root.centerViewportWidth
         height: Math.max(0, root.height - root.outerMargin * 2)
-        contentWidth: content.width
+        // Extend Qt's actual bounds without moving or resizing ordinary controls.
+        contentWidth: content.width + (localEventSurface.visible ? root.eventSlotWidth : 0)
+        onWidthChanged: root.revealAfterGeometryChange()
         contentHeight: height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -391,20 +413,19 @@ Item {
         Row {
             id: content
             objectName: "dockContent"
+            onWidthChanged: root.revealAfterGeometryChange()
             height: viewport.height
             spacing: appearanceState.effective.tokens.spacing
             Item {
                 id: settingsPlaceholder
                 objectName: "settingsPlaceholder"
-                visible: !root.localEventsActive
-                width: root.localEventsActive ? 0 : settingsButton.implicitWidth
+                width: settingsButton.implicitWidth
                 height: parent.height
             }
             Item {
                 id: settingsDividerPlaceholder
                 objectName: "settingsDividerPlaceholder"
-                visible: !root.localEventsActive
-                width: root.localEventsActive ? 0 : 1
+                width: 1
                 height: parent.height
             }
             Repeater {
@@ -470,7 +491,7 @@ Item {
         y: root.outerMargin
         width: root.eventSlotWidth
         height: Math.max(0, root.height - root.outerMargin * 2)
-        visible: root.localEventsActive
+        visible: root.localEventsActive && Boolean(localEventState.current)
         z: 3
         eventState: localEventState
         surfaceColor: root.surface
@@ -479,6 +500,7 @@ Item {
         mutedColor: root.muted
         accentColor: root.accent
         animationDuration: root.motion
+        onFocusRestoreRequested: root.restoreStableDockControl(closeControl)
     }
     DropArea {
         anchors.fill: parent

@@ -18,6 +18,8 @@ from PySide6.QtTest import QTest
 class ProfilesDockTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        runtime = Path(__file__).resolve().parents[1] / ".runtime/profiles-dock"
+        runtime.mkdir(parents=True, mode=0o700, exist_ok=True)
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
     def setUp(self):

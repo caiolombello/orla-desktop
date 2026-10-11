@@ -13,17 +13,27 @@ Item {
     property color accentColor: "#70d7c7"
     property int animationDuration: 120
     property alias closeControl: closeButton
+    property bool closeOwnedFocus: false
+    signal focusRestoreRequested()
     readonly property bool hasEvent: Boolean(eventState.current)
     readonly property int mode: width >= 144 ? 3 : width >= 80 ? 2 : width >= 56 ? 1 : width >= 48 ? 0 : -1
     readonly property string fullAccessibleName: hasEvent
-        ? eventState.current.title + (eventState.current.detail ? ". " + eventState.current.detail : "")
-        : qsTr("Eventos locais")
+        ? eventState.current.title + (eventState.current.detail ? ". " + eventState.current.detail : "") : ""
     readonly property string accessibleName: fullAccessibleName
-    property real contentOpacity: hasEvent ? 1 : 0.72
+    property real contentOpacity: hasEvent ? 1 : 0
 
+    onHasEventChanged: {
+        if (hasEvent) closeOwnedFocus = false;
+        else if (closeOwnedFocus) {
+            closeOwnedFocus = false;
+            focusRestoreRequested();
+        }
+    }
+
+    Accessible.ignored: !hasEvent
     Accessible.role: Accessible.Pane
     Accessible.name: fullAccessibleName
-    Accessible.description: hasEvent ? qsTr("Confirmação local dentro do dock") : qsTr("Área de eventos locais sem avisos")
+    Accessible.description: hasEvent ? qsTr("Confirmação local dentro do dock") : ""
 
     Connections {
         target: surface.eventState
@@ -40,23 +50,24 @@ Item {
     }
 
     Rectangle {
+        visible: surface.hasEvent
         anchors.fill: parent
         radius: Math.min(14, height / 2)
         color: surface.surfaceColor
-        border.color: surface.hasEvent ? surface.accentColor : surface.borderColor
+        border.color: surface.accentColor
         border.width: 1
         opacity: surface.contentOpacity
     }
 
     Text {
         id: glyph
-        visible: surface.mode !== 1
+        visible: surface.hasEvent && surface.mode !== 1
         anchors.left: parent.left
         anchors.leftMargin: surface.mode === 0 ? 6 : 8
         anchors.verticalCenter: parent.verticalCenter
         width: surface.mode === 0 ? 12 : 16
-        text: surface.hasEvent ? "✓" : "•"
-        color: surface.hasEvent ? surface.accentColor : surface.mutedColor
+        text: surface.hasEvent ? "✓" : ""
+        color: surface.accentColor
         font.pixelSize: surface.mode === 0 ? 13 : 15
         font.bold: surface.hasEvent
         horizontalAlignment: Text.AlignHCenter
@@ -65,13 +76,13 @@ Item {
     }
 
     Text {
-        visible: surface.mode === 1
+        visible: surface.hasEvent && surface.mode === 1
         anchors.left: parent.left
         anchors.leftMargin: 7
         anchors.right: closeButton.left
         anchors.rightMargin: 3
         anchors.verticalCenter: parent.verticalCenter
-        text: surface.hasEvent ? qsTr("Fim") : "•"
+        text: surface.hasEvent ? qsTr("Fim") : ""
         color: surface.foregroundColor
         font.pixelSize: 9
         font.bold: surface.hasEvent
@@ -83,14 +94,14 @@ Item {
     Text {
         id: oneLine
         objectName: "localEventOneLine"
-        visible: surface.mode === 2
+        visible: surface.hasEvent && surface.mode === 2
         anchors.left: glyph.right
         anchors.leftMargin: 5
         anchors.right: closeButton.left
         anchors.rightMargin: 4
         anchors.verticalCenter: parent.verticalCenter
-        text: surface.hasEvent ? surface.eventState.current.title : qsTr("Eventos")
-        color: surface.hasEvent ? surface.foregroundColor : surface.mutedColor
+        text: surface.hasEvent ? surface.eventState.current.title : ""
+        color: surface.foregroundColor
         font.pixelSize: 11
         font.bold: surface.hasEvent
         elide: Text.ElideRight
@@ -99,7 +110,7 @@ Item {
     }
 
     Column {
-        visible: surface.mode === 3
+        visible: surface.hasEvent && surface.mode === 3
         anchors.left: glyph.right
         anchors.leftMargin: 6
         anchors.right: closeButton.left
@@ -108,8 +119,8 @@ Item {
         spacing: 0
         Text {
             width: parent.width
-            text: surface.hasEvent ? surface.eventState.current.title : qsTr("Eventos locais")
-            color: surface.hasEvent ? surface.foregroundColor : surface.mutedColor
+            text: surface.hasEvent ? surface.eventState.current.title : ""
+            color: surface.foregroundColor
             font.pixelSize: 11
             font.bold: surface.hasEvent
             elide: Text.ElideRight
@@ -128,9 +139,19 @@ Item {
         }
     }
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: surface.hasEvent
+        acceptedButtons: Qt.AllButtons
+        preventStealing: true
+        onWheel: wheel => wheel.accepted = true
+    }
+
     Controls.Button {
         id: closeButton
         objectName: "localEventClose"
+        visible: surface.hasEvent
+        enabled: surface.hasEvent
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.verticalCenter: parent.verticalCenter
@@ -138,9 +159,14 @@ Item {
         height: 24
         padding: 0
         text: "×"
-        activeFocusOnTab: true
-        Accessible.name: surface.hasEvent ? qsTr("Fechar aviso %1").arg(surface.fullAccessibleName) : qsTr("Fechar eventos")
-        Accessible.description: surface.hasEvent ? qsTr("Descarta este aviso local") : qsTr("Nenhum aviso para descartar")
+        activeFocusOnTab: surface.hasEvent
+        Accessible.ignored: !surface.hasEvent
+        Accessible.name: surface.hasEvent ? qsTr("Fechar aviso %1").arg(surface.fullAccessibleName) : ""
+        Accessible.description: surface.hasEvent ? qsTr("Descarta este aviso local") : ""
+        onActiveFocusChanged: {
+            if (activeFocus) surface.closeOwnedFocus = true;
+            else if (surface.hasEvent) surface.closeOwnedFocus = false;
+        }
         onClicked: surface.eventState.dismiss()
         Keys.onEscapePressed: surface.eventState.dismiss()
         Keys.onReturnPressed: surface.eventState.dismiss()
