@@ -4,11 +4,13 @@
 
 **Um dock pessoal para o KDE Plasma, com identidade costeira e espaço para crescer.**
 
-O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entre janelas abertas e manter algumas ferramentas por perto. Ainda está em alpha: o dock funciona hoje; a barra superior opcional, o launcher, as apresentações de notificação, os controles do sistema e várias integrações continuam planejados.
+O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entre janelas abertas e manter algumas ferramentas por perto. Ainda está em alpha: o dock funciona hoje. O checkout de código também tem primeiros componentes experimentais para menu da barra opcional e launcher; integração completa, apresentações de notificação, Central de Controle e várias integrações continuam planejadas.
 
 > [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
 O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.5 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
+
+O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), com menu do sistema e nome do aplicativo ativo para Plasma 6.7.x. Exige instalação manual separada e não faz parte da release 0.2.5. Diálogos reais de sessão, painel/foco e composição em vários monitores continuam sem teste. Menu Global, bandeja e relógio serão widgets KDE irmãos.
 
 O bundle da release 0.2.5 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
 
@@ -55,7 +57,7 @@ A base atual de validação é Fedora 44, Plasma 6.7.5, Qt 6.11.2 e Wayland. Out
 
 ## Instalar uma versão publicada
 
-Os comandos abaixo apontam para a prerelease alpha 0.2.5; use quando seus assets estiverem publicados. Baixe o `.zip` da versão na página de [releases do GitHub](https://github.com/caiolombello/orla-desktop/releases), verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
+Os comandos abaixo apontam para a [prerelease alpha 0.2.5 publicada](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.5). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
 
 ```bash
 cd ~/Downloads
@@ -105,7 +107,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Para ass
 
 Orla Desktop é um projeto alpha. O componente atual mantém o identificador Plasma `org.caiodock.dock` e o serviço D-Bus `org.caiodock.Integrations` para preservar instalações e configurações existentes. O nome exibido às pessoas é Orla Dock; esses identificadores internos existem por compatibilidade.
 
-Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 preparado para a 0.2.5. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra de menus inspirada no macOS, a Central de Controle, o launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, Steam, associação de perfis a Activities/desktops, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
+Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 publicado na 0.2.5. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra completa inspirada no macOS, a Central de Controle, a integração completa do launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, Steam, associação de perfis a Activities/desktops, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
 
 Veja o [roadmap completo](ROADMAP.md) para sequência, dependências e critérios de aceite, com propostas de [UX/UI](docs/UX_UI.md), [temas e extensões](docs/EXTENSIONS.md), [acesso e provedores de IA](docs/AI_INTEGRATIONS.md) e [experiência de desenvolvimento](docs/DX.md). Temas declarativos vêm antes de plugins executáveis; adaptadores de IA usam as rotas de autorização oferecidas por cada provedor. O núcleo continua útil sem conta Orla, addon pago ou assinatura de IA. Checkout de marketplace e SDK ainda não foram implementados.
 

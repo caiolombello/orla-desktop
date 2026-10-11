@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Id": "org.orla.bar",
+        "Name": "Orla Menu (experimental)",
+        "Name[pt_BR]": "Menu Orla (experimental)",
+        "Description": "Optional Orla system menu and active application name; Plasma 6.7.x experimental source component",
+        "Description[pt_BR]": "Menu do sistema Orla e nome do aplicativo ativo; componente fonte experimental para Plasma 6.7.x",
+        "Icon": "preferences-desktop",
+        "Category": "Application Launchers",
+        "Version": "0.1.0",
+        "License": "MIT",
+        "Authors": [{ "Name": "Caio Barbieri", "Website": "https://github.com/caiolombello" }],
+        "Website": "https://github.com/caiolombello/orla-desktop",
+        "BugReportUrl": "https://github.com/caiolombello/orla-desktop/issues"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.7",
+    "X-Plasma-FormFactors": ["horizontal", "planar"]
+}
