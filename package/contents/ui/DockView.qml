@@ -19,17 +19,20 @@ Item {
     property alias tasksModel: tasks
     property alias pomodoro: focusTimer
     property alias integrations: localIntegrations
+    property alias appearance: appearanceState
     property string selectedIntegration: "quota"
-    readonly property bool light: configuration.theme === "paper"
-    readonly property color foreground: light ? "#252b35" : "#edf1f9"
-    readonly property color muted: light ? "#657180" : "#9da9bf"
-    readonly property color accent: light ? "#167361" : "#69d7c2"
-    readonly property color surface: light ? "#f4f0e8" : configuration.theme === "midnight" ? "#111923" : "#db283542"
-    readonly property int motion: configuration.animations ? Kirigami.Units.shortDuration : 0
-    readonly property int requestedIconSize: Math.max(24, Math.min(64, configuration.iconSize))
+    readonly property bool light: appearanceState.effective.baseTheme === "paper"
+    readonly property color foreground: appearanceState.effective.tokens.foreground
+    readonly property color muted: appearanceState.effective.tokens.muted
+    readonly property color accent: appearanceState.effective.tokens.accent
+    readonly property color surface: appearanceState.overridden ? appearanceState.effective.tokens.surface : light ? "#f4f0e8" : configuration.theme === "midnight" ? "#111923" : "#db283542"
+    readonly property int motion: appearanceState.effective.tokens.reducedMotion ? 0 : Kirigami.Units.shortDuration
+    readonly property int requestedIconSize: appearanceState.effective.tokens.iconSize
     readonly property int tileSize: Math.max(16, Math.min(requestedIconSize, height > 0 ? height - 36 : requestedIconSize))
     implicitWidth: content.implicitWidth + 24
     implicitHeight: requestedIconSize + 38
+
+    AppearanceState { id: appearanceState; configuration: root.configuration }
 
     function activateTask(row) {
         if (row < 0 || row >= tasks.count) return;
@@ -117,11 +120,13 @@ Item {
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
     Rectangle {
+        objectName: "dockSurface"
         anchors.fill: parent
-        radius: 21
+        radius: appearanceState.effective.tokens.radius
         color: root.surface
+        opacity: appearanceState.overridden ? appearanceState.effective.tokens.opacity : 1
         border.width: 1
-        border.color: root.light ? "#cec9bf" : "#3c4b65"
+        border.color: appearanceState.effective.tokens.border
         Behavior on color { ColorAnimation { duration: root.motion } }
         Rectangle { x: 16; y: 1; width: parent.width - 32; height: 1; color: root.light ? "#ffffff" : "#526482"; opacity: 0.55 }
     }
@@ -137,8 +142,9 @@ Item {
         Controls.ScrollBar.horizontal: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
         Row {
             id: content
+            objectName: "dockContent"
             height: viewport.height
-            spacing: 5
+            spacing: appearanceState.effective.tokens.spacing
             Tile {
                 objectName: "settingsButton"
                 anchors.verticalCenter: parent.verticalCenter
@@ -255,7 +261,7 @@ Item {
             for (const url of drop.urls) accepted = root.addLauncher(String(url)) || accepted;
             if (accepted) drop.acceptProposedAction();
         }
-        Rectangle { anchors.fill: parent; radius: 21; visible: parent.containsDrag; color: "transparent"; border.color: root.accent; border.width: 2 }
+        Rectangle { anchors.fill: parent; radius: appearanceState.effective.tokens.radius; visible: parent.containsDrag; color: "transparent"; border.color: root.accent; border.width: 2 }
     }
     Controls.Menu {
         id: taskMenu
@@ -277,12 +283,33 @@ Item {
         Controls.MenuItem { text: qsTr("Minimizar / restaurar"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.minimizable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestToggleMinimized(index); } }
         Controls.MenuItem { text: qsTr("Fechar janela"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.closable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestClose(index); } }
     }
+    // Keep the editor legible even when the draft uses low-contrast dock colors.
+    Item {
+        id: settingsAnchor
+        anchors.fill: parent
+        readonly property bool popAbove: root.popAbove
+        readonly property bool light: root.configuration.theme === "paper"
+        readonly property color surface: light ? "#f4f0e8" : "#111923"
+        readonly property color foreground: light ? "#252b35" : "#edf1f9"
+        readonly property color accent: light ? "#167361" : "#69d7c2"
+    }
     DockPopup {
         id: settings
         objectName: "settingsPopup"
-        dock: root
+        // Screen.height bounds the current monitor; desktopAvailableHeight
+        // excludes reserved areas but describes the entire virtual desktop.
+        property real heightBudget: Math.max(1, Math.min(root.Screen.height || 640, root.Screen.desktopAvailableHeight || 640) - 40)
+        height: Math.min(implicitHeight, heightBudget)
+        dock: settingsAnchor
         title: qsTr("Seu dock, do seu jeito")
-        SettingsContents { configuration: root.configuration; resetTimer: focusTimer.reset }
+        onAboutToShow: appearanceState.begin()
+        onClosed: appearanceState.cancel()
+        SettingsContents {
+            configuration: root.configuration
+            resetTimer: focusTimer.reset
+            appearance: appearanceState
+            onAppearanceCanceled: settings.close()
+        }
     }
     DockPopup {
         id: addDialog

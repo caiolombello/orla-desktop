@@ -3,7 +3,7 @@
 **PT-BR:** `0.1-experimental` é a versão deste formato de dados, independente da
 versão do Orla. Pode mudar antes da estabilização. Esta entrega é uma base
 portátil de X1/DX2: valida e empacota dados, sem instalar nem aplicar temas no
-dock. Editor, galeria/prévia, contraste/foco no Plasma, importação com recuperação
+dock. Editor de arquivos de tema, galeria/prévia, contraste/foco no Plasma, importação com recuperação
 e teste por contribuidor externo continuam pendentes. C1, X1 e DX2 não estão
 concluídos por este validador.
 

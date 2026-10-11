@@ -11,7 +11,7 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 ## O que funciona hoje
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
-- Escolher entre os temas Glass, Midnight e Paper, ajustar o tamanho dos ícones e ativar ou desativar animações.
+- Partir dos temas Glass, Midnight ou Paper e pré-visualizar cores, opacidade, espaçamento, cantos, ícones e movimento reduzido. Aplicar salva; Cancelar, Escape ou fechar descarta a prévia. Desfazer restaura a aparência aplicada anterior uma vez por sessão.
 - Usar relógio, Pomodoro, calendário do KDE e controles de mídia compatíveis com MPRIS.
 - Ler snapshots locais opcionais do QuotaLantern, PeriGauge e FalaTrace quando esses projetos gravam arquivos de estado compatíveis.
 - Manter o dock em um painel Plasma e ajustar posição e visibilidade pelas configurações do Plasma.
@@ -19,6 +19,8 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 O calendário usa a mesma seleção de calendários dos componentes do KDE. O Orla não conecta o Google Agenda sozinho. Para ver eventos do Google, primeiro adicione e configure uma conta Google pelo KOrganizer/KDE PIM e depois ative os eventos sincronizados nas configurações do Orla. A configuração e sincronização dependem dos recursos KDE PIM instalados no sistema.
 
 Os controles de mídia usam MPRIS e funcionam com players compatíveis. O comportamento específico do Spotify, capa e reprodução ainda não foi validado. As integrações com projetos locais leem arquivos de estado existentes; elas não iniciam os outros aplicativos nem chamam suas APIs online.
+
+A aparência usa um override separado e preserva as preferências anteriores de tema, ícones e animação. Restaurar prepara essas preferências para prévia e exige Aplicar. O [kit experimental de temas](docs/theme-format.md) valida e empacota dados comunitários; importar/aplicar esses arquivos continua no roadmap. Veja a [validação da aparência](docs/validation/appearance-0.2.3.md) para cobertura e limites nativos.
 
 ## Requisitos
 
@@ -44,10 +46,10 @@ Baixe o `.zip` da versão na página de [releases do GitHub](https://github.com/
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.2.zip
-cd orla-dock-0.2.2
+unzip orla-dock-0.2.3.zip
+cd orla-dock-0.2.3
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.2.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.3.plasmoid
 ```
 
 O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
@@ -59,7 +61,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.2.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.3.plasmoid
 ```
 
 Para verificar a configuração local ou remover os arquivos gerenciados pelo Orla:

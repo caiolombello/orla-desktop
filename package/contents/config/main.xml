@@ -6,6 +6,7 @@
   <group name="General">
     <entry name="launchers" type="StringList"><default>applications:org.kde.dolphin.desktop,applications:org.kde.konsole.desktop</default></entry>
     <entry name="theme" type="String"><default>glass</default></entry>
+    <entry name="appearanceJSON" type="String"><default></default></entry>
     <entry name="iconSize" type="Int"><default>42</default><min>24</min><max>64</max></entry>
     <entry name="animations" type="Bool"><default>true</default></entry>
     <entry name="showClock" type="Bool"><default>true</default></entry>
