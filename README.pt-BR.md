@@ -87,7 +87,9 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Para ass
 
 Orla Desktop é um projeto alpha. O componente atual mantém o identificador Plasma `org.caiodock.dock` e o serviço D-Bus `org.caiodock.Integrations` para preservar instalações e configurações existentes. O nome exibido às pessoas é Orla Dock; esses identificadores internos existem por compatibilidade.
 
-A barra de menus inspirada no macOS, a Central de Controle, o launcher inspirado no Raycast, Dynamic Island/HUD/toasts, suporte específico ao Spotify, bateria do sistema, Steam, perfis, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Esses recursos não fazem parte da versão atual. Veja [ROADMAP.md](ROADMAP.md) para sequência e critérios de aceite.
+A barra de menus inspirada no macOS, a Central de Controle, o launcher inspirado no Raycast, Dynamic Island/HUD/toasts, suporte específico ao Spotify, bateria do sistema, Steam, perfis, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Temas comunitários, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados. Esses recursos não fazem parte da versão atual.
+
+Veja o [roadmap completo](ROADMAP.md) para sequência, dependências e critérios de aceite, com propostas de [UX/UI](docs/UX_UI.md), [temas e extensões](docs/EXTENSIONS.md), [acesso e provedores de IA](docs/AI_INTEGRATIONS.md) e [experiência de desenvolvimento](docs/DX.md). Temas declarativos vêm antes de plugins executáveis; adaptadores de IA usam as rotas de autorização oferecidas por cada provedor. O núcleo continua útil sem conta Orla, addon pago ou assinatura de IA. Checkout de marketplace e SDK ainda não foram implementados.
 
 ## Licença
 
