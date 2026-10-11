@@ -2,10 +2,11 @@
 
 User-visible changes are recorded here for each published release.
 
-## 0.2.7 alpha candidate — prepared, not published
+## 0.2.7 — 2026-10-11 — Alpha prerelease
 
 - Add an opt-in local toast for completion of a Pomodoro focus or break period. The global Widgets setting is off by default; when enabled, the dock shows a short plain-text message in its own reserved area. KDE notifications remain independent.
 - Keep the existing Pomodoro timer, deadline and owner. Invalid or unsupported profile data clears local presentation and uses the existing legacy notice path without rewriting saved profile data. The setting is global; per-profile event rules are not included.
+- Published as [v0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7) from source commit `9ca1792ee3e9c20ad770042d2d441aa1ae6efbce` (PR 16; CI run [38111731691](https://github.com/caiolombello/orla-desktop/actions/runs/38111731691) succeeded). Anonymous downloads of the applet, ZIP and `SHA256SUMS` returned HTTP 200 and matched the exact release build; the [validation record](docs/validation/local-events-0.2.7.md) lists hashes and limits. Installation and native admission remain unverified.
 - The 14-check product suite and the existing 9-pass/3-pre-existing-skip offscreen QML suite passed before the compact-boundary correction. After that change, two focused surface tests passed with zero warnings; the full product suite was not rerun. Independent review approved both corrections and additionally checked pointer/geometry behavior at 48 pixels. The synthetic package check also passed after the correction, with exact current event/config bytes and two reproducible builds. Native panel, popup, focus, screen-reader and install/upgrade behavior remain unqualified. See the [local events guide](docs/local-events.md) and [validation record](docs/validation/local-events-0.2.7.md).
 
 ## Unreleased — experimental source components

@@ -1,12 +1,21 @@
-# Local Pomodoro toast validation — 0.2.7 candidate
+# Local Pomodoro toast validation — 0.2.7 release
 
 This record covers a default-off, in-dock notice for one event class: completion
-of a Pomodoro focus or break period. The 0.2.7 candidate is not published.
-Independent round-two review approved the profile-safety correction. A separate
-compact-surface correction in round three passed two focused tests and independent
-review with zero findings. Metadata, documentation, the final candidate
-package and release are not approved. This is bounded source/fixture evidence,
-not native Plasma qualification.
+of a Pomodoro focus or break period. The [0.2.7 alpha release](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7)
+was published from source commit `9ca1792ee3e9c20ad770042d2d441aa1ae6efbce`
+(PR 16, merge `1e61a54a8337e854f1369d224a03a38da61d0ff3`). CI run
+[38111731691](https://github.com/caiolombello/orla-desktop/actions/runs/38111731691)
+succeeded. An anonymous public-download check returned HTTP 200 for all three
+assets and found exact build matches. Installation and upgrade were not run;
+native admission remains false. This separates publication evidence from bounded
+source/fixture evidence and does not qualify native Plasma behavior.
+
+| Public asset | Bytes | SHA-256 | Build match |
+|---|---:|---|---|
+| `orla-dock-0.2.7.plasmoid` | 48,817 | `58f56b313e3fa60abe9caa48e57221956829d81fc92e9e5a50e291e0b5e08506` | Exact |
+| `orla-dock-0.2.7.zip` | 429,793 | `53cd551c59c966020472ff5243c8c0bbc2da8b1b7eba3bae4c9dd13dcb0cba29` | Exact |
+| `SHA256SUMS` | 177 | `5632f29dae32db4ede5a945639f838056a6bcc1961a86c51a7d11816a7c51bd0` | Exact |
+
 
 ## Behavior and persistence boundary
 
@@ -93,3 +102,5 @@ X11 host focus, touch, real scaling, multiple displays, screen reader, lock
 screen, Do Not Disturb, KDE notification service, MPRIS/provider, installation,
 upgrade or user session was exercised. Automated accessibility properties do
 not establish screen-reader support. N1 remains partial; N2 and N3 remain open.
+
+Publication receipt: anonymous asset verification confirmed the hashes and build matches above for tag `v0.2.7`. The published assets correspond to the exact source commit listed above. That check did not install or launch the package; native admission remains false.
