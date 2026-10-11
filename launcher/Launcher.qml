@@ -13,15 +13,54 @@ Window {
     title: qsTr("Orla Launcher")
     color: "#111923"
     flags: Qt.Window
+    property bool aiPanelVisible: false
+    property bool pendingDismiss: false
+    property bool pendingQuit: false
     property var selectedRow: launcher.selectedIndex >= 0 ? launcher.rows[launcher.selectedIndex] : null
     function executeSelection() {
         const row = selectedRow
         if (row) launcher.execute(launcher.selectedIndex, row.generation, row.id)
     }
-    onActiveChanged: if (active) search.forceActiveFocus()
-    onClosing: { launcher.dismiss(); Qt.quit() }
-    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: launcher.dismiss() }
-    Shortcut { sequence: "Ctrl+Q"; context: Qt.WindowShortcut; onActivated: { launcher.dismiss(); Qt.quit() } }
+    function closeAiPanel() {
+        aiProviders.cancel(aiProviders.requestId)
+        aiPanelVisible = false
+        search.forceActiveFocus()
+    }
+    function requestDismiss(quitApplication) {
+        if (!aiProviders.requestClose()) {
+            pendingDismiss = true
+            pendingQuit = quitApplication
+            return
+        }
+        launcher.dismiss()
+        if (quitApplication) Qt.quit()
+    }
+    onActiveChanged: if (active && !aiPanelVisible) search.forceActiveFocus()
+    onClosing: function(close) {
+        if (!aiProviders.requestClose()) {
+            close.accepted = false
+            pendingDismiss = true
+            pendingQuit = true
+            return
+        }
+        launcher.dismiss()
+        Qt.quit()
+    }
+    Shortcut {
+        sequence: "Escape"; context: Qt.WindowShortcut
+        onActivated: if (window.aiPanelVisible) window.closeAiPanel(); else window.requestDismiss(false)
+    }
+    Shortcut { sequence: "Ctrl+Q"; context: Qt.WindowShortcut; onActivated: window.requestDismiss(true) }
+    Connections {
+        target: aiProviders
+        function onCloseReady() {
+            if (!window.pendingDismiss) return
+            window.pendingDismiss = false
+            launcher.dismiss()
+            if (window.pendingQuit) Qt.quit()
+            window.pendingQuit = false
+        }
+    }
     Connections {
         target: launcher
         function onChanged() {
@@ -35,6 +74,7 @@ Window {
         anchors.margins: 24
         spacing: 16
         RowLayout {
+            objectName: "launcherHeader"
             Layout.fillWidth: true
             Rectangle {
                 width: 32; height: 32; radius: 11; color: "#69D7C2"
@@ -44,6 +84,18 @@ Window {
             Text { text: qsTr("LAUNCHER"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 2; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
             Text { text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: "#9FAFBC"; font.pixelSize: 11; textFormat: Text.PlainText }
+            Button {
+                id: aiEntry
+                objectName: "aiEntryButton"
+                text: window.aiPanelVisible ? qsTr("Busca") : qsTr("IA")
+                Accessible.name: window.aiPanelVisible ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
+                onClicked: {
+                    if (window.aiPanelVisible) window.closeAiPanel()
+                    else { window.aiPanelVisible = true; aiPanel.focusFirst() }
+                }
+                contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+            }
         }
         TextField {
             id: search
@@ -59,6 +111,7 @@ Window {
             selectByMouse: true
             maximumLength: 512
             Accessible.name: qsTr("Buscar aplicativo ou calcular")
+            visible: !window.aiPanelVisible
             background: Rectangle { radius: 14; color: "#1B2733"; border.width: 1; border.color: search.activeFocus ? "#69D7C2" : "#3B4B5A" }
             onTextEdited: launcher.query = text
             Keys.priority: Keys.BeforeItem
@@ -69,12 +122,14 @@ Window {
             Component.onCompleted: forceActiveFocus()
         }
         RowLayout {
+            visible: !window.aiPanelVisible
             Layout.fillWidth: true
             Text { text: qsTr("APLICATIVOS + CALCULADORA"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 1.4; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
             Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: "#69D7C2"; font.pixelSize: 11; textFormat: Text.PlainText }
         }
         Item {
+            visible: !window.aiPanelVisible
             Layout.fillWidth: true
             Layout.fillHeight: true
             ListView {
@@ -145,12 +200,13 @@ Window {
         }
         Text {
             Layout.fillWidth: true
-            visible: windowSession && windowSession.notice.length > 0
+            visible: !window.aiPanelVisible && windowSession && windowSession.notice.length > 0
             text: windowSession ? windowSession.notice : ""
             color: "#E7C58E"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#283542" }
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#283542"; visible: !window.aiPanelVisible }
         RowLayout {
+            visible: !window.aiPanelVisible
             Layout.fillWidth: true
             spacing: 8
             Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: "#A7B7C4"; font.pixelSize: 11; textFormat: Text.PlainText }
@@ -178,6 +234,16 @@ Window {
                 contentItem: Text { text: parent.text; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 7; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
             }
+        }
+        AiSettings {
+            id: aiPanel
+            objectName: "aiSettings"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            visible: window.aiPanelVisible
+            controller: aiProviders
+            onBackRequested: window.closeAiPanel()
         }
     }
 }
