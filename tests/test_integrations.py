@@ -92,19 +92,121 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(value['quota']['status'], 'missing')
 
     def test_peripherals_hide_identifiers_and_neutralize_old_readings(self):
-        self.write_state('perigauge/state.json', {'schema': 1, 'generated_at': self.now.timestamp(), 'devices': [
-            {'id': 'private-device-id', 'name': 'Mouse', 'kind': 'mouse', 'present': True, 'updated_at': self.now.timestamp(), 'battery': {'percent': 0, 'charging': 'discharging', 'estimated': True}},
+        path = self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3', 'source': 'daemon',
+            'generated_at': self.now.timestamp(), 'devices': [
+            {'id': 'private-device-id', 'backend': 'hidpp', 'vendor': 'Private vendor', 'name': 'Mouse\n' + ('x' * 100), 'kind': 'mouse',
+             'present': True, 'updated_at': self.now.timestamp(), 'battery': {'percent': 0, 'charging': 'discharging', 'estimated': True}},
             {'name': 'Old', 'kind': 'earbuds', 'present': True, 'updated_at': self.now.timestamp() - 901, 'battery': {'percent': 80}, 'components': [{'id': 'left', 'percent': 90}]},
             {'name': 'Hidden', 'kind': 'keyboard', 'hidden': True, 'battery': {'percent': 99}},
+        ], 'issues': [{'code': 'private-code', 'detail': 'private device path'}]})
+        path.chmod(0o600)
+        before = (path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns)
+        result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
+        self.assertEqual(result['status'], 'ready')
+        self.assertEqual((result['generatedAt'], result['source'], result['producerVersion']),
+                         (self.now.timestamp(), 'daemon', '0.1.0-alpha.3'))
+        self.assertFalse(result['limited'])
+        self.assertEqual(len(result['devices']), 2)
+        self.assertEqual(result['devices'][0]['percent'], 0)
+        self.assertEqual(result['devices'][0]['name'], 'Mouse' + ('x' * 75))
+        self.assertTrue(result['devices'][0]['estimated'])
+        self.assertEqual(result['devices'][0]['observedAt'], self.now.timestamp())
+        self.assertTrue(result['devices'][0]['present'])
+        self.assertIsNone(result['devices'][1]['percent'])
+        self.assertIsNone(result['devices'][1]['components'][0]['percent'])
+        self.assertTrue(result['devices'][1]['stale'])
+        self.assertNotIn('private-device-id', json.dumps(result))
+        self.assertNotIn('hidpp', json.dumps(result))
+        self.assertNotIn('Private vendor', json.dumps(result))
+        self.assertNotIn('private device path', json.dumps(result))
+        self.assertEqual((path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns), before)
+
+    def test_peripherals_distinguish_absent_stale_and_unknown_observations(self):
+        base = {'schema': 1, 'version': '0.1.0-alpha.3', 'source': 'oneshot',
+                'generated_at': self.now.timestamp(), 'devices': []}
+        cases = (
+            ({**base, 'devices': [{'name': 'Absent', 'kind': 'mouse', 'present': False,
+                                   'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
+             'unknown', False, False, self.now.timestamp()),
+            ({**base, 'generated_at': self.now.timestamp() - 901,
+              'devices': [{'name': 'Old', 'kind': 'mouse', 'present': True,
+                           'updated_at': self.now.timestamp() - 901, 'battery': {'percent': 45}}]},
+             'stale', True, False, self.now.timestamp() - 901),
+            ({**base, 'devices': [{'name': 'Future', 'kind': 'mouse', 'present': True,
+                                   'updated_at': self.now.timestamp() + 1, 'battery': {'percent': 45}}]},
+             'unknown', False, True, None),
+            ({**base, 'devices': [{'name': 'Malformed', 'kind': 'mouse', 'present': True,
+                                   'updated_at': 'now', 'battery': {'percent': 45}}]},
+             'unknown', False, True, None),
+            ({**base, 'generated_at': self.now.timestamp() + 1,
+              'devices': [{'name': 'Future snapshot', 'kind': 'mouse', 'present': True,
+                           'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
+             'unknown', False, True, self.now.timestamp()),
+            ({**base, 'generated_at': 'now',
+              'devices': [{'name': 'Malformed snapshot', 'kind': 'mouse', 'present': True,
+                           'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
+             'unknown', False, True, self.now.timestamp()),
+            ({**base, 'devices': [{'name': 'Unknown presence', 'kind': 'mouse', 'present': 'yes',
+                                   'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
+             'unknown', False, True, self.now.timestamp()),
+        )
+        for record, status, stale, limited, observed_at in cases:
+            with self.subTest(device=record['devices'][0]['name']):
+                self.write_state('perigauge/state.json', record)
+                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['devices'][0]['stale'], stale)
+                self.assertEqual(result['devices'][0]['observedAt'], observed_at)
+                self.assertIsNone(result['devices'][0]['percent'])
+                self.assertEqual(result['limited'], limited)
+                if record['devices'][0]['name'] == 'Unknown presence':
+                    self.assertIsNone(result['devices'][0]['present'])
+
+    def test_peripherals_degrade_legacy_metadata_without_discarding_fresh_values(self):
+        self.write_state('perigauge/state.json', {'schema': 1, 'generated_at': self.now.timestamp(), 'devices': [
+            {'name': 'Legacy', 'kind': 'keyboard', 'present': True, 'updated_at': self.now.timestamp(),
+             'battery': {'percent': 64}},
         ]})
         result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
         self.assertEqual(result['status'], 'ready')
-        self.assertEqual(len(result['devices']), 2)
-        self.assertEqual(result['devices'][0]['percent'], 0)
-        self.assertTrue(result['devices'][0]['estimated'])
-        self.assertIsNone(result['devices'][1]['percent'])
-        self.assertIsNone(result['devices'][1]['components'][0]['percent'])
-        self.assertNotIn('private-device-id', json.dumps(result))
+        self.assertEqual(result['devices'][0]['percent'], 64)
+        self.assertTrue(result['limited'])
+        self.assertIsNone(result['source'])
+        self.assertIsNone(result['producerVersion'])
+
+    def test_malformed_stale_flags_neutralize_all_current_battery_fields(self):
+        for malformed in ('true', None, 0, 1, {}, []):
+            with self.subTest(stale=malformed):
+                self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3',
+                    'source': 'daemon', 'generated_at': self.now.timestamp(), 'devices': [{
+                        'name': 'Mouse', 'kind': 'mouse', 'present': True, 'stale': malformed,
+                        'updated_at': self.now.timestamp(),
+                        'battery': {'percent': 73, 'level': 'good', 'charging': 'charging', 'estimated': True},
+                        'components': [{'id': 'left', 'percent': 64, 'charging': 'charging'}],
+                    }]})
+                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
+                device = result['devices'][0]
+                self.assertEqual(result['status'], 'unknown')
+                self.assertTrue(result['limited'])
+                self.assertIsNone(device['percent'])
+                self.assertIsNone(device['level'])
+                self.assertEqual(device['charging'], 'unknown')
+                self.assertFalse(device['estimated'])
+                self.assertIsNone(device['components'][0]['percent'])
+                self.assertEqual(device['components'][0]['charging'], 'unknown')
+
+    def test_malformed_hidden_flags_never_expose_device(self):
+        for malformed in ('true', None, 0, 1, {}, []):
+            with self.subTest(hidden=malformed):
+                self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3',
+                    'source': 'daemon', 'generated_at': self.now.timestamp(), 'devices': [{
+                        'name': 'PRIVATE-SENTINEL', 'kind': 'mouse', 'present': True, 'hidden': malformed,
+                        'updated_at': self.now.timestamp(), 'battery': {'percent': 73},
+                    }]})
+                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
+                self.assertEqual(result['devices'], [])
+                self.assertTrue(result['limited'])
+                self.assertNotIn('PRIVATE-SENTINEL', json.dumps(result))
 
     def test_recording_phase_is_cached_and_never_claims_live_capture(self):
         session = {'version': 1, 'id': 'private-session', 'owner': 'manual', 'backend': 'audio',
@@ -139,7 +241,8 @@ class IntegrationTests(unittest.TestCase):
         self.write_state('recording-cli/recording-session.json', {'version': 1, 'phase': 'recording', 'startedAt': 'invalid'})
         result = self.bridge.collect_snapshot(self.home, self.now)
         self.assertEqual(result['quota']['status'], 'missing')
-        self.assertEqual(result['peripherals'], {'status': 'invalid', 'devices': []})
+        self.assertEqual(result['peripherals'], {'status': 'invalid', 'generatedAt': None, 'source': None,
+                                                 'producerVersion': None, 'limited': False, 'devices': []})
         self.assertEqual(result['recording']['status'], 'invalid')
         self.assertEqual(result['recording']['state'], 'unknown')
 

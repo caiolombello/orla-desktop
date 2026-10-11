@@ -219,6 +219,151 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(controls.property("media"), fixture)
         self.assertEqual(self.warnings, [])
 
+    def test_control_center_is_opt_in_read_only_on_open_and_uses_only_mock_backend(self):
+        button = self.window.findChild(QQuickItem, "controlCenterButton")
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        loader = self.window.findChild(QQuickItem, "controlCenterNativeLoader")
+        backend = self.window.findChild(QObject, "dockControlCenterBackend")
+        battery = self.window.findChild(QQuickItem, "systemBattery")
+        self.assertFalse(button.property("visible"))
+        self.assertFalse(loader.property("active"))
+        self.assertFalse(self.dock.property("nativeControlCenterBackendLoaded"))
+
+        self.config.setProperty("showControlCenter", True)
+        QTest.qWait(20)
+        self.assertTrue(button.property("visible"))
+        snapshot = self.evaluate("JSON.stringify({profilesJSON:configuration.profilesJSON,theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,timerDeadline:configuration.timerDeadline,timerRemaining:configuration.timerRemaining,timerBreak:configuration.timerBreak,completedFocus:configuration.completedFocus,showControlCenter:configuration.showControlCenter})")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        point = button.mapToScene(QPoint(int(button.width() / 2), int(button.height() / 2)))
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        QTest.qWait(30)
+        self.assertTrue(popup.property("visible"))
+        self.assertEqual(self.evaluate("JSON.stringify({profilesJSON:configuration.profilesJSON,theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,timerDeadline:configuration.timerDeadline,timerRemaining:configuration.timerRemaining,timerBreak:configuration.timerBreak,completedFocus:configuration.completedFocus,showControlCenter:configuration.showControlCenter})"), snapshot)
+        calls = backend.property("calls")
+        self.assertEqual(calls.toVariant() if hasattr(calls, "toVariant") else calls, [])
+        self.assertTrue(battery.property("active"))
+        self.assertFalse(loader.property("active"))
+        self.assertFalse(self.dock.property("nativeControlCenterBackendLoaded"))
+
+        sound_action = self.window.findChild(QQuickItem, "controlCenterSoundAction")
+        for _ in range(4):
+            if self.window.activeFocusItem() == sound_action:
+                break
+            QTest.keyClick(self.window, Qt.Key_Tab)
+            QTest.qWait(10)
+        self.assertEqual(self.window.activeFocusItem(), sound_action)
+        closed = QSignalSpy(popup.closed)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        if not closed.count():
+            self.assertTrue(closed.wait(1000))
+        self.assertFalse(popup.property("visible"))
+        self.assertEqual(self.window.activeFocusItem(), button)
+        self.assertFalse(battery.property("active"))
+        self.assertEqual(self.evaluate("JSON.stringify({profilesJSON:configuration.profilesJSON,theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,timerDeadline:configuration.timerDeadline,timerRemaining:configuration.timerRemaining,timerBreak:configuration.timerBreak,completedFocus:configuration.completedFocus,showControlCenter:configuration.showControlCenter})"), snapshot)
+        self.assertEqual(self.warnings, [])
+
+    def test_control_center_popup_respects_narrow_width_and_height_budget(self):
+        self.config.setProperty("showControlCenter", True)
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        loader = self.window.findChild(QQuickItem, "controlCenterNativeLoader")
+        backend = self.window.findChild(QObject, "dockControlCenterBackend")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        self.assertGreater(popup.property("heightBudget"), self.window.height() - 24)
+        budget = QQmlExpression(self.engine.rootContext(), popup,
+            "widthBudget = 260; heightBudget = 320")
+        budget.evaluate()
+        self.assertFalse(budget.hasError(), budget.error().toString())
+        opened = QQmlExpression(self.engine.rootContext(), popup, "open()")
+        opened.evaluate()
+        self.assertFalse(opened.hasError(), opened.error().toString())
+        QTest.qWait(30)
+        self.assertTrue(popup.property("visible"))
+        self.assertLessEqual(popup.property("width"), 260)
+        self.assertLessEqual(popup.property("height"), 320)
+        contents = self.window.findChild(QQuickItem, "controlCenterContents")
+        scroll = self.window.findChild(QQuickItem, "controlCenterScroll")
+        viewport = scroll.property("contentItem")
+        for name in ("controlCenterSoundAction", "controlCenterPowerAction", "controlCenterAllAction"):
+            action = self.window.findChild(QQuickItem, name)
+            self.assertLessEqual(action.width(), contents.width())
+            self.assertGreaterEqual(action.height(), 40)
+
+        final_action = self.window.findChild(QQuickItem, "controlCenterAllAction")
+        initial_top = final_action.mapToItem(viewport, QPoint(0, 0)).y()
+        self.assertGreater(initial_top + final_action.height(), viewport.height())
+        visited = []
+        for _ in range(12):
+            QTest.keyClick(self.window, Qt.Key_Tab)
+            QTest.qWait(10)
+            focused = self.window.activeFocusItem()
+            visited.append(focused.property("objectName") if focused else "")
+            if focused == final_action:
+                break
+        self.assertEqual(self.window.activeFocusItem(), final_action, visited)
+        final_top = final_action.mapToItem(viewport, QPoint(0, 0)).y()
+        self.assertGreater(viewport.property("contentY"), 0)
+        self.assertGreaterEqual(final_top, -0.5)
+        self.assertLessEqual(final_top + final_action.height(), viewport.height() + 0.5)
+        calls = backend.property("calls")
+        self.assertEqual(calls.toVariant() if hasattr(calls, "toVariant") else calls, [])
+        self.assertFalse(loader.property("active"))
+        self.assertFalse(self.dock.property("nativeControlCenterBackendLoaded"))
+        self.assertEqual(self.warnings, [])
+
+    def test_disabling_control_center_closes_popup_and_releases_optional_battery(self):
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        loader = self.window.findChild(QQuickItem, "controlCenterNativeLoader")
+        backend = self.window.findChild(QObject, "dockControlCenterBackend")
+        battery = self.window.findChild(QQuickItem, "systemBattery")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        protected = self.evaluate("JSON.stringify({profilesJSON:configuration.profilesJSON,theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,timerDeadline:configuration.timerDeadline,timerRemaining:configuration.timerRemaining,timerBreak:configuration.timerBreak,completedFocus:configuration.completedFocus})")
+
+        def open_then_disable():
+            self.config.setProperty("showControlCenter", True)
+            expression = QQmlExpression(self.engine.rootContext(), popup, "open()")
+            expression.evaluate()
+            self.assertFalse(expression.hasError(), expression.error().toString())
+            QTest.qWait(30)
+            self.assertTrue(popup.property("visible"))
+            self.assertTrue(battery.property("active"))
+            self.config.setProperty("showControlCenter", False)
+            QTest.qWait(30)
+            self.assertFalse(popup.property("visible"))
+            self.assertFalse(loader.property("active"))
+            self.assertFalse(self.dock.property("nativeControlCenterBackendLoaded"))
+
+        open_then_disable()
+        self.assertFalse(battery.property("active"))
+
+        self.config.setProperty("showSystemBattery", True)
+        QTest.qWait(30)
+        open_then_disable()
+        self.assertTrue(battery.property("active"))
+
+        calls = backend.property("calls")
+        self.assertEqual(calls.toVariant() if hasattr(calls, "toVariant") else calls, [])
+        self.assertEqual(self.evaluate("JSON.stringify({profilesJSON:configuration.profilesJSON,theme:configuration.theme,appearanceJSON:configuration.appearanceJSON,timerDeadline:configuration.timerDeadline,timerRemaining:configuration.timerRemaining,timerBreak:configuration.timerBreak,completedFocus:configuration.completedFocus})"), protected)
+        self.assertEqual(self.warnings, [])
+
+    def test_control_center_preference_is_global_immediate_and_does_not_change_profile(self):
+        popup = self.window.findChild(QObject, "settingsPopup")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        expression = QQmlExpression(self.engine.rootContext(), popup, "open()")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        QTest.qWait(30)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(20)
+        toggle = self.window.findChild(QQuickItem, "showControlCenter")
+        before_profile = self.config.property("profilesJSON")
+        before_theme = self.config.property("theme")
+        toggle.forceActiveFocus()
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertTrue(self.config.property("showControlCenter"))
+        self.assertEqual(self.config.property("profilesJSON"), before_profile)
+        self.assertEqual(self.config.property("theme"), before_theme)
+        self.assertEqual(self.warnings, [])
+
 
 if __name__ == "__main__":
     unittest.main()

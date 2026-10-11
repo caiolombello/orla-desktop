@@ -86,7 +86,7 @@ Contribuições de texto e traduções não dependem de QtDBus, KDE instalado, A
 
 ### Integrações e hardware
 
-Usar fixtures determinísticas para estado ausente, antigo, parcial e erro. Mock provider/serviço deve implementar o mesmo contrato estreito do adaptador real. Separar teste portátil de prova real de MPRIS, UPower, calendário, Steam, Wayland ou multi-monitor. Uma contribuição que toca API do Plasma ou hardware inclui versão, sessão e dispositivo usados; ausência local não deve impedir testar a lógica sem dispositivo quando houver fixture adequada.
+Usar fixtures determinísticas para estado ausente, antigo, parcial e erro. Mock provider/serviço deve implementar o mesmo contrato estreito do adaptador real. Separar teste portátil de prova real de MPRIS, UPower, calendário, Steam, Wayland ou multi-monitor. Uma contribuição que toca API do Plasma ou hardware inclui versão, sessão e dispositivo usados; ausência local não deve impedir testar a lógica sem dispositivo quando houver fixture adequada. Para PeriGauge, distinguir snapshot/cache local de coleta ativa: “Reler cache local” não executa CLI nem coleta dados; leitura antiga, limitada ou ausente deve ser identificada. A validação Source/mock 0.2.9 recebeu aprovação independente, mas cache real, daemon/serviço e hardware permanecem sem validação. A primeira fatia Source da Central de Controle 0.2.9 também recebeu aprovação independente, sem qualificar popup nativo ou abertura de KCM. A candidata da [Central de Controle](control-center.md) reutiliza os modelos existentes e encaminha somente ações explícitas às configurações do KDE; fixtures de despacho não provam que uma janela nativa abriu.
 
 ### IA e provedores pagos
 

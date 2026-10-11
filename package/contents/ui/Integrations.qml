@@ -25,10 +25,25 @@ Item {
     readonly property string batterySummary: {
         if (error) return qsTr("Integração indisponível");
         const devices = peripherals.devices || [];
-        const available = devices.filter(device => !device.stale && typeof device.percent === "number" && isFinite(device.percent));
+        const available = devices.filter(device => device.present !== false && !device.stale
+            && typeof device.percent === "number" && isFinite(device.percent));
         available.sort((a, b) => a.percent - b.percent);
-        return available.length ? available[0].name + " · " + Math.round(available[0].percent) + "%"
-            : peripherals.status === "stale" ? qsTr("Dados desatualizados") : qsTr("Sem leitura disponível");
+        if (available.length) return available[0].name + " · " + Math.round(available[0].percent) + "%";
+        const absent = devices.find(device => device.present === false);
+        if (absent) return absent.name + " · " + qsTr("fora de alcance");
+        if (peripherals.status === "stale" || devices.some(device => device.stale)) return qsTr("Dados desatualizados");
+        if (devices.length) return qsTr("Percentual desconhecido");
+        return peripherals.status === "missing" ? qsTr("Sem cache local") : qsTr("Sem bateria disponível");
+    }
+    readonly property string peripheralsMetadataSummary: {
+        const parts = [];
+        if (peripherals.source === "daemon") parts.push(qsTr("coleta do daemon"));
+        else if (peripherals.source === "oneshot") parts.push(qsTr("coleta pontual"));
+        if (peripherals.producerVersion) parts.push("PeriGauge " + peripherals.producerVersion);
+        if (typeof peripherals.generatedAt === "number" && isFinite(peripherals.generatedAt))
+            parts.push(qsTr("atualizado em %1").arg(Qt.formatDateTime(new Date(peripherals.generatedAt * 1000), "d MMM, HH:mm")));
+        if (peripherals.limited === true) parts.push(qsTr("modelo limitado"));
+        return parts.join(" · ");
     }
     readonly property string recordingSummary: recording.state === "stopped" ? qsTr("Sessão encerrada")
         : recording.state === "recording" ? qsTr("Estado salvo · gravando")

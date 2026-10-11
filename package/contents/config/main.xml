@@ -19,6 +19,7 @@
     <entry name="showPeripherals" type="Bool"><default>true</default></entry>
     <entry name="showRecording" type="Bool"><default>true</default></entry>
     <entry name="showLocalToasts" type="Bool"><default>false</default></entry>
+    <entry name="showControlCenter" type="Bool"><default>false</default></entry>
     <entry name="calendarEvents" type="Bool"><default>true</default></entry>
     <entry name="currentDesktopOnly" type="Bool"><default>false</default></entry>
     <entry name="focusMinutes" type="Int"><default>25</default><min>1</min><max>120</max></entry>
