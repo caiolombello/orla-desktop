@@ -21,6 +21,34 @@ The PR workflow passed portable Python/QML checks and produced a Source ZIP arti
 
 The panel therefore demonstrates only a bounded compatibility-reporting path in Source and one local protocol observation. It is not native launcher admission, provider readiness, or evidence that AI works in Orla as an end-user feature. Native Qt/KDE/Wayland behavior, normal launcher session/focus, packaging/install, authentication/session flows, model requests, inference, cancellation semantics, streaming/tools, usage, billing and general network/namespace enforcement remain UNRUN.
 
+## Offline text contract foundation (T1)
+
+The Source checkout also includes `scripts/ai_text.py`, a separate experimental
+text-contract foundation. It validates bounded rewrite, summarize and translate
+requests and parses a supported text-only subset of Ollama NDJSON and OpenAI
+Responses SSE. Unknown event fields, unsupported tools, calls, images and
+contradictory lifecycle states are rejected. Published deltas keep contiguous sequence numbers and the
+4,096-event limit reserves a terminal slot. Provider error details are sanitized;
+reported usage is validated and cost remains unknown.
+
+The framing parser accepts credential bytes supplied by its caller. The module
+does not acquire credentials from stores or the environment, authenticate, use
+credentials in transport, make network requests or connect to the launcher UI.
+Its command-line entry point returns
+`unsupported_transport`. It is not functional AI or a release feature. Real
+transport, cancellation, authentication, subscriptions, model access and billing
+remain separate gates; a provider subscription does not establish API credit.
+
+Independent Source review approved the offline contract after adversarial bounds
+and lifecycle checks. Its 23 author tests use only Python's standard library:
+
+```bash
+python3 -B -m unittest discover -s tests -p 'test_ai_text.py' -v
+```
+
+Portable CI runs that same suite. It does not admit provider/network or native
+behavior. The published 0.2.9 assets remain unchanged and exclude this text module.
+
 ## Reviewed source pins
 
 The separately reviewed controller/UI and helper revisions used these source hashes:
