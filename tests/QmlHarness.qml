@@ -81,6 +81,21 @@ Window {
         property var calls: []
         function openSystemSettings(target) { calls = calls.concat([target]); }
     }
+    QtObject {
+        id: audioBackend
+        objectName: "dockAudioBackend"
+        property int revision: 0
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", normalVolume: 65536, defaultOutputId: "speakers", outputs: [
+            {id: "speakers", label: "Alto-falantes sintéticos", volumeRaw: 32768, muted: false, writable: true, isDefault: true},
+            {id: "headphones", label: "Fones sintéticos", volumeRaw: 16384, muted: false, writable: true, isDefault: false}
+        ]})
+        function setVolume(id, value) { calls = calls.concat([{kind: "volume", id: id, value: value}]); return !rejectWrites; }
+        function setMuted(id, value) { calls = calls.concat([{kind: "mute", id: id, value: value}]); return !rejectWrites; }
+        function setDefaultOutput(id) { calls = calls.concat([{kind: "default-output", id: id}]); return !rejectWrites; }
+        function retry() { calls = calls.concat([{kind: "retry"}]); return !rejectWrites; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -94,6 +109,7 @@ Window {
         configuration: config
         contextSnapshotOverride: contextSnapshot
         controlCenterBackendOverride: controlCenterBackend
+        audioBackendOverride: audioBackend
         integrations.active: false
         systemBattery.transport: ownedBatteryTransport
     }

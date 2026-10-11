@@ -1,11 +1,51 @@
-# Central de Controle (alpha 0.2.9)
+# Central de Controle (Source experimental)
 
-A alpha 0.2.9 publica a primeira fatia experimental. A revisão independente do Source foi aprovada; isso não equivale à validação de uma sessão Plasma nativa.
+Os assets publicados da alpha 0.2.9 continuam imutáveis: eles entregam a fatia
+CC0 de estado e atalhos, sem controles diretos. O Source atual acrescenta a
+primeira fatia CC1-A experimental para áudio. Essa mudança ainda não integra
+uma nova release.
 
-Ative **Mostrar Central de Controle no dock (global)** em **Widgets** para exibir o botão opcional no dock. A preferência é global, começa desligada e é salva imediatamente, fora dos perfis.
+Ative **Mostrar Central de Controle no dock (global)** em **Widgets** para
+exibir o botão opcional. A preferência herdada de CC0 é global, começa
+desligada, é salva imediatamente e permanece fora dos perfis.
 
-O popup apresenta dois cards independentes: **Som e mídia**, com o modelo MPRIS já compartilhado pelo dock, e **Energia**, com o modelo de bateria já existente. Os botões explícitos podem encaminhar a abertura das páginas de Som, Energia ou **Todos os ajustes** nas Configurações do Sistema do KDE. Um encaminhamento bem-sucedido não confirma que a janela abriu nem que uma configuração mudou.
+Além dos cards compartilhados de mídia MPRIS e bateria, o card de áudio do
+Source atual permite:
 
-Esta fatia mostra estado e oferece atalhos. Ela não controla diretamente volume, microfone, Wi-Fi, Bluetooth, brilho ou Não perturbe; não é HUD nem sistema de notificações. O popup pode ativar a leitura já existente da bateria enquanto necessário. Ausência de player/bateria não transforma o card correspondente em prova de serviço ou hardware disponível.
+- ajustar o volume da saída padrão entre 0% e 100%;
+- silenciar ou reativar o som por ação explícita, sem ligar ou desligar o mudo
+  implicitamente ao mover o volume;
+- escolher entre as saídas elegíveis e solicitar uma nova saída padrão.
 
-O [registro de validação](validation/control-center-peripherals-0.2.9.md) separa testes Source/mock de validação nativa ainda aberta.
+No contrato do Orla, abrir o popup não solicita uma mudança de áudio. Cada
+escrita exige mover o slider, acionar o botão de mudo ou escolher uma saída. O
+controle acompanha mudanças externas e só considera uma operação concluída
+quando um snapshot posterior converge para o valor solicitado. Essa
+convergência prova o estado observado, mas não a origem ou causalidade da
+mudança. Carregar o adaptador nativo ainda pode ativar o serviço de áudio; esse
+efeito exige o gate nativo descrito na validação.
+
+Enquanto uma alteração aguarda confirmação, o card mostra estado pendente. Uma
+falha imediata, remoção do alvo ou timeout produz erro local e restaura uma
+apresentação confirmada ou ainda supervisionada, conforme o alvo. O ID da saída
+é capturado no gesto: trocar a saída padrão durante um drag não redireciona a
+escrita para o novo dispositivo. Não há movimentação de streams individuais.
+
+Se o backend de áudio estiver ausente, somente o card correspondente fica
+indisponível. O atalho explícito **Abrir Som no KDE** permanece disponível como
+fallback. Seu despacho não comprova que a janela abriu nem que uma configuração
+mudou.
+
+Os títulos, valores, detalhes e erros livres usam as cores `foreground` e
+`muted` da aparência do Orla. Controles como botões e o seletor de saída mantêm
+a paleta interna do estilo Qt/KDE, evitando texto escuro herdado sobre o fundo
+escuro do card sem recolorir os controles nativos.
+
+CC1 continua parcial. Microfone, brilho, Não perturbe e os gates reais do
+serviço de áudio ainda estão abertos; rede, Bluetooth e energia pertencem às
+fatias seguintes. Instalação, módulo privado do Plasma-PA, Pulse/PipeWire,
+barramento da sessão, compositor, seat, hardware, popup nativo e painel
+instalado permanecem sem validação.
+
+Veja a [validação Source de áudio](validation/control-center-audio-source.md) e
+o [registro da alpha 0.2.9](validation/control-center-peripherals-0.2.9.md).

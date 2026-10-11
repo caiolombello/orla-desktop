@@ -6,8 +6,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QPointF, QUrl, Qt
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtGui import QColor, QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression, QQmlProperty
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 
@@ -106,6 +106,39 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.item("controlCenterPowerTitle").property("text"), "Bateria indisponível")
         self.assertTrue(self.item("controlCenterSoundAction").property("enabled"))
         self.assertTrue(self.item("controlCenterPowerAction").property("enabled"))
+        self.assertEqual(self.warnings, [])
+
+    def test_free_labels_follow_custom_foreground_without_recoloring_controls(self):
+        foreground = QColor("#eaf4f1")
+        muted = QColor("#a7b7c4")
+        button = self.item("controlCenterSoundAction")
+        selector = self.item("controlCenterOutputSelector")
+        display = self.item("controlCenterOutputDisplay")
+        button_text_before = self.evaluate("palette.buttonText", button)
+        selector_text_before = self.evaluate("palette.buttonText", selector)
+
+        self.assertTrue(QQmlProperty.write(self.center, "foreground", foreground))
+        self.assertTrue(QQmlProperty.write(self.center, "muted", muted))
+        self.assertTrue(QQmlProperty.write(self.center, "soundError", "Falha sintética"))
+        self.assertTrue(QQmlProperty.write(self.center, "powerError", "Falha sintética"))
+        self.assertTrue(QQmlProperty.write(self.center, "allError", "Falha sintética"))
+        self.assertTrue(QQmlProperty.write(self.center.property("audio"), "error", "Falha sintética"))
+        QTest.qWait(20)
+
+        for name in ("controlCenterSoundHeading", "controlCenterMediaTitle",
+                     "controlCenterAudioPercent", "controlCenterAudioStatus",
+                     "controlCenterPowerHeading",
+                     "controlCenterPowerTitle", "controlCenterSoundError",
+                     "controlCenterPowerError", "controlCenterAllError"):
+            self.assertEqual(self.item(name).property("color").name(), foreground.name(), name)
+        for name in ("controlCenterMediaDetail", "controlCenterOutputHeading",
+                     "controlCenterPowerDetail"):
+            self.assertEqual(self.item(name).property("color").name(), muted.name(), name)
+
+        self.assertEqual(self.evaluate("palette.buttonText", button), button_text_before)
+        self.assertEqual(self.evaluate("palette.buttonText", selector), selector_text_before)
+        self.assertEqual(display.property("color"), selector_text_before)
+        self.assertNotEqual(button_text_before.name(), foreground.name())
         self.assertEqual(self.warnings, [])
 
     def test_keyboard_focus_reveals_each_action_in_a_narrow_view(self):
