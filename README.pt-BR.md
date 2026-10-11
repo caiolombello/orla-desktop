@@ -10,7 +10,7 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 ## O que funciona hoje
 
-- Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las.
+- Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
 - Escolher entre os temas Glass, Midnight e Paper, ajustar o tamanho dos ícones e ativar ou desativar animações.
 - Usar relógio, Pomodoro, calendário do KDE e controles de mídia compatíveis com MPRIS.
 - Ler snapshots locais opcionais do QuotaLantern, PeriGauge e FalaTrace quando esses projetos gravam arquivos de estado compatíveis.
@@ -24,13 +24,15 @@ Os controles de mídia usam MPRIS e funcionam com players compatíveis. O compor
 
 - KDE Plasma 6.7 ou mais recente.
 - Python 3.10 ou mais recente para o helper de empacotamento e as integrações locais.
-- PySide6 com QtDBus para o instalador e o serviço de integração local. O applet pode funcionar sem as integrações com projetos, mas o helper oficial de instalação verifica essas dependências.
+- `kpackagetool6` para instalação. PySide6 com QtDBus, `busctl` e sessão D-Bus são requisitos opcionais das integrações locais com projetos. A ausência deles não bloqueia a instalação do dock.
 - KOrganizer e o recurso de calendário KDE PIM apropriado para sincronizar calendários externos.
 
-Em um Fedora que já tenha Plasma 6.7+, instale as dependências do helper pelos pacotes da distribuição e execute `doctor` dentro da sua sessão gráfica:
+Em um Fedora que já tenha Plasma 6.7+, instale a ferramenta de pacotes. Adicione as dependências opcionais se quiser os widgets dos projetos e execute `doctor` dentro da sua sessão gráfica:
 
 ```bash
-sudo dnf install kf6-kpackage python3-pyside6 systemd
+sudo dnf install kf6-kpackage
+# Integrações locais opcionais com projetos:
+sudo dnf install python3-pyside6 systemd
 ```
 
 A base atual de validação é Fedora 44, Plasma 6.7.5, Qt 6.11.2 e Wayland. Outras distribuições, versões do Plasma, sessões X11 e configurações com vários monitores ainda precisam de validação.
@@ -42,13 +44,13 @@ Baixe o `.zip` da versão na página de [releases do GitHub](https://github.com/
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.1.zip
-cd orla-dock-0.2.1
+unzip orla-dock-0.2.2.zip
+cd orla-dock-0.2.2
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.1.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.2.plasmoid
 ```
 
-Se a bridge de integração estiver no pacote, o helper registra o serviço local opcional. Não é necessário acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
+O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
 
 Para compilar e instalar a partir do código-fonte:
 
@@ -57,7 +59,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.1.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.2.plasmoid
 ```
 
 Para verificar a configuração local ou remover os arquivos gerenciados pelo Orla:

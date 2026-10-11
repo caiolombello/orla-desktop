@@ -167,6 +167,13 @@ Item {
                     attention: Boolean(model.IsDemandingAttention)
                     onClicked: root.activateTask(index)
                     onPressAndHold: root.showTaskMenu(index, model)
+                    Keys.onMenuPressed: root.showTaskMenu(index, model)
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_F10 && event.modifiers === Qt.ShiftModifier) {
+                            root.showTaskMenu(index, model);
+                            event.accepted = true;
+                        }
+                    }
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: root.showTaskMenu(taskTile.index, taskTile.model) }
                 }
             }
@@ -252,6 +259,7 @@ Item {
     }
     Controls.Menu {
         id: taskMenu
+        objectName: "taskContextMenu"
         popupType: Controls.Popup.Window
         x: Math.max(0, Math.min(root.width - width, (root.menuRow + 1) * (root.tileSize + 16)))
         y: root.popAbove ? -height - 8 : root.height + 8

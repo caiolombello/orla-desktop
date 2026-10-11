@@ -1,6 +1,6 @@
 # Experiência de desenvolvimento do Orla Desktop
 
-> **Roadmap proposto.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. A versão pública é Orla Dock 0.2.1 alpha, licenciada sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, CLI de extensões, runtime de plugins ou galeria no alpha.
+> **Roadmap em execução.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. O incremento da base é Orla Dock 0.2.2 alpha, licenciado sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, runtime de plugins ou galeria no alpha.
 
 ## Objetivo
 
@@ -22,6 +22,8 @@ python3 scripts/orla.py build
 `doctor`, `build`, `install` e `uninstall` são comandos atuais do helper. Para interações QML, testes da sessão privada D-Bus ou comportamento nativo, consulte [CONTRIBUTING.md](../CONTRIBUTING.md) e [ROADMAP.md](../ROADMAP.md); esses testes exigem runtimes/ambientes específicos e não são cobertos pela CI portátil inteira. Alterações de UI precisam ser conferidas numa sessão Plasma compatível antes de afirmar que comportamento nativo está validado.
 
 ### Regras para documentação de comandos
+
+Desde 0.2.2, `doctor` identifica PySide6.QtDBus, `busctl` e sessão D-Bus como dependências opcionais das integrações. A instalação do dock continua sem elas; restaurar as dependências e reinstalar ativa o serviço. A suíte de integração D-Bus ainda requer PySide6 e `dbus-run-session`. Veja a [validação da base](validation/foundation-0.2.2.md) para escopo e limites.
 
 - Exemplos acima correspondem ao fluxo atual documentado; não sugerem que haja CLI para criar extensões.
 - Os nomes `orla-ext create`, `orla-ext check`, `orla-ext dev` e `orla-ext pack` abaixo são **nomes candidatos para um futuro conjunto de ferramentas**. Não os executar nem documentar como se já estivessem disponíveis.
