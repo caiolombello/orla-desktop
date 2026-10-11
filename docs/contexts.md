@@ -2,7 +2,7 @@
 
 ## Português
 
-O checkout-fonte candidato a 0.2.8 adiciona a aba experimental **Contextos** às configurações do dock. A release pública continua sendo a [0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7); esta integração de fonte ainda não foi publicada.
+A prerelease alpha [0.2.8](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) adiciona a aba experimental **Contextos** às configurações do dock. É uma primeira fatia de associações explícitas; não oferece seleção automática de perfil ou troca de contexto.
 
 A aba observa Activity e área de trabalho virtual em cartões separados e, quando o contexto atual está disponível, permite associá-lo explicitamente a um perfil gerenciado que já existe. Use o seletor para escolher o perfil e **Associar Activity atual** ou **Associar área atual** para salvar; **Remover** elimina a associação atual. Apenas navegar pelo seletor não grava nada. As associações organizam preferências: nesta versão elas não selecionam perfil automaticamente, não trocam Activity/área e não alteram aplicativos, aparência ou widgets.
 
@@ -14,7 +14,7 @@ A integração não aplica nem cancela uma prévia de aparência pendente e não
 
 ## English
 
-The source checkout for candidate 0.2.8 adds an experimental **Contexts** tab to dock settings. The public release remains [0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7); this source integration has not been released.
+The [0.2.8 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) adds an experimental **Contexts** tab to dock settings. This is a first slice of explicit associations; it does not automatically select profiles or switch contexts.
 
 The tab observes Activity and virtual desktop in separate cards. When the current context is available, it lets you explicitly associate it with an existing managed profile. Choose a profile, then select **Associar Activity atual** or **Associar área atual** to save; **Remover** clears the current association. Moving through a selector does not write anything. Associations organize preferences: this version does not automatically select a profile, switch an Activity or desktop, or change apps, appearance, or widgets.
 

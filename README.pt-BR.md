@@ -8,13 +8,13 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 > [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
-O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. As releases 0.2.5, 0.2.6 e 0.2.7 não o empacotam nem instalam; foco global no Wayland e integração completa do launcher continuam pendentes.
+O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. As releases 0.2.5, 0.2.6, 0.2.7 e 0.2.8 não o empacotam nem instalam; foco global no Wayland e integração completa do launcher continuam pendentes.
 
-O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), com menu do sistema e nome do aplicativo ativo para Plasma 6.7.x. Exige instalação manual separada e não faz parte das releases 0.2.5, 0.2.6 e 0.2.7. Diálogos reais de sessão, painel/foco e composição em vários monitores continuam sem teste. Menu Global, bandeja e relógio serão widgets KDE irmãos.
+O checkout inclui o [Menu Orla, primeiro componente experimental da barra](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), com menu do sistema e nome do aplicativo ativo para Plasma 6.7.x. Exige instalação manual separada e não faz parte das releases 0.2.5, 0.2.6, 0.2.7 e 0.2.8. Diálogos reais de sessão, painel/foco e composição em vários monitores continuam sem teste. Menu Global, bandeja e relógio serão widgets KDE irmãos.
 
-O bundle da release 0.2.7 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
+O bundle da release 0.2.8 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
 
-O ZIP da prerelease alpha 0.2.7 inclui a CLI experimental de inventário local do Steam. Ela lê metadados limitados de bibliotecas em raízes informadas explicitamente e distingue estados parciais/desconhecidos; não inicia jogos, acessa contas nem comprova titularidade. Busca/favoritos no dock e validação com Steam real continuam planejados. Os assets da 0.2.5 permanecem inalterados e não incluem a CLI. O ZIP da 0.2.6 já a traz, e o ZIP da 0.2.7 continua incluindo-a; o `.plasmoid` sozinho não contém a CLI. Veja o [guia do Steam](docs/steam.md).
+O ZIP da prerelease alpha 0.2.8 inclui a CLI experimental de inventário local do Steam. Ela lê metadados limitados de bibliotecas em raízes informadas explicitamente e distingue estados parciais/desconhecidos; não inicia jogos, acessa contas nem comprova titularidade. Busca/favoritos no dock e validação com Steam real continuam planejados. Os assets da 0.2.5 permanecem inalterados e não incluem a CLI. Os ZIPs 0.2.6 e 0.2.7 também a incluem; o `.plasmoid` sozinho não contém a CLI. Veja o [guia do Steam](docs/steam.md).
 
 ## O que funciona hoje
 
@@ -38,9 +38,9 @@ A aparência usa um override separado e preserva as preferências anteriores de 
 
 ## Usar perfis
 
-Abra as configurações do dock e escolha **Perfis**, ao lado de **Aparência** e **Widgets**. **Criar Trabalho, Pessoal e Jogos** copia suas preferências salvas para três perfis e mantém **Preferências anteriores** ativo. Escolha um perfil e pressione **Usar perfil**; apenas mudar o seletor não ativa a escolha. Para copiar a apresentação salva do perfil ativo, digite um nome único e pressione **Criar e usar**. Aplique ou cancele a prévia de aparência antes de criar ou trocar o perfil.
+Abra as configurações do dock e escolha **Perfis**, ao lado de **Aparência**, **Widgets** e **Contextos**. **Criar Trabalho, Pessoal e Jogos** copia suas preferências salvas para três perfis e mantém **Preferências anteriores** ativo. Escolha um perfil e pressione **Usar perfil**; apenas mudar o seletor não ativa a escolha. Para copiar a apresentação salva do perfil ativo, digite um nome único e pressione **Criar e usar**. Aplique ou cancele a prévia de aparência antes de criar ou trocar o perfil.
 
-Em **Widgets**, visibilidade, ordem, eventos do calendário e filtro de janelas salvam imediatamente no perfil ativo; Cancelar aparência não desfaz essas opções. Organizar a ordem exige um perfil. Volte a **Preferências anteriores** para usar as preferências originais. Não há migração automática. Veja o [guia de perfis](docs/profiles.md) e a [validação](docs/validation/profiles-0.2.5.md), com prova privada de KConfig/reinício. O checkout de código agora inclui uma primeira aba experimental **Contextos** para associar explicitamente a Activity ou área de trabalho atual a um perfil gerenciado existente. Ela não troca nenhum contexto nem seleciona perfis automaticamente. Consulte o [guia de Contextos](docs/contexts.md) e a [validação da fonte 0.2.8](docs/validation/contexts-0.2.8.md). Este incremento ainda não está na release pública 0.2.7; seleção automática de perfil e qualificação da sessão nativa continuam pendentes.
+Em **Widgets**, visibilidade, ordem, eventos do calendário e filtro de janelas salvam imediatamente no perfil ativo; Cancelar aparência não desfaz essas opções. Organizar a ordem exige um perfil. Volte a **Preferências anteriores** para usar as preferências originais. Não há migração automática. Veja o [guia de perfis](docs/profiles.md) e a [validação](docs/validation/profiles-0.2.5.md), com prova privada de KConfig/reinício. A prerelease alpha pública 0.2.8 adiciona a primeira aba experimental **Contextos** para associar explicitamente a Activity ou área virtual atual a um perfil gerenciado existente. Ela não troca contextos nem seleciona perfis automaticamente. Consulte o [guia de Contextos](docs/contexts.md) e a [validação 0.2.8](docs/validation/contexts-0.2.8.md). P2 continua parcial, W1 ainda não começou e a qualificação da sessão nativa permanece pendente.
 
 ## Requisitos
 
@@ -61,15 +61,15 @@ A base atual de validação é Fedora 44, Plasma 6.7.5, Qt 6.11.2 e Wayland. Out
 
 ## Instalar uma versão publicada
 
-Os comandos abaixo apontam para a [prerelease alpha 0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
+Os comandos abaixo apontam para a [prerelease alpha 0.2.8](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.7.zip
-cd orla-dock-0.2.7
+unzip orla-dock-0.2.8.zip
+cd orla-dock-0.2.8
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.7.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.8.plasmoid
 ```
 
 O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
@@ -111,7 +111,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Para ass
 
 Orla Desktop é um projeto alpha. O componente atual mantém o identificador Plasma `org.caiodock.dock` e o serviço D-Bus `org.caiodock.Integrations` para preservar instalações e configurações existentes. O nome exibido às pessoas é Orla Dock; esses identificadores internos existem por compatibilidade.
 
-Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 publicado na 0.2.5. A versão 0.2.6 acrescenta o primeiro consumidor experimental de tema por colagem e inclui a CLI experimental do Steam. A 0.2.7 mantém essa CLI no ZIP e acrescenta um aviso local opt-in para conclusão de foco ou pausa do Pomodoro. O checkout de código agora inclui a primeira fatia revisada, ainda não publicada, da aba Contextos candidata a 0.2.8; P2 continua parcial e W1 ainda não começou. A qualificação em ambientes reais continua pendente. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra completa inspirada no macOS, a Central de Controle, a integração completa do launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, integração Steam no dock, seleção automática de perfis por Activity/desktop, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Formato estável de temas, galeria, importação de arquivos, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados.
+Perfis manuais do dock e organização de widgets são o incremento parcial P1/C1 publicado na 0.2.5. A versão 0.2.6 acrescenta o primeiro consumidor experimental de tema por colagem e inclui a CLI experimental do Steam. A 0.2.7 mantém essa CLI no ZIP e acrescenta um aviso local opt-in para conclusão de foco ou pausa do Pomodoro. A prerelease 0.2.8 publica a primeira fatia experimental de associação explícita de Activity/área a perfis existentes; P2 continua parcial, W1 ainda não começou e a qualificação nativa permanece pendente. A qualificação em ambientes reais continua pendente. A leitura da bateria do sistema e o incremento de seleção/controle de players fazem parte da 0.2.4; os marcos B1/M1 completos continuam abertos para qualificação de hardware e cliente real. A barra completa inspirada no macOS, a Central de Controle, a integração completa do launcher inspirado no Raycast, Dynamic Island/HUD/toasts, capa/progresso/abertura do Spotify, integração Steam no dock, seleção automática de perfis por Activity/desktop, troca de área de trabalho/Activity, atualizações automáticas e integrações mais completas com os projetos estão no roadmap. Formato estável de temas, galeria, importação de arquivos, SDK versionado, addons vendidos pelos próprios autores e integrações opcionais de IA também estão planejados.
 
 Veja o [roadmap completo](ROADMAP.md) para sequência, dependências e critérios de aceite, com propostas de [UX/UI](docs/UX_UI.md), [temas e extensões](docs/EXTENSIONS.md), [acesso e provedores de IA](docs/AI_INTEGRATIONS.md) e [experiência de desenvolvimento](docs/DX.md). Temas declarativos vêm antes de plugins executáveis; adaptadores de IA usam as rotas de autorização oferecidas por cada provedor. O núcleo continua útil sem conta Orla, addon pago ou assinatura de IA. Checkout de marketplace e SDK ainda não foram implementados.
 
