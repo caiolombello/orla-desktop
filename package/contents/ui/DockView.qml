@@ -27,7 +27,9 @@ Item {
     property alias contexts: contextState
     property alias contextBindings: contextBindingsState
     property var contextSnapshotOverride: null
+    property var controlCenterBackendOverride: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
+    readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
     readonly property var presentation: profileState.effective
     readonly property string launcherSnapshot: JSON.stringify(presentation.launchers)
     property string selectedIntegration: "quota"
@@ -118,7 +120,7 @@ Item {
     }
     function closeContext() {
         taskMenu.close(); addDialog.close();
-        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close();
+        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.close();
         menuRow = -1; menuData = {}; appInput.clear();
     }
     Connections {
@@ -287,7 +289,7 @@ Item {
     SystemBattery {
         id: power
         objectName: "systemBattery"
-        active: root.widgetVisible("systemBattery")
+        active: root.widgetVisible("systemBattery") || controlCenterPopup.visible
     }
     readonly property string powerSubtitle: power.status === "absent" ? qsTr("Sem bateria do sistema")
         : power.status === "loading" ? qsTr("Lendo bateria…")
@@ -434,6 +436,18 @@ Item {
                 onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
                 onClicked: addDialog.open()
             }
+            Tile {
+                objectName: "controlCenterButton"
+                anchors.verticalCenter: parent.verticalCenter
+                visible: Boolean(root.configuration.showControlCenter)
+                iconSource: "preferences-system"
+                iconSize: Math.max(16, root.tileSize - 10)
+                foreground: root.foreground; muted: root.muted; accent: root.accent
+                animationDuration: root.motion
+                tooltip: qsTr("Central de Controle")
+                onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
+                onClicked: controlCenterPopup.open()
+            }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: 1; height: 30; color: root.muted; opacity: 0.3 }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
 
@@ -544,6 +558,50 @@ Item {
         dock: root
         title: root.selectedIntegration === "quota" ? "QuotaLantern" : root.selectedIntegration === "peripherals" ? "PeriGauge" : "FalaTrace"
         IntegrationDetails { dock: root; integrations: localIntegrations; selected: root.selectedIntegration }
+    }
+    Connections {
+        target: root.configuration
+        function onShowControlCenterChanged() {
+            if (!root.configuration.showControlCenter) controlCenterPopup.close();
+        }
+    }
+    Loader {
+        id: nativeControlCenterBackend
+        objectName: "controlCenterNativeLoader"
+        active: controlCenterPopup.visible && root.controlCenterBackendOverride === null
+        source: active ? Qt.resolvedUrl("NativeKdeControlActions.qml") : ""
+    }
+    KdeControlActions {
+        id: kdeControlActions
+        objectName: "kdeControlActions"
+        backend: root.controlCenterBackendOverride !== null ? root.controlCenterBackendOverride
+            : nativeControlCenterBackend.item
+    }
+    DockPopup {
+        id: controlCenterPopup
+        objectName: "controlCenterPopup"
+        readonly property real screenWidth: root.Screen.width > 0
+            ? (root.Screen.desktopAvailableWidth > 0 ? Math.min(root.Screen.width, root.Screen.desktopAvailableWidth) : root.Screen.width)
+            : root.Screen.desktopAvailableWidth
+        readonly property real screenHeight: root.Screen.height > 0
+            ? (root.Screen.desktopAvailableHeight > 0 ? Math.min(root.Screen.height, root.Screen.desktopAvailableHeight) : root.Screen.height)
+            : root.Screen.desktopAvailableHeight
+        property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : 350
+        property real heightBudget: screenHeight > 0 ? Math.max(1, screenHeight - 40) : 420
+        width: Math.max(1, Math.min(350, widthBudget))
+        height: Math.max(1, Math.min(implicitHeight, heightBudget))
+        dock: root
+        title: qsTr("Central de Controle")
+        ControlCenter {
+            id: controlCenterContents
+            objectName: "controlCenterContents"
+            Layout.fillWidth: true
+            actions: kdeControlActions
+            player: root.player
+            battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle})
+            foreground: root.foreground
+            muted: root.muted
+        }
     }
     DockPopup {
         id: pomodoroPopup

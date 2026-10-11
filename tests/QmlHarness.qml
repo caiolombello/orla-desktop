@@ -37,6 +37,7 @@ Window {
         property bool showPeripherals: false
         property bool showRecording: false
         property bool showLocalToasts: false
+        property bool showControlCenter: false
         property bool calendarEvents: false
         property bool currentDesktopOnly: false
         property int focusMinutes: 25
@@ -74,6 +75,12 @@ Window {
         property bool canGoPrevious: false
         property bool canGoNext: false
     }
+    QtObject {
+        id: controlCenterBackend
+        objectName: "dockControlCenterBackend"
+        property var calls: []
+        function openSystemSettings(target) { calls = calls.concat([target]); }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -86,6 +93,7 @@ Window {
         height: implicitHeight
         configuration: config
         contextSnapshotOverride: contextSnapshot
+        controlCenterBackendOverride: controlCenterBackend
         integrations.active: false
         systemBattery.transport: ownedBatteryTransport
     }

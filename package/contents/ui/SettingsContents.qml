@@ -107,6 +107,21 @@ ColumnLayout {
                     textFormat: Text.PlainText
                     opacity: 0.65
                 }
+                Controls.CheckBox {
+                    objectName: "showControlCenter"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar Central de Controle no dock (global)")
+                    checked: Boolean(settings.configuration.showControlCenter)
+                    onToggled: settings.configuration.showControlCenter = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Preferência global salva imediatamente. Não muda com o perfil e pode ser desativada aqui.")
+                    wrapMode: Text.WordWrap
+                    textFormat: Text.PlainText
+                    opacity: 0.65
+                }
                 Controls.Label { text: qsTr("Widgets"); font.bold: true }
                 Controls.Label { Layout.fillWidth: true; visible: settings.profiles.activeProfileId === "legacy"; text: qsTr("Crie/use um perfil para organizar os widgets. Aqui você pode mudar a visibilidade."); textFormat: Text.PlainText; wrapMode: Text.WordWrap }
                 Repeater {

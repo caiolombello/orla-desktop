@@ -10,7 +10,17 @@ ColumnLayout {
     readonly property string project: selected === "quota" ? "quotalantern" : selected === "peripherals" ? "perigauge" : "falatrace"
     spacing: 10
 
+    function stateText(modelData) {
+        if (root.selected === "peripherals" && modelData.present === false) return qsTr("Fora de alcance");
+        if (modelData.stale) return qsTr("Leitura desatualizada");
+        if (root.selected === "quota") return typeof modelData.usedPercent === "number"
+            ? Math.round(modelData.usedPercent) + "% usado" : qsTr("Quota desconhecida");
+        return typeof modelData.percent === "number" ? Math.round(modelData.percent) + "%"
+            + (modelData.estimated ? qsTr(" · estimativa") : "") : qsTr("Percentual desconhecido");
+    }
+
     Controls.Label {
+        objectName: "integrationDescription"
         Layout.fillWidth: true
         text: root.integrations.error || (root.selected === "quota" ? qsTr("Leituras já coletadas pelo QuotaLantern. Cada janela é independente; custos não são percentuais de quota.")
             : root.selected === "peripherals" ? qsTr("Últimas leituras do PeriGauge. Estimativas e dados antigos são identificados.")
@@ -20,11 +30,24 @@ ColumnLayout {
         color: root.dock.muted
     }
     Controls.Label {
+        objectName: "peripheralsMetadata"
+        Layout.fillWidth: true
+        visible: root.selected === "peripherals" && text.length > 0
+        text: root.integrations.peripheralsMetadataSummary || ""
+        textFormat: Text.PlainText
+        wrapMode: Text.WordWrap
+        color: root.dock.muted
+        font.pixelSize: 11
+    }
+    Controls.Label {
+        objectName: "integrationEmptyState"
         Layout.fillWidth: true
         visible: root.selected === "quota" ? !(root.integrations.quota.windows || []).length
             : root.selected === "peripherals" ? !(root.integrations.peripherals.devices || []).length : true
         text: root.selected === "quota" ? qsTr("Sem quota recente. Abra o QuotaLantern para atualizar suas leituras.")
-            : root.selected === "peripherals" ? qsTr("Sem bateria disponível. Abra o PeriGauge para coletar seus periféricos.")
+            : root.selected === "peripherals" ? (root.integrations.peripherals.status === "missing"
+                ? qsTr("Sem cache local do PeriGauge.") : root.integrations.peripherals.status === "invalid"
+                ? qsTr("O cache local do PeriGauge é inválido.") : qsTr("Sem bateria disponível no cache local."))
             : root.integrations.recordingSummary
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
@@ -53,10 +76,9 @@ ColumnLayout {
                         color: root.dock.foreground
                     }
                     Controls.Label {
+                        objectName: root.selected === "peripherals" ? "peripheralStateText" : "quotaStateText"
                         Layout.fillWidth: true
-                        text: modelData.stale ? qsTr("Leitura desatualizada")
-                            : root.selected === "quota" ? (typeof modelData.usedPercent === "number" ? Math.round(modelData.usedPercent) + "% usado" : qsTr("Quota desconhecida"))
-                            : (typeof modelData.percent === "number" ? Math.round(modelData.percent) + "%" + (modelData.estimated ? qsTr(" · estimativa") : "") : qsTr("Percentual desconhecido"))
+                        text: root.stateText(modelData)
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.dock.muted
@@ -75,7 +97,7 @@ ColumnLayout {
         }
     }
     RowLayout {
-        Controls.Button { text: qsTr("Reler dados locais"); enabled: !root.integrations.loading; onClicked: root.integrations.refresh() }
+        Controls.Button { objectName: "refreshCacheButton"; text: qsTr("Reler cache local"); enabled: !root.integrations.loading; onClicked: root.integrations.refresh() }
         Controls.Button { text: qsTr("Projeto GitHub"); onClicked: Qt.openUrlExternally("https://github.com/caiolombello/" + root.project) }
     }
 }

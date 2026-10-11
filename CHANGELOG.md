@@ -2,6 +2,11 @@
 
 User-visible changes are recorded here for each published release.
 
+## Unreleased — alpha 0.2.9 candidate (not published)
+
+- Prepare an optional global Control Center button (off by default) with shared media and battery status cards and three explicit KDE settings shortcuts. Independent Source review approved the focused lifecycle and narrow-layout/keyboard correction. Native popup behavior, KCM opening and hardware/service integration remain unqualified; 0.2.9 is not published. See the [guide](docs/control-center.md) and [candidate validation record](docs/validation/control-center-peripherals-0.2.9.md).
+- PeriGauge local-cache parsing now rejects malformed `stale`/`hidden` flags safely. The round-2 Source change received independent approval with no findings; 17 bridge tests and 3 isolated UI tests are author evidence, with separate focused reviewer checks. Real cache, daemon/service and hardware remain untested; I1 is partial.
+
 
 ## Unreleased — experimental AI provider compatibility (source only)
 
