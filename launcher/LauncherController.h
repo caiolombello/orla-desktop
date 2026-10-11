@@ -7,6 +7,8 @@
 #include <KRunner/ResultsModel>
 #include <KRunner/RunnerManager>
 
+class SteamProviderController;
+
 // Private C++/QML boundary, experimental with this optional executable.
 class LauncherController final : public QObject
 {
@@ -18,7 +20,7 @@ class LauncherController final : public QObject
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
-    explicit LauncherController(QObject *parent = nullptr);
+    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr);
     QString query() const { return m_query; }
     quint64 generation() const { return m_generation; }
     QVariantList rows() const { return m_rows; }
@@ -36,6 +38,7 @@ Q_SIGNALS:
     void closeRequested();
 private:
     void refresh();
+    void steamChanged();
     QString resultId(const QModelIndex &index) const;
     KConfig m_config;
     KConfig m_state;
@@ -45,6 +48,8 @@ private:
     QString m_error;
     QString m_selectedId;
     QVariantList m_rows;
+    QList<int> m_backendRows;
+    SteamProviderController *m_steam;
     quint64 m_generation = 0;
     quint64 m_launchedGeneration = 0;
     int m_selected = -1;

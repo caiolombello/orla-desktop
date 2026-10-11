@@ -8,6 +8,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <utility>
+
 #ifdef Q_OS_UNIX
 #include <cerrno>
 #include <csignal>
@@ -56,8 +58,10 @@ QString safeErrorMessage(const QString &code)
 }
 }
 
-AiProviderController::AiProviderController(const QString &pythonPath, const QString &helperPath, QObject *parent)
-    : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath)
+AiProviderController::AiProviderController(const QString &pythonPath, const QString &helperPath,
+                                           GroupObserver groupObserver, QObject *parent)
+    : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath),
+      m_groupObserver(std::move(groupObserver))
 {
     m_deadline.setSingleShot(true);
     m_killGrace.setSingleShot(true);
@@ -152,6 +156,7 @@ void AiProviderController::start(const QString &operation, const QString &reques
     m_stdout.clear();
     m_outputOverflow = false;
     m_cancelled = false;
+    m_operationActive = true;
     m_cleanupActive = false;
     m_killSent = false;
     m_pendingExitCode = -1;
@@ -237,6 +242,7 @@ bool AiProviderController::ownedGroupExists() const
 {
 #ifdef Q_OS_UNIX
     if (m_processGroup <= 0) return false;
+    if (m_groupObserver) return m_groupObserver(m_processGroup);
     errno = 0;
     return ::kill(-static_cast<pid_t>(m_processGroup), 0) == 0 || errno == EPERM;
 #else
@@ -268,16 +274,21 @@ void AiProviderController::pollGroupCleanup()
 void AiProviderController::finishAfterCleanup(bool cleanupConfirmed)
 {
     if (!m_cleanupActive) return;
-    m_groupPoll.stop();
     m_killGrace.stop();
     m_cleanupDeadline.stop();
-    m_cleanupActive = false;
-    m_processGroup = 0;
-    const bool current = m_processGeneration == m_generation;
     if (!cleanupConfirmed) {
         fail(QStringLiteral("process_cleanup_failed"),
              tr("A limpeza do processo local não pôde ser confirmada."));
-    } else if (current && !m_cancelled && m_errorCode.isEmpty()) {
+        if (!m_groupPoll.isActive()) m_groupPoll.start();
+        return;
+    }
+
+    m_groupPoll.stop();
+    m_operationActive = false;
+    m_cleanupActive = false;
+    m_processGroup = 0;
+    const bool current = m_processGeneration == m_generation;
+    if (current && !m_cancelled && m_errorCode.isEmpty()) {
         if (m_outputOverflow) {
             fail(QStringLiteral("invalid_helper_response"), safeErrorMessage(QStringLiteral("invalid_helper_response")));
         } else if (m_pendingExitStatus != QProcess::NormalExit || m_pendingExitCode != 0) {

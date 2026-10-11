@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
@@ -17,12 +18,14 @@ class AiProviderController final : public QObject
     Q_PROPERTY(QString errorCode READ errorCode NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
+    using GroupObserver = std::function<bool(qint64)>;
+
     explicit AiProviderController(const QString &pythonPath, const QString &helperPath,
-                                  QObject *parent = nullptr);
+                                  GroupObserver groupObserver = {}, QObject *parent = nullptr);
     ~AiProviderController() override;
 
     QString status() const { return m_status; }
-    bool busy() const { return m_process.state() != QProcess::NotRunning || m_cleanupActive; }
+    bool busy() const { return m_operationActive || m_process.state() != QProcess::NotRunning || m_cleanupActive; }
     QString operation() const { return m_operation; }
     QString requestId() const { return m_requestId; }
     QVariantList providers() const { return m_providers; }
@@ -57,6 +60,7 @@ private:
 
     QString m_pythonPath;
     QString m_helperPath;
+    GroupObserver m_groupObserver;
     QProcess m_process;
     QTimer m_deadline;
     QTimer m_killGrace;
@@ -77,6 +81,7 @@ private:
     bool m_outputOverflow = false;
     bool m_cancelled = false;
     bool m_closePending = false;
+    bool m_operationActive = false;
     bool m_cleanupActive = false;
     bool m_killSent = false;
     int m_pendingExitCode = -1;
