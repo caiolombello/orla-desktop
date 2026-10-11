@@ -4,6 +4,15 @@ import "../package/contents/ui" as DockUI
 
 Window {
     property string fixtureProfilesJSON: ""
+    property string fixtureContextsJSON: ""
+    property int contextWriteCount: 0
+    property var contextTimerWitness: dockView.pomodoro
+    readonly property bool contextTimerIdentity: contextTimerWitness === dockView.pomodoro
+    property var contextSnapshot: ({
+        outputName: "DP-1",
+        activity: {status: "ready", currentId: "activity-work", ids: ["activity-work"], names: ["Foco"]},
+        desktop: {status: "ready", currentId: "desktop-1", ids: ["desktop-1"], names: ["Área 1"]}
+    })
     width: Math.max(740, dockView.implicitWidth + 64)
     height: 220
     visible: true
@@ -16,6 +25,8 @@ Window {
         property string theme: "glass"
         property string appearanceJSON: ""
         property string profilesJSON: fixtureProfilesJSON
+        property string contextsJSON: fixtureContextsJSON
+        onContextsJSONChanged: contextWriteCount++
         property int iconSize: 42
         property bool animations: false
         property bool showClock: true
@@ -74,6 +85,7 @@ Window {
         width: Math.min(implicitWidth, parent.width - 64)
         height: implicitHeight
         configuration: config
+        contextSnapshotOverride: contextSnapshot
         integrations.active: false
         systemBattery.transport: ownedBatteryTransport
     }

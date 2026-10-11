@@ -24,6 +24,10 @@ Item {
     property alias appearance: appearanceState
     property alias systemBattery: power
     property alias profiles: profileState
+    property alias contexts: contextState
+    property alias contextBindings: contextBindingsState
+    property var contextSnapshotOverride: null
+    readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property var presentation: profileState.effective
     readonly property string launcherSnapshot: JSON.stringify(presentation.launchers)
     property string selectedIntegration: "quota"
@@ -59,6 +63,31 @@ Item {
         id: profileState
         configuration: root.configuration
         transitionGuard: () => !appearanceState.dirty
+    }
+    readonly property var unavailableContextSnapshot: ({
+        outputName: "",
+        activity: {status: "unavailable", currentId: "", ids: [], names: []},
+        desktop: {status: "unavailable", currentId: "", ids: [], names: []}
+    })
+    Loader {
+        id: contextSourceLoader
+        objectName: "contextSourceLoader"
+        active: root.contextSnapshotOverride === null && settings.visible
+            && settingsContents.contextsTabActive
+        source: active ? Qt.resolvedUrl("KdeContextSource.qml") : ""
+    }
+    ContextState {
+        id: contextState
+        objectName: "dockContextState"
+        sourceSnapshot: root.contextSnapshotOverride !== null ? root.contextSnapshotOverride
+            : contextSourceLoader.item ? contextSourceLoader.item.snapshot : root.unavailableContextSnapshot
+    }
+    ContextBindingsState {
+        id: contextBindingsState
+        objectName: "dockContextBindingsState"
+        configuration: root.configuration
+        profiles: profileState
+        contexts: contextState
     }
     AppearanceState {
         id: appearanceState
@@ -477,10 +506,13 @@ Item {
         onAboutToShow: appearanceState.begin()
         onClosed: appearanceState.cancel()
         SettingsContents {
+            id: settingsContents
             configuration: root.configuration
             profiles: profileState
             resetTimer: focusTimer.reset
             appearance: appearanceState
+            contexts: contextState
+            contextBindings: contextBindingsState
             onAppearanceCanceled: settings.close()
         }
     }

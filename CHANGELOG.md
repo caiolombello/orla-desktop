@@ -2,6 +2,13 @@
 
 User-visible changes are recorded here for each published release.
 
+
+## 0.2.8 alpha candidate — source integration, not published
+
+- Add a fourth **Contextos** settings tab with separate Activity and virtual-desktop cards. Opening that tab is the only time the read-only native discovery Loader is active; selectors stage a choice and only explicit bind/remove actions save an association to an existing managed profile.
+- Keep Activity and desktop associations in the separate empty-default `contextsJSON` setting. Stable IDs, stale-intent rejection and invalid/future raw-byte preservation avoid silent cleanup or profile/context switching. Associations do not auto-select profiles, switch KDE contexts, apply/cancel appearance previews, or change Pomodoro identity/deadline.
+- The focused integration union passed 12 local offscreen QML tests; 2 independent adversarial cases passed, and independent Source reviews approved the pure core and dock integration. Native plugin compilation/construction, installed KConfig/restart, CI result, publication and native/session qualification remain unverified. P2 is partial; W1 switching is unstarted. See the [guide](docs/contexts.md) and [validation record](docs/validation/contexts-0.2.8.md). The published 0.2.7 release and its download instructions remain unchanged.
+
 ## 0.2.7 — 2026-10-11 — Alpha prerelease
 
 - Add an opt-in local toast for completion of a Pomodoro focus or break period. The global Widgets setting is off by default; when enabled, the dock shows a short plain-text message in its own reserved area. KDE notifications remain independent.
