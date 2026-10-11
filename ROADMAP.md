@@ -41,7 +41,7 @@ Esses documentos especificam capacidades futuras. A alpha não inclui SDK, runti
 | Spotify | Modelo MPRIS compartilhado, preferência inicial pelo Spotify, seleção manual, faixa/artista e controles por capacidade | Capa/progresso, abrir cliente e qualificar Spotify real/áudio com segundo player |
 | Bateria | Widget opcional do agregado UPower, percentual/estado/energia/tempo quando informados; PeriGauge separado | Matriz real de notebook/desktop/múltiplas baterias/UPS/transições, alertas e uso humano no painel |
 | Ambientes e áreas de trabalho | Perfis manuais do dock e filtro de janelas pela área atual | Escolha de barra/launcher/eventos, associação com Activities/desktops, seletor e troca de contexto |
-| Steam | Integração ausente | Biblioteca local, favoritos, abrir jogos, suporte nativo/Flatpak e perfil Jogos |
+| Steam | CLI experimental no fonte: leitura limitada de raízes explícitas e bibliotecas indexadas; presença candidata, conta/conexão desconhecidas | Provedor/UI, detecção de instalação, favoritos/busca, abertura pelo cliente e qualificação real nativo/Flatpak/disco externo |
 | Projetos próprios | Adaptadores locais para QuotaLantern, PeriGauge e estado salvo do FalaTrace | Validar os coletores reais, comunicar a idade da leitura e comprovar gravação ativa antes de indicá-la como ao vivo |
 | Calendário | Calendário e agenda pelo plugin PIM do KDE; acesso ao KOrganizer | Conectar Google pelo fluxo nativo e validar seleção, sincronização, fuso e recorrência |
 | Notificações | Avisos internos em texto/tooltip | Ilha compacta, HUD, toasts, política de prioridade e integração qualificada com notificações do KDE |
@@ -146,6 +146,8 @@ P1 está parcialmente implementado no dock; falta escolher barra/launcher/evento
 T1 depende de C1/P1; T2/T4 dependem de T1; T3 depende também de R3. Os módulos nativos preservam funcionalidade enquanto o visual próprio é qualificado.
 
 ### 0.7 — Central de Controle, Steam e projetos próprios
+
+**Primeira fatia Steam no fonte:** `scripts/steam.py` consulta metadados em raízes explícitas e bibliotecas declaradas pelo índice, sem acessar conta/rede nem iniciar jogos. Limites de arquivos/parser/worker/saída, estados parciais/desconhecidos e nomes obviamente semelhantes a caminhos têm tratamento explícito. Vinte testes sintéticos e revisão independente passaram; não houve leitura de bibliotecas pessoais. Não integra os assets publicados 0.2.5. Detecção do cliente, provedor/UI, favoritos/busca, handler e dois jogos reais permanecem pendentes; S1 continua parcial. Consulte o [guia](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md).
 
 - [ ] **CC0: Central de Controle de estado e atalhos.** Primeiro entregar cards com dados e abertura dos controles KDE, acessíveis também pelo dock sem a barra. Aceite: abrir o painel não altera configurações e serviço ausente afeta somente o card correspondente.
 - [ ] **CC1: controles diretos básicos.** Cards de volume/saída de áudio, microfone/mudo, brilho quando disponível, mídia, bateria/energia e Não perturbe. Sincronizar com mudanças feitas fora do Orla. Aceite: valores refletem o KDE, hardware ausente desativa somente o card correspondente e cada alteração resulta de uma ação do usuário, confirmada pelo serviço.

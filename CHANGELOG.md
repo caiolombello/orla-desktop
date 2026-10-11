@@ -2,12 +2,13 @@
 
 User-visible changes are recorded here for each published release.
 
-## Unreleased — experimental source component
+## Unreleased — experimental source components
 
 - Add optional Menu Orla (`org.orla.bar`, component version 0.1.0) for Plasma 6.7.x: an Orla icon or text-only label, bounded plain-text active application name, and explicit system/settings/configuration and capability-aware session actions. Keep the application label stable from menu opening through closure; distinguish an unnamed active application from the desktop.
 - Isolate the private Plasma session adapter behind a 6.7.x guard, with source/API checks against 6.7.5. Logout, reboot and shutdown request native confirmation; successful dispatch does not prove completion.
 - Ten injected mock tests passed with Fusion and KDE styles; independent review repeated ten KDE tests and approved experimental source publication. Four components compiled without errors, without native instantiation. Real dialogs/actions, panel/focus, human gestures and multi-monitor composition remain UNRUN; T1/T2/T3 are open.
 - This component is excluded from the published 0.2.5 assets. Manual source installation is described in the [component guide](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md); no bar installer, panel preset, autostart, Control Center, Global Menu or tray is delivered.
+- Add an experimental Steam inventory CLI for explicitly supplied roots and indexed libraries. Bound KV1 parsing, filesystem access, worker time and output; report conservative presence candidates and partial/unknown states. Generate only validated URI strings, without launching them. Twenty synthetic tests and independent review passed; real Steam libraries, accounts and handlers remain untested. Obvious path-like names are neutralized, without a general anonymization promise. Dock/provider/search/favorites remain planned; S1 is partial. The published 0.2.5 assets do not include this collector.
 
 ## 0.2.5 — 2026-10-10 — Alpha prerelease
 

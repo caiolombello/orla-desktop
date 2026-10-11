@@ -61,6 +61,8 @@ The wrapper owns temporary XDG roots and unavailable private bus addresses, remo
 
 The experimental [release-check CLI](docs/updates.md) uses Python's standard library on Linux. Run its offline tests in their own process with `python3 -m unittest discover -s tests -p 'test_updates.py' -v`; no network or provider account is required. These tests are included in portable CI. Live release checks are explicit commands and never run during tests.
 
+The experimental [Steam collector](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md) also uses only Python's standard library on Linux. Its twenty synthetic checks run separately with `python3 -B -m unittest discover -s tests -p 'test_steam.py' -v` and in portable CI. Never point fixtures at a personal Steam library. The worker forks: invoke the CLI in its own process, not inside a threaded Qt process. Native/Flatpak are caller-supplied hints, and manifest presence never proves ownership or client installation.
+
 Contributions and CI must not require paid AI calls, an AI subscription, or private account credentials. Future provider tests use synthetic mocks by default; live tests are separate, manually initiated, and opt-in. UI changes include the relevant loading, empty, error, long-text, keyboard/focus, contrast, and reduced-motion states. Captures should use synthetic data.
 
 ## Pull requests

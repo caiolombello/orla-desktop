@@ -14,6 +14,8 @@ The source checkout includes [Menu Orla, the first experimental bar component](h
 
 The 0.2.5 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
 
+Source checkouts include an [experimental local Steam inventory CLI](https://github.com/caiolombello/orla-desktop/blob/main/docs/steam.md). It reads bounded library metadata from explicitly supplied roots and reports partial/unknown states; it does not launch games, access an account or prove ownership. Dock search/favorites and real Steam validation remain planned. Published 0.2.5 assets do not include it.
+
 ## What works today
 
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
