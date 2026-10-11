@@ -13,6 +13,7 @@ Window {
         objectName: "configuration"
         property var launchers: ["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]
         property string theme: "glass"
+        property string appearanceJSON: ""
         property int iconSize: 42
         property bool animations: false
         property bool showClock: true

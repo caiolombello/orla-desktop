@@ -11,7 +11,7 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 ## What works today
 
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
-- Choose among Glass, Midnight, and Paper themes, set icon size, and enable or disable motion.
+- Start from Glass, Midnight or Paper and preview colors, opacity, spacing, corners, icon size and reduced motion. Apply saves; Cancel, Escape or closing settings discards the preview. Undo restores the previous applied appearance once per session.
 - Use the clock, Pomodoro timer, KDE calendar view, and generic MPRIS media controls.
 - Read optional local snapshots from QuotaLantern, PeriGauge, and FalaTrace when those projects have written supported state files.
 - Keep the dock in a Plasma panel and configure its position and visibility through Plasma.
@@ -19,6 +19,8 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 The calendar uses the same calendar selection as KDE's calendar components. Orla does not connect Google Calendar by itself. To use Google events, first add and configure a Google account through KOrganizer/KDE PIM, then enable synced events in Orla. Account setup and sync depend on KDE PIM resources installed on your system.
 
 Media controls use MPRIS and work with compatible players. Spotify-specific behavior, artwork, and playback have not yet been qualified. Local project integrations read existing state files; they do not start the other apps or call their online APIs.
+
+Appearance uses a separate override, preserving earlier theme/icon/motion preferences. Restore prepares those preferences for preview and requires Apply. The [experimental theme kit](docs/theme-format.md) validates and packages community data; importing/applying those files remains planned. See [appearance validation](docs/validation/appearance-0.2.3.md) for test coverage and native limits.
 
 ## Requirements
 
@@ -44,10 +46,10 @@ Download the release `.zip` from the [GitHub Releases page](https://github.com/c
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.2.zip
-cd orla-dock-0.2.2
+unzip orla-dock-0.2.3.zip
+cd orla-dock-0.2.3
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.2.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.3.plasmoid
 ```
 
 The helper registers the local integration service when its packaged bridge and optional dependencies are available. `doctor` reports missing optional dependencies separately. After restoring them, reinstall the same package to activate integrations. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
@@ -59,7 +61,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.2.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.3.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:

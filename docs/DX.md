@@ -1,6 +1,6 @@
 # Experiência de desenvolvimento do Orla Desktop
 
-> **Roadmap em execução.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. O incremento da base é Orla Dock 0.2.2 alpha, licenciado sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, runtime de plugins ou galeria no alpha.
+> **Roadmap em execução.** Este documento descreve como tornar o Orla simples de desenvolver, testar e estender. O incremento atual é Orla Dock 0.2.3 alpha, licenciado sob MIT. Os comandos e contratos marcados como futuros são propostas; não existem SDK, runtime de plugins ou galeria no alpha.
 
 ## Objetivo
 
@@ -127,7 +127,7 @@ Métricas de DX começam por uma baseline observada, não por metas inventadas: 
 
 | Etapa | Entrega | Dependências | Critério de saída |
 |---|---|---|---|
-| **DX0 — alpha compreensível** | Documentar e manter sincronizados comandos atuais, dependências, limites da CI, contribuição e triagem | Estado atual 0.2.1 | Pessoa nova reproduz os testes portáteis e o build usando somente docs existentes; comandos listados coincidem com o helper e a CI. |
+| **DX0 — alpha compreensível** | Documentar e manter sincronizados comandos atuais, dependências, limites da CI, contribuição e triagem | Estado atual 0.2.3 | Pessoa nova reproduz os testes portáteis e o build usando somente docs existentes; comandos listados coincidem com o helper e a CI. |
 | **DX1 — contratos internos testáveis** | Inventariar fronteiras do applet, bridge e adaptadores; adicionar fixtures sintéticas e erros reproduzíveis | DX0; passos iniciais de arquitetura no ROADMAP | Falhas de integração podem ser testadas sem serviço/conta; cada interface interna tem owner, dependências e teste correspondente. |
 | **DX2 — galeria e tema declarativo** | Especificar schema versionado, validador, template, prévia mock/offline e exemplos gratuitos | Tema/manifesto em X1/X2 de EXTENSIONS; DX1 | Contribuidor cria, confere e pré-visualiza tema sem executar código nem usar sessão de IA; CI testa fixtures válidas/inválidas. |
 | **DX3 — kit de contribuidor** | Comandos `create/check/dev/pack`, exemplos e guia gerado do schema | DX2 e necessidade demonstrada pelos primeiros temas | Instruções se mantêm testáveis; pacote determinístico; erro aponta correção; galeria declara quando uma sessão Plasma é necessária. |
