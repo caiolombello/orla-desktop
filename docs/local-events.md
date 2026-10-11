@@ -2,7 +2,7 @@
 
 ## Português
 
-Na candidata alpha 0.2.7, o dock oferece um único aviso local para a conclusão
+Na alpha 0.2.7 publicada, o dock oferece um único aviso local para a conclusão
 de uma etapa de foco ou pausa do Pomodoro. O recurso é experimental, global e
 desligado por padrão. Abra **Widgets** e ative **Mostrar conclusões do Pomodoro
 dentro do dock (global)** para exibi-lo. Esta preferência é salva separadamente
@@ -27,11 +27,11 @@ Este incremento não substitui, lê ou envia eventos ao Centro de Notificações
 KDE. Outros eventos, HUD, ilha, histórico e comportamento por perfil ainda não
 estão incluídos. A validação disponível usa fixtures offscreen e não qualifica
 painel Plasma, foco/grab, leitor de tela, escala, múltiplos monitores ou
-instalação. Consulte o [registro de validação](validation/local-events-0.2.7.md).
+instalação. Consulte o [registro de validação](validation/local-events-0.2.7.md) e a [release publicada](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7).
 
 ## English
 
-The 0.2.7 alpha candidate adds one local dock notice for completion of a
+The published 0.2.7 alpha adds one local dock notice for completion of a
 Pomodoro focus or break period. It is experimental, global and off by default.
 Open **Widgets** and enable **Mostrar conclusões do Pomodoro dentro do dock
 (global)** to display it. This preference is saved separately from profile
@@ -57,4 +57,4 @@ This increment does not replace, read from or send events to KDE's Notification
 Center. Other events, HUD, island, history and per-profile behavior are not
 included. Available validation uses offscreen fixtures and does not qualify the
 Plasma panel, focus/grabs, screen reader, scaling, multi-monitor behavior or
-installation. See the [validation record](validation/local-events-0.2.7.md).
+installation. See the [validation record](validation/local-events-0.2.7.md) and the [published release](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7).
