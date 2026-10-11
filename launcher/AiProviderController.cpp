@@ -64,9 +64,11 @@ QString safeErrorMessage(const QString &code)
 
 AiProviderController::AiProviderController(const QString &pythonPath, const QString &helperPath,
                                            GroupObserver groupObserver, QObject *parent,
-                                           RuntimeRemover runtimeRemover)
+                                           RuntimeRemover runtimeRemover,
+                                           int cancellationGraceMs)
     : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath),
-      m_groupObserver(std::move(groupObserver)), m_runtimeRemover(std::move(runtimeRemover))
+      m_groupObserver(std::move(groupObserver)), m_runtimeRemover(std::move(runtimeRemover)),
+      m_cancellationGraceMs(cancellationGraceMs > 0 ? cancellationGraceMs : kCancellationGraceMs)
 {
     m_deadline.setSingleShot(true);
     m_killGrace.setSingleShot(true);
@@ -244,7 +246,7 @@ void AiProviderController::beginCancellation()
     m_process.terminate();
 #endif
     if (!m_groupPoll.isActive()) m_groupPoll.start();
-    if (!m_killGrace.isActive() && !m_killSent) m_killGrace.start(kCancellationGraceMs);
+    if (!m_killGrace.isActive() && !m_killSent) m_killGrace.start(m_cancellationGraceMs);
 }
 
 void AiProviderController::killOwnedGroup(int signalNumber)
@@ -284,7 +286,7 @@ void AiProviderController::beginGroupCleanup()
     killOwnedGroup(SIGTERM);
 #endif
     if (!m_groupPoll.isActive()) m_groupPoll.start();
-    if (!m_killGrace.isActive() && !m_killSent) m_killGrace.start(kCancellationGraceMs);
+    if (!m_killGrace.isActive() && !m_killSent) m_killGrace.start(m_cancellationGraceMs);
 }
 
 void AiProviderController::pollGroupCleanup()

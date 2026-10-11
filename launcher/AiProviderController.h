@@ -26,7 +26,8 @@ public:
 
     explicit AiProviderController(const QString &pythonPath, const QString &helperPath,
                                   GroupObserver groupObserver = {}, QObject *parent = nullptr,
-                                  RuntimeRemover runtimeRemover = {});
+                                  RuntimeRemover runtimeRemover = {},
+                                  int cancellationGraceMs = 3000);
     ~AiProviderController() override;
 
     QString status() const { return m_status; }
@@ -71,6 +72,7 @@ private:
     QString m_helperPath;
     GroupObserver m_groupObserver;
     RuntimeRemover m_runtimeRemover;
+    int m_cancellationGraceMs;
     std::unique_ptr<QTemporaryDir> m_runtimeDirectory;
     quint64 m_runtimeDevice = 0;
     quint64 m_runtimeInode = 0;

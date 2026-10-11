@@ -462,8 +462,9 @@ private Q_SLOTS:
         QVERIFY(directory.isValid());
         const QString mode = directory.filePath(QStringLiteral("mode"));
         const QString identityPath = directory.filePath(QStringLiteral("cancel-descendant.identity"));
+        const QString readyPath = directory.filePath(QStringLiteral("cancel-descendant.ready"));
         const QByteArray token = QByteArray("orla-ai-cancel-") + QByteArray::number(QCoreApplication::applicationPid());
-        const QByteArray childCode = "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)";
+        const QByteArray childCode = "import pathlib,signal,sys,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path(sys.argv[2]).touch();time.sleep(60)";
         QFile modeFile(mode);
         QVERIFY(modeFile.open(QIODevice::WriteOnly));
         modeFile.write("fast");
@@ -473,13 +474,15 @@ private Q_SLOTS:
             + "doc=base64.b64decode('" + providerDocument("detect").toBase64() + "')\n"
             + "mode=pathlib.Path(r'" + mode.toUtf8() + "').read_text()\n"
             + "if mode == 'slow':\n"
-            + " child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token + "'])\n"
+            + " child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token
+            + "',r'" + readyPath.toUtf8() + "'])\n"
             + " stat=pathlib.Path(f'/proc/{child.pid}/stat').read_text();tail=stat[stat.rfind(') ')+2:].split()\n"
             + " pathlib.Path(r'" + identityPath.toUtf8() + "').write_text(f'{child.pid} {tail[19]}')\n"
             + " def stop(*_):\n  child.wait(timeout=2)\n  raise SystemExit(0)\n"
             + " signal.signal(signal.SIGTERM, stop)\n time.sleep(60)\n"
             + "sys.stdout.buffer.write(doc)\n");
-        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+                                        {}, nullptr, {}, 100);
         controller.discover();
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
         QCOMPARE(controller.providers().size(), 5);
@@ -488,7 +491,7 @@ private Q_SLOTS:
         modeFile.close();
         controller.discover();
         QTRY_VERIFY_WITH_TIMEOUT(controller.busy(), 1000);
-        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(identityPath), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(identityPath) && QFile::exists(readyPath), 3000);
         const QString request = controller.requestId();
         controller.cancel(request);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 7000);
@@ -528,19 +531,25 @@ private Q_SLOTS:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString marker = directory.filePath(QStringLiteral("descendant.identity"));
+        const QString readyPath = directory.filePath(QStringLiteral("descendant.ready"));
         const QByteArray token = QByteArray("orla-ai-owned-") + QByteArray::number(QCoreApplication::applicationPid());
         const QByteArray document = providerDocument("detect");
-        const QByteArray childCode = "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)";
+        const QByteArray childCode = "import pathlib,signal,sys,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path(sys.argv[2]).touch();time.sleep(60)";
         const QString helper = writeHelper(directory,
-            QByteArray("import base64,pathlib,subprocess,sys\n")
+            QByteArray("import base64,pathlib,subprocess,sys,time\n")
             + "child=subprocess.Popen(['/usr/bin/python3','-c',r'" + childCode + "',r'" + token
+            + "',r'" + readyPath.toUtf8()
             + "'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
             + "stat=pathlib.Path(f'/proc/{child.pid}/stat').read_text();tail=stat[stat.rfind(') ')+2:].split()\n"
             + "pathlib.Path(r'" + marker.toUtf8() + "').write_text(f'{child.pid} {tail[19]}')\n"
+            + "ready=pathlib.Path(r'" + readyPath.toUtf8() + "');deadline=time.monotonic()+2\n"
+            + "while not ready.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+            + "assert ready.exists()\n"
             + "sys.stdout.buffer.write(base64.b64decode('" + document.toBase64() + "'))\n");
-        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+                                        {}, nullptr, {}, 100);
         controller.discover();
-        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(marker), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(marker) && QFile::exists(readyPath), 3000);
         QVERIFY(controller.busy());
         QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("report_available"), 7000);
         QVERIFY(!controller.busy());
@@ -572,7 +581,7 @@ private Q_SLOTS:
                 observedGroup = group;
                 ++observerCalls;
                 return reportGroupExists;
-            });
+            }, nullptr, {}, 100);
         QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
 
         controller.discover();
