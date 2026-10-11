@@ -380,6 +380,8 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertEqual(self.window.activeFocusItem().objectName(), "widgetVisibleclock")
 
     def test_encoded_owned_desktop_urls_add_move_and_remove_without_normalizing_saved_bytes(self):
+        if self.app.platformName() == "offscreen":
+            self.skipTest("TaskManager needs a Wayland or X11 connection")
         self.initialize()
         with tempfile.TemporaryDirectory(prefix="desktop-", dir=Path(__file__).resolve().parents[1] / ".runtime/profiles-dock") as directory:
             desktop = Path(directory) / "My Ação %20 App.desktop"
@@ -399,6 +401,32 @@ class ProfilesDockTests(unittest.TestCase):
             self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), [aliases[2], aliases[0], aliases[1]])
             self.assertTrue(self.evaluate("removeLauncher(" + json.dumps(url) + ")"))
             self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), [aliases[2]])
+            self.assertEqual(self.warnings, [])
+
+    def test_encoded_owned_desktop_urls_preserve_saved_bytes_and_remove_equivalent_aliases_portably(self):
+        self.initialize()
+        with tempfile.TemporaryDirectory(prefix="desktop-", dir=Path(__file__).resolve().parents[1] / ".runtime/profiles-dock") as directory:
+            desktop = Path(directory) / "My Ação %20 App.desktop"
+            desktop.write_text("[Desktop Entry]\nType=Application\nName=Owned URL Fixture\nExec=/usr/bin/true\nIcon=application-x-executable\n", encoding="utf-8")
+            url = QUrl.fromLocalFile(str(desktop)).toString(QUrl.FullyEncoded)
+            original = json.loads(self.evaluate("JSON.stringify(presentation.launchers)"))
+            self.assertTrue(self.evaluate("addLauncher(" + json.dumps(url) + ")"))
+            added = original + [url]
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), added)
+            saved = json.loads(self.config.property("profilesJSON"))
+            work = next(profile for profile in saved["profiles"] if profile["id"] == "work")
+            self.assertEqual(work["launchers"], added)
+            aliases = [url, url.replace("My%20", "%4Dy%20"), "applications:org.kde.dolphin.desktop"]
+            self.assertTrue(self.command("commitPresentation", {"launchers": aliases}))
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), aliases)
+            saved = json.loads(self.config.property("profilesJSON"))
+            work = next(profile for profile in saved["profiles"] if profile["id"] == "work")
+            self.assertEqual(work["launchers"], aliases)
+            self.assertTrue(self.evaluate("removeLauncher(" + json.dumps(url) + ")"))
+            self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.launchers)")), [aliases[2]])
+            saved = json.loads(self.config.property("profilesJSON"))
+            work = next(profile for profile in saved["profiles"] if profile["id"] == "work")
+            self.assertEqual(work["launchers"], [aliases[2]])
             self.assertEqual(self.warnings, [])
 
     def test_fixed_widget_order_has_no_hidden_gaps_and_battery_only_keeps_divider(self):
