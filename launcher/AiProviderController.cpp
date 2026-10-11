@@ -1,18 +1,22 @@
 #include "AiProviderController.h"
 
+#include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSet>
+#include <QTemporaryDir>
 
 #include <utility>
 
 #ifdef Q_OS_UNIX
 #include <cerrno>
 #include <csignal>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -59,9 +63,10 @@ QString safeErrorMessage(const QString &code)
 }
 
 AiProviderController::AiProviderController(const QString &pythonPath, const QString &helperPath,
-                                           GroupObserver groupObserver, QObject *parent)
+                                           GroupObserver groupObserver, QObject *parent,
+                                           RuntimeRemover runtimeRemover)
     : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath),
-      m_groupObserver(std::move(groupObserver))
+      m_groupObserver(std::move(groupObserver)), m_runtimeRemover(std::move(runtimeRemover))
 {
     m_deadline.setSingleShot(true);
     m_killGrace.setSingleShot(true);
@@ -83,17 +88,26 @@ AiProviderController::AiProviderController(const QString &pythonPath, const QStr
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart) return;
+        const quint64 generation = m_generation;
+        const quint64 processGeneration = m_processGeneration;
         m_deadline.stop();
         m_pendingExitCode = -1;
         m_pendingExitStatus = QProcess::CrashExit;
-        if (m_processGeneration == m_generation && !m_cancelled)
+        if (m_processGeneration == m_generation && !m_cancelled) {
             fail(QStringLiteral("helper_unavailable"), safeErrorMessage(QStringLiteral("helper_unavailable")));
+            if (m_generation != generation || m_processGeneration != processGeneration
+                || !m_operationActive) return;
+        }
         if (!m_cleanupActive) m_cleanupActive = true;
         finishAfterCleanup(true);
     });
     connect(&m_deadline, &QTimer::timeout, this, [this] {
         if (!busy()) return;
+        const quint64 generation = m_generation;
+        const quint64 processGeneration = m_processGeneration;
         fail(QStringLiteral("operation_timeout"), safeErrorMessage(QStringLiteral("operation_timeout")));
+        if (m_generation != generation || m_processGeneration != processGeneration
+            || !m_operationActive) return;
         beginCancellation();
     });
     connect(&m_killGrace, &QTimer::timeout, this, [this] {
@@ -140,11 +154,15 @@ void AiProviderController::probeCodex(const QString &requestId)
 
 void AiProviderController::start(const QString &operation, const QString &requestId, ExpectedDocument expected)
 {
-    if (busy()) return;
+    if (busy() || m_closePending) return;
     const QFileInfo python(m_pythonPath);
     const QFileInfo helper(m_helperPath);
     if (!python.isAbsolute() || !python.isFile() || !python.isExecutable()
         || !helper.isAbsolute() || !helper.isFile() || !helper.isReadable()) {
+        fail(QStringLiteral("helper_unavailable"), safeErrorMessage(QStringLiteral("helper_unavailable")));
+        return;
+    }
+    if (!prepareRuntime()) {
         fail(QStringLiteral("helper_unavailable"), safeErrorMessage(QStringLiteral("helper_unavailable")));
         return;
     }
@@ -181,10 +199,15 @@ void AiProviderController::start(const QString &operation, const QString &reques
         | QProcess::UnixProcessFlag::ResetSignalHandlers
         | QProcess::UnixProcessFlag::DisableCoreDumps);
 #endif
+    const quint64 generation = m_generation;
+    const QStringList arguments = {QStringLiteral("-I"), QStringLiteral("-B"), m_helperPath, operation,
+        QStringLiteral("--runtime-root"), m_runtimeDirectory->path(), QStringLiteral("--runtime-root-id"),
+        QStringLiteral("%1:%2").arg(m_runtimeDevice).arg(m_runtimeInode)};
     emit changed();
-    m_process.start(m_pythonPath, {QStringLiteral("-I"), QStringLiteral("-B"), m_helperPath, operation},
-                    QIODevice::ReadOnly);
+    if (m_generation != generation || m_processGeneration != generation
+        || !m_operationActive || m_cancelled || m_closePending || m_cleanupActive) return;
     m_deadline.start(kOuterDeadlineMs);
+    m_process.start(m_pythonPath, arguments, QIODevice::ReadOnly);
 }
 
 void AiProviderController::cancel(const QString &requestId)
@@ -277,40 +300,130 @@ void AiProviderController::finishAfterCleanup(bool cleanupConfirmed)
     m_killGrace.stop();
     m_cleanupDeadline.stop();
     if (!cleanupConfirmed) {
+        const quint64 generation = m_generation;
+        const quint64 processGeneration = m_processGeneration;
         fail(QStringLiteral("process_cleanup_failed"),
              tr("A limpeza do processo local não pôde ser confirmada."));
+        if (m_generation != generation || m_processGeneration != processGeneration
+            || !m_cleanupActive) return;
+        if (!m_groupPoll.isActive()) m_groupPoll.start();
+        return;
+    }
+    if (!removeOwnedRuntime()) {
+        const quint64 generation = m_generation;
+        const quint64 processGeneration = m_processGeneration;
+        fail(QStringLiteral("process_cleanup_failed"),
+             tr("A limpeza do processo local não pôde ser confirmada."));
+        if (m_generation != generation || m_processGeneration != processGeneration
+            || !m_cleanupActive) return;
         if (!m_groupPoll.isActive()) m_groupPoll.start();
         return;
     }
 
     m_groupPoll.stop();
-    m_operationActive = false;
-    m_cleanupActive = false;
-    m_processGroup = 0;
     const bool current = m_processGeneration == m_generation;
+    const bool cancelled = m_cancelled;
     if (current && !m_cancelled && m_errorCode.isEmpty()) {
         if (m_outputOverflow) {
-            fail(QStringLiteral("invalid_helper_response"), safeErrorMessage(QStringLiteral("invalid_helper_response")));
+            recordFailure(QStringLiteral("invalid_helper_response"),
+                          safeErrorMessage(QStringLiteral("invalid_helper_response")));
         } else if (m_pendingExitStatus != QProcess::NormalExit || m_pendingExitCode != 0) {
-            fail(QStringLiteral("helper_failed"), safeErrorMessage(QStringLiteral("helper_failed")));
+            recordFailure(QStringLiteral("helper_failed"), safeErrorMessage(QStringLiteral("helper_failed")));
         } else {
             QVariantList providers;
             if (!parseDocument(m_stdout, &providers))
-                fail(QStringLiteral("invalid_helper_response"), safeErrorMessage(QStringLiteral("invalid_helper_response")));
+                recordFailure(QStringLiteral("invalid_helper_response"),
+                              safeErrorMessage(QStringLiteral("invalid_helper_response")));
             else
                 publish(std::move(providers));
         }
-    } else if (m_cancelled) {
+    } else if (cancelled) {
         m_status = m_stableStatus;
-        emit changed();
     }
+
+    const bool closePending = m_closePending;
+    m_operationActive = false;
+    m_cleanupActive = false;
+    m_processGroup = 0;
+    m_processGeneration = 0;
     m_operation.clear();
     m_requestId.clear();
-    if (m_closePending) {
-        m_closePending = false;
+    m_stdout.clear();
+    m_outputOverflow = false;
+    m_cancelled = false;
+    m_closePending = false;
+    m_killSent = false;
+    m_pendingExitCode = -1;
+    m_pendingExitStatus = QProcess::CrashExit;
+
+    if (closePending) {
         emit closeReady();
+        return;
     }
     emit changed();
+}
+
+bool AiProviderController::prepareRuntime()
+{
+    if (m_runtimeDirectory) return false;
+    const QString requested = QDir::cleanPath(qEnvironmentVariable("XDG_RUNTIME_DIR"));
+    if (!QDir::isAbsolutePath(requested) || requested == QStringLiteral("/")) return false;
+    const QFileInfo root(requested);
+    if (!root.exists() || !root.isDir() || root.isSymLink()
+        || root.canonicalFilePath() != requested) return false;
+#ifdef Q_OS_UNIX
+    struct stat info {};
+    const QByteArray encoded = QFile::encodeName(requested);
+    if (::lstat(encoded.constData(), &info) != 0 || !S_ISDIR(info.st_mode)
+        || info.st_uid != ::geteuid() || (info.st_mode & 0777) != 0700) return false;
+#endif
+
+    auto directory = std::make_unique<QTemporaryDir>(requested + QStringLiteral("/orla-ai-XXXXXX"));
+    directory->setAutoRemove(false);
+    if (!directory->isValid()) return false;
+#ifdef Q_OS_UNIX
+    const QByteArray runtimeEncoded = QFile::encodeName(directory->path());
+    if (::chmod(runtimeEncoded.constData(), 0700) != 0
+        || ::lstat(runtimeEncoded.constData(), &info) != 0 || !S_ISDIR(info.st_mode)
+        || S_ISLNK(info.st_mode) || info.st_uid != ::geteuid()
+        || (info.st_mode & 0777) != 0700) {
+        QDir(directory->path()).removeRecursively();
+        return false;
+    }
+    m_runtimeDevice = static_cast<quint64>(info.st_dev);
+    m_runtimeInode = static_cast<quint64>(info.st_ino);
+#endif
+    m_runtimeDirectory = std::move(directory);
+    return true;
+}
+
+bool AiProviderController::removeOwnedRuntime()
+{
+    if (!m_runtimeDirectory) return true;
+    if (!runtimeIdentityMatches()) return false;
+    const QString path = m_runtimeDirectory->path();
+    const bool removed = m_runtimeRemover ? m_runtimeRemover(path) : QDir(path).removeRecursively();
+    if (!removed || QFileInfo::exists(path)) return false;
+    m_runtimeDirectory.reset();
+    m_runtimeDevice = 0;
+    m_runtimeInode = 0;
+    return true;
+}
+
+bool AiProviderController::runtimeIdentityMatches() const
+{
+    if (!m_runtimeDirectory) return false;
+#ifdef Q_OS_UNIX
+    struct stat info {};
+    const QByteArray encoded = QFile::encodeName(m_runtimeDirectory->path());
+    return ::lstat(encoded.constData(), &info) == 0 && S_ISDIR(info.st_mode)
+        && !S_ISLNK(info.st_mode) && info.st_uid == ::geteuid()
+        && (info.st_mode & 0777) == 0700
+        && static_cast<quint64>(info.st_dev) == m_runtimeDevice
+        && static_cast<quint64>(info.st_ino) == m_runtimeInode;
+#else
+    return true;
+#endif
 }
 
 void AiProviderController::handleFinished(int exitCode, QProcess::ExitStatus exitStatus)
@@ -327,11 +440,16 @@ void AiProviderController::handleFinished(int exitCode, QProcess::ExitStatus exi
     beginGroupCleanup();
 }
 
-void AiProviderController::fail(const QString &code, const QString &message)
+void AiProviderController::recordFailure(const QString &code, const QString &message)
 {
     m_status = QStringLiteral("error");
     m_errorCode = code;
     m_error = message;
+}
+
+void AiProviderController::fail(const QString &code, const QString &message)
+{
+    recordFailure(code, message);
     emit changed();
 }
 
@@ -492,7 +610,4 @@ void AiProviderController::publish(QVariantList providers)
     m_stableStatus = m_status;
     m_errorCode.clear();
     m_error.clear();
-    m_operation.clear();
-    m_requestId.clear();
-    emit changed();
 }

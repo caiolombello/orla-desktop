@@ -75,6 +75,8 @@ PROVIDERS = (
 
 
 _cancelled = False
+_runtime_root: Path | None = None
+_runtime_root_identity: tuple[int, int] | None = None
 
 
 def _handle_cancel(_signum, _frame):
@@ -213,7 +215,7 @@ def _run_version(executable_found: str, executable_name: str,
             for stream in (process.stdout, process.stderr):
                 if stream is not None:
                     stream.close()
-        shutil.rmtree(owned_home, ignore_errors=False)
+        cleanup_ok = _remove_owned_home(owned_home) and cleanup_ok
     if not cleanup_ok:
         return "process_cleanup_failed", None
     if status != "exited":
@@ -292,6 +294,14 @@ def _cancelled_provider(provider: Provider) -> dict[str, object]:
     }
 
 
+def _runtime_unavailable_provider(provider: Provider) -> dict[str, object]:
+    return {
+        "id": provider.id, "displayName": provider.display_name, "enabled": False,
+        "clientVersion": None, "capabilities": _empty_capabilities("unknown"),
+        "route": provider.route, "messageCode": "isolation_unavailable",
+    }
+
+
 def _inside(path: str, parent: str) -> bool:
     try:
         return os.path.commonpath((os.path.normpath(path), os.path.normpath(parent))) == os.path.normpath(parent)
@@ -305,6 +315,40 @@ def _valid_home(home: object) -> bool:
     if os.path.normpath(home) != home or "\x00" in home:
         return False
     return all(part not in ("", ".", "..") for part in home.split("/")[1:])
+
+
+def _validated_runtime_root(value: object,
+                            expected_identity: tuple[int, int] | None = None) -> Path | None:
+    if not _valid_home(value):
+        return None
+    assert isinstance(value, str)
+    candidate = Path(value)
+    try:
+        current = candidate
+        while current != current.parent:
+            if stat.S_ISLNK(current.lstat().st_mode):
+                return None
+            current = current.parent
+        info = candidate.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o700):
+            return None
+        if expected_identity is not None and (info.st_dev, info.st_ino) != expected_identity:
+            return None
+        if candidate.resolve(strict=True) != candidate:
+            return None
+    except (OSError, RuntimeError):
+        return None
+    return candidate
+
+
+def _runtime_identity(value: object) -> tuple[int, int] | None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{1,20}:[0-9]{1,20}", value) is None:
+        return None
+    device, inode = (int(part) for part in value.split(":"))
+    if device <= 0 or inode <= 0 or device > 2 ** 64 - 1 or inode > 2 ** 64 - 1:
+        return None
+    return device, inode
 
 
 def _resolved_regular_executable(path: str) -> str | None:
@@ -605,12 +649,46 @@ def _isolation_inputs(executable_found: str, executable_name: str):
             _inside(path, home) or (codex_home and _inside(path, codex_home))
             for path in dependencies):
         return None
-    owned_root = Path(__file__).resolve().parents[1] / ".runtime" / "ai-provider-helper-impl"
-    owned_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    owned_home = tempfile.mkdtemp(prefix="home-", dir=owned_root)
-    os.chmod(owned_home, 0o700)
-    Path(owned_home, ".codex").mkdir(mode=0o700)
+    owned_root = _runtime_root
+    if (owned_root is None or _runtime_root_identity is None
+            or _validated_runtime_root(str(owned_root), _runtime_root_identity) is None):
+        return None
+    created = None
+    try:
+        owned_home = tempfile.mkdtemp(prefix="home-", dir=owned_root)
+        os.chmod(owned_home, 0o700)
+        created = Path(owned_home)
+        if (created.parent != owned_root or created.is_symlink()
+                or stat.S_IMODE(created.lstat().st_mode) != 0o700):
+            shutil.rmtree(created, ignore_errors=True)
+            return None
+        Path(owned_home, ".codex").mkdir(mode=0o700)
+        if _validated_runtime_root(str(owned_root), _runtime_root_identity) is None:
+            shutil.rmtree(created, ignore_errors=True)
+            return None
+    except OSError:
+        if created is not None:
+            shutil.rmtree(created, ignore_errors=True)
+        return None
     return bwrap, executable, dependencies, owned_home, home, codex_home
+
+
+def _remove_owned_home(owned_home: str) -> bool:
+    if (_runtime_root is None or _runtime_root_identity is None
+            or _validated_runtime_root(str(_runtime_root), _runtime_root_identity) is None):
+        return False
+    candidate = Path(owned_home)
+    try:
+        info = candidate.lstat()
+        if (candidate.parent != _runtime_root or candidate.is_symlink()
+                or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o700):
+            return False
+        shutil.rmtree(candidate, ignore_errors=False)
+        return (not candidate.exists()
+                and _validated_runtime_root(str(_runtime_root), _runtime_root_identity) is not None)
+    except OSError:
+        return False
 
 
 def _provider_document(version: str | None, installation: str, protocol: str,
@@ -744,12 +822,30 @@ def _emit(document: dict[str, object]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _runtime_root, _runtime_root_identity
     arguments = sys.argv[1:] if argv is None else argv
-    if len(arguments) != 1 or arguments[0] not in ("detect", "probe-codex-anonymous"):
+    if (len(arguments) == 1
+            and arguments[0] in ("detect", "probe-codex-anonymous")):
+        _runtime_root = None
+        _runtime_root_identity = None
+    elif (len(arguments) == 5
+          and arguments[0] in ("detect", "probe-codex-anonymous")
+          and arguments[1] == "--runtime-root"
+          and arguments[3] == "--runtime-root-id"):
+        identity = _runtime_identity(arguments[4])
+        _runtime_root_identity = identity
+        _runtime_root = _validated_runtime_root(arguments[2], identity) if identity else None
+    else:
         _emit({"schemaVersion": SCHEMA_VERSION, "error": {"code": "invalid_operation"}})
         return 2
     signal.signal(signal.SIGTERM, _handle_cancel)
     signal.signal(signal.SIGINT, _handle_cancel)
+    if _runtime_root is None:
+        if arguments[0] == "detect":
+            return _emit({"schemaVersion": SCHEMA_VERSION,
+                          "providers": [_runtime_unavailable_provider(provider)
+                                        for provider in PROVIDERS]})
+        return _emit(_provider_document(None, "unknown", "unknown", "isolation_unavailable"))
     if arguments[0] == "detect":
         return _emit(detect())
     return _emit(probe_codex_anonymous())
@@ -813,8 +909,10 @@ def probe_codex_anonymous() -> dict[str, object]:
                 process.stdout.close()
             if not cleanup_ok:
                 message = "process_cleanup_failed"
-        shutil.rmtree(owned_home, ignore_errors=False)
+        cleanup_ok = _remove_owned_home(owned_home) and cleanup_ok
 
+    if not cleanup_ok:
+        message = "process_cleanup_failed"
     if message == "protocol_supported" and process is not None and process.returncode == 0:
         return _provider_document(version, "supported", "supported", "anonymous_protocol_supported")
     if message == "protocol_supported":

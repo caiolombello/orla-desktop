@@ -45,6 +45,8 @@ class AiHelperTests(unittest.TestCase):
         self.base = Path(self.temporary.name)
         self.bin = self.base / "bin"
         self.bin.mkdir()
+        self.runtime = self.base / "runtime"
+        self.runtime.mkdir(mode=0o700)
         self.install_bwrap()
         self.runner = self.base / "helper-runner.py"
         self.runner.write_text(textwrap.dedent(f"""
@@ -142,8 +144,10 @@ class AiHelperTests(unittest.TestCase):
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         environment.update(extra_env or {})
+        runtime_info = self.runtime.stat()
         completed = subprocess.run(
-            [sys.executable, str(self.runner), operation],
+            [sys.executable, str(self.runner), operation, "--runtime-root", str(self.runtime),
+             "--runtime-root-id", f"{runtime_info.st_dev}:{runtime_info.st_ino}"],
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -152,6 +156,88 @@ class AiHelperTests(unittest.TestCase):
         )
         self.assertEqual(completed.stderr, b"")
         return completed, json.loads(completed.stdout)
+
+    def test_readonly_helper_tree_uses_only_explicit_external_runtime(self):
+        stage = self.base / "readonly stage"
+        libexec = stage / "libexec"
+        libexec.mkdir(parents=True)
+        staged_helper = libexec / "ai.py"
+        staged_helper.write_bytes(HELPER.read_bytes())
+        staged_helper.chmod(0o444)
+        libexec.chmod(0o555)
+        stage.chmod(0o555)
+        before = [(path.relative_to(stage).as_posix(), path.stat().st_mode & 0o777,
+                   path.read_bytes() if path.is_file() else None)
+                  for path in sorted(stage.rglob("*"))]
+        runner = self.base / "staged-runner.py"
+        runner.write_text(textwrap.dedent(f"""
+            import importlib.util
+            import sys
+            spec = importlib.util.spec_from_file_location("orla_ai_staged", {str(staged_helper)!r})
+            target = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = target
+            spec.loader.exec_module(target)
+            target._safe_system_bwrap = lambda path, home, codex_home: path
+            raise SystemExit(target.main(sys.argv[1:]))
+        """), encoding="utf-8")
+        self.executable("codex", "print('codex-cli 0.162.1')")
+        environment = {
+            "HOME": "/home/synthetic", "PATH": str(self.bin), "LANG": "C.UTF-8",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        runtime_info = self.runtime.stat()
+        completed = subprocess.run(
+            [sys.executable, str(runner), "detect", "--runtime-root", str(self.runtime),
+             "--runtime-root-id", f"{runtime_info.st_dev}:{runtime_info.st_ino}"], env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, b"")
+        self.assertEqual(json.loads(completed.stdout)["providers"][0]["clientVersion"], "0.162.1")
+        after = [(path.relative_to(stage).as_posix(), path.stat().st_mode & 0o777,
+                  path.read_bytes() if path.is_file() else None)
+                 for path in sorted(stage.rglob("*"))]
+        self.assertEqual(after, before)
+        self.assertEqual(list(self.runtime.iterdir()), [])
+        libexec.chmod(0o755)
+        stage.chmod(0o755)
+
+    def test_missing_relative_symlink_and_wrong_mode_runtime_roots_are_unavailable(self):
+        marker = self.base / "client-started"
+        self.executable("codex", f"from pathlib import Path; Path({str(marker)!r}).touch(); print('codex-cli 0.162.1')")
+        wrong_mode = self.base / "wrong-mode"
+        wrong_mode.mkdir(mode=0o755)
+        target = self.base / "runtime-target"
+        target.mkdir(mode=0o700)
+        link = self.base / "runtime-link"
+        link.symlink_to(target, target_is_directory=True)
+        for value in (None, "relative", str(link), str(wrong_mode), str(self.runtime)):
+            with self.subTest(value=value):
+                environment = {
+                    "HOME": "/home/synthetic", "PATH": str(self.bin), "LANG": "C.UTF-8",
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                }
+                arguments = [sys.executable, str(self.runner), "detect"]
+                if value is not None:
+                    arguments.extend(("--runtime-root", value, "--runtime-root-id", "1:1"))
+                completed = subprocess.run(
+                    arguments, env=environment,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False,
+                )
+                self.assertEqual(completed.returncode, 0)
+                result = json.loads(completed.stdout)
+                self.assertEqual(result["providers"][0]["messageCode"], "isolation_unavailable")
+                self.assertFalse(marker.exists())
+
+        completed = subprocess.run(
+            [sys.executable, str(self.runner), "probe-codex-anonymous"],
+            env={"HOME": "/home/synthetic", "PATH": str(self.bin), "LANG": "C.UTF-8"},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(json.loads(completed.stdout)["provider"]["messageCode"],
+                         "isolation_unavailable")
+        self.assertFalse(marker.exists())
 
     def test_detect_reports_five_fixed_providers_without_running_until_requested(self):
         marker = self.base / "ran"
@@ -502,6 +588,10 @@ class AiHelperTests(unittest.TestCase):
         sys.modules[name] = target
         self.addCleanup(sys.modules.pop, name, None)
         spec.loader.exec_module(target)
+        info = self.runtime.stat()
+        target._runtime_root_identity = (info.st_dev, info.st_ino)
+        target._runtime_root = target._validated_runtime_root(
+            str(self.runtime), target._runtime_root_identity)
         return target
 
     def test_preexisting_and_mid_first_cancellation_do_not_spawn_later_versions(self):
@@ -712,7 +802,9 @@ class AiHelperTests(unittest.TestCase):
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         process = subprocess.Popen(
-            [sys.executable, str(self.runner), "probe-codex-anonymous"], env=environment,
+            [sys.executable, str(self.runner), "probe-codex-anonymous",
+             "--runtime-root", str(self.runtime), "--runtime-root-id",
+             f"{self.runtime.stat().st_dev}:{self.runtime.stat().st_ino}"], env=environment,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
         )
         deadline = time.monotonic() + 3.0

@@ -1,10 +1,13 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
 #include <QVariantList>
+
+class QTemporaryDir;
 
 // Private C++/QML boundary for the disabled-by-default A0.1 provider report.
 class AiProviderController final : public QObject
@@ -19,9 +22,11 @@ class AiProviderController final : public QObject
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
     using GroupObserver = std::function<bool(qint64)>;
+    using RuntimeRemover = std::function<bool(const QString &)>;
 
     explicit AiProviderController(const QString &pythonPath, const QString &helperPath,
-                                  GroupObserver groupObserver = {}, QObject *parent = nullptr);
+                                  GroupObserver groupObserver = {}, QObject *parent = nullptr,
+                                  RuntimeRemover runtimeRemover = {});
     ~AiProviderController() override;
 
     QString status() const { return m_status; }
@@ -51,7 +56,11 @@ private:
     void beginGroupCleanup();
     void pollGroupCleanup();
     void finishAfterCleanup(bool cleanupConfirmed);
+    bool prepareRuntime();
+    bool removeOwnedRuntime();
+    bool runtimeIdentityMatches() const;
     void handleFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void recordFailure(const QString &code, const QString &message);
     void fail(const QString &code, const QString &message);
     bool parseDocument(const QByteArray &bytes, QVariantList *providers) const;
     bool parseProvider(const QJsonObject &object, QVariantMap *provider) const;
@@ -61,6 +70,10 @@ private:
     QString m_pythonPath;
     QString m_helperPath;
     GroupObserver m_groupObserver;
+    RuntimeRemover m_runtimeRemover;
+    std::unique_ptr<QTemporaryDir> m_runtimeDirectory;
+    quint64 m_runtimeDevice = 0;
+    quint64 m_runtimeInode = 0;
     QProcess m_process;
     QTimer m_deadline;
     QTimer m_killGrace;

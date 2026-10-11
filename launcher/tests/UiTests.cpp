@@ -106,11 +106,11 @@ private Q_SLOTS:
         const QString helper = directory.filePath(QStringLiteral("helper.py"));
         QFile helperFile(helper);
         QVERIFY(helperFile.open(QIODevice::WriteOnly));
-        helperFile.write("import base64,pathlib,sys\nif sys.argv[1:] == ['detect']:\n pathlib.Path(r'");
+        helperFile.write("import base64,pathlib,sys\nargs=sys.argv[1:]\nif len(args) == 5 and args[0] == 'detect' and args[1] == '--runtime-root' and args[3] == '--runtime-root-id':\n pathlib.Path(r'");
         helperFile.write(marker.toUtf8());
         helperFile.write("').touch()\n sys.stdout.buffer.write(base64.b64decode('");
         helperFile.write(document.toBase64());
-        helperFile.write("'))\nelif sys.argv[1:] == ['probe-codex-anonymous']:\n pathlib.Path(r'");
+        helperFile.write("'))\nelif len(args) == 5 and args[0] == 'probe-codex-anonymous' and args[1] == '--runtime-root' and args[3] == '--runtime-root-id':\n pathlib.Path(r'");
         helperFile.write(probeMarker.toUtf8());
         helperFile.write("').touch()\n sys.stdout.buffer.write(base64.b64decode('");
         helperFile.write(probeDocument.toBase64());
