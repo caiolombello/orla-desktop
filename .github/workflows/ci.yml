@@ -100,6 +100,7 @@ jobs:
       contents: read
     container:
       image: registry.fedoraproject.org/fedora@sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e
+      options: --init
     defaults:
       run:
         shell: bash
