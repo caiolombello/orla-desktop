@@ -9,6 +9,9 @@ ColumnLayout {
     required property var resetTimer
     required property var appearance
     required property var profiles
+    required property var contexts
+    required property var contextBindings
+    readonly property bool contextsTabActive: tabs.currentIndex === 3
     signal appearanceCanceled()
     spacing: 8
     function setPreference(key, value) {
@@ -57,7 +60,7 @@ ColumnLayout {
         if (point.y < 0) viewport.contentY += point.y;
         else if (point.y + control.height > viewport.height) viewport.contentY += point.y + control.height - viewport.height;
     }
-    Controls.Label { text: "Orla Dock 0.2.7 alpha · Plasma 6.7+"; opacity: 0.6 }
+    Controls.Label { text: "Orla Dock 0.2.8 alpha · Plasma 6.7+"; opacity: 0.6 }
     Controls.TabBar {
         id: tabs
         objectName: "settingsTabs"
@@ -65,6 +68,7 @@ ColumnLayout {
         Controls.TabButton { text: qsTr("Aparência") }
         Controls.TabButton { text: qsTr("Widgets") }
         Controls.TabButton { text: qsTr("Perfis") }
+        Controls.TabButton { objectName: "contextsTab"; text: qsTr("Contextos") }
     }
     Controls.Label {
         Layout.fillWidth: true
@@ -155,5 +159,12 @@ ColumnLayout {
             }
         }
         ProfileControls { profiles: settings.profiles; appearance: settings.appearance }
+        ContextControls {
+            objectName: "contextControls"
+            contexts: settings.contexts
+            bindingsState: settings.contextBindings
+            profiles: settings.profiles
+            active: settings.contextsTabActive
+        }
     }
 }
