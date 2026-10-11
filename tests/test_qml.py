@@ -91,6 +91,38 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(opened.count(), 1)
         self.assertEqual(self.warnings, [])
 
+    def test_task_context_menu_supports_keyboard_and_returns_focus(self):
+        if self.app.platformName() == "offscreen":
+            self.skipTest("TaskManager needs a Wayland or X11 connection")
+        settings = self.window.findChild(QQuickItem, "settingsButton")
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        # Exercise keyboard interaction in the in-window renderer. QtTest's
+        # synthetic events cannot qualify native Wayland popup seat grabs;
+        # native placement/grabs remain part of the real-panel gate.
+        self.assertTrue(menu.setProperty("popupType", 0))  # Controls.Popup.Item
+        for steps, key, modifiers, title in ((1, Qt.Key_Menu, Qt.NoModifier, "Dolphin"),
+                                             (2, Qt.Key_F10, Qt.ShiftModifier, "Konsole")):
+            settings.forceActiveFocus(Qt.TabFocusReason)
+            for _ in range(steps):
+                QTest.keyClick(self.window, Qt.Key_Tab)
+            task_button = self.window.activeFocusItem()
+            self.assertIsNotNone(task_button)
+            self.assertNotEqual(task_button, settings)
+            self.assertNotEqual(task_button.objectName(), "addButton")
+            opened = QSignalSpy(menu.opened)
+            QTest.keyClick(self.window, key, modifiers)
+            if not opened.count():
+                self.assertTrue(opened.wait(1000), "Keyboard context action should open the task menu")
+            self.assertEqual(self.evaluate("menuData.title"), title)
+            self.assertTrue(menu.property("visible"))
+            closed = QSignalSpy(menu.closed)
+            QTest.keyClick(self.window, Qt.Key_Escape)
+            if not closed.count():
+                self.assertTrue(closed.wait(1000))
+            self.assertFalse(menu.property("visible"))
+            self.assertEqual(self.window.activeFocusItem(), task_button)
+        self.assertEqual(self.warnings, [])
+
     def test_integrations_render_real_percentages_and_neutral_stale_data(self):
         self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 1, quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'ready', devices: [{name: 'Mouse', percent: 64, stale: false}]}, recording: {status: 'idle', state: 'idle'}}))")
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "codex · 37% usado")

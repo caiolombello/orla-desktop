@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -119,15 +121,114 @@ class PackageCliTests(unittest.TestCase):
                 caiodock.install(archive, data)
             run.assert_not_called()
 
-    def test_install_missing_runtime_dependency_does_not_mutate_package(self):
+    def test_install_missing_required_dependency_does_not_mutate_package(self):
         archive = caiodock.build(self.root, self.root)
         data = self.root / "data"
-        statuses = {"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": False, "sessão D-Bus do usuário": True}
+        statuses = {"Python 3": True, "kpackagetool6": False, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
         with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=None), mock.patch.object(caiodock, "run_checked") as run:
-            with self.assertRaisesRegex(caiodock.PackageError, "PySide6.QtDBus"):
+            with self.assertRaisesRegex(caiodock.PackageError, "kpackagetool6"):
                 caiodock.install(archive, data)
             run.assert_not_called()
             self.assertFalse((data / "plasma/plasmoids" / caiodock.PACKAGE_ID).exists())
+
+    def test_install_and_upgrade_work_without_optional_integrations_and_preserve_user_data(self):
+        archive = caiodock.build(self.root, self.root)
+        for missing in ("PySide6.QtDBus", "busctl", "sessão D-Bus do usuário"):
+            with self.subTest(missing=missing):
+                data = self.root / missing
+                installed = data / "plasma/plasmoids" / caiodock.PACKAGE_ID
+                service = data / "dbus-1/services" / caiodock.SERVICE_NAME
+                settings = data / "config/plasma-settings"
+                cache = data / "cache/project-state"
+                for path in (settings, cache):
+                    path.parent.mkdir(parents=True)
+                    path.write_text("preserve me")
+                statuses = {"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
+                statuses[missing] = False
+                actions = []
+
+                def run(command, **kwargs):
+                    self.assertEqual(command[:3], ["/usr/bin/kpackagetool6", "--type", "Plasma/Applet"])
+                    self.assertEqual(kwargs["env"]["XDG_DATA_HOME"], str(data))
+                    actions.append(command[3])
+                    with zipfile.ZipFile(command[4]) as package:
+                        package.extractall(installed)
+                    return mock.Mock(returncode=0)
+
+                errors = io.StringIO()
+                with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", return_value="/usr/bin/kpackagetool6"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                    self.assertTrue((installed / "contents/ui/main.qml").is_file())
+                    self.assertFalse(service.exists())
+                    service.parent.mkdir(parents=True)
+                    original_service = caiodock.SERVICE_MARKER + "[D-BUS Service]\nExec=existing helper\n"
+                    service.write_text(original_service)
+                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                self.assertEqual(actions, ["--install", "--upgrade"])
+                self.assertIn(missing, errors.getvalue())
+                self.assertEqual(service.read_text(), original_service)
+                self.assertEqual(settings.read_text(), "preserve me")
+                self.assertEqual(cache.read_text(), "preserve me")
+
+                statuses[missing] = True
+                commands = []
+
+                def recovered_run(command, **kwargs):
+                    commands.append(command)
+                    if command[0] == "/usr/bin/kpackagetool6":
+                        return run(command, **kwargs)
+                    return mock.Mock(returncode=0)
+
+                with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=recovered_run), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                import shlex
+                service_text = service.read_text()
+                command = next(line[5:] for line in service_text.splitlines() if line.startswith("Exec="))
+                self.assertEqual(shlex.split(command), [caiodock.sys.executable, str(installed / "contents/code/integrations.py"), "--serve"])
+                self.assertIn("Name=org.caiodock.Integrations\n", service_text)
+                self.assertEqual(commands[-1], ["/usr/bin/busctl", "--user", "--timeout=8s", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReloadConfig"])
+                self.assertEqual(settings.read_text(), "preserve me")
+                self.assertEqual(cache.read_text(), "preserve me")
+
+    def test_install_preserves_dock_and_warns_when_optional_bus_refresh_fails(self):
+        archive = caiodock.build(self.root, self.root)
+        statuses = {"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
+        failures = (mock.Mock(returncode=1), caiodock.subprocess.TimeoutExpired("busctl", 10), OSError("bus unavailable"))
+        for index, failure in enumerate(failures):
+            with self.subTest(failure=failure):
+                data = self.root / f"refresh-{index}"
+                installed = data / "plasma/plasmoids" / caiodock.PACKAGE_ID
+                settings = data / "config/plasma-settings"
+                cache = data / "cache/project-state"
+                for path in (settings, cache):
+                    path.parent.mkdir(parents=True)
+                    path.write_text("preserve me")
+                commands = []
+
+                def run(command, **kwargs):
+                    commands.append(command)
+                    if command[0] == "/usr/bin/kpackagetool6":
+                        with zipfile.ZipFile(command[4]) as package:
+                            package.extractall(installed)
+                        return mock.Mock(returncode=0)
+                    self.assertEqual(command[-1], "ReloadConfig")
+                    if isinstance(failure, Exception):
+                        raise failure
+                    return failure
+
+                errors = io.StringIO()
+                with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                self.assertEqual(len(commands), 2)
+                self.assertEqual((installed / "contents/ui/main.qml").read_text(), "Item {}")
+                service = data / "dbus-1/services" / caiodock.SERVICE_NAME
+                self.assertIn("Name=org.caiodock.Integrations\n", service.read_text())
+                self.assertEqual(settings.read_text(), "preserve me")
+                self.assertEqual(cache.read_text(), "preserve me")
+                self.assertIn("dock instalado", errors.getvalue())
+                self.assertIn("integrações locais opcionais", errors.getvalue())
+                self.assertIn("doctor", errors.getvalue())
+                self.assertIn("reinstale", errors.getvalue())
 
     def test_uninstall_removes_only_owned_package_service_and_preserves_other_data(self):
         data = self.root / "data"
@@ -170,6 +271,15 @@ class PackageCliTests(unittest.TestCase):
         statuses = {"Python 3": True, "kpackagetool6": False, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
         with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=None):
             self.assertEqual(caiodock.doctor(), 1)
+
+    def test_doctor_reports_missing_optional_integrations_without_failing_dock_checks(self):
+        statuses = {"Python 3": True, "kpackagetool6": True, "busctl": False, "PySide6.QtDBus": False, "sessão D-Bus do usuário": False}
+        output = io.StringIO()
+        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), contextlib.redirect_stdout(output):
+            self.assertEqual(caiodock.main(["doctor"]), 0)
+        for name in ("busctl", "PySide6.QtDBus", "sessão D-Bus do usuário"):
+            self.assertIn("OPCIONAL AUSENTE  " + name, output.getvalue())
+        self.assertIn("OK  Plasma 6.7.5", output.getvalue())
 
     @mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}")
     @mock.patch.object(caiodock.subprocess, "run")

@@ -10,7 +10,7 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 ## What works today
 
-- Pin, reorder, launch, and remove applications; switch to or minimize open windows.
+- Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
 - Choose among Glass, Midnight, and Paper themes, set icon size, and enable or disable motion.
 - Use the clock, Pomodoro timer, KDE calendar view, and generic MPRIS media controls.
 - Read optional local snapshots from QuotaLantern, PeriGauge, and FalaTrace when those projects have written supported state files.
@@ -24,13 +24,15 @@ Media controls use MPRIS and work with compatible players. Spotify-specific beha
 
 - KDE Plasma 6.7 or newer.
 - Python 3.10 or newer for the packaging helper and local integrations.
-- PySide6 with QtDBus for the installer and local integration service. The dock applet can run without project integrations, but the supported install helper checks these runtime dependencies.
+- `kpackagetool6` for installation. PySide6 with QtDBus, `busctl`, and a user D-Bus session are optional requirements for local project integrations. Missing them does not block installing the dock.
 - KOrganizer and the appropriate KDE PIM calendar resource for synchronized external calendars.
 
-On a Fedora system that already has Plasma 6.7+, install the helper dependencies from the distribution packages, then run `doctor` inside your desktop session:
+On a Fedora system that already has Plasma 6.7+, install the package tool. Add the optional integration dependencies if you want project widgets, then run `doctor` inside your desktop session:
 
 ```bash
-sudo dnf install kf6-kpackage python3-pyside6 systemd
+sudo dnf install kf6-kpackage
+# Optional local project integrations:
+sudo dnf install python3-pyside6 systemd
 ```
 
 The current validation baseline is Fedora 44, Plasma 6.7.5, Qt 6.11.2, and Wayland. Other distributions, Plasma versions, X11 sessions, and multi-monitor behavior still need validation.
@@ -42,13 +44,13 @@ Download the release `.zip` from the [GitHub Releases page](https://github.com/c
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.1.zip
-cd orla-dock-0.2.1
+unzip orla-dock-0.2.2.zip
+cd orla-dock-0.2.2
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.1.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.2.plasmoid
 ```
 
-The helper registers the optional local integration service when its packaged bridge is present. It does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
+The helper registers the local integration service when its packaged bridge and optional dependencies are available. `doctor` reports missing optional dependencies separately. After restoring them, reinstall the same package to activate integrations. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
 
 To build and install from a source checkout instead:
 
@@ -57,7 +59,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.1.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.2.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:

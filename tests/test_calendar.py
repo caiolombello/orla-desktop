@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 
 
@@ -23,7 +24,7 @@ class CalendarTests(unittest.TestCase):
         self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("CalendarHarness.qml").resolve())))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.window = self.engine.rootObjects()[0]
-        self.calendar = self.window.findChild(QObject, "calendarUnderTest")
+        self.calendar = self.window.findChild(QQuickItem, "calendarUnderTest")
         QTest.qWait(80)
 
     def tearDown(self):
@@ -51,10 +52,15 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual(self.evaluate("eventTime(agendaEvents[0])"), "Dia inteiro")
         self.assertEqual(self.evaluate("eventTime(agendaEvents[1])"), "09:00 – 10:00")
         self.assertEqual(self.evaluate("agendaEvents[0].title"), "<b>Sintético</b>")
-        agenda = self.window.findChild(QObject, "calendarAgendaList")
-        expression = QQmlExpression(self.engine.rootContext(), agenda, "itemAtIndex(0).children[0].textFormat")
-        self.assertEqual(expression.evaluate()[0], 0)
+        agenda = self.window.findChild(QQuickItem, "calendarAgendaList")
+        # A hidden/occluded Wayland test window may not receive a render tick.
+        # Flush the pending parent layout and view before inspecting a delegate.
+        self.calendar.ensurePolished()
+        agenda.ensurePolished()
+        expression = QQmlExpression(self.engine.rootContext(), agenda, "forceLayout(); itemAtIndex(0).children[0].textFormat")
+        value, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
+        self.assertEqual(value, 0)
         self.assertEqual(self.warnings, [])
 
     def test_month_navigation_and_return_to_today(self):

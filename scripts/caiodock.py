@@ -21,6 +21,7 @@ PACKAGE_ID = "org.caiodock.dock"
 SERVICE_NAME = "org.caiodock.Integrations.service"
 SERVICE_MARKER = "# Managed by CaioDock\n"
 MINIMUM_PLASMA = (6, 7)
+OPTIONAL_INTEGRATION_DEPENDENCIES = {"busctl", "PySide6.QtDBus", "sessão D-Bus do usuário"}
 
 
 class PackageError(Exception):
@@ -177,13 +178,19 @@ def dependency_status() -> dict[str, bool]:
     }
 
 
-def _require_install_runtime() -> None:
-    missing = [name for name, available in dependency_status().items() if not available]
+def _require_install_runtime() -> bool:
+    statuses = dependency_status()
+    missing = [name for name, available in statuses.items() if not available and name not in OPTIONAL_INTEGRATION_DEPENDENCIES]
     if missing:
         raise PackageError("missing install/runtime dependencies: " + ", ".join(missing))
     version = _plasma_version()
     if version is not None and version[:2] < MINIMUM_PLASMA:
         raise PackageError(f"Plasma 6.7 or newer is required; detected {'.'.join(map(str, version))}")
+    optional_missing = [name for name, available in statuses.items() if not available and name in OPTIONAL_INTEGRATION_DEPENDENCIES]
+    if optional_missing:
+        print("orla: integrações locais indisponíveis (opcionais): " + ", ".join(optional_missing)
+              + "; instalação do dock continua. Execute doctor após instalar as dependências e reinstale o pacote para ativar as integrações.", file=sys.stderr)
+    return not optional_missing
 
 
 def run_checked(command: list[str], env: dict[str, str] | None = None) -> None:
@@ -196,20 +203,25 @@ def install(package: Path, data_home: Path | None = None) -> str:
     _archive_metadata(package)
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
     _check_service_path(home)
-    _require_install_runtime()
+    integrations_available = _require_install_runtime()
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
     action = "--upgrade" if installed.exists() else "--install"
     env = environment_with(XDG_DATA_HOME=str(home))
     run_checked([require_tool("kpackagetool6"), "--type", "Plasma/Applet", action, str(package.resolve())], env)
-    if (installed / "contents/code/integrations.py").is_file():
+    if integrations_available and (installed / "contents/code/integrations.py").is_file():
         enable_integrations(home)
         # dbus-broker may not watch a services directory that did not exist
         # when the login session started. Reloading discovers the new mapping.
         busctl = require_tool("busctl")
-        result = subprocess.run([busctl, "--user", "--timeout=8s", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
-                                 "org.freedesktop.DBus", "ReloadConfig"], env=env, capture_output=True, timeout=10)
-        if result.returncode:
-            raise PackageError("widget installed, but the session bus could not refresh its integration service")
+        try:
+            result = subprocess.run([busctl, "--user", "--timeout=8s", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                     "org.freedesktop.DBus", "ReloadConfig"], env=env, capture_output=True, timeout=10)
+            refreshed = result.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            refreshed = False
+        if not refreshed:
+            print("orla: dock instalado; a sessão D-Bus não atualizou as integrações locais opcionais. "
+                  "O serviço foi preservado. Execute doctor na sessão KDE e reinstale o pacote para tentar ativar as integrações novamente.", file=sys.stderr)
     return action
 
 
@@ -244,7 +256,8 @@ def uninstall(data_home: Path | None = None) -> bool:
 def doctor() -> int:
     statuses = dependency_status()
     for name, available in statuses.items():
-        print(f"{'OK' if available else 'AUSENTE'}  {name}")
+        label = "OK" if available else "OPCIONAL AUSENTE" if name in OPTIONAL_INTEGRATION_DEPENDENCIES else "AUSENTE"
+        print(f"{label}  {name}")
     version = _plasma_version()
     if version is None:
         print("NÃO DETECTADO  Plasma (requisito do pacote: 6.7+)")
@@ -254,7 +267,7 @@ def doctor() -> int:
         available = version[:2] >= MINIMUM_PLASMA
         print(f"{'OK' if available else 'INCOMPATÍVEL'}  Plasma {label} (mínimo 6.7)")
         statuses["Plasma 6.7+"] = available
-    return 0 if all(statuses.values()) else 1
+    return 0 if all(available for name, available in statuses.items() if name not in OPTIONAL_INTEGRATION_DEPENDENCIES) else 1
 
 
 def preview(root: Path, timeout: float | None = None) -> None:
