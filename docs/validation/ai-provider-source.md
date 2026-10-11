@@ -53,6 +53,32 @@ passed the 23 text tests and all five launcher CTests. It does not admit
 provider/network or native behavior. The generated CI Source ZIP includes this
 module and its tests; the published 0.2.9 assets remain unchanged and exclude it.
 
+## Fake text transport lifecycle foundation (T2.1/T2.2)
+
+`scripts/ai_text_transport.py` adds a private lifecycle around the frozen T1
+contract. It frames a caller-supplied request and ephemeral credential, checks
+cancellation and the absolute budget at each injected boundary, and holds the
+terminal event batch until stream EOF and local cleanup. Cleanup failures,
+cancellation and transport errors have a fixed precedence. Events contain no
+raw headers, bodies, exceptions or credentials.
+
+Independent Source review approved this slice after cancellation, secret/body
+overlap and credential ownership adversaries. The maintained suites contain
+23 T1 tests and 29 T2 tests; all transport, input, signal, timer, clock and sink
+boundaries are fakes. Best-effort buffer wiping is attempted independently on
+failure; it does not promise perfect erasure.
+
+```bash
+python3 -B -m unittest discover -s tests -p 'test_ai_text_transport.py' -v
+```
+
+The command-line entry point still returns `unsupported_transport`. HTTP
+headers/framing, sockets, DNS, TLS and production signal adapters are not
+implemented. No provider, credential store, authentication, paid request,
+subscription, launcher UI or native session is exercised. These files are
+Source foundations, with no functional AI or release admission. Future CI Source
+ZIPs include the script and tests; published 0.2.9 assets remain unchanged.
+
 ## Reviewed source pins
 
 The separately reviewed controller/UI and helper revisions used these source hashes:

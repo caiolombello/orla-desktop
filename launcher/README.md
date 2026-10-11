@@ -22,6 +22,31 @@ A invocação `python3 -I -B scripts/ai.py detect` continua reconhecida. Sem a p
 
 A fatia Source recebeu aprovação independente e foi integrada pelo PR [#20](https://github.com/caiolombello/orla-desktop/pull/20); a CI portátil [também passou](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163). Esse run anterior não compilou o launcher C++/QML nem executou CTests. O job separado de build em Fedora 44 agora [compilou o launcher e passou os cinco CTests fechados](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). Não há versão de release própria para o launcher: os assets 0.2.9 excluem launcher C++/QML, painel de IA e barra. O ZIP do dock inclui somente `scripts/ai.py` e `tests/test_ai.py`, sem oferecer painel ou integração de IA ao usuário. Evidências sintéticas e one-shot delimitadas estão no [registro de validação](../docs/validation/ai-provider-source.md). Autenticação, inferência, semântica de cancelamento, uso, pedidos pagos, procedência do cliente instalado, isolamento de namespace/rede e comportamento nativo Wayland/QML permanecem sem qualificação.
 
+## Fundação do pacote de dados — somente no fonte
+
+`launcher/package.py` contém um builder determinístico e um verificador externo
+para um ZIP de dados com cinco arquivos allowlisted: ELF, helpers de IA/Steam,
+licença e manifesto. O verificador compara o SHA-256 externo antes de interpretar o conteúdo.
+Depois da decodificação limitada, confere o commit esperado no manifesto, além
+de nomes, modos, hashes, CRC e limites reais de descompactação. Ele não extrai nem executa o payload.
+
+O inventário de dependências ainda é uma declaração fornecida pelo chamador
+(`caller_assertion_unverified`); não foi coletado do ambiente. `doctor` retorna
+`unsupported_doctor`. Staging CMake, resolução relocável dos helpers, coleta
+RPM, diagnóstico do host e artifact hospedado continuam pendentes. Essa fatia
+não instala o launcher e não altera dados do usuário. O ZIP Source gerado pela
+CI continua excluindo `launcher/`, inclusive este empacotador. Ele inclui os
+helpers-fonte de texto da IA em `scripts/` e seus testes em `tests/`; isso não
+os transforma em recursos instalados.
+
+```sh
+python3 -B -m unittest discover -s launcher/tests -p 'test_package.py' -v
+```
+
+Os 17 testes mantidos usam ELF e inventários sintéticos, com ZIPs adversariais e
+verificação de determinismo. O checksum precisa vir de um canal confiável;
+um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
+
 ## Compilar e testar
 
 Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml, Quick; Test/DBus para testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.

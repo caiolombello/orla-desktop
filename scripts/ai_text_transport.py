@@ -1,0 +1,642 @@
+#!/usr/bin/env python3
+"""Private fake-only lifecycle for Orla's bounded AI text transport.
+
+This T2.1/T2.2 module has no production connector and imports no networking or
+signal APIs.  Callers must inject readers, clocks, signal boundaries, sinks and
+fake connectors.  The command-line entry point remains unavailable.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+
+
+TOTAL_TIMEOUT = 120.0
+CONNECT_TIMEOUT = 5.0
+SEND_TIMEOUT = 5.0
+FIRST_BYTE_TIMEOUT = 30.0
+IDLE_TIMEOUT = 30.0
+READ_CHUNK_BYTES = 8 * 1024
+SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGALRM")
+_CREDENTIAL = re.compile(rb"[A-Za-z0-9._~+/=-]+")
+
+
+def _load_contract():
+    path = Path(__file__).resolve().with_name("ai_text.py")
+    spec = importlib.util.spec_from_file_location("_orla_ai_text_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("contract unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    required = (
+        "SCHEMA_VERSION", "MAX_REQUEST_BYTES", "ContractError", "build_request",
+        "parse_input", "OllamaNDJSONParser", "OpenAISSEParser", "_encode_event_line",
+    )
+    if module.SCHEMA_VERSION != 1 or any(not hasattr(module, name) for name in required):
+        raise RuntimeError("contract unavailable")
+    return module
+
+
+_contract = _load_contract()
+
+
+class _Cancelled(Exception):
+    pass
+
+
+class _TimedOut(Exception):
+    pass
+
+
+class _SinkFailure(Exception):
+    pass
+
+
+class _TransportFailure(Exception):
+    def __init__(self, code="helper_unavailable", retryable=False):
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+@dataclass(frozen=True)
+class _TransportOutcome:
+    state: str
+    terminal: str | None
+    code: str | None
+    retryable: bool
+    published_events: int
+    partial_published: bool
+    exit_code: int
+
+
+@dataclass
+class _CancellationToken:
+    cancelled: bool = False
+    timed_out: bool = False
+
+    def cancel(self):
+        self.cancelled = True
+
+    def timeout(self):
+        self.timed_out = True
+
+    def check(self):
+        if self.timed_out:
+            raise _TimedOut()
+        if self.cancelled:
+            raise _Cancelled()
+
+
+@dataclass
+class _SignalSetupLedger:
+    setup_mask_acquired: bool = False
+    setup_previous_mask: object | None = None
+    original_handlers: dict[str, object] = field(default_factory=dict)
+    original_timer_captured: bool = False
+    handlers_installed: list[str] = field(default_factory=list)
+    timer_armed: bool = False
+    started_published: bool = False
+
+
+def _remaining(clock, deadline):
+    value = deadline - clock()
+    return value if value > 0.0 else 0.0
+
+
+def _phase_timeout(clock, deadline, limit=None):
+    remaining = _remaining(clock, deadline)
+    if remaining <= 0.0:
+        raise _TimedOut()
+    return remaining if limit is None else min(limit, remaining)
+
+
+def _check_operational(clock, deadline, token):
+    token.check()
+    if _remaining(clock, deadline) <= 0.0:
+        raise _TimedOut()
+
+
+def _boundary_timeout(clock, deadline, token, limit=None):
+    token.check()
+    return _phase_timeout(clock, deadline, limit)
+
+
+def _wipe(buffer):
+    if isinstance(buffer, bytearray):
+        for index in range(len(buffer)):
+            buffer[index] = 0
+
+
+def _signal_handler(token, *, timeout=False):
+    def handler(*_unused):
+        if timeout:
+            token.timeout()
+        else:
+            token.cancel()
+    return handler
+
+
+def _setup_signals(boundary, token, clock, deadline, ledger):
+    previous_mask = boundary.block(SIGNAL_NAMES)
+    ledger.setup_previous_mask = previous_mask
+    ledger.setup_mask_acquired = True
+
+    for name in SIGNAL_NAMES:
+        ledger.original_handlers[name] = boundary.get_handler(name)
+    timer = boundary.get_timer()
+    ledger.original_timer_captured = True
+    if timer != (0.0, 0.0):
+        raise RuntimeError("preflight")
+
+    for name in SIGNAL_NAMES:
+        boundary.install_handler(
+            name, _signal_handler(token, timeout=(name == "SIGALRM"))
+        )
+        ledger.handlers_installed.append(name)
+
+    remaining = _remaining(clock, deadline)
+    if remaining <= 0.0:
+        raise _TimedOut()
+    boundary.arm_timer(remaining)
+    ledger.timer_armed = True
+    boundary.restore_mask(ledger.setup_previous_mask)
+    ledger.setup_mask_acquired = False
+
+
+def _rollback_operational(boundary, ledger):
+    failed = False
+    if ledger.timer_armed:
+        try:
+            boundary.cancel_timer()
+        except Exception:
+            failed = True
+        else:
+            ledger.timer_armed = False
+    for name in tuple(reversed(ledger.handlers_installed)):
+        try:
+            boundary.restore_handler(name, ledger.original_handlers[name])
+        except Exception:
+            failed = True
+        else:
+            ledger.handlers_installed.remove(name)
+    return failed
+
+
+def _restore_setup_mask(boundary, ledger):
+    if not ledger.setup_mask_acquired:
+        return False
+    try:
+        boundary.restore_mask(ledger.setup_previous_mask)
+    except Exception:
+        return True
+    ledger.setup_mask_acquired = False
+    return False
+
+
+def _rollback_preflight(boundary, ledger, buffers=()):
+    failed = False
+    for buffer in buffers:
+        try:
+            _wipe(buffer)
+        except Exception:
+            failed = True
+    failed = _rollback_operational(boundary, ledger) or failed
+    mask_failed = _restore_setup_mask(boundary, ledger)
+    return mask_failed or failed
+
+
+def _read_call_frame(input_reader, clock, deadline, token):
+    maximum = _contract.MAX_REQUEST_BYTES + 1 + 512
+    raw = bytearray()
+    credential = None
+    try:
+        while True:
+            token.check()
+            remaining = _remaining(clock, deadline)
+            if remaining <= 0.0:
+                raise _TimedOut()
+            limit = min(READ_CHUNK_BYTES, maximum + 1 - len(raw))
+            if limit <= 0:
+                raise _contract.ContractError("invalid_request")
+            try:
+                chunk = input_reader.read1(limit, remaining)
+            except TimeoutError:
+                raise _TimedOut() from None
+            _check_operational(clock, deadline, token)
+            if not isinstance(chunk, bytes):
+                raise _contract.ContractError("invalid_request")
+            if not chunk:
+                break
+            if len(chunk) > limit:
+                raise _contract.ContractError("invalid_request")
+            raw.extend(chunk)
+            if len(raw) > maximum:
+                raise _contract.ContractError("invalid_request")
+        request, credential = _contract.parse_input(bytes(raw))
+        if request["provider"] == "openai_api":
+            if _CREDENTIAL.fullmatch(credential) is None:
+                raise _contract.ContractError("invalid_request")
+        elif credential:
+            raise _contract.ContractError("invalid_request")
+    except Exception:
+        try:
+            _wipe(raw)
+        except Exception:
+            pass
+        if credential is not None:
+            try:
+                _wipe(credential)
+            except Exception:
+                pass
+        raise
+
+    try:
+        _wipe(raw)
+    except Exception:
+        try:
+            _wipe(credential)
+        except Exception:
+            pass
+        raise _TransportFailure("process_cleanup_failed", False) from None
+    return request, credential
+
+
+def _preflight_outcome(error=None):
+    terminal, code, retryable = _failure_from_exception(error)
+    if terminal == "cancelled":
+        code = "credential_cancelled"
+    return _TransportOutcome(
+        state="preflight_failed", terminal=None, code=code,
+        retryable=retryable, published_events=0,
+        partial_published=False, exit_code=2,
+    )
+
+
+def _safe_hook(boundary, name, token):
+    boundary.hook(name, token)
+
+
+def _safe_close(resource):
+    if resource is None:
+        return False
+    try:
+        resource.close()
+    except Exception:
+        return True
+    return False
+
+
+def _failure_from_exception(error):
+    if isinstance(error, _Cancelled):
+        return "cancelled", None, False
+    if isinstance(error, (_TimedOut, TimeoutError)):
+        return "failed", "operation_timeout", True
+    if isinstance(error, _TransportFailure):
+        if (error.code in _contract._FAILURE_CODES and
+                isinstance(error.retryable, bool)):
+            return "failed", error.code, error.retryable
+        return "failed", "helper_unavailable", False
+    if isinstance(error, _contract.ContractError):
+        code = error.code if error.code in _contract._FAILURE_CODES else "protocol_invalid"
+        return "failed", code, False
+    return "failed", "helper_unavailable", False
+
+
+def _parser_for(request):
+    if request["provider"] == "ollama_local":
+        return _contract.OllamaNDJSONParser(request)
+    return _contract.OpenAISSEParser(request)
+
+
+def _body_contains_secret(value, secret):
+    if not secret:
+        return False
+    if isinstance(value, str):
+        return bytes(secret) in value.encode("utf-8")
+    if isinstance(value, dict):
+        return any(
+            _body_contains_secret(key, secret) or
+            _body_contains_secret(item, secret)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_body_contains_secret(item, secret) for item in value)
+    return False
+
+
+def _publish(sink, events, state):
+    for event in events:
+        try:
+            sink.publish(event)
+        except Exception:
+            raise _SinkFailure() from None
+        state["published_events"] += 1
+        if event["type"] == "delta":
+            state["partial_published"] = True
+
+
+def _restore_pending(parser, pending):
+    if pending is not None:
+        parser._restore(pending[0])
+
+
+def _finalize_started(*, boundary, ledger, token, parser, pending,
+                      operational_error, sink_unavailable, response, connector, credential,
+                      sink, state):
+    try:
+        previous_mask = boundary.block(SIGNAL_NAMES)
+    except Exception:
+        _restore_pending(parser, pending)
+        _safe_close(response)
+        _safe_close(connector)
+        try:
+            _wipe(credential)
+        except Exception:
+            pass
+        _rollback_operational(boundary, ledger)
+        return _TransportOutcome(
+            state="finalization_failed", terminal=None,
+            code="process_cleanup_failed", retryable=False,
+            published_events=state["published_events"],
+            partial_published=state["partial_published"], exit_code=3,
+        )
+
+    cleanup_failed = False
+    sink_failed = False
+    terminal_kind = None
+    terminal_code = None
+    terminal_retryable = False
+    restore_failed = False
+    try:
+        try:
+            _safe_hook(boundary, "before_response_close", token)
+        except Exception:
+            cleanup_failed = True
+        cleanup_failed = _safe_close(response) or cleanup_failed
+        try:
+            _safe_hook(boundary, "after_response_close", token)
+            _safe_hook(boundary, "before_connector_close", token)
+        except Exception:
+            cleanup_failed = True
+        cleanup_failed = _safe_close(connector) or cleanup_failed
+        try:
+            _safe_hook(boundary, "after_connector_close", token)
+        except Exception:
+            cleanup_failed = True
+
+        if ledger.timer_armed:
+            try:
+                boundary.cancel_timer()
+            except Exception:
+                cleanup_failed = True
+            else:
+                ledger.timer_armed = False
+
+        try:
+            _safe_hook(boundary, "before_wipe", token)
+        except Exception:
+            cleanup_failed = True
+        try:
+            _wipe(credential)
+        except Exception:
+            cleanup_failed = True
+        try:
+            _safe_hook(boundary, "after_wipe", token)
+        except Exception:
+            cleanup_failed = True
+
+        if cleanup_failed:
+            terminal_kind, terminal_code, terminal_retryable = (
+                "failed", "process_cleanup_failed", False,
+            )
+        elif token.cancelled:
+            terminal_kind, terminal_code, terminal_retryable = "cancelled", None, False
+        elif token.timed_out:
+            terminal_kind, terminal_code, terminal_retryable = (
+                "failed", "operation_timeout", True,
+            )
+        elif operational_error is not None:
+            terminal_kind, terminal_code, terminal_retryable = operational_error
+        elif pending is None:
+            terminal_kind, terminal_code, terminal_retryable = (
+                "failed", "protocol_invalid", False,
+            )
+
+        try:
+            boundary.hook("before_terminal", token)
+        except Exception:
+            cleanup_failed = True
+            terminal_kind, terminal_code, terminal_retryable = (
+                "failed", "process_cleanup_failed", False,
+            )
+        if not cleanup_failed:
+            if token.cancelled:
+                terminal_kind, terminal_code, terminal_retryable = "cancelled", None, False
+            elif token.timed_out:
+                terminal_kind, terminal_code, terminal_retryable = (
+                    "failed", "operation_timeout", True,
+                )
+
+        if sink_unavailable:
+            _restore_pending(parser, pending)
+            sink_failed = True
+        else:
+            replacement = terminal_kind is not None
+            if replacement:
+                _restore_pending(parser, pending)
+                if terminal_kind == "cancelled":
+                    batch = [parser.events.cancelled()]
+                else:
+                    batch = [parser.events.failed(terminal_code, terminal_retryable)]
+            else:
+                batch = pending[1]
+            terminal_kind = batch[-1]["type"]
+            terminal_code = batch[-1].get("code")
+
+            state["terminal_attempted"] = True
+            try:
+                _publish(sink, batch, state)
+            except _SinkFailure:
+                sink_failed = True
+    finally:
+        for name in tuple(reversed(ledger.handlers_installed)):
+            try:
+                boundary.restore_handler(name, ledger.original_handlers[name])
+            except Exception:
+                restore_failed = True
+            else:
+                ledger.handlers_installed.remove(name)
+        try:
+            boundary.restore_mask(previous_mask)
+        except Exception:
+            restore_failed = True
+
+    if sink_failed:
+        return _TransportOutcome(
+            state="sink_failed", terminal=None, code=None, retryable=False,
+            published_events=state["published_events"],
+            partial_published=state["partial_published"], exit_code=3,
+        )
+    if restore_failed:
+        return _TransportOutcome(
+            state="finalization_failed", terminal=terminal_kind,
+            code="process_cleanup_failed", retryable=False,
+            published_events=state["published_events"],
+            partial_published=state["partial_published"], exit_code=3,
+        )
+    return _TransportOutcome(
+        state="terminal_emitted", terminal=terminal_kind, code=terminal_code,
+        retryable=terminal_retryable,
+        published_events=state["published_events"],
+        partial_published=state["partial_published"], exit_code=0,
+    )
+
+
+def _run_call(*, input_reader, connector_factory, clock, signal_boundary, sink):
+    """Run one fake-only call; real connectors and signal APIs are unsupported."""
+    deadline = clock() + TOTAL_TIMEOUT
+    token = _CancellationToken()
+    ledger = _SignalSetupLedger()
+    credential = None
+    request = None
+    try:
+        _setup_signals(signal_boundary, token, clock, deadline, ledger)
+        request, credential = _read_call_frame(input_reader, clock, deadline, token)
+        parser = _parser_for(request)
+        built = _contract.build_request(request)
+        if _body_contains_secret(built["body"], credential):
+            raise _contract.ContractError("invalid_request")
+    except Exception as error:
+        if not ledger.setup_mask_acquired and ledger.handlers_installed:
+            try:
+                ledger.setup_previous_mask = signal_boundary.block(SIGNAL_NAMES)
+                ledger.setup_mask_acquired = True
+            except Exception:
+                pass
+        cleanup_failed = _rollback_preflight(
+            signal_boundary, ledger,
+            () if credential is None else (credential,),
+        )
+        if cleanup_failed:
+            error = _TransportFailure("process_cleanup_failed", False)
+        return _preflight_outcome(error)
+
+    connector = None
+    response = None
+    pending = None
+    operational_error = None
+    sink_unavailable = False
+    state = {
+        "published_events": 0,
+        "partial_published": False,
+        "terminal_attempted": False,
+    }
+    try:
+        _check_operational(clock, deadline, token)
+        _publish(sink, parser.start(), state)
+        ledger.started_published = True
+        _check_operational(clock, deadline, token)
+
+        connector = connector_factory({
+            "provider": request["provider"],
+            "url": built["url"],
+        })
+        _check_operational(clock, deadline, token)
+        connector.connect(_boundary_timeout(
+            clock, deadline, token, CONNECT_TIMEOUT,
+        ))
+        _check_operational(clock, deadline, token)
+        connector.send((), built["body"], _boundary_timeout(
+            clock, deadline, token, SEND_TIMEOUT,
+        ))
+        _check_operational(clock, deadline, token)
+        response = connector.receive_headers(
+            _boundary_timeout(clock, deadline, token, FIRST_BYTE_TIMEOUT)
+        )
+        _check_operational(clock, deadline, token)
+
+        while True:
+            chunk = response.read1(
+                READ_CHUNK_BYTES,
+                _boundary_timeout(clock, deadline, token, IDLE_TIMEOUT),
+            )
+            _check_operational(clock, deadline, token)
+            if not isinstance(chunk, bytes):
+                raise _contract.ContractError("protocol_invalid")
+            if len(chunk) > READ_CHUNK_BYTES:
+                raise _contract.ContractError("response_limit")
+            if not chunk:
+                parser.finish()
+                if pending is None:
+                    raise _contract.ContractError("protocol_invalid")
+                break
+            if pending is not None:
+                _restore_pending(parser, pending)
+                pending = None
+                raise _contract.ContractError("protocol_invalid")
+            snapshot = parser._snapshot()
+            try:
+                events = parser.feed(chunk)
+                _check_operational(clock, deadline, token)
+            except Exception:
+                parser._restore(snapshot)
+                raise
+            if events and events[-1]["type"] in {"completed", "failed", "cancelled"}:
+                pending = (snapshot, events)
+            else:
+                _publish(sink, events, state)
+                _check_operational(clock, deadline, token)
+    except Exception as error:
+        if not ledger.started_published:
+            if not ledger.setup_mask_acquired and ledger.handlers_installed:
+                try:
+                    ledger.setup_previous_mask = signal_boundary.block(SIGNAL_NAMES)
+                    ledger.setup_mask_acquired = True
+                except Exception:
+                    pass
+            cleanup_failed = _rollback_preflight(
+                signal_boundary, ledger,
+                () if credential is None else (credential,),
+            )
+            if isinstance(error, _SinkFailure):
+                return _TransportOutcome(
+                    state="sink_failed", terminal=None, code=None,
+                    retryable=False, published_events=state["published_events"],
+                    partial_published=state["partial_published"], exit_code=3,
+                )
+            if cleanup_failed:
+                error = _TransportFailure("process_cleanup_failed", False)
+            return _preflight_outcome(error)
+        if isinstance(error, _SinkFailure):
+            sink_unavailable = True
+        else:
+            operational_error = _failure_from_exception(error)
+
+    return _finalize_started(
+        boundary=signal_boundary, ledger=ledger, token=token, parser=parser,
+        pending=pending, operational_error=operational_error,
+        sink_unavailable=sink_unavailable, response=response,
+        connector=connector, credential=credential, sink=sink, state=state,
+    )
+
+
+def main(argv=None):
+    del argv
+    result = {
+        "schemaVersion": 1,
+        "type": "failed",
+        "code": "unsupported_transport",
+        "retryable": False,
+    }
+    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\n")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
