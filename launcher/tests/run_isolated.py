@@ -108,7 +108,9 @@ def main():
                     owned_bin = root / 'bin'
                     owned_bin.mkdir()
                     env['PATH'] = str(owned_bin)
-                return subprocess.run(args.command, env=env, cwd=runtime, timeout=35).returncode
+                result = subprocess.run(args.command, env=env, cwd=runtime, timeout=35)
+                print(f'ORLA_TEST_RESULT returncode={result.returncode}', flush=True)
+                return result.returncode
             finally:
                 daemon.terminate()
                 try:
