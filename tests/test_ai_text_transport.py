@@ -5,11 +5,13 @@ from __future__ import annotations
 import importlib.util
 import ast
 import contextlib
+import hashlib
 import http.client
 import io
 import json
 from pathlib import Path
 import socket
+import ssl
 import sys
 import unittest
 from unittest import mock
@@ -221,11 +223,12 @@ class FakeHTTPResponse:
 
 
 class FakeHTTPConnection:
-    def __init__(self, response):
+    def __init__(self, response, *, authorization_digest=None):
         self.response = response
         self.sock = FakeSocket()
         self.timeout = None
         self.calls = []
+        self.authorization_digest = authorization_digest
 
     def connect(self):
         self.calls.append(("connect", self.timeout))
@@ -234,6 +237,12 @@ class FakeHTTPConnection:
         self.calls.append(("putrequest", method, path, kwargs))
 
     def putheader(self, name, value):
+        if name == "Authorization" and self.authorization_digest is not None:
+            digest = hashlib.sha256(value).hexdigest()
+            if digest != self.authorization_digest:
+                raise AssertionError("unexpected synthetic authorization value")
+            self.calls.append(("putheader", name, len(value), digest))
+            return
         self.calls.append(("putheader", name, value))
 
     def endheaders(self, body, *, encode_chunked):
@@ -246,6 +255,62 @@ class FakeHTTPConnection:
     def close(self):
         self.calls.append(("close",))
         self.sock.close()
+
+
+class FakeOwnedSocket(FakeSocket):
+    def __init__(self, *, close_error=False, handshake_error=None):
+        super().__init__()
+        self.close_error = close_error
+        self.handshake_error = handshake_error
+        self.closed = False
+
+    def do_handshake(self):
+        self.calls.append(("do_handshake",))
+        if self.handshake_error is not None:
+            raise self.handshake_error
+
+    def close(self):
+        self.calls.append(("close",))
+        if self.close_error:
+            raise OSError("synthetic owned socket close fault")
+        self.closed = True
+
+
+class FakeTLSPort:
+    def __init__(self, wrapped=None, *, wrap_error=None, detach_before_error=False):
+        self.verify_mode = ssl.CERT_REQUIRED
+        self.check_hostname = True
+        self.keylog_filename = None
+        self.wrapped = wrapped or FakeOwnedSocket()
+        self.wrap_error = wrap_error
+        self.detach_before_error = detach_before_error
+        self.calls = []
+
+    def wrap_socket(self, raw, **kwargs):
+        self.calls.append(("wrap_socket", raw, kwargs))
+        if self.detach_before_error:
+            raw.detached = True
+        if self.wrap_error is not None:
+            raise self.wrap_error
+        raw.detached = True
+        return self.wrapped
+
+
+class FakeTCPPort:
+    def __init__(self, raw=None, *, clock=None, advance=0.0, error=None):
+        self.raw = raw or FakeOwnedSocket()
+        self.clock = clock
+        self.advance = advance
+        self.error = error
+        self.calls = []
+
+    def acquire(self, *, host, port, budget):
+        self.calls.append((host, port, budget))
+        if self.clock is not None:
+            self.clock.now += self.advance
+        if self.error is not None:
+            raise self.error
+        return self.raw
 
 
 class RefCountedFile(io.BytesIO):
@@ -296,6 +361,9 @@ class RefCountedSocket(FakeSocket):
     def sendall(self, data):
         self.calls.append(("sendall", bytes(data)))
 
+    def do_handshake(self):
+        self.calls.append(("do_handshake",))
+
     def makefile(self, mode):
         self.assert_mode = mode
         self.refs += 1
@@ -323,6 +391,20 @@ class AiTextTransportTests(unittest.TestCase):
             patcher = mock.patch.object(socket, name, blocked)
             patcher.start()
             self.addCleanup(patcher.stop)
+        context_patcher = mock.patch.object(
+            ssl, "create_default_context", side_effect=AssertionError(
+                "real SSL context creation is forbidden in fake-only tests",
+            ),
+        )
+        context_patcher.start()
+        self.addCleanup(context_patcher.stop)
+        wrap_patcher = mock.patch.object(
+            ssl.SSLContext, "wrap_socket", side_effect=AssertionError(
+                "real SSL wrapping is forbidden in fake-only tests",
+            ),
+        )
+        wrap_patcher.start()
+        self.addCleanup(wrap_patcher.stop)
 
     def request_wire(self, **changes):
         request = {
@@ -379,6 +461,521 @@ class AiTextTransportTests(unittest.TestCase):
             connection_factory=lambda **_kwargs: connection,
         )
         return connector, connection
+
+    @staticmethod
+    def openai_body():
+        return {
+            "model": "gpt-5-mini",
+            "instructions": "Rewrite clearly.",
+            "input": "Revise this sentence.",
+            "stream": True,
+            "store": False,
+            "tools": [],
+            "max_output_tokens": 1024,
+        }
+
+    def make_openai_connector(self, *, response=None, context=None,
+                              connection=None, clock=None, tcp_port=None):
+        response = response or FakeHTTPResponse(headers=(
+            ("Content-Type", "text/event-stream"),
+        ))
+        connection = connection or FakeHTTPConnection(response)
+        context = context or FakeTLSPort()
+        tcp_port = tcp_port or FakeTCPPort()
+        clock = clock or FakeClock()
+        factory_calls = []
+
+        def connection_factory(**kwargs):
+            factory_calls.append(kwargs)
+            return connection
+
+        connector = self.target._OpenAIHTTPSConnector(
+            {"provider": "openai_api",
+             "url": "https://api.openai.com/v1/responses"},
+            tcp_port=tcp_port, clock=clock,
+            context_factory=lambda: context,
+            connection_factory=connection_factory,
+        )
+        return connector, connection, context, tcp_port, factory_calls
+
+    def test_openai_connector_requires_acquire_member_and_valid_context(self):
+        valid_spec = {
+            "provider": "openai_api",
+            "url": "https://api.openai.com/v1/responses",
+        }
+        context_calls = []
+        for port in (None, object(), type("Port", (), {"acquire": 3})()):
+            with self.subTest(port=type(port).__name__):
+                with self.assertRaises(self.target._contract.ContractError):
+                    self.target._OpenAIHTTPSConnector(
+                        valid_spec, tcp_port=port, clock=FakeClock(),
+                        context_factory=lambda: context_calls.append(1),
+                    )
+        self.assertEqual(context_calls, [])
+
+        for changes in (
+                {"verify_mode": ssl.CERT_NONE},
+                {"check_hostname": False},
+                {"keylog_filename": "synthetic-keylog"}):
+            with self.subTest(changes=changes):
+                context = FakeTLSPort()
+                for name, value in changes.items():
+                    setattr(context, name, value)
+                port = FakeTCPPort()
+                with self.assertRaises(self.target._contract.ContractError):
+                    self.target._OpenAIHTTPSConnector(
+                        valid_spec, tcp_port=port, clock=FakeClock(),
+                        context_factory=lambda: context,
+                    )
+                self.assertEqual(port.calls, [])
+
+    def test_openai_connector_rejects_every_destination_drift_before_factories(self):
+        cases = (
+            {},
+            {"provider": "openai_api"},
+            {"url": "https://api.openai.com/v1/responses"},
+            {"provider": "ollama_local",
+             "url": "https://api.openai.com/v1/responses"},
+            {"provider": "openai_api",
+             "url": "http://api.openai.com/v1/responses"},
+            {"provider": "openai_api",
+             "url": "https://api.openai.com:443/v1/responses"},
+            {"provider": "openai_api",
+             "url": "https://api.openai.com/v1/responses/"},
+            {"provider": "openai_api",
+             "url": "https://example.invalid/v1/responses"},
+            {"provider": "openai_api",
+             "url": "https://api.openai.com/v1/responses", "extra": True},
+        )
+        for spec in cases:
+            with self.subTest(spec=spec):
+                context_calls = []
+                port = FakeTCPPort()
+                with self.assertRaises(self.target._contract.ContractError):
+                    self.target._OpenAIHTTPSConnector(
+                        spec, tcp_port=port, clock=FakeClock(),
+                        context_factory=lambda: context_calls.append(1),
+                    )
+                self.assertEqual(context_calls, [])
+                self.assertEqual(port.calls, [])
+
+    def test_openai_connection_retains_raw_wraps_without_auto_handshake_then_handshakes(self):
+        clock = FakeClock()
+        raw = FakeOwnedSocket()
+        wrapped = FakeOwnedSocket()
+        tcp_port = FakeTCPPort(raw, clock=clock, advance=1.25)
+        context = FakeTLSPort(wrapped)
+        connection = self.target._OpenAIHTTPSConnection(
+            host="api.openai.com", port=443, context=context,
+            tcp_port=tcp_port, clock=clock, timeout=None,
+        )
+        connection.timeout = 5.0
+        connection.connect()
+        self.assertEqual(tcp_port.calls, [("api.openai.com", 443, 5.0)])
+        self.assertEqual(raw.calls, [("settimeout", 3.75)])
+        self.assertEqual(context.calls, [(
+            "wrap_socket", raw, {
+                "server_hostname": "api.openai.com",
+                "do_handshake_on_connect": False,
+            },
+        )])
+        self.assertEqual(wrapped.calls, [
+            ("settimeout", 3.75), ("do_handshake",),
+        ])
+        self.assertIs(connection.sock, wrapped)
+        self.assertIsNone(connection._owned_raw_socket)
+        self.assertIs(connection._owned_tls_socket, wrapped)
+
+    def test_openai_connection_rejects_returned_overshoot_and_retains_close_fault(self):
+        for close_error, cleanup_fails in ((False, False), (True, True)):
+            with self.subTest(close_error=close_error):
+                clock = FakeClock()
+                raw = FakeOwnedSocket(close_error=close_error)
+                connection = self.target._OpenAIHTTPSConnection(
+                    host="api.openai.com", port=443, context=FakeTLSPort(),
+                    tcp_port=FakeTCPPort(raw, clock=clock, advance=5.0),
+                    clock=clock, timeout=5.0,
+                )
+                with self.assertRaises(TimeoutError):
+                    connection.connect()
+                with self.assertRaises(OSError) if cleanup_fails else contextlib.nullcontext():
+                    connection.close()
+                self.assertEqual(raw.calls, [("close",)])
+                self.assertIs(connection._owned_raw_socket, raw if cleanup_fails else None)
+
+    def test_openai_connection_rechecks_budget_at_each_tls_boundary(self):
+        class AdvancingSocket(FakeOwnedSocket):
+            def __init__(self, clock, seam):
+                super().__init__()
+                self.clock = clock
+                self.seam = seam
+
+            def settimeout(self, timeout):
+                super().settimeout(timeout)
+                if self.seam == "settimeout":
+                    self.clock.now += 5.0
+
+            def do_handshake(self):
+                super().do_handshake()
+                if self.seam == "handshake":
+                    self.clock.now += 5.0
+
+        cases = ("raw-timeout", "tls-timeout", "handshake")
+        for seam in cases:
+            with self.subTest(seam=seam):
+                clock = FakeClock()
+                raw = AdvancingSocket(
+                    clock, "settimeout" if seam == "raw-timeout" else None,
+                )
+                wrapped = AdvancingSocket(
+                    clock, ("settimeout" if seam == "tls-timeout"
+                            else "handshake" if seam == "handshake" else None),
+                )
+                context = FakeTLSPort(wrapped)
+                connection = self.target._OpenAIHTTPSConnection(
+                    host="api.openai.com", port=443, context=context,
+                    tcp_port=FakeTCPPort(raw), clock=clock, timeout=5.0,
+                )
+                with self.assertRaises(TimeoutError):
+                    connection.connect()
+                connection.close()
+                if seam == "raw-timeout":
+                    self.assertEqual(context.calls, [])
+                    self.assertTrue(raw.closed)
+                    self.assertFalse(wrapped.closed)
+                else:
+                    self.assertEqual(len(context.calls), 1)
+                    self.assertTrue(wrapped.closed)
+                    self.assertEqual(
+                        sum(call[0] == "do_handshake" for call in wrapped.calls),
+                        0 if seam == "tls-timeout" else 1,
+                    )
+
+    def test_openai_connection_marks_every_tcp_nonreturn_unconfirmed(self):
+        for error in (TimeoutError("synthetic timeout"),
+                      ConnectionRefusedError("synthetic refused"),
+                      OSError("synthetic hidden close fault")):
+            with self.subTest(error=type(error).__name__):
+                connection = self.target._OpenAIHTTPSConnection(
+                    host="api.openai.com", port=443, context=FakeTLSPort(),
+                    tcp_port=FakeTCPPort(error=error), clock=FakeClock(), timeout=5.0,
+                )
+                with self.assertRaises(type(error)):
+                    connection.connect()
+                self.assertTrue(connection._tcp_acquisition_unconfirmed)
+                self.assertIsNone(connection._owned_raw_socket)
+                with self.assertRaises(OSError):
+                    connection.close()
+
+    def test_openai_connection_wrap_nonreturn_is_unconfirmed_without_hidden_handle(self):
+        for detached in (False, True):
+            with self.subTest(detached=detached):
+                raw = FakeOwnedSocket()
+                context = FakeTLSPort(
+                    wrap_error=ssl.SSLError("synthetic wrap failure"),
+                    detach_before_error=detached,
+                )
+                connection = self.target._OpenAIHTTPSConnection(
+                    host="api.openai.com", port=443, context=context,
+                    tcp_port=FakeTCPPort(raw), clock=FakeClock(), timeout=5.0,
+                )
+                with self.assertRaises(ssl.SSLError):
+                    connection.connect()
+                self.assertTrue(connection._wrap_transfer_unconfirmed)
+                self.assertIsNone(connection._owned_tls_socket)
+                with self.assertRaises(OSError):
+                    connection.close()
+                self.assertEqual(raw.calls, [("settimeout", 5.0), ("close",)])
+                self.assertEqual(getattr(raw, "detached", False), detached)
+
+    def test_openai_connector_classifies_visible_handshake_and_cleanup_faults(self):
+        for close_error, expected_cleanup in ((False, False), (True, True)):
+            with self.subTest(close_error=close_error):
+                wrapped = FakeOwnedSocket(
+                    close_error=close_error,
+                    handshake_error=ssl.SSLCertVerificationError(
+                        "synthetic certificate marker",
+                    ),
+                )
+                connector = self.target._OpenAIHTTPSConnector(
+                    {"provider": "openai_api",
+                     "url": "https://api.openai.com/v1/responses"},
+                    tcp_port=FakeTCPPort(FakeOwnedSocket()), clock=FakeClock(),
+                    context_factory=lambda: FakeTLSPort(wrapped),
+                )
+                with self.assertRaises(self.target._TransportFailure) as caught:
+                    connector.connect(5.0)
+                self.assertEqual((caught.exception.code, caught.exception.retryable),
+                                 ("tls_failed", False))
+                with self.assertRaises(OSError) if expected_cleanup else contextlib.nullcontext():
+                    connector.close()
+
+    def test_openai_connector_sends_exact_ordered_request_and_wipes_bearer(self):
+        credential = bytearray(b"synthetic-openai-key-12345")
+        bearer_digest = hashlib.sha256(b"Bearer " + credential).hexdigest()
+        connection = FakeHTTPConnection(
+            FakeHTTPResponse(headers=(("Content-Type", "text/event-stream"),)),
+            authorization_digest=bearer_digest,
+        )
+        connector, connection, _context, _port, factory_calls = (
+            self.make_openai_connector(connection=connection)
+        )
+        connector.connect(4.0)
+        connector.send((("Authorization", credential),), self.openai_body(), 3.0)
+        encoded = json.dumps(
+            self.openai_body(), ensure_ascii=False, allow_nan=False,
+            separators=(",", ":"),
+        ).encode()
+        self.assertEqual(factory_calls[0]["host"], "api.openai.com")
+        self.assertEqual(factory_calls[0]["port"], 443)
+        self.assertEqual(connection.calls, [
+            ("connect", 4.0),
+            ("putrequest", "POST", "/v1/responses", {
+                "skip_host": True, "skip_accept_encoding": True,
+            }),
+            ("putheader", "Host", "api.openai.com"),
+            ("putheader", "Content-Type", "application/json"),
+            ("putheader", "Accept", "text/event-stream"),
+            ("putheader", "Accept-Encoding", "identity"),
+            ("putheader", "Content-Length", str(len(encoded))),
+            ("putheader", "Connection", "close"),
+            ("putheader", "Authorization", len(b"Bearer ") + len(credential),
+             bearer_digest),
+            ("endheaders", encoded, False),
+        ])
+        self.assertEqual(connection.sock.calls, [("settimeout", 3.0)])
+        self.assertEqual(credential, bytearray(b"synthetic-openai-key-12345"))
+
+    def test_openai_bearer_buffer_is_wiped_when_header_send_fails(self):
+        class FailingHeaderConnection(FakeHTTPConnection):
+            def putheader(self, name, value):
+                if name == "Authorization":
+                    raise OSError("synthetic header write fault")
+                super().putheader(name, value)
+
+        connection = FailingHeaderConnection(FakeHTTPResponse())
+        connector, *_rest = self.make_openai_connector(connection=connection)
+        connector.connect(4.0)
+        credential = bytearray(b"synthetic-openai-key-12345")
+        wiped = []
+        original_wipe = self.target._wipe
+
+        def observe(buffer):
+            if isinstance(buffer, bytearray) and len(buffer) > len(credential):
+                wiped.append(buffer)
+            original_wipe(buffer)
+
+        with mock.patch.object(self.target, "_wipe", side_effect=observe):
+            with self.assertRaises(self.target._TransportFailure):
+                connector.send(
+                    (("Authorization", credential),), self.openai_body(), 3.0,
+                )
+        self.assertEqual(len(wiped), 1)
+        self.assertTrue(all(value == 0 for value in wiped[0]))
+        self.assertEqual(credential, bytearray(b"synthetic-openai-key-12345"))
+
+    def test_openai_bearer_wipe_fault_is_sticky_after_success_or_send_fault(self):
+        marker = b"synthetic-openai-key-12345"
+        bearer_digest = hashlib.sha256(b"Bearer " + marker).hexdigest()
+
+        class SendConnection(FakeHTTPConnection):
+            def __init__(self, response, *, fail_send):
+                super().__init__(response, authorization_digest=bearer_digest)
+                self.fail_send = fail_send
+
+            def endheaders(self, body, *, encode_chunked):
+                super().endheaders(body, encode_chunked=encode_chunked)
+                if self.fail_send:
+                    raise OSError("synthetic prior send fault")
+
+        stream = (
+            b'event: response.created\ndata: {"type":"response.created",'
+            b'"response":{"status":"in_progress"}}\n\n'
+            b'event: response.completed\ndata: {"type":"response.completed",'
+            b'"response":{"status":"completed"}}\n\n'
+        )
+        for fail_send in (False, True):
+            with self.subTest(fail_send=fail_send):
+                response = FakeHTTPResponse(
+                    [stream, b""], headers=(
+                        ("Content-Type", "text/event-stream"),
+                        ("Content-Length", str(len(stream))),
+                    ),
+                )
+                connection = SendConnection(response, fail_send=fail_send)
+                clock = FakeClock()
+                bearer_buffers = []
+                original_buffers = []
+                original_wipe = self.target._wipe
+
+                def faulted_wipe(buffer):
+                    if (isinstance(buffer, bytearray) and
+                            buffer.startswith(b"Bearer ")):
+                        bearer_buffers.append(buffer)
+                        raise RuntimeError("synthetic mutable wipe fault")
+                    if isinstance(buffer, bytearray) and len(buffer) == len(marker):
+                        original_buffers.append(buffer)
+                    original_wipe(buffer)
+
+                def factory(spec):
+                    return self.target._OpenAIHTTPSConnector(
+                        spec, tcp_port=FakeTCPPort(), clock=clock,
+                        context_factory=FakeTLSPort,
+                        connection_factory=lambda **_kwargs: connection,
+                    )
+
+                sink = RecordingSink()
+                try:
+                    with mock.patch.object(
+                            self.target, "_wipe", side_effect=faulted_wipe):
+                        outcome = self.target._run_call(
+                            input_reader=FakeReader([
+                                self.request_wire(
+                                    provider="openai_api", endpoint=None,
+                                    model="gpt-5-mini",
+                                    credentialBytes=len(marker),
+                                ) + marker,
+                                b"",
+                            ]),
+                            connector_factory=factory, clock=clock,
+                            signal_boundary=FakeSignals(), sink=sink,
+                        )
+                    self.assertEqual(
+                        (outcome.terminal, outcome.code, outcome.retryable),
+                        ("failed", "process_cleanup_failed", False),
+                    )
+                    self.assertEqual([event["type"] for event in sink.events],
+                                     ["started", "failed"])
+                    self.assertIn(("close",), connection.calls)
+                    self.assertEqual(len(bearer_buffers), 1)
+                    self.assertTrue(original_buffers)
+                    self.assertTrue(all(not any(buffer)
+                                        for buffer in original_buffers))
+                finally:
+                    for buffer in bearer_buffers:
+                        original_wipe(buffer)
+
+    def test_openai_response_is_owned_before_status_or_media_rejection(self):
+        cases = (
+            FakeHTTPResponse(status=503, headers=()),
+            FakeHTTPResponse(status=200, headers=(("Content-Type", "text/plain"),)),
+        )
+        for raw in cases:
+            with self.subTest(status=raw.status):
+                connector, connection, *_rest = self.make_openai_connector(response=raw)
+                with self.assertRaises((self.target._TransportFailure,
+                                        self.target._contract.ContractError)):
+                    connector.receive_headers(2.0)
+                self.assertIs(connector._pending_response, raw)
+                connector.close()
+                self.assertEqual(raw.close_calls, 1)
+                self.assertIn(("close",), connection.calls)
+
+    def test_openai_response_close_failure_still_closes_connection_and_is_sticky(self):
+        raw = FakeHTTPResponse(
+            status=503, headers=(), close_error=True,
+        )
+        connector, connection, *_rest = self.make_openai_connector(response=raw)
+        with self.assertRaises(self.target._TransportFailure):
+            connector.receive_headers(2.0)
+        with self.assertRaises(OSError):
+            connector.close()
+        self.assertEqual(raw.close_calls, 1)
+        self.assertIn(("close",), connection.calls)
+        self.assertIs(connector._pending_response, raw)
+
+    def test_openai_full_lifecycle_uses_injected_tcp_and_memory_tls_wire(self):
+        marker = b"synthetic-openai-key-12345"
+        stream = (
+            b'event: response.created\ndata: {"type":"response.created",'
+            b'"response":{"status":"in_progress"}}\n\n'
+            b'event: response.output_text.delta\ndata: '
+            b'{"type":"response.output_text.delta","delta":"ok"}\n\n'
+            b'event: response.completed\ndata: {"type":"response.completed",'
+            b'"response":{"status":"completed"}}\n\n'
+        )
+        wire = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/event-stream\r\n"
+            + f"Content-Length: {len(stream)}\r\n".encode("ascii")
+            + b"Connection: close\r\n\r\n"
+            + stream
+        )
+        wrapped = RefCountedSocket(wire, fragment=37)
+        raw = FakeOwnedSocket()
+        context = FakeTLSPort(wrapped)
+        tcp_port = FakeTCPPort(raw)
+        clock = FakeClock()
+        connectors = []
+
+        def factory(spec):
+            connector = self.target._OpenAIHTTPSConnector(
+                spec, tcp_port=tcp_port, clock=clock,
+                context_factory=lambda: context,
+            )
+            connectors.append(connector)
+            return connector
+
+        request = self.request_wire(
+            provider="openai_api", endpoint=None, model="gpt-5-mini",
+            credentialBytes=len(marker),
+        ) + marker
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([request, b""]), connector_factory=factory,
+            clock=clock, signal_boundary=FakeSignals(), sink=sink,
+        )
+
+        self.assertEqual(outcome.terminal, "completed")
+        self.assertEqual([event["type"] for event in sink.events],
+                         ["started", "delta", "completed"])
+        self.assertEqual(tcp_port.calls, [("api.openai.com", 443, 5.0)])
+        self.assertEqual(context.calls[0][2], {
+            "server_hostname": "api.openai.com",
+            "do_handshake_on_connect": False,
+        })
+        sent = b"".join(call[1] for call in wrapped.calls
+                        if call[0] == "sendall")
+        self.assertIn(b"POST /v1/responses HTTP/1.1\r\n", sent)
+        self.assertIn(b"Authorization: Bearer " + marker + b"\r\n", sent)
+        wrapped.calls[:] = [
+            (("sendall", len(call[1]), hashlib.sha256(call[1]).hexdigest())
+             if call[0] == "sendall" else call)
+            for call in wrapped.calls
+        ]
+        self.assertNotIn(marker, repr(wrapped.calls).encode("utf-8"))
+        self.assertTrue(wrapped.closed)
+        self.assertFalse(wrapped.fd_open)
+        self.assertEqual(len(connectors), 1)
+
+    def test_openai_tcp_nonreturn_cleanup_failure_outranks_transport_error(self):
+        marker = b"synthetic-openai-key-12345"
+        tcp_port = FakeTCPPort(error=ConnectionRefusedError("synthetic refusal"))
+        clock = FakeClock()
+
+        def factory(spec):
+            return self.target._OpenAIHTTPSConnector(
+                spec, tcp_port=tcp_port, clock=clock,
+                context_factory=FakeTLSPort,
+            )
+
+        sink = RecordingSink()
+        outcome = self.target._run_call(
+            input_reader=FakeReader([
+                self.request_wire(
+                    provider="openai_api", endpoint=None, model="gpt-5-mini",
+                    credentialBytes=len(marker),
+                ) + marker,
+                b"",
+            ]),
+            connector_factory=factory, clock=clock,
+            signal_boundary=FakeSignals(), sink=sink,
+        )
+        self.assertEqual((outcome.terminal, outcome.code, outcome.retryable),
+                         ("failed", "process_cleanup_failed", False))
+        self.assertEqual([event["type"] for event in sink.events],
+                         ["started", "failed"])
+        self.assertEqual(tcp_port.calls, [("api.openai.com", 443, 5.0)])
 
     def test_numeric_connection_uses_exact_family_sockaddr_and_no_name_resolution(self):
         cases = (
@@ -1508,7 +2105,7 @@ class AiTextTransportTests(unittest.TestCase):
             "retryable": True,
         })
 
-    def test_source_allows_only_numeric_http_and_cli_remains_disabled(self):
+    def test_source_allows_only_closed_stdlib_transports_and_cli_remains_disabled(self):
         tree = ast.parse(HELPER.read_text(encoding="utf-8"))
         imported = set()
         for node in ast.walk(tree):
@@ -1516,9 +2113,9 @@ class AiTextTransportTests(unittest.TestCase):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module.split(".")[0])
-        self.assertTrue({"http", "socket"}.issubset(imported))
+        self.assertTrue({"http", "socket", "ssl"}.issubset(imported))
         self.assertTrue(imported.isdisjoint({
-            "urllib", "ssl", "signal", "requests", "openai", "ollama",
+            "urllib", "signal", "requests", "openai", "ollama",
             "subprocess", "os", "dotenv", "httpx", "aiohttp",
         }))
         forbidden_calls = []
@@ -1529,6 +2126,13 @@ class AiTextTransportTests(unittest.TestCase):
                     node.func.attr in {"create_connection", "getaddrinfo"}):
                 forbidden_calls.append(node.func.attr)
         self.assertEqual(forbidden_calls, [])
+        main = next(node for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "main")
+        self.assertFalse(any(
+            isinstance(node, ast.Name) and
+            node.id in {"_OllamaNumericConnector", "_OpenAIHTTPSConnector"}
+            for node in ast.walk(main)
+        ))
         output = io.StringIO()
         errors = io.StringIO()
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
