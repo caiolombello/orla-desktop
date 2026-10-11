@@ -97,7 +97,16 @@ prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
 sem quit também passou. A primeira fixture desse desafio pressupunha um
 prazo Steam errado e falhou antes da verificação causal; ficou preservada.
 A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
-CI da nova revisão e integração na branch remota principal estão pendentes.
+A correção seguinte mantém o uso de tokens privado até a resposta completa,
+saída normal zero e limpeza confirmada. Dados extras, saída com erro,
+cancelamento ou timeout não publicam metadados rejeitados; o texto parcial
+continua revisável. Sete regressões com helpers reais e retries passaram,
+após falharem causalmente no código anterior. A revisão independente passou
+34 entradas do controller e um desafio adicional de cinco entradas com saída
+padrão fechada e processo ainda vivo, incluindo uso desconhecido e fechamento.
+A composição do código passou build novo de 40 passos e os seis CTests uma vez
+em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
+CI do novo commit e integração na branch remota principal estão pendentes.
 Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
 empacotamento relocável, instalação, release e
 admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda

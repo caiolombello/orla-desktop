@@ -106,6 +106,7 @@ private:
     QString m_destination;
     QString m_model;
     QVariantMap m_usage;
+    QVariantMap m_pendingUsage;
     QString m_costStatus = QStringLiteral("unknown");
     QByteArray m_stdout;
     QByteArray m_requestFrame;

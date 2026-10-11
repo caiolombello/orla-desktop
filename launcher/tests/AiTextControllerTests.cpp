@@ -132,6 +132,146 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void reportedUsageWaitsForValidatedEofExitAndCleanup_data()
+    {
+        QTest::addColumn<QString>("boundary");
+        for (const char *name : {"extra-event", "unterminated-bytes", "nonzero-exit",
+                                 "clean-eof", "cancel", "timeout", "runtime-cleanup"})
+            QTest::newRow(name) << QString::fromLatin1(name);
+    }
+
+    void reportedUsageWaitsForValidatedEofExitAndCleanup()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QFETCH(QString, boundary);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString gate = directory.filePath(QStringLiteral("allow-eof"));
+        const QByteArray script = QByteArray(R"PY(import json,os,pathlib,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as record:
+ record.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+retry=r['requestId'].endswith('.retry')
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='fresh' if retry else 'retained')
+emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4 if retry else 2,'outputTokens':5 if retry else 3,'totalTokens':9 if retry else 5},cost={'status':'unknown','currency':None,'amount':None})
+if retry: sys.exit(0)
+while not pathlib.Path(r')PY") + gate.toUtf8() + QByteArray(R"PY(').exists(): time.sleep(.005)
+boundary=')PY") + boundary.toUtf8() + QByteArray(R"PY('
+if boundary=='extra-event': emit(3,'delta',text='unexpected')
+if boundary=='unterminated-bytes':
+ sys.stdout.write('unterminated')
+ sys.stdout.flush()
+sys.exit(7 if boundary=='nonzero-exit' else 0)
+)PY");
+        bool allowCleanup = boundary != QStringLiteral("runtime-cleanup");
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                runtimePaths.append(path);
+                return allowCleanup && QDir(path).removeRecursively();
+            }, 100, boundary == QStringLiteral("timeout") ? 2000 : 125000);
+        bool usagePublishedWhileBusy = false;
+        QVariantMap notifiedFinalUsage;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (controller.busy()) usagePublishedWhileBusy |= !controller.usage().isEmpty();
+            else notifiedFinalUsage = controller.usage();
+        });
+        controller.generate(QStringLiteral("request.eof-boundary"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.output() == QStringLiteral("retained")
+                                 && controller.m_terminalEvent, 3000);
+        // Read-only witness that the real stdout completed line was parsed, without fabricating events.
+        const QVariantMap beforeEofUsage = controller.usage();
+        const bool busyBeforeEof = controller.busy();
+        if (boundary == QStringLiteral("cancel")) controller.cancelAll();
+        else if (boundary != QStringLiteral("timeout")) {
+            QFile release(gate);
+            QVERIFY(release.open(QIODevice::WriteOnly));
+            QCOMPARE(release.write("allow"), qint64(5));
+            release.close();
+        }
+        QVariantMap cleanupBlockedUsage;
+        bool cleanupWasBusy = false;
+        if (!allowCleanup) {
+            QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+            cleanupBlockedUsage = controller.usage();
+            cleanupWasBusy = controller.busy();
+            allowCleanup = true;
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 4000);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        record.close();
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        QVERIFY(!runtimePaths.isEmpty());
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        qInfo() << "OWNED_HELPER_CLEANUP" << boundary << "pid/group absent" << pid
+                << "runtime paths absent" << runtimePaths;
+        // Causal metadata assertions run only after the owned helper/group/runtime have gone.
+        QVERIFY(busyBeforeEof);
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        const bool validCompletion = boundary == QStringLiteral("clean-eof")
+            || boundary == QStringLiteral("runtime-cleanup");
+        if (validCompletion) {
+            QCOMPARE(controller.status(), QStringLiteral("completed"));
+            QVERIFY(controller.errorCode().isEmpty());
+            QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5);
+            QCOMPARE(notifiedFinalUsage, controller.usage());
+        } else {
+            QCOMPARE(controller.status(), boundary == QStringLiteral("cancel")
+                ? QStringLiteral("cancelled_unconfirmed") : QStringLiteral("failed"));
+            QCOMPARE(controller.errorCode(), boundary == QStringLiteral("cancel")
+                ? QStringLiteral("cancelled_unconfirmed") : boundary == QStringLiteral("timeout")
+                ? QStringLiteral("operation_timeout") : QStringLiteral("invalid_helper_response"));
+            QVERIFY(controller.usage().isEmpty());
+            QVERIFY(notifiedFinalUsage.isEmpty());
+        }
+        if (boundary == QStringLiteral("runtime-cleanup")) {
+            QVERIFY(cleanupWasBusy);
+            QVERIFY(cleanupBlockedUsage.isEmpty());
+        }
+        QVERIFY(beforeEofUsage.isEmpty());
+        QVERIFY(!usagePublishedWhileBusy);
+        controller.generate(QStringLiteral("request.eof-boundary.retry"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("input"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(notifiedFinalUsage, controller.usage());
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray allIdentities = record.readAll();
+        QCOMPARE(allIdentities.count('\n'), 2);
+        for (const QByteArray &line : allIdentities.split('\n')) {
+            if (line.isEmpty()) continue;
+            const qint64 captured = line.left(line.indexOf(' ')).toLongLong();
+            QVERIFY(captured > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
     void closingPublishesFinalStateBeforeReadyAndRejectsReentrantGenerate_data()
     {
         QTest::addColumn<bool>("cooperative");
@@ -489,7 +629,9 @@ time.sleep(60)
         controller.generate(QStringLiteral("request.held-result"), QStringLiteral("summarize"), QVariant(),
                             QStringLiteral("live result"), QStringLiteral("model"),
                             QStringLiteral("127.0.0.1"), 11434, true);
-        QTRY_COMPARE_WITH_TIMEOUT(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.output() == QStringLiteral("live result")
+                                 && controller.m_terminalEvent, 3000);
+        QVERIFY(controller.usage().isEmpty());
         QVERIFY(controller.busy());
         const QVariantMap liveUsage = controller.usage();
         if (closePending) QVERIFY(!controller.requestClose());

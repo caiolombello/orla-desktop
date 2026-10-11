@@ -114,7 +114,17 @@ prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
 sem quit também passou. A primeira fixture desse desafio pressupunha um
 prazo Steam errado e falhou antes da verificação causal; ficou preservada.
 A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
-CI da nova revisão e integração na branch remota principal continuam pendentes.
+O uso de tokens agora fica pendente até validar a resposta completa, saída
+normal zero e limpeza confirmada. Dados extras, erro de saída, cancelamento
+e timeout descartam esse uso sem apagar o texto parcial revisável. Sete novas
+regressões com helpers reais e retries passaram depois das falhas causais no
+código anterior. A revisão independente passou controller 34 e um desafio
+adicional de cinco entradas: saída padrão fechada com processo ainda vivo
+não publica uso; conclusão válida publica uso reportado ou desconhecido,
+e fechamento preserva a barreira e a ordem de notificação.
+A composição do código passou build novo de 40 passos e os seis CTests uma vez
+em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
+CI do novo commit e integração na branch remota principal continuam pendentes.
 Esta mudança não atualiza a instalação existente do launcher baseada no Source
 32, que continua sem a nova UI de texto.
 

@@ -308,6 +308,37 @@ were UNRUN there. Its source/binary/log remain preserved; the corrected fresh
 supplemental build changed only an exposed fixture grace value, not production
 timers/caps or the normal candidate, and passed its single challenge.
 
+### Usage publication after helper EOF and process validation
+
+The next controller correction stages validated terminal usage privately.
+It commits the metadata only after complete framing, normal exit zero and
+confirmed owned-group/runtime cleanup. Rejected suffixes, extra events,
+nonzero exit, cancellation and timeout discard pending usage while retaining
+reviewable partial text. Busy/closing ignored calls preserve the live request;
+the final property notification still precedes closeReady with reentrant
+generation blocked.
+
+Seven actual helper regression rows passed, including clean EOF, rejected
+framing/exit, cancellation, deadline and temporary runtime-cleanup rejection,
+each followed by a valid retry. The exact final tests with baseline controller
+code failed seven ordinary causal assertions after captured PID/group/runtime
+cleanup. Only the two authorized old early-publication expectations changed;
+the remaining original tests stayed byte-exact.
+
+Independent Source review passed a fresh ALL40 build and controller 34 once.
+Its additional five-entry challenge closed helper stdout while the process and
+group remained alive: usage stayed private until valid process completion,
+reported and unknown results committed correctly, and closing discarded the
+pending usage while preserving changed-before-closeReady and the close barrier.
+The challenge passed its first execution with actual original/retry cleanup.
+
+The exact three-code-path composition passed a fresh ALL40 build and all six
+isolated CTests once in 78.502 s. Controller reported 34 entries and UI 27,
+with no failures or skips in either; UI took 24.508 s under the unchanged
+30-second cap. Six actual child exit-zero/bus cleanup receipts were retained.
+The other 179 candidate Source paths and all 182 modes were preserved. The
+behavior fixture retained its expected skip, separately covered by owned-app.
+
 This follow-up remains Source validation. New-head CI and main integration are
 pending; real KDE/Wayland, provider/model, native clipboard/accessibility,
 installation, relocatable packaging, release and the full roadmap remain open.

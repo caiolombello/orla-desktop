@@ -298,6 +298,7 @@ void AiTextController::generate(const QString &requestId, const QString &task,
     if (busy() || m_closePending) return;
     m_output.clear();
     m_usage.clear();
+    m_pendingUsage.clear();
     m_costStatus = QStringLiteral("unknown");
     if (!validateRequest(requestId, task, targetLanguage, text, model, numericHost, port,
                          explicitConsent)) {
@@ -510,7 +511,8 @@ bool AiTextController::consumeLine(const QByteArray &line)
             || cost.value(QStringLiteral("status")).toString() != QStringLiteral("unknown")
             || !cost.value(QStringLiteral("currency")).isNull()
             || !cost.value(QStringLiteral("amount")).isNull()) return false;
-        m_usage = std::move(usage);
+        if (!m_cancelRequested && !m_timedOut && !m_protocolInvalid)
+            m_pendingUsage = std::move(usage);
         m_terminalEvent = true;
         m_terminalType = type;
     } else if (type == QStringLiteral("failed")) {
@@ -554,6 +556,7 @@ void AiTextController::protocolFailure()
 void AiTextController::beginCancellation()
 {
     if (!busy()) return;
+    m_pendingUsage.clear();
     m_cleanupActive = true;
 #ifdef Q_OS_UNIX
     killOwnedGroup(SIGTERM);
@@ -665,6 +668,7 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
                    || m_pendingExitStatus != QProcess::NormalExit || m_pendingExitCode != 0) {
             if (m_errorCode.isEmpty()) recordFailure(QStringLiteral("invalid_helper_response"));
         } else if (m_terminalType == QStringLiteral("completed")) {
+            m_usage = std::move(m_pendingUsage);
             m_status = QStringLiteral("completed");
             m_errorCode.clear();
             m_error.clear();
@@ -696,6 +700,7 @@ void AiTextController::recordFailure(const QString &code)
 
 void AiTextController::resetOperation()
 {
+    m_pendingUsage.clear();
     m_operationActive = false;
     m_cleanupActive = false;
     m_processGroup = 0;
