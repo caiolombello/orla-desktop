@@ -2,6 +2,11 @@
 
 User-visible changes are recorded here for each published release.
 
+## Unreleased
+
+- Add an experimental standalone Qt Quick launcher in the source checkout, using public KRunner application/calculator APIs with anonymous configuration and stale-selection guards.
+- Three CTests passed with private D-Bus, temporary XDG/runtime and automatic service activation blocked; independent review approved the component. Actual global Wayland shortcut/focus, daily use and optional installation remain open. Release 0.2.4 excludes this component.
+
 ## 0.2.4 — 2026-10-10 — Alpha
 
 - Add an opt-in system battery widget (off by default), reading only UPower’s aggregate display device. Preserve valid 0%, show absent/unavailable states neutrally, and display power/charging/time only when supplied; PeriGauge peripheral readings remain separate.
