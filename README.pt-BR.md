@@ -8,7 +8,7 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 > [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
-O checkout de código também inclui um [launcher independente experimental](launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.5 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
+O checkout de código também inclui um [launcher independente experimental](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.5 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
 
 O bundle da release 0.2.5 inclui uma [CLI experimental de consulta de updates](docs/updates.md). Ela consulta releases oficiais estáveis/beta quando invocada, compara uma versão explícita e distingue falhas de rede. Execute pelo bundle extraído; o `.plasmoid` sozinho não contém CLI nem interface de updates. Cache e atualização com recuperação continuam planejados.
 

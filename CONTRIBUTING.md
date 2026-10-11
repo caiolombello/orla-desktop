@@ -47,7 +47,7 @@ PYTHONPATH=tests QT_QUICK_CONTROLS_STYLE=org.kde.desktop python3 -B -m unittest 
 
 The profile core also runs independently in portable CI with offscreen Qt; the dock integration suites above need KDE/Qt. These synthetic checks do not qualify native popups or human panel gestures. The private KConfig proof covers a frozen snapshot and one owned remove/re-add cycle with the new applet explicitly seeded from saved JSON; timer resume across processes, real apps and full release qualification remain separate.
 
-The source checkout has a separate experimental [C++/Qt Quick launcher](launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
+The source checkout has a separate experimental [C++/Qt Quick launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
 
 The experimental [release-check CLI](docs/updates.md) uses Python's standard library on Linux. Run its offline tests in their own process with `python3 -m unittest discover -s tests -p 'test_updates.py' -v`; no network or provider account is required. These tests are included in portable CI. Live release checks are explicit commands and never run during tests.
 

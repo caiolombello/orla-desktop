@@ -8,7 +8,7 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 > [Project website](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [Português brasileiro](README.pt-BR.md) · [Roadmap](ROADMAP.md) · [Brand guide](docs/brand.md)
 
-The source checkout also includes an [experimental standalone launcher](launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.5 does not package or install it; global Wayland focus and complete launcher integration remain open.
+The source checkout also includes an [experimental standalone launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.5 does not package or install it; global Wayland focus and complete launcher integration remain open.
 
 The 0.2.5 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
 
