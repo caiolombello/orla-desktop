@@ -8,6 +8,8 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 > [Project website](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [Português brasileiro](README.pt-BR.md) · [Roadmap](ROADMAP.md) · [Brand guide](docs/brand.md)
 
+The source checkout also includes an [experimental standalone launcher](launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Release 0.2.4 does not package or install it; global Wayland focus and complete launcher integration remain open.
+
 ## What works today
 
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.

@@ -29,6 +29,8 @@ Testes sintéticos Qt, mesmo em Wayland, não comprovam gesto humano, foco/grab 
 
 ### Regras para documentação de comandos
 
+O checkout inclui o [launcher experimental](../launcher/README.md), compilado separadamente com C++/Qt/KF6. Seu CTest usa D-Bus privado sem ativação e XDG/runtime próprios; três testes passaram no alvo Qt 6.11.2/KF6 6.30/Plasma 6.7.5. A CI portátil não compila o componente. A release 0.2.4 o exclui; helper, foco global e integração completa têm gates próprios.
+
 Desde 0.2.2, `doctor` identifica PySide6.QtDBus, `busctl` e sessão D-Bus como dependências opcionais das integrações. A instalação do dock continua sem elas; restaurar as dependências e reinstalar ativa o serviço. A suíte de integração D-Bus ainda requer PySide6 e `dbus-run-session`. Veja a [validação da base](validation/foundation-0.2.2.md) para escopo e limites.
 
 - Exemplos acima correspondem ao fluxo atual documentado; não sugerem que haja CLI para criar extensões.

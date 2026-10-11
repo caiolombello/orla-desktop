@@ -38,6 +38,8 @@ versioned from Orla. These commands do not install or apply a theme.
 
 QML interaction tests need the KDE/Qt runtime and a graphical session. Before changing a Plasma API or claiming native behavior, verify it on the stated Plasma version and record that version in the pull request. The continuous integration job checks portable behavior and package generation; it does not prove panel, Wayland, multi-monitor, or notification behavior.
 
+The source checkout has a separate experimental [C++/Qt Quick launcher](launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All three CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry. Portable CI does not compile this component. Its global focus and installation gates remain independent of the dock tests.
+
 Contributions and CI must not require paid AI calls, an AI subscription, or private account credentials. Future provider tests use synthetic mocks by default; live tests are separate, manually initiated, and opt-in. UI changes include the relevant loading, empty, error, long-text, keyboard/focus, contrast, and reduced-motion states. Captures should use synthetic data.
 
 ## Pull requests

@@ -8,6 +8,8 @@ O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entr
 
 > [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
+O checkout de código também inclui um [launcher independente experimental](launcher/README.md) para aplicativos e cálculos locais. Ele exige build separado C++/Qt/KF6. A release 0.2.4 não o empacota nem instala; foco global no Wayland e integração completa do launcher continuam pendentes.
+
 ## O que funciona hoje
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
