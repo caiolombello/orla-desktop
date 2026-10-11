@@ -137,9 +137,19 @@ seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
 A revisão independente passou controller 51 e um desafio QML de quatro
 entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
 ficaram UNRUN; o trace serializado null não comprova ordem temporal.
-CI do novo commit e integração na branch remota principal estão pendentes.
-Esta mudança não atualiza a instalação existente do launcher baseada no Source
-32, que continua sem a nova UI de texto.
+Em `5aaf518`, CI run 38175193804 aprovou o job portátil, mas behavior saiu
+com SIGSEGV depois de 7 PASS/0 FAIL/1 skip esperado; os outros cinco CTests
+passaram. Causa UNKNOWN; um único GDB local saiu zero sem reproduzir o crash.
+O workflow amplia somente o diagnóstico após falha para um alvo behavior/UI,
+priorizando behavior e mantendo os limites e o resultado original. CI desta
+revisão e integração na branch principal continuam pendentes.
+O canary local de `5aaf518` substituiu reversivelmente o executável instalado,
+com backup e alteração somente do caminho no wrapper. A build permanente ALL40
+passou seis CTests uma vez em 80,85 s. No KDE foram observados atalho, retorno
+de foco, painel de IA, rolagem por Tab, popup de tarefa, cálculo `2+2`, saída
+limpa e reinício; o serviço ficou ativo/habilitado. Esses fluxos básicos não
+qualificam geração/provedor real, clipboard/acessibilidade, matriz de telas,
+pacote relocável, distribuição/release ou admissão completa.
 
 ## Fundação do pacote de dados — somente no fonte
 

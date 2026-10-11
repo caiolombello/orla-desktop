@@ -241,7 +241,7 @@ jobs:
           ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
             --output-on-failure --no-tests=error
 
-      - name: Diagnose failed launcher UI without changing its result
+      - name: Diagnose failed launcher test without changing its result
         if: ${{ failure() && steps.launcher_ctests.outcome == 'failure' }}
         timeout-minutes: 2
         env:
@@ -253,11 +253,31 @@ jobs:
         run: |
           set -euo pipefail
           failed="$RUNNER_TEMP/orla-launcher-build/Testing/Temporary/LastTestsFailed.log"
-          if [[ ! -f "$failed" ]] || ! grep -Eq '^[0-9]+:launcher-ui$' "$failed"; then
-            exit 0
+          target=""
+          if [[ -f "$failed" ]]; then
+            if grep -Eq '^[0-9]+:launcher-behavior$' "$failed"; then
+              target="launcher-behavior"
+            elif grep -Eq '^[0-9]+:launcher-ui$' "$failed"; then
+              target="launcher-ui"
+            fi
           fi
+          case "$target" in
+            launcher-behavior)
+              binary="orla-launcher-tests"
+              isolation_flags=()
+              ;;
+            launcher-ui)
+              binary="orla-launcher-ui-tests"
+              isolation_flags=(--private-path)
+              ;;
+            *)
+              printf 'No supported failed launcher test in LastTestsFailed.log\n'
+              exit 0
+              ;;
+          esac
+          printf 'Diagnosing %s only (priority: launcher-behavior before launcher-ui)\n' "$target"
           # This one diagnostic run cannot turn the original failed step green.
-          python3 launcher/tests/run_isolated.py --private-path \
+          python3 launcher/tests/run_isolated.py "${isolation_flags[@]}" \
             /usr/bin/gdb --nx --nh --batch --return-child-result \
             -iex 'set auto-load off' \
             -iex 'set debuginfod enabled off' \
@@ -265,4 +285,4 @@ jobs:
             -ex 'set disable-randomization off' \
             -ex 'set startup-with-shell off' \
             -ex run -ex 'thread apply all bt 40' -ex 'info sharedlibrary' \
-            --args "$RUNNER_TEMP/orla-launcher-build/orla-launcher-ui-tests"
+            --args "$RUNNER_TEMP/orla-launcher-build/$binary"

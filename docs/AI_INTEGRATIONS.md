@@ -119,13 +119,20 @@ seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
 A revisão independente passou controller 51 e um desafio QML de quatro
 entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
 ficaram UNRUN; o trace serializado null não comprova ordem temporal.
-CI do novo commit e integração na branch remota principal estão pendentes.
-Ollama e modelo reais, qualidade semântica, clipboard e acessibilidade nativos,
-empacotamento relocável, instalação, release e
-admissão nativa continuam `UNRUN`. A1 permanece aberta: o roadmap completo ainda
-exige também o backend API opt-in e os demais gates publicados. A instalação
-existente do launcher baseada no Source 32 continua sem a nova UI; esta mudança
-de fonte não instala nem atualiza esse executável.
+Em `5aaf518`, CI run 38175193804 aprovou o job portátil, mas behavior saiu
+com SIGSEGV após 7 PASS/0 FAIL/1 skip esperado; os outros cinco CTests passaram.
+A causa continua UNKNOWN. Um único GDB local saiu zero sem reproduzir o crash.
+O diagnóstico hospedado agora seleciona apenas behavior ou UI, nessa prioridade,
+sem alterar a falha original nem os limites. Isso não é uma correção do crash;
+CI desta revisão e integração na branch principal continuam pendentes.
+O canary local desse Source foi instalado reversivelmente após build permanente
+ALL40/seis CTests em 80,85 s. Atalho, retorno de foco, painel de IA, Tab com
+rolagem, popup de tarefa, calculadora, saída limpa e reinício passaram no KDE.
+Não foi executada descoberta ou geração real de IA. Ollama e modelo reais,
+qualidade semântica, clipboard e acessibilidade nativos, matriz de telas,
+empacotamento relocável, distribuição/release e admissão completa continuam
+abertos. A1 permanece aberta: o roadmap completo ainda exige também o backend
+API opt-in e os demais gates publicados.
 
 ## Resultado esperado
 

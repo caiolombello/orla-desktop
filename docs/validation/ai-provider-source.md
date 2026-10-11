@@ -390,3 +390,45 @@ Historical 2c8b750 SIGSEGV and the earlier cooperative supplemental challenge
 retain UNKNOWN causes. New-head CI/main integration and real native/provider,
 clipboard/accessibility, install, distribution/release and full-roadmap
 admission remain open at this Source publication checkpoint.
+
+### Subsequent hosted failure and local canary — 5aaf518
+
+Hosted run 38175193804/job114576003847 failed: launcher-behavior printed
+7 PASS/0 FAIL/1 expected SKIP and cleanup/Finished, then the isolated runner
+reported returncode -11. The five other CTests passed; the portable job passed.
+Cause is UNKNOWN and distinct from the historical 2c8b750 UI crash. One local
+GDB execution against the exact permanent behavior ELF exited 0 without
+reproduction or a causal stack. Two unnamed LWPs exiting after Totals are not
+proof of KRunner thread identity. Twenty-seven direct closure pins matched
+before/after; 116 mapped-library pins were collected only after the run.
+
+The workflow extension selects one fixed failed target from exact allowlisted
+log entries, prioritizing behavior before UI. Behavior retains no private-PATH
+flag; UI retains it. Seven author selector fixtures, ten independent fixtures
+and two independent bash syntax checks passed. The original failure condition,
+CTest result, environment and step/job/runner caps remain unchanged. This is
+diagnostic coverage, not a crash fix; new-head hosted CI and merge are pending.
+
+A separate reversible local canary was authorized and installed from Source
+5aaf518. A fresh permanent ALL40 build and six isolated CTests passed once in
+80.85s (UI27/24.408s Qt; controller51/11.248s Qt). ELF has no RPATH/RUNPATH;
+five helpers use permanent paths and installed library resolution was checked.
+Only the launcher's wrapper binary-path literal changed; unit/desktop/autostart
+targets remained exact and the backup was retained. Initial preparation review
+found wrapper-to-ELF startup/rollback races; corrected bounded observation was
+reviewed before installation. The nominal five-second transition deadline has
+individual twenty-second service-query limits and is not a strict aggregate cap.
+
+Actual KDE checks observed shortcut opening, Escape restoring T3 Code focus,
+AI panel opening, Tab scrolling to the focused task field, an in-window task
+popup, Escape closing it while preserving the panel, and calculator 2+2 showing
+4 without execution/copy. Ctrl+Q left the named service inactive with exit0;
+restart reached the exact ELF, then shortcut/Down/Escape worked again. Final
+service was active/running/enabled with success/exit0. Temporary virtual input
+devices were closed and absent. A restart helper import failed before commands;
+adding its own directory to sys.path corrected only that preparation lookup.
+
+This covers basic flows on this machine, not full native admission. Actual AI
+discovery/generation, provider identity/semantics, native clipboard/accessibility,
+multi-monitor/DPI, real calendar accounts, relocatable distribution/update and
+release remain open. Local screenshots stay private. The full roadmap is active.
