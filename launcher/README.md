@@ -60,6 +60,8 @@ build/launcher/orla-launcher --no-global-shortcut
 
 Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Super+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro próprio. Não há autostart, instalação automática, alteração de painel ou integração de menu nesta pasta.
 
+`--start-hidden` inicia a janela oculta quando o registro do atalho funciona. Se o atalho estiver ocupado ou desativado, a janela permanece visível para que o launcher continue acessível.
+
 ## Limites de qualificação
 
 Build, busca real por aplicativos/calculadora, cancelamento, proteção contra callbacks antigos e execução exclusiva de uma fixture própria foram verificados. Os testes de teclado Qt simulam eventos dentro da própria janela; não comprovam atalhos globais nem foco real no compositor. Todos os CTests usam bus D-Bus privado sem diretórios de ativação de serviços e XDG/runtime temporários próprios. O processo Qt verifica o ID desse bus antes de construir RunnerManager. O teste de fixture cria um `.desktop` e recibo próprios; tudo é removido ao terminar, e nenhum aplicativo pessoal é lançado automaticamente. O runner do Plasma pode registrar o acesso ao aplicativo explicitamente aberto em serviços do desktop, como KActivities; desligar o histórico do Orla não desliga esses serviços.

@@ -66,7 +66,7 @@ Item {
             id: menuButton
             objectName: "orlaMenuButton"
             text: root.boundedText(root.menuLabel, 32) || "Orla"
-            icon.source: root.menuIcon === "none" ? "" : "../images/orla.svg"
+            icon.source: root.menuIcon === "none" ? "" : Qt.resolvedUrl("../images/orla.svg")
             Layout.minimumWidth: 32
             Layout.fillHeight: true
             Accessible.name: qsTr("Menu Orla")

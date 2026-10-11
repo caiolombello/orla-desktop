@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDebug>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -21,6 +22,7 @@ int main(int argc, char **argv)
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({QStringLiteral("no-global-shortcut"), QStringLiteral("Não registrar atalho; Escape encerra o processo.")});
+    parser.addOption({QStringLiteral("start-hidden"), QStringLiteral("Iniciar oculto somente quando o atalho global estiver registrado.")});
     parser.addOption({QStringLiteral("shortcut"), QStringLiteral("Atalho temporário disponível, sem substituir bindings."),
                       QStringLiteral("combinação"), QStringLiteral("Ctrl+Alt+Meta+O")});
     parser.addOption({QStringLiteral("ai-python"), QStringLiteral("Interpretador Python absoluto para o helper limitado de IA."),
@@ -51,5 +53,10 @@ int main(int argc, char **argv)
     QObject::connect(&controller, &LauncherController::closeRequested, &steamController,
                      &SteamProviderController::cancelAll);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSession"), &session);
+    if (parser.isSet(QStringLiteral("start-hidden")) && !session.shortcutText().isEmpty()) {
+        window->hide();
+    }
+    qInfo().noquote() << "Orla Launcher ready; visible=" << window->isVisible()
+                     << "; shortcut=" << session.shortcutText();
     return app.exec();
 }
