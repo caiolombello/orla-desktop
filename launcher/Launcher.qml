@@ -13,7 +13,7 @@ Window {
     title: qsTr("Orla Launcher")
     color: "#111923"
     flags: Qt.Window
-    property bool aiPanelVisible: false
+    property string activePanel: "search"
     property bool pendingDismiss: false
     property bool pendingQuit: false
     property var selectedRow: launcher.selectedIndex >= 0 ? launcher.rows[launcher.selectedIndex] : null
@@ -23,11 +23,25 @@ Window {
     }
     function closeAiPanel() {
         aiProviders.cancel(aiProviders.requestId)
-        aiPanelVisible = false
+        activePanel = "search"
         search.forceActiveFocus()
     }
+    function closeSteamPanel() {
+        steamProvider.cancelAll()
+        activePanel = "search"
+        search.forceActiveFocus()
+    }
+    function finishPendingClose() {
+        if (!pendingDismiss || aiProviders.busy || steamProvider.busy) return
+        pendingDismiss = false
+        launcher.dismiss()
+        if (pendingQuit) Qt.quit()
+        pendingQuit = false
+    }
     function requestDismiss(quitApplication) {
-        if (!aiProviders.requestClose()) {
+        const aiReady = aiProviders.requestClose()
+        const steamReady = steamProvider.requestClose()
+        if (!aiReady || !steamReady) {
             pendingDismiss = true
             pendingQuit = quitApplication
             return
@@ -35,9 +49,11 @@ Window {
         launcher.dismiss()
         if (quitApplication) Qt.quit()
     }
-    onActiveChanged: if (active && !aiPanelVisible) search.forceActiveFocus()
+    onActiveChanged: if (active && activePanel === "search") search.forceActiveFocus()
     onClosing: function(close) {
-        if (!aiProviders.requestClose()) {
+        const aiReady = aiProviders.requestClose()
+        const steamReady = steamProvider.requestClose()
+        if (!aiReady || !steamReady) {
             close.accepted = false
             pendingDismiss = true
             pendingQuit = true
@@ -48,18 +64,22 @@ Window {
     }
     Shortcut {
         sequence: "Escape"; context: Qt.WindowShortcut
-        onActivated: if (window.aiPanelVisible) window.closeAiPanel(); else window.requestDismiss(false)
+        onActivated: {
+            if (window.activePanel === "ai") window.closeAiPanel()
+            else if (window.activePanel === "steam") window.closeSteamPanel()
+            else window.requestDismiss(false)
+        }
     }
     Shortcut { sequence: "Ctrl+Q"; context: Qt.WindowShortcut; onActivated: window.requestDismiss(true) }
     Connections {
         target: aiProviders
         function onCloseReady() {
-            if (!window.pendingDismiss) return
-            window.pendingDismiss = false
-            launcher.dismiss()
-            if (window.pendingQuit) Qt.quit()
-            window.pendingQuit = false
+            window.finishPendingClose()
         }
+    }
+    Connections {
+        target: steamProvider
+        function onCloseReady() { window.finishPendingClose() }
     }
     Connections {
         target: launcher
@@ -87,11 +107,23 @@ Window {
             Button {
                 id: aiEntry
                 objectName: "aiEntryButton"
-                text: window.aiPanelVisible ? qsTr("Busca") : qsTr("IA")
-                Accessible.name: window.aiPanelVisible ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
+                text: window.activePanel === "ai" ? qsTr("Busca") : qsTr("IA")
+                Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
                 onClicked: {
-                    if (window.aiPanelVisible) window.closeAiPanel()
-                    else { window.aiPanelVisible = true; aiPanel.focusFirst() }
+                    if (window.activePanel === "ai") window.closeAiPanel()
+                    else { window.activePanel = "ai"; aiPanel.focusFirst() }
+                }
+                contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+            }
+            Button {
+                id: steamEntry
+                objectName: "steamEntryButton"
+                text: window.activePanel === "steam" ? qsTr("Busca") : qsTr("Steam")
+                Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
+                onClicked: {
+                    if (window.activePanel === "steam") window.closeSteamPanel()
+                    else { window.activePanel = "steam"; steamPanel.focusFirst() }
                 }
                 contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
@@ -103,15 +135,15 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: 58
             color: "#EAF4F1"
-            placeholderText: qsTr("Buscar aplicativo ou calcular…")
+            placeholderText: qsTr("Buscar aplicativo, jogo ou calcular…")
             placeholderTextColor: "#A7B7C4"
             font.pixelSize: 19
             leftPadding: 18
             rightPadding: 18
             selectByMouse: true
             maximumLength: 512
-            Accessible.name: qsTr("Buscar aplicativo ou calcular")
-            visible: !window.aiPanelVisible
+            Accessible.name: qsTr("Buscar aplicativos, jogos ou calcular")
+            visible: window.activePanel === "search"
             background: Rectangle { radius: 14; color: "#1B2733"; border.width: 1; border.color: search.activeFocus ? "#69D7C2" : "#3B4B5A" }
             onTextEdited: launcher.query = text
             Keys.priority: Keys.BeforeItem
@@ -122,14 +154,14 @@ Window {
             Component.onCompleted: forceActiveFocus()
         }
         RowLayout {
-            visible: !window.aiPanelVisible
+            visible: window.activePanel === "search"
             Layout.fillWidth: true
-            Text { text: qsTr("APLICATIVOS + CALCULADORA"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 1.4; textFormat: Text.PlainText }
+            Text { text: qsTr("APLICATIVOS + CALCULADORA + STEAM"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 1.4; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
             Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: "#69D7C2"; font.pixelSize: 11; textFormat: Text.PlainText }
         }
         Item {
-            visible: !window.aiPanelVisible
+            visible: window.activePanel === "search"
             Layout.fillWidth: true
             Layout.fillHeight: true
             ListView {
@@ -139,6 +171,12 @@ Window {
                 clip: true
                 spacing: 6
                 model: launcher.rows
+                section.property: "categoryLabel"
+                section.delegate: Text {
+                    required property string section
+                    width: results.width; height: 24; text: section; color: "#91A5B4"
+                    font.pixelSize: 10; font.letterSpacing: 1.2; textFormat: Text.PlainText
+                }
                 ScrollBar.vertical: ScrollBar { }
                 delegate: ItemDelegate {
                     id: result
@@ -162,7 +200,7 @@ Window {
                         Rectangle {
                             Layout.preferredWidth: 38; Layout.preferredHeight: 38
                             radius: 10; color: "#283542"
-                            Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : "▦"; color: "#69D7C2"; font.pixelSize: 23; textFormat: Text.PlainText }
+                            Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : "▦"; color: "#69D7C2"; font.pixelSize: 23; textFormat: Text.PlainText }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -200,13 +238,13 @@ Window {
         }
         Text {
             Layout.fillWidth: true
-            visible: !window.aiPanelVisible && windowSession && windowSession.notice.length > 0
+            visible: window.activePanel === "search" && windowSession && windowSession.notice.length > 0
             text: windowSession ? windowSession.notice : ""
             color: "#E7C58E"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#283542"; visible: !window.aiPanelVisible }
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#283542"; visible: window.activePanel === "search" }
         RowLayout {
-            visible: !window.aiPanelVisible
+            visible: window.activePanel === "search"
             Layout.fillWidth: true
             spacing: 8
             Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: "#A7B7C4"; font.pixelSize: 11; textFormat: Text.PlainText }
@@ -227,7 +265,7 @@ Window {
             }
             Button {
                 property var executionTicket: null
-                text: window.selectedRow && window.selectedRow.kind === "app" ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
                 enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
                 onClicked: if (executionTicket) launcher.execute(executionTicket.row, executionTicket.generation, executionTicket.id)
@@ -241,9 +279,19 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 0
-            visible: window.aiPanelVisible
+            visible: window.activePanel === "ai"
             controller: aiProviders
             onBackRequested: window.closeAiPanel()
+        }
+        SteamSettings {
+            id: steamPanel
+            objectName: "steamSettings"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            visible: window.activePanel === "steam"
+            controller: steamProvider
+            onBackRequested: window.closeSteamPanel()
         }
     }
 }

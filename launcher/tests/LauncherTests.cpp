@@ -1,6 +1,22 @@
 #include <QtTest>
 #include "LauncherController.h"
+#include "SteamProviderController.h"
 #include "BusChecks.h"
+
+namespace {
+QString writeSteamHelper(QTemporaryDir &directory)
+{
+    const QByteArray document = R"({"apps":[{"appid":"42","library":"library-0","name":"Synthetic Steam Game","ownership":"unknown","source":"local_manifest","status":"installed_candidate"}],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
+    const QString helper = directory.filePath(QStringLiteral("steam-helper.py"));
+    QFile file(helper);
+    if (!file.open(QIODevice::WriteOnly)) return {};
+    file.write("import base64,sys\nsys.stdout.buffer.write(base64.b64decode('");
+    file.write(document.toBase64());
+    file.write("'))\n");
+    file.close();
+    return helper;
+}
+}
 
 class LauncherTests final : public QObject
 {
@@ -84,6 +100,48 @@ private Q_SLOTS:
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(), QByteArray("owned-launcher-fixture\n"));
         QVERIFY(launcher.rows().isEmpty());
+    }
+
+    void steamSearchOnlyOpensTheCurrentExplicitSelection()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QList<QUrl> opened;
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeSteamHelper(directory), [&opened](const QUrl &url) { opened.append(url); return true; });
+        LauncherController launcher(&steam);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 3000);
+
+        launcher.setQuery(QStringLiteral("Synthetic Steam"));
+        QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready")
+                                 && !launcher.rows().isEmpty(), 5000);
+        int steamRow = -1;
+        for (int row = 0; row < launcher.rows().size(); ++row) {
+            if (launcher.rows()[row].toMap().value(QStringLiteral("kind")).toString()
+                == QStringLiteral("steam")) steamRow = row;
+        }
+        QVERIFY(steamRow >= 0);
+        launcher.select(steamRow);
+        const QVariantMap old = launcher.rows()[steamRow].toMap();
+        QVERIFY(opened.isEmpty());
+
+        launcher.setQuery(QStringLiteral("different"));
+        QVERIFY(!launcher.execute(steamRow, old.value(QStringLiteral("generation")).toULongLong(),
+                                  old.value(QStringLiteral("id")).toString()));
+        QVERIFY(opened.isEmpty());
+
+        launcher.setQuery(QStringLiteral("Synthetic Steam"));
+        QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready"), 5000);
+        for (int row = 0; row < launcher.rows().size(); ++row) {
+            const QVariantMap current = launcher.rows()[row].toMap();
+            if (current.value(QStringLiteral("kind")).toString() != QStringLiteral("steam")) continue;
+            launcher.select(row);
+            QVERIFY(launcher.execute(row, current.value(QStringLiteral("generation")).toULongLong(),
+                                     current.value(QStringLiteral("id")).toString()));
+            break;
+        }
+        QCOMPARE(opened, QList<QUrl>{QUrl(QStringLiteral("steam://rungameid/42"))});
     }
 };
 QTEST_MAIN(LauncherTests)

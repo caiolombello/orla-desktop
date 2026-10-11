@@ -1,13 +1,15 @@
 # Descoberta local Steam experimental
 
 `scripts/steam.py` consulta somente metadados de bibliotecas em raízes explícitas.
-Esta é uma fatia de S1: favoritos, busca, interface do dock, provedor, abertura
-de cliente/jogo e qualificação com dois jogos reais continuam pendentes. A
+Esta é uma fatia de S1: favoritos, interface do dock e qualificação com dois
+jogos reais continuam pendentes. O Source do launcher agora oferece provedor,
+busca session-only e encaminhamento explícito das duas URIs allowlisted; isso
+continua fora das releases públicas e sem qualificação nativa. A
 rodada usou exclusivamente diretórios sintéticos próprios. Não houve leitura de
 biblioteca pessoal nem chamada ao cliente Steam. A CLI está incluída no ZIP da
 prerelease 0.2.6. Os assets da
-release 0.2.5 publicada não a incluem. O Menu Orla experimental continua fora do
-bundle 0.2.6.
+release 0.2.5 publicada não a incluem. O Menu Orla experimental e o launcher
+continuam fora dos bundles públicos até 0.2.9.
 
 O contrato JSON é `0.1-experimental`, independente da versão do Orla. O futuro
 consumidor deve tratar nomes como texto simples e distinguir inventário completo,
@@ -32,6 +34,19 @@ python3 -B -m unittest discover -s tests -p 'test_steam.py' -v
 argumentos de jogo, URI arbitrário nem chamada automática a outro aplicativo.
 AppID precisa ser decimal ASCII canônico entre 1 e 4294967295. A geração não
 comprova que o cliente, jogo ou handler de URI exista.
+
+No launcher Source, abrir o painel Steam não executa a CLI. A pessoa cola de uma
+a oito raízes no mesmo formato acima e aciona **Carregar jogos**. O controlador
+inicia Python/helper absolutos com argumentos separados, valida schema, tipos,
+limites, referências e correspondência do exit code antes de publicar qualquer
+inventário. Recarga ou cancelamento retira resultados anteriores e incrementa a
+revisão; Enter/clique revalida consulta, seleção, AppID, biblioteca e revisão.
+As raízes, inventário e consulta não são gravados.
+
+O handler do desktop só é chamado por gesto explícito e com uma URI reconstruída
+da allowlist. Testes usam opener injetado; nenhum handler Steam real é registrado
+ou chamado. Segundo a documentação do Qt 6.11.2, sucesso de
+`QDesktopServices::openUrl` indica apenas que o pedido foi encaminhado ao sistema.
 
 Exemplos convencionais de raízes a avaliar numa rodada real são
 `/home/SEU_USUARIO/.local/share/Steam` e
@@ -83,6 +98,10 @@ neutralização específica descrita abaixo, sem anonimização arbitrária.
 AppIDs são ordenados numericamente dentro de cada biblioteca; a ordem das raízes
 segue a entrada e a das bibliotecas segue o índice numérico. Consultas idênticas
 em dados idênticos produzem JSON idêntico, sem relógio/identificador aleatório.
+O launcher também valida a coerência entre os estados antes de publicar a lista:
+bibliotecas não podem pertencer a uma raiz ausente, apps só podem vir de uma
+biblioteca consultável e um inventário completo não pode conter estados parciais
+ou desconhecidos. Respostas contraditórias falham fechadas e não geram ação.
 
 | Campo/estado | Significado |
 | --- | --- |
@@ -90,11 +109,18 @@ em dados idênticos produzem JSON idêntico, sem relógio/identificador aleatór
 | Inventário `absent` | Todas as raízes explícitas estão ausentes; não comprova ausência global do Steam |
 | Inventário `partial` | Parte dos metadados foi consultada, com erros/limites ou biblioteca indisponível |
 | Inventário `unknown` | Nenhuma biblioteca pôde ser consultada, entrada inválida, deadline ou resultado grande demais |
-| Raiz `absent` / biblioteca `missing` | Caminho não encontrado; biblioteca pode estar desmontada, movida ou removida, sem inferir a causa |
+| Raiz `absent` | A pasta raiz informada não existe; não comprova ausência global do Steam |
+| Raiz `missing` | A pasta raiz existe, mas sua pasta primária `steamapps` não foi encontrada; a biblioteca correspondente também fica `missing` |
+| Biblioteca `missing` | A pasta da biblioteca ou sua `steamapps` não foi encontrada; pode estar desmontada, movida ou removida, sem inferir a causa |
 | App `installed_candidate` | `StateFlags` exatamente `4` e diretório `common/installdir` seguro presente; interpretação experimental de presença local |
 | App `partial` | Hint `4`, mas diretório de instalação não encontrado |
 | App `unknown` | Flags ausentes/não qualificadas ou alvo inacessível/inseguro; não é classificação de jogo desinstalado |
 | `connection` e `ownership` | Sempre `unknown`; não se distingue online/offline nem titularidade por manifesto |
+
+Com várias raízes, uma pasta `missing` pode coexistir com outra biblioteca
+consultada. Nesse caso o inventário é `partial`, e os apps válidos da biblioteca
+disponível continuam no resultado com seus próprios estados; a falha de uma raiz
+não transforma os demais apps em ausentes nem comprova titularidade.
 
 Nomes têm até 160 caracteres, sem caracteres de controle/formatação Unicode.
 Podem ser truncados e continuam sendo metadados não confiáveis do manifesto.
@@ -142,8 +168,9 @@ Fontes consultadas em 2026-10-11, sem Steam Web API ou acesso a conta:
 - [Valve Developer Community: KeyValues](https://developer.valvesoftware.com/wiki/KeyValues) e [Steam browser protocol](https://developer.valvesoftware.com/wiki/Steam_browser_protocol): URLs primárias fixadas, mas a leitura retornou HTTP 403. O protocolo completo e os URIs gerados permanecem pendentes de consulta/qualificação nativa; testes aqui verificam somente construção e validação das strings.
 
 O recibo local `.runtime/steam-discovery/sources.json` registra essas consultas e
-o pin do arquivo da Valve. Vinte testes offline e revisão independente passaram;
-isso não promove o formato local a API estável. Próxima rodada: ligação ao
-provedor/UI, consentimento explícito de raízes reais, dois jogos reais, disco
-externo presente/desmontado, Steam ausente e ações pelo handler aprovado. S1
-permanece aberto até esses gates e favoritos/busca/ação serem qualificados.
+o pin do arquivo da Valve. Vinte testes offline do helper passaram; isso não
+promove o formato local a API estável. A integração Source do launcher usa apenas
+fixtures fechadas e árvores próprias. Permanecem pendentes: consentimento para
+raízes reais, dois jogos reais, disco externo presente/desmontado, Steam ausente,
+gesto humano e ações pelo handler real. S1 permanece aberto até esses gates e os
+favoritos serem qualificados.

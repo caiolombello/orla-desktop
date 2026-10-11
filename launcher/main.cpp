@@ -5,6 +5,7 @@
 #include <QQuickWindow>
 #include "AiProviderController.h"
 #include "LauncherController.h"
+#include "SteamProviderController.h"
 #include "WindowSession.h"
 
 int main(int argc, char **argv)
@@ -16,7 +17,7 @@ int main(int argc, char **argv)
     app.setDesktopFileName(QStringLiteral("org.orla.Launcher"));
     app.setQuitOnLastWindowClosed(false);
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Orla Launcher opcional: aplicativos e calculadora locais via KRunner."));
+    parser.setApplicationDescription(QStringLiteral("Orla Launcher opcional: aplicativos, calculadora e inventário Steam local explícito."));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({QStringLiteral("no-global-shortcut"), QStringLiteral("Não registrar atalho; Escape encerra o processo.")});
@@ -27,13 +28,16 @@ int main(int argc, char **argv)
     parser.addOption({QStringLiteral("ai-helper"), QStringLiteral("Helper limitado de IA absoluto; ausente significa indisponível."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_HELPER_PATH)});
     parser.process(app);
-    LauncherController controller;
     AiProviderController aiController(parser.value(QStringLiteral("ai-python")),
                                       parser.value(QStringLiteral("ai-helper")));
+    SteamProviderController steamController(QStringLiteral(ORLA_STEAM_PYTHON_PATH),
+                                            QStringLiteral(ORLA_STEAM_HELPER_PATH));
+    LauncherController controller(&steamController);
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);
     engine.rootContext()->setContextProperty(QStringLiteral("launcher"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("aiProviders"), &aiController);
+    engine.rootContext()->setContextProperty(QStringLiteral("steamProvider"), &steamController);
     // A window session is attached after QML creation; initial content is usable without a shortcut.
     engine.rootContext()->setContextProperty(QStringLiteral("windowSession"), QVariant::fromValue<QObject *>(nullptr));
     engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
@@ -44,6 +48,8 @@ int main(int argc, char **argv)
                           parser.value(QStringLiteral("shortcut")));
     QObject::connect(&controller, &LauncherController::closeRequested, &aiController,
                      &AiProviderController::cancelAll);
+    QObject::connect(&controller, &LauncherController::closeRequested, &steamController,
+                     &SteamProviderController::cancelAll);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSession"), &session);
     return app.exec();
 }

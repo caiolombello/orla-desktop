@@ -256,6 +256,40 @@ private Q_SLOTS:
         }
     }
 
+    void unconfirmedCleanupRetainsCustodyAndDefersCloseReady()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("ai-started"));
+        const QString helper = writeHelper(directory,
+            QByteArray("import pathlib,time\npathlib.Path(r'") + marker.toUtf8()
+            + "').touch()\ntime.sleep(60)\n");
+        bool reportGroupExists = true;
+        qint64 observedGroup = 0;
+        int observerCalls = 0;
+        AiProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&](qint64 group) {
+                observedGroup = group;
+                ++observerCalls;
+                return reportGroupExists;
+            });
+        QSignalSpy closeReady(&controller, &AiProviderController::closeReady);
+
+        controller.discover();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.busy() && QFile::exists(marker), 3000);
+        QVERIFY(!controller.requestClose());
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 7000);
+        QVERIFY(controller.busy());
+        QVERIFY(observedGroup > 0);
+        QCOMPARE(closeReady.size(), 0);
+
+        const int callsBeforeRelease = observerCalls;
+        reportGroupExists = false;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1000);
+        QVERIFY(observerCalls > callsBeforeRelease);
+        QCOMPARE(closeReady.size(), 1);
+    }
+
     void impossibleCapabilityClaimsAreRejectedWithoutReplacingTheStableReport()
     {
         QTemporaryDir directory;

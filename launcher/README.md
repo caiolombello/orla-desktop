@@ -1,6 +1,14 @@
 # Orla Launcher — componente opcional experimental
 
-Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. Não há histórico de consultas do Orla, contexto automático, runner de shell, integrações de conta ou rede.
+Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. Não há histórico de consultas do Orla, contexto automático, runner de shell, integrações de conta ou rede.
+
+## Steam local — somente no fonte
+
+O painel **Steam** não lê nada ao abrir. Cada raiz precisa ser informada na sessão como `native=/caminho/absoluto` ou `flatpak=/caminho/absoluto`; **Carregar jogos** chama o helper limitado `scripts/steam.py` sem shell. O inventário validado entra na busca em categoria própria e some ao encerrar o processo. Não há raiz padrão, detecção por HOME, persistência, perfil, histórico, conta, autenticação ou rede.
+
+Somente um resultado atual com estado `installed_candidate` pode encaminhar `steam://rungameid/<appid>` por Enter/clique. **Abrir downloads no Steam** encaminha apenas `steam://open/downloads`. O retorno informa no máximo que o desktop aceitou o pedido; não prova handler, cliente, login, titularidade ou que o jogo abriu. Recarga, cancelamento e mudança de consulta invalidam tickets anteriores. `StateFlags=4` continua sendo uma interpretação experimental de presença local, com `ownership` e `connection` sempre desconhecidos.
+
+Essa integração permanece fora dos assets públicos 0.2.5–0.2.9, não foi executada contra raízes pessoais e não qualifica Steam native/Flatpak, biblioteca desmontada, dois jogos reais ou gesto humano Wayland. Os testes usam árvores e processos próprios, opener injetado e D-Bus/XDG privados; nunca chamam o handler Steam real.
 
 ## Experimento de compatibilidade com provedores de IA — somente no fonte
 
@@ -40,3 +48,4 @@ As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles
 - [Atalho de sessão — kglobalacceld 6.7.5](https://github.com/KDE/kglobalacceld/blob/v6.7.5/src/globalshortcut.cpp), [KGlobalAccel 6.30](https://github.com/KDE/kglobalaccel/blob/v6.30.0/src/kglobalaccel.h).
 - [KWaylandExtras 6.30](https://github.com/KDE/kwindowsystem/blob/v6.30.0/src/kwaylandextras.h), [política de token — KWin 6.7.5](https://github.com/KDE/kwin/blob/v6.7.5/src/xdgactivationv1.cpp).
 - [TextField](https://doc.qt.io/qt-6.11/qml-qtquick-controls-textfield.html), [Text.PlainText/elide](https://doc.qt.io/qt-6.11/qml-qtquick-text.html), [Keys](https://doc.qt.io/qt-6.11/qml-qtquick-keys.html), [QQuickWindow](https://doc.qt.io/qt-6.11/qquickwindow.html) — Qt 6.11.2.
+- [QProcess](https://doc.qt.io/qt-6.11/qprocess.html) e [QDesktopServices](https://doc.qt.io/qt-6.11/qdesktopservices.html) — subprocesso com argumentos separados e encaminhamento de URI no Qt 6.11.2.
