@@ -160,6 +160,32 @@ class BarTests(unittest.TestCase):
         self.assertEqual(self.session.calls, [])
         self.assertEqual(self.warnings, [])
 
+    def test_compact_menu_keeps_its_icon_inside_and_keyboard_accessible(self):
+        button = self.item("orlaMenuButton")
+        icon = self.item("orlaMenuIcon")
+        label = self.item("orlaMenuLabel")
+        for width in (48, 72, 96, 400):
+            self.window.setWidth(width)
+            QTest.qWait(30)
+            self.assertTrue(icon.property("visible"))
+            self.assertGreaterEqual(self.evaluate("mapToItem(parent.parent, 0, 0).x", icon), 0)
+            self.assertLessEqual(self.evaluate("mapToItem(parent.parent, width, 0).x", icon), button.width())
+            if label.property("visible"):
+                self.assertGreaterEqual(label.x(), icon.x() + icon.width() + 4)
+                self.assertLessEqual(label.x() + label.width(), button.property("availableWidth"))
+        self.assertTrue(label.property("visible"))
+        self.window.setWidth(48)
+        QTest.qWait(30)
+        self.assertFalse(label.property("visible"))
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        menu = self.window.findChild(QObject, "orlaMenu")
+        self.wait_property(menu, "opened", True)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.wait_property(button, "activeFocus", True)
+        self.assertEqual(self.session.calls, [])
+
 
     def test_menu_items_dispatch_their_own_action_and_revoked_actions_stay_passive(self):
         for name, action, capability in (("sessionLock", "lock", "canLock"),
