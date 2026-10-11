@@ -1,6 +1,6 @@
-# Central de Controle (candidata 0.2.9)
+# Central de Controle (alpha 0.2.9)
 
-A primeira fatia experimental está no checkout de código e ainda não faz parte de uma release publicada. A revisão independente do Source foi aprovada; isso não equivale à validação de uma sessão Plasma nativa.
+A alpha 0.2.9 publica a primeira fatia experimental. A revisão independente do Source foi aprovada; isso não equivale à validação de uma sessão Plasma nativa.
 
 Ative **Mostrar Central de Controle no dock (global)** em **Widgets** para exibir o botão opcional no dock. A preferência é global, começa desligada e é salva imediatamente, fora dos perfis.
 
@@ -8,4 +8,4 @@ O popup apresenta dois cards independentes: **Som e mídia**, com o modelo MPRIS
 
 Esta fatia mostra estado e oferece atalhos. Ela não controla diretamente volume, microfone, Wi-Fi, Bluetooth, brilho ou Não perturbe; não é HUD nem sistema de notificações. O popup pode ativar a leitura já existente da bateria enquanto necessário. Ausência de player/bateria não transforma o card correspondente em prova de serviço ou hardware disponível.
 
-A [validação da candidata](validation/control-center-peripherals-0.2.9.md) separa testes Source/mock de validação nativa ainda aberta.
+O [registro de validação](validation/control-center-peripherals-0.2.9.md) separa testes Source/mock de validação nativa ainda aberta.

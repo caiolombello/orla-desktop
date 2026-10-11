@@ -1,6 +1,6 @@
 # IA opcional: APIs, planos e clientes locais
 
-Revisão do plano: 11/10/2026. O documento abaixo continua sendo a proposta de longo prazo; uma fatia experimental de compatibilidade foi integrada ao fonte separado do launcher pelo PR [#20](https://github.com/caiolombello/orla-desktop/pull/20), com CI portátil [aprovada](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) no run 38115242191. Isso não equivale à integração de um provedor de IA: nenhuma autenticação, elegibilidade de conta, inferência ou geração paga do Orla foi testada. As releases públicas 0.2.5–0.2.8 continuam sem o launcher/IA. Revalidar documentação, termos e versões antes de implementar cada rota.
+Revisão do plano: 11/10/2026. O documento abaixo continua sendo a proposta de longo prazo; uma fatia experimental de compatibilidade foi integrada ao fonte separado do launcher pelo PR [#20](https://github.com/caiolombello/orla-desktop/pull/20), com CI portátil [aprovada](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) no run 38115242191. Isso não equivale à integração de um provedor de IA: nenhuma autenticação, elegibilidade de conta, inferência ou geração paga do Orla foi testada. A release 0.2.9 inclui no ZIP somente `scripts/ai.py` e `tests/test_ai.py`; launcher C++/QML, painel de IA e barra continuam excluídos. Isso é conteúdo-fonte auxiliar, não uma integração de IA publicada ou pronta. Revalidar documentação, termos e versões antes de implementar cada rota.
 
 ## Estado atual do fonte: compatibilidade A0.1 experimental
 
@@ -8,7 +8,7 @@ O checkout inclui um painel **IA** no launcher opcional. Todos os provedores con
 
 O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 (texto escolhido enviado a um backend autorizado) não começou.
 
-O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.8; a experiência exige build separado do launcher. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
+O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.9; a experiência exige build separado do launcher. O ZIP inclui somente os helpers de detecção/teste e seus testes. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
 
 ## Resultado esperado
 

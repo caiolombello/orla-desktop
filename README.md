@@ -8,17 +8,17 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 > [Project website](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [Português brasileiro](README.pt-BR.md) · [Roadmap](ROADMAP.md) · [Brand guide](docs/brand.md)
 
-The source checkout also includes an [experimental standalone launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Releases 0.2.5–0.2.8 do not package or install it; global Wayland focus and complete launcher integration remain open. The launcher source also has an experimental AI compatibility panel, integrated in PR [#20](https://github.com/caiolombello/orla-desktop/pull/20) with portable CI, but still excluded from published 0.2.5–0.2.8 assets. It is off by default and does not authenticate or generate responses; see the [source validation record](docs/validation/ai-provider-source.md).
+The source checkout also includes an [experimental standalone launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md) for local applications and calculations. It requires a separate C++/Qt/KF6 build. Releases 0.2.5–0.2.9 do not package or install the launcher; global Wayland focus and complete launcher integration remain open. The launcher source also has an experimental AI compatibility panel, integrated in PR [#20](https://github.com/caiolombello/orla-desktop/pull/20) with portable CI. Release 0.2.9 bundles only `scripts/ai.py` and `tests/test_ai.py`; the launcher and its AI panel remain excluded. It is off by default and does not authenticate or generate responses; see the [source validation record](docs/validation/ai-provider-source.md).
 
-The source checkout includes [Menu Orla, the first experimental bar component](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), with a system menu and active application name for Plasma 6.7.x. It requires separate manual installation and is excluded from releases 0.2.5, 0.2.6, 0.2.7 and 0.2.8. Native session dialogs, panel/focus behavior and multi-monitor composition remain untested. Global Menu, tray and clock are future sibling KDE widgets.
+The source checkout includes [Menu Orla, the first experimental bar component](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), with a system menu and active application name for Plasma 6.7.x. It requires separate manual installation and is excluded from releases 0.2.5–0.2.9. Native session dialogs, panel/focus behavior and multi-monitor composition remain untested. Global Menu, tray and clock are future sibling KDE widgets.
 
-The 0.2.8 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
+The 0.2.9 release bundle includes an [experimental update-check CLI](docs/updates.md). It checks official stable/beta releases only when invoked, compares an explicit version, and reports network failures separately. Run it from the extracted bundle; the `.plasmoid` alone has no CLI or update UI. Caching and installation recovery remain planned.
 
-The 0.2.8 alpha prerelease ZIP includes the experimental local Steam inventory CLI. It reads bounded library metadata from explicitly supplied roots and reports partial/unknown states; it does not launch games, access an account or prove ownership. Dock search/favorites and real Steam validation remain planned. The 0.2.5 release assets remain unchanged and do not include it. The 0.2.6 and 0.2.7 ZIPs also bundle this CLI; the standalone `.plasmoid` has no CLI. See the [Steam guide](docs/steam.md).
+The 0.2.9 alpha prerelease ZIP includes the experimental local Steam inventory CLI. It reads bounded library metadata from explicitly supplied roots and reports partial/unknown states; it does not launch games, access an account or prove ownership. Dock search/favorites and real Steam validation remain planned. The 0.2.5 release assets remain unchanged and do not include it. The 0.2.6, 0.2.7 and 0.2.8 ZIPs also bundle this CLI; the standalone `.plasmoid` has no CLI. See the [Steam guide](docs/steam.md).
 
 ## What works today
 
-The source checkout contains a **candidate first Control Center slice for alpha 0.2.9**, not included in published 0.2.8 assets. Its optional global dock button (off by default) presents shared media and battery status plus explicit shortcuts to KDE settings; see the [Control Center guide](docs/control-center.md). Independent Source review approved this focused slice; direct system controls and native admission are not part of it, and 0.2.9 remains unpublished.
+Alpha 0.2.9 publishes the first experimental Control Center slice: an optional global dock button, off by default, with shared media and battery status plus explicit shortcuts to KDE settings. Independent Source review approved this slice, but native popup/KCM and service or hardware behavior remain unqualified; see the [Control Center guide](docs/control-center.md) and [validation record](docs/validation/control-center-peripherals-0.2.9.md).
 
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
 - Start from Glass, Midnight or Paper and preview colors, opacity, spacing, corners, icon size and reduced motion. Apply saves; Cancel, Escape or closing settings discards the preview. Undo restores the previous applied appearance once per session.
@@ -63,15 +63,15 @@ The current validation baseline is Fedora 44, Plasma 6.7.5, Qt 6.11.2, and Wayla
 
 ## Install a release
 
-These commands target the [0.2.8 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8). Download its release `.zip`, verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
+These commands target the [0.2.9 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.9). Download its release `.zip`, verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.8.zip
-cd orla-dock-0.2.8
+unzip orla-dock-0.2.9.zip
+cd orla-dock-0.2.9
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.8.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.9.plasmoid
 ```
 
 The helper registers the local integration service when its packaged bridge and optional dependencies are available. `doctor` reports missing optional dependencies separately. After restoring them, reinstall the same package to activate integrations. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
@@ -83,7 +83,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.8.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.9.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:
@@ -113,7 +113,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For securi
 
 Orla Desktop is an alpha project. The current component keeps the existing Plasma package identifier `org.caiodock.dock` and D-Bus service `org.caiodock.Integrations` to preserve existing installations and settings. The name shown to users is Orla Dock; these internal identifiers are compatibility details.
 
-Manual dock profiles and widget organization are the partial P1/C1 increment shipped in 0.2.5. Version 0.2.6 added the first paste-only experimental theme consumer and bundled the experimental Steam CLI. The 0.2.7 ZIP carries that CLI forward and adds one opt-in in-dock Pomodoro focus-or-break completion notice. The 0.2.8 alpha release adds explicit profile associations for the current Activity or virtual desktop; P2 remains partial, W1 is unstarted, and native context behavior remains unqualified. The source also prepares an optional first Control Center slice for a future 0.2.9 alpha; Source review approved the candidate slice, which is not in published assets. The native panel and system-notification behavior also remain unqualified. The system battery reader and player selection/control increment shipped in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The full macOS-inspired optional bar, Control Center, complete Raycast-like launcher integration, AI authentication/inference and selected-text workflow, HUD/island and broader notifications, Spotify artwork/progress/client opening, Steam dock integration, automatic profile selection from desktop/Activity context, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. A stable theme contract, gallery, file import, public extension SDK, independently sold addons, and optional AI integrations are also planned.
+Manual dock profiles and widget organization are the partial P1/C1 increment shipped in 0.2.5. Version 0.2.6 added the first paste-only experimental theme consumer and bundled the experimental Steam CLI. The 0.2.7 ZIP carries that CLI forward and adds one opt-in in-dock Pomodoro focus-or-break completion notice. The 0.2.8 alpha release adds explicit profile associations for the current Activity or virtual desktop; P2 remains partial, W1 is unstarted, and native context behavior remains unqualified. The 0.2.9 alpha publishes the first optional Control Center slice; CC0 remains partial and native behavior unqualified. The native panel and system-notification behavior also remain unqualified. The system battery reader and player selection/control increment shipped in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The full macOS-inspired optional bar, Control Center, complete Raycast-like launcher integration, AI authentication/inference and selected-text workflow, HUD/island and broader notifications, Spotify artwork/progress/client opening, Steam dock integration, automatic profile selection from desktop/Activity context, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. A stable theme contract, gallery, file import, public extension SDK, independently sold addons, and optional AI integrations are also planned.
 
 See the [complete roadmap](ROADMAP.md) for sequencing, dependencies, and acceptance criteria, with companion proposals for [UX/UI](docs/UX_UI.md), [themes and extensions](docs/EXTENSIONS.md), [AI access and providers](docs/AI_INTEGRATIONS.md), and [developer experience](docs/DX.md). Declarative themes come before executable plugins; AI adapters use each provider's supported authorization route. The core remains useful without an Orla account, paid addon, or AI subscription. Marketplace checkout and the extension SDK have not been implemented.
 

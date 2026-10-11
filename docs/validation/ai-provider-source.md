@@ -1,6 +1,6 @@
 # Experimental AI provider compatibility — source validation
 
-**Status:** Experimental, integrated Source; not a published feature. The [PR #20](https://github.com/caiolombello/orla-desktop/pull/20) source commit `579e181a8dbe9b3cc690410cb1c0e9b0398e00db` was merged at 2026-10-11 05:36:17 UTC as `9d286eb2899c8e1c09b36d545eec4048745415f2`. [CI run 38115242191/job 114398735163](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) passed at 05:35:40 UTC. The published 0.2.8 `.plasmoid` and ZIP remain unchanged and exclude the launcher/AI panel; no AI release version or public assets have been created.
+**Status:** Experimental, integrated Source; not an end-user feature in the published 0.2.9 assets. The [PR #20](https://github.com/caiolombello/orla-desktop/pull/20) source commit `579e181a8dbe9b3cc690410cb1c0e9b0398e00db` was merged at 2026-10-11 05:36:17 UTC as `9d286eb2899c8e1c09b36d545eec4048745415f2`. [CI run 38115242191/job 114398735163](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163) passed at 05:35:40 UTC. Release 0.2.9 bundles only `scripts/ai.py` and `tests/test_ai.py` in its ZIP; it still excludes the launcher C++/QML, AI panel, and bar. The helper files are not a published AI feature or proof of AI readiness.
 
 ## What this slice does
 
@@ -10,7 +10,7 @@ A separate explicit consent action tests one narrow Codex compatibility exchange
 
 ## PR CI scope
 
-The PR workflow passed portable Python/QML checks and produced a Source ZIP artifact. The ZIP contains `scripts/ai.py` and `tests/test_ai.py`; the launcher C++/QML files remain excluded. Its CI run passed the helper suite, 19 tests in 13.065 seconds. This workflow did **not** compile the launcher C++/QML or run the controller CTests. This CI result is separate from the local controller/helper and one-shot evidence below.
+The PR workflow passed portable Python/QML checks and produced a Source ZIP artifact. The ZIP contains `scripts/ai.py` and `tests/test_ai.py`; the launcher C++/QML files remain excluded. Its CI run passed the helper suite, 19 tests in 13.065 seconds. This workflow did **not** compile the launcher C++/QML or run the controller CTests. The 0.2.9 release reuses the helper files in its ZIP, but this does not package the launcher panel. This CI result is separate from the local controller/helper and one-shot evidence below.
 
 ## Bounded source evidence
 
