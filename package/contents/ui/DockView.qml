@@ -20,6 +20,7 @@ Item {
     property alias pomodoro: focusTimer
     property alias integrations: localIntegrations
     property alias appearance: appearanceState
+    property alias systemBattery: power
     property string selectedIntegration: "quota"
     readonly property bool light: appearanceState.effective.baseTheme === "paper"
     readonly property color foreground: appearanceState.effective.tokens.foreground
@@ -111,7 +112,19 @@ Item {
     }
     Component.onCompleted: { tasks.launcherList = configuration.launchers; ready = true; }
     Mpris.Mpris2Model { id: media }
-    readonly property var player: media.currentPlayer
+    property var mediaSource: media
+    readonly property var player: mediaSource ? mediaSource.currentPlayer : null
+    SystemBattery {
+        id: power
+        objectName: "systemBattery"
+        active: Boolean(root.configuration.showSystemBattery)
+    }
+    readonly property string powerSubtitle: power.status === "absent" ? qsTr("Sem bateria do sistema")
+        : power.status === "loading" ? qsTr("Lendo bateria…")
+        : !power.percentKnown ? qsTr("Bateria indisponível")
+        : power.charging === "charging" ? qsTr("Carregando")
+        : power.onBattery === "ac" ? qsTr("Na tomada")
+        : power.onBattery === "battery" ? qsTr("Na bateria") : qsTr("Energia desconhecida")
     Pomodoro {
         id: focusTimer
         configuration: root.configuration
@@ -219,16 +232,30 @@ Item {
                 onClicked: pomodoroPopup.open()
             }
             Tile {
+                objectName: "musicTile"
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.configuration.showMusic
                 wide: true
                 iconSize: root.tileSize
                 iconSource: root.player ? root.player.iconName || "audio-x-generic" : "audio-x-generic"
-                title: root.player ? root.player.track || root.player.identity : qsTr("Sua música")
-                subtitle: root.player ? root.player.artist || root.player.identity : qsTr("Nenhum player aberto")
+                title: root.player ? musicControls.mediaState.boundedText(root.player.track || root.player.identity, 512) : qsTr("Sua música")
+                subtitle: root.player ? musicControls.mediaState.boundedText(root.player.artist || root.player.identity, 256) : qsTr("Nenhum player aberto")
                 tooltip: qsTr("Controles de mídia")
                 foreground: root.foreground; muted: root.muted; accent: root.accent; animationDuration: root.motion
                 onClicked: musicPopup.open()
+            }
+            Tile {
+                objectName: "systemBatteryTile"
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.configuration.showSystemBattery
+                wide: true; implicitWidth: 132
+                iconSize: root.tileSize
+                iconSource: power.charging === "charging" ? "battery-charging" : "battery"
+                title: power.percentKnown ? Math.round(power.percent) + "%" : qsTr("Energia")
+                subtitle: root.powerSubtitle
+                tooltip: qsTr("Bateria do sistema") + " · " + subtitle
+                foreground: root.foreground; muted: root.muted; accent: root.accent; animationDuration: root.motion
+                onClicked: batteryPopup.open()
             }
             Repeater {
                 model: [
@@ -372,14 +399,35 @@ Item {
     DockPopup {
         id: musicPopup
         dock: root
-        title: root.player ? root.player.identity : qsTr("Sua música")
+        title: qsTr("Sua música")
+        MediaControls {
+            id: musicControls
+            objectName: "mediaControls"
+            Layout.fillWidth: true
+            media: root.mediaSource
+            foreground: root.foreground
+            muted: root.muted
+        }
+    }
+    DockPopup {
+        id: batteryPopup
+        dock: root
+        title: qsTr("Energia")
         ColumnLayout {
-            Controls.Label { Layout.fillWidth: true; text: root.player ? root.player.track || qsTr("Sem título") : qsTr("Abra um player compatível com MPRIS, como Elisa, VLC ou Spotify."); wrapMode: Text.WordWrap; font.bold: true }
-            Controls.Label { Layout.fillWidth: true; text: root.player ? root.player.artist : ""; wrapMode: Text.WordWrap; opacity: 0.65 }
-            RowLayout {
-                Controls.Button { text: qsTr("Anterior"); enabled: Boolean(root.player && root.player.canGoPrevious); onClicked: root.player.Previous() }
-                Controls.Button { text: root.player && root.player.playbackStatus === Mpris.PlaybackStatus.Playing ? qsTr("Pausar") : qsTr("Reproduzir"); enabled: Boolean(root.player && (root.player.canPlay || root.player.canPause)); onClicked: root.player.PlayPause() }
-                Controls.Button { text: qsTr("Próxima"); enabled: Boolean(root.player && root.player.canGoNext); onClicked: root.player.Next() }
+            Controls.Label { Layout.fillWidth: true; text: power.summary; font.bold: true; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+            Controls.Label { Layout.fillWidth: true; text: root.powerSubtitle; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+            Controls.Label {
+                Layout.fillWidth: true
+                visible: power.estimatedTimeKind !== "unknown"
+                text: power.estimatedTimeKind === "full"
+                    ? qsTr("Estimativa até completar: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
+                    : qsTr("Estimativa restante: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
+                wrapMode: Text.WordWrap; textFormat: Text.PlainText
+            }
+            Controls.Label {
+                Layout.fillWidth: true
+                text: qsTr("Bateria do computador. Baterias de periféricos continuam no PeriGauge.")
+                wrapMode: Text.WordWrap; textFormat: Text.PlainText; opacity: 0.65
             }
         }
     }

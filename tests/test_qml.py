@@ -163,6 +163,46 @@ class DockInterfaceTests(unittest.TestCase):
             self.app.processEvents()
             self.assertLessEqual(self.dock.property("tileSize") + 16, self.dock.height() - 20)
 
+    def test_system_battery_opt_in_renders_zero_and_neutralizes_failure(self):
+        battery = self.window.findChild(QQuickItem, "systemBattery")
+        tile = self.window.findChild(QQuickItem, "systemBatteryTile")
+        transport = self.window.findChild(QObject, "batteryTransport")
+        self.assertIsNotNone(battery)
+        self.assertIsNotNone(tile)
+        self.assertEqual(battery.property("status"), "inactive")
+        battery.setProperty("transport", transport)
+        self.config.setProperty("showSystemBattery", True)
+        self.app.processEvents()
+        self.assertEqual(battery.property("status"), "ready")
+        self.assertTrue(tile.property("visible"))
+        self.assertEqual(tile.property("title"), "0%")
+        self.assertEqual(tile.property("subtitle"), "Na bateria")
+        transport.setProperty("fail", True)
+        self.evaluate("systemBattery.refresh()")
+        self.assertEqual(battery.property("status"), "unavailable")
+        self.assertEqual(tile.property("title"), "Energia")
+        self.assertEqual(tile.property("subtitle"), "Bateria indisponível")
+        self.config.setProperty("showSystemBattery", False)
+        self.assertEqual(battery.property("status"), "inactive")
+        self.assertFalse(tile.property("visible"))
+        self.assertFalse(self.evaluate("systemBattery.refresh()"))
+        self.assertEqual(self.warnings, [])
+
+    def test_media_popup_uses_the_shared_native_model(self):
+        controls = self.window.findChild(QQuickItem, "mediaControls")
+        self.assertIsNotNone(controls)
+        # Compare the two QObject references directly rather than executing any player action.
+        self.assertIsNotNone(controls.property("media"))
+        self.assertEqual(controls.property("media"), self.dock.property("mediaSource"))
+        fixture = self.window.findChild(QObject, "fixtureMedia")
+        self.dock.setProperty("mediaSource", fixture)
+        self.app.processEvents()
+        tile = self.window.findChild(QQuickItem, "musicTile")
+        self.assertEqual(tile.property("title"), "<b>" + "A" * 509)
+        self.assertEqual(tile.property("subtitle"), "<i>" + "B" * 253)
+        self.assertEqual(controls.property("media"), fixture)
+        self.assertEqual(self.warnings, [])
+
 
 if __name__ == "__main__":
     unittest.main()

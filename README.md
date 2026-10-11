@@ -12,13 +12,16 @@ Orla Dock is an open-source Plasma applet for pinning applications, switching be
 
 - Pin, reorder, launch, and remove applications; switch to or minimize open windows. Open app menus with Menu or Shift+F10; Escape closes them.
 - Start from Glass, Midnight or Paper and preview colors, opacity, spacing, corners, icon size and reduced motion. Apply saves; Cancel, Escape or closing settings discards the preview. Undo restores the previous applied appearance once per session.
-- Use the clock, Pomodoro timer, KDE calendar view, and generic MPRIS media controls.
+- Use the clock, Pomodoro timer, KDE calendar view, and MPRIS media controls with player selection, track/artist text, and capability-aware playback buttons.
+- Enable the optional system battery widget in settings (off by default) to read the UPower aggregate; PeriGauge remains separate for peripherals.
 - Read optional local snapshots from QuotaLantern, PeriGauge, and FalaTrace when those projects have written supported state files.
 - Keep the dock in a Plasma panel and configure its position and visibility through Plasma.
 
 The calendar uses the same calendar selection as KDE's calendar components. Orla does not connect Google Calendar by itself. To use Google events, first add and configure a Google account through KOrganizer/KDE PIM, then enable synced events in Orla. Account setup and sync depend on KDE PIM resources installed on your system.
 
-Media controls use MPRIS and work with compatible players. Spotify-specific behavior, artwork, and playback have not yet been qualified. Local project integrations read existing state files; they do not start the other apps or call their online APIs.
+Media controls share one native Plasma MPRIS model. They initially prefer Spotify when discovered and keep a manual player choice for the session. Play, Pause, Previous and Next respect the selected player’s capabilities; track and artist render as bounded plain text. A private D-Bus fixture qualified the native model with two synthetic players, not the real Spotify client or audio playback. Artwork, progress and opening the client remain planned.
+
+System battery reads only UPower’s aggregate display device, every 30 seconds while enabled, with a five-second request timeout. A genuine 0% reading stays visible; absent or unavailable data has a neutral state. External power, charging and estimated time appear only when supplied. It does not control hardware or enumerate peripheral batteries. See [battery and media validation](docs/validation/battery-media-0.2.4.md) for test coverage and limits. Local project integrations read existing state files; they do not start the other apps or call their online APIs.
 
 Appearance uses a separate override, preserving earlier theme/icon/motion preferences. Restore prepares those preferences for preview and requires Apply. The [experimental theme kit](docs/theme-format.md) validates and packages community data; importing/applying those files remains planned. See [appearance validation](docs/validation/appearance-0.2.3.md) for test coverage and native limits.
 
@@ -46,10 +49,10 @@ Download the release `.zip` from the [GitHub Releases page](https://github.com/c
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.3.zip
-cd orla-dock-0.2.3
+unzip orla-dock-0.2.4.zip
+cd orla-dock-0.2.4
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.3.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.4.plasmoid
 ```
 
 The helper registers the local integration service when its packaged bridge and optional dependencies are available. `doctor` reports missing optional dependencies separately. After restoring them, reinstall the same package to activate integrations. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
@@ -61,7 +64,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.3.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.4.plasmoid
 ```
 
 To check the local setup or remove Orla's managed files:
@@ -91,7 +94,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For securi
 
 Orla Desktop is an alpha project. The current component keeps the existing Plasma package identifier `org.caiodock.dock` and D-Bus service `org.caiodock.Integrations` to preserve existing installations and settings. The name shown to users is Orla Dock; these internal identifiers are compatibility details.
 
-The macOS-inspired optional menu bar, Control Center, Raycast-like launcher, Dynamic Island/HUD/toasts, Spotify-specific support, system battery, Steam, profiles, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
+The system battery reader and player selection/control increment ship in 0.2.4; the full B1/M1 milestones remain open for hardware and real-client qualification. The macOS-inspired optional menu bar, Control Center, Raycast-like launcher, Dynamic Island/HUD/toasts, Spotify artwork/progress/client opening, Steam, profiles, desktop/activity switching, automatic updates, and fuller project integrations are roadmap items. Community themes, a versioned extension SDK, independently sold addons, and optional AI integrations are also planned. They are not included in the current release.
 
 See the [complete roadmap](ROADMAP.md) for sequencing, dependencies, and acceptance criteria, with companion proposals for [UX/UI](docs/UX_UI.md), [themes and extensions](docs/EXTENSIONS.md), [AI access and providers](docs/AI_INTEGRATIONS.md), and [developer experience](docs/DX.md). Declarative themes come before executable plugins; AI adapters use each provider's supported authorization route. The core remains useful without an Orla account, paid addon, or AI subscription. Marketplace checkout and the extension SDK have not been implemented.
 
