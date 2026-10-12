@@ -133,6 +133,228 @@ class AiTextControllerTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void acceptedFailureMessagesAreTruthfulAfterCleanup_data()
+    {
+        QTest::addColumn<QString>("boundary");
+        QTest::addColumn<QString>("code");
+        QTest::addColumn<QString>("message");
+        QTest::addColumn<bool>("lateCancel");
+        QTest::newRow("invalid_request") << QStringLiteral("clean-failed")
+            << QStringLiteral("invalid_request") << QStringLiteral("O pedido de texto não é válido.") << false;
+        QTest::newRow("helper_unavailable") << QStringLiteral("clean-failed")
+            << QStringLiteral("helper_unavailable") << QStringLiteral("A geração local não está disponível nesta instalação.") << false;
+        QTest::newRow("credential_cancelled") << QStringLiteral("clean-failed")
+            << QStringLiteral("credential_cancelled") << QStringLiteral("A autorização para a geração local foi cancelada. Autorize novamente para tentar.") << false;
+        QTest::newRow("credential_required") << QStringLiteral("clean-failed")
+            << QStringLiteral("credential_required") << QStringLiteral("A geração local requer uma credencial. Configure a autorização para tentar novamente.") << false;
+        QTest::newRow("endpoint_rejected") << QStringLiteral("clean-failed")
+            << QStringLiteral("endpoint_rejected") << QStringLiteral("O endereço da geração local foi recusado. Verifique a configuração do provedor.") << false;
+        QTest::newRow("connection_failed") << QStringLiteral("clean-failed")
+            << QStringLiteral("connection_failed") << QStringLiteral("Não foi possível conectar ao provedor local. Verifique se ele está em execução e tente novamente.") << false;
+        QTest::newRow("tls_failed") << QStringLiteral("clean-failed")
+            << QStringLiteral("tls_failed") << QStringLiteral("A conexão segura com o provedor local falhou. Verifique a configuração de segurança.") << false;
+        QTest::newRow("authentication_failed") << QStringLiteral("clean-failed")
+            << QStringLiteral("authentication_failed") << QStringLiteral("A autenticação no provedor local falhou. Verifique a credencial configurada.") << false;
+        QTest::newRow("permission_denied") << QStringLiteral("clean-failed")
+            << QStringLiteral("permission_denied") << QStringLiteral("O provedor local recusou a permissão para gerar texto. Verifique as permissões configuradas.") << false;
+        QTest::newRow("model_unavailable") << QStringLiteral("clean-failed")
+            << QStringLiteral("model_unavailable") << QStringLiteral("O modelo selecionado não está disponível no provedor local. Verifique se ele está instalado ou escolha outro modelo.") << false;
+        QTest::newRow("rate_limited") << QStringLiteral("clean-failed")
+            << QStringLiteral("rate_limited") << QStringLiteral("O provedor local atingiu o limite de solicitações. Aguarde e tente novamente.") << false;
+        QTest::newRow("provider_unavailable") << QStringLiteral("clean-failed")
+            << QStringLiteral("provider_unavailable") << QStringLiteral("O provedor local está indisponível. Verifique se ele está em execução e tente novamente.") << false;
+        QTest::newRow("provider_failed") << QStringLiteral("clean-failed")
+            << QStringLiteral("provider_failed") << QStringLiteral("O provedor local falhou ao gerar texto. Tente novamente.") << false;
+        QTest::newRow("unsupported_provider_event") << QStringLiteral("clean-failed")
+            << QStringLiteral("unsupported_provider_event") << QStringLiteral("O provedor local enviou um evento não suportado. Verifique a compatibilidade do provedor.") << false;
+        QTest::newRow("protocol_invalid") << QStringLiteral("clean-failed")
+            << QStringLiteral("protocol_invalid") << QStringLiteral("A resposta da geração local não pôde ser validada.") << false;
+        QTest::newRow("response_limit") << QStringLiteral("clean-failed")
+            << QStringLiteral("response_limit") << QStringLiteral("A resposta da geração local excedeu o limite permitido. Reduza o pedido e tente novamente.") << false;
+        QTest::newRow("operation_timeout") << QStringLiteral("clean-failed")
+            << QStringLiteral("operation_timeout") << QStringLiteral("A geração local excedeu o tempo permitido.") << false;
+        QTest::newRow("process_cleanup_failed") << QStringLiteral("clean-failed")
+            << QStringLiteral("process_cleanup_failed") << QStringLiteral("A limpeza do processo local não pôde ser confirmada.") << false;
+        QTest::newRow("unsupported_transport") << QStringLiteral("clean-failed")
+            << QStringLiteral("unsupported_transport") << QStringLiteral("O transporte da geração local não é suportado nesta instalação. Verifique a configuração do provedor.") << false;
+        QTest::newRow("connection_failed-late-cancel") << QStringLiteral("clean-failed")
+            << QStringLiteral("connection_failed") << QStringLiteral("Não foi possível conectar ao provedor local. Verifique se ele está em execução e tente novamente.") << true;
+        QTest::newRow("model_unavailable-late-cancel") << QStringLiteral("clean-failed")
+            << QStringLiteral("model_unavailable") << QStringLiteral("O modelo selecionado não está disponível no provedor local. Verifique se ele está instalado ou escolha outro modelo.") << true;
+        QTest::newRow("rate_limited-late-cancel") << QStringLiteral("clean-failed")
+            << QStringLiteral("rate_limited") << QStringLiteral("O provedor local atingiu o limite de solicitações. Aguarde e tente novamente.") << true;
+        QTest::newRow("provider_unavailable-late-cancel") << QStringLiteral("clean-failed")
+            << QStringLiteral("provider_unavailable") << QStringLiteral("O provedor local está indisponível. Verifique se ele está em execução e tente novamente.") << true;
+        QTest::newRow("extra-event") << QStringLiteral("extra-event")
+            << QStringLiteral("rate_limited") << QStringLiteral("A resposta da geração local não pôde ser validada.") << false;
+        QTest::newRow("unterminated-bytes") << QStringLiteral("unterminated-bytes")
+            << QStringLiteral("rate_limited") << QStringLiteral("A resposta da geração local não pôde ser validada.") << false;
+        QTest::newRow("nonzero-exit") << QStringLiteral("nonzero-exit")
+            << QStringLiteral("rate_limited") << QStringLiteral("A resposta da geração local não pôde ser validada.") << false;
+    }
+
+    void acceptedFailureMessagesAreTruthfulAfterCleanup()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QFETCH(QString, boundary);
+        QFETCH(QString, code);
+        QFETCH(QString, message);
+        QFETCH(bool, lateCancel);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        const QString gate = directory.filePath(QStringLiteral("allow-eof"));
+        const QByteArray script = QByteArray(R"PY(import json,os,pathlib,sys,time
+r=json.loads(sys.stdin.buffer.read())
+with pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(').open('a') as record:
+ record.write(str(os.getpid())+' '+r['requestId']+'\n')
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+retry=r['requestId'].endswith('.retry')
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='fresh' if retry else 'retained')
+if retry:
+ emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':4,'outputTokens':5,'totalTokens':9},cost={'status':'unknown','currency':None,'amount':None})
+ sys.exit(0)
+emit(2,'failed',code=')PY") + code.toUtf8() + QByteArray(R"PY(',retryable=True)
+while not pathlib.Path(r')PY") + gate.toUtf8() + QByteArray(R"PY(').exists(): time.sleep(.005)
+boundary=')PY") + boundary.toUtf8() + QByteArray(R"PY('
+if boundary=='extra-event': emit(3,'delta',text='rejected')
+if boundary=='unterminated-bytes':
+ sys.stdout.write('unterminated')
+ sys.stdout.flush()
+sys.exit(7 if boundary=='nonzero-exit' else 0)
+)PY");
+        bool allowCleanup = false;
+        QStringList runtimePaths;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                runtimePaths.append(path);
+                return allowCleanup && QDir(path).removeRecursively();
+            });
+        const auto cleanupGuard = qScopeGuard([&] { allowCleanup = true; });
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        QStringList order;
+        QVariantMap notifiedFinal;
+        bool originalPhase = true;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (!originalPhase) return;
+            if (controller.busy() && controller.errorCode() == QStringLiteral("process_cleanup_failed")) {
+                order.append(QStringLiteral("cleanup-failed"));
+            } else if (!controller.busy()) {
+                order.append(QStringLiteral("finished"));
+                notifiedFinal = QVariantMap{{QStringLiteral("status"), controller.status()},
+                    {QStringLiteral("errorCode"), controller.errorCode()},
+                    {QStringLiteral("error"), controller.error()},
+                    {QStringLiteral("output"), controller.output()},
+                    {QStringLiteral("usage"), controller.usage()}};
+            }
+        });
+        controller.generate(QStringLiteral("request.failed-validation"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("prompt-canary"), QStringLiteral("model-canary"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        // Read-only witness: the syntactic failed line was parsed while the real helper holds EOF.
+        QTRY_VERIFY_WITH_TIMEOUT(controller.m_terminalEvent
+            && controller.m_terminalType == QStringLiteral("failed")
+            && controller.m_process.state() == QProcess::Running, 3000);
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QCOMPARE(controller.status(), QStringLiteral("running"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(closeReady.size(), 0);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identity = record.readAll();
+        record.close();
+        QCOMPARE(identity.count('\n'), 1);
+        const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+        QVERIFY(pid > 0);
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == 0);
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == 0);
+        QFile release(gate);
+        QVERIFY(release.open(QIODevice::WriteOnly));
+        QCOMPARE(release.write("allow"), qint64(5));
+        release.close();
+        QTRY_COMPARE_WITH_TIMEOUT(controller.errorCode(), QStringLiteral("process_cleanup_failed"), 3000);
+        QVERIFY(controller.busy());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(!runtimePaths.isEmpty());
+        QVERIFY(QFileInfo::exists(runtimePaths.first()));
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        const bool protocolObserved = controller.m_protocolInvalid;
+        const int actualExitCode = controller.m_pendingExitCode;
+        if (lateCancel) controller.cancelAll();
+        allowCleanup = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+        errno = 0;
+        QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        errno = 0;
+        QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        qInfo() << "OWNED_STABLE_FAILURE_MESSAGE_CLEANUP" << code << boundary << lateCancel << pid
+                << "protocol" << protocolObserved << "actualExit" << actualExitCode
+                << "runtimeGone" << runtimePaths << "order" << order
+                << "finalNotified" << notifiedFinal;
+        // Final-cause oracles only run after real PID/group/runtime absence.
+        if (boundary == QStringLiteral("extra-event") || boundary == QStringLiteral("unterminated-bytes"))
+            QVERIFY(protocolObserved);
+        if (boundary == QStringLiteral("nonzero-exit")) QCOMPARE(actualExitCode, 7);
+        const QString expected = boundary == QStringLiteral("clean-failed")
+            ? code : QStringLiteral("invalid_helper_response");
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), expected);
+        QCOMPARE(order, lateCancel
+            ? QStringList({QStringLiteral("cleanup-failed"), QStringLiteral("cleanup-failed"), QStringLiteral("finished")})
+            : QStringList({QStringLiteral("cleanup-failed"), QStringLiteral("finished")}));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("status")).toString(), QStringLiteral("failed"));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("errorCode")).toString(), expected);
+        QCOMPARE(notifiedFinal.value(QStringLiteral("error")).toString(), controller.error());
+        QCOMPARE(controller.error(), message);
+        QCOMPARE(notifiedFinal.value(QStringLiteral("error")).toString(), message);
+        QCOMPARE(controller.m_pendingExitStatus, QProcess::NormalExit);
+        QCOMPARE(actualExitCode, boundary == QStringLiteral("nonzero-exit") ? 7 : 0);
+        QVERIFY(!controller.error().contains(QStringLiteral("model-canary")));
+        QVERIFY(!controller.error().contains(QStringLiteral("127.0.0.1")));
+        QVERIFY(!controller.error().contains(QStringLiteral("prompt-canary")));
+        QCOMPARE(notifiedFinal.value(QStringLiteral("output")).toString(), QStringLiteral("retained"));
+        QVERIFY(notifiedFinal.value(QStringLiteral("usage")).toMap().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("retained"));
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QCOMPARE(closeReady.size(), 0);
+        originalPhase = false;
+        controller.generate(QStringLiteral("request.failed-validation.retry"), QStringLiteral("summarize"),
+                            QVariant(), QStringLiteral("prompt-canary"), QStringLiteral("model-canary"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray identities = record.readAll();
+        QCOMPARE(identities.count('\n'), 2);
+        for (const QByteArray &line : identities.split('\n')) {
+            if (line.isEmpty()) continue;
+            const qint64 captured = line.left(line.indexOf(' ')).toLongLong();
+            QVERIFY(captured > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(captured), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : runtimePaths) QVERIFY(!QFileInfo::exists(path));
+#endif
+    }
+
     void failedTerminalIsValidatedBeforePublishingItsCause_data()
     {
         QTest::addColumn<QString>("boundary");

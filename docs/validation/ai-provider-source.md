@@ -473,7 +473,7 @@ for the earlier SIGSEGV, hosted CI, native/provider/release admission.
 
 CI at preceding Source5f898ce passed both jobs (run38177233983, six CTests80.42s),
 with GDB skipped. CI and merge for this follow-up remain pending. The permanent
-launcher canary remains5aaf518; no new installed payload, real provider, personal
+launcher canary remains `5aaf518`; no new installed payload, real provider, personal
 calendar, native clipboard or full roadmap acceptance is claimed.
 
 ### Failed-event validation and compact launcher — subsequent composition
@@ -520,3 +520,29 @@ pending. The permanent installed launcher is still5aaf518. Historical UI,
 behavior and supplemental challenge SIGSEGV causes remain UNKNOWN; these
 passing checks do not establish a crash fix, actual model generation, native
 clipboard/accessibility, multiple-display coverage, release or full admission.
+
+
+### Started publication and actionable local failure messages
+
+Typed cancellation or timeout while publishing `started` now uses the existing
+started finalizer once publication has begun. The complete-write fixture covers
+SIGTERM/SIGALRM after all started bytes but before the sink returns: a canonical
+cancelled/timeout terminal follows, without starting the connector. Returned
+publication counters remain truthful. Partial/no-write ambiguity remains; this
+is no delivery, atomic-write, acknowledgment or automatic-retry guarantee.
+
+All accepted stable failure codes now have fixed, translated recovery messages.
+Missing models, connection failures, rate limits and unavailable providers are
+shown accurately after valid EOF/normal exit and cleanup; malformed/nonzero
+responses retain the validation error. No provider body or credential is shown.
+Independent reviews approved both changes. Their causal RED records and two
+controller-author provenance caveats remain preserved.
+
+The exact five-file composition passed a fresh 40-step build, all six registered
+CTests once (90.697s driver), and 116 Python tests (14.636s unittest;14.801s driver).
+Controller 83 and UI 32 passed within the unchanged 40/30-second caps; behavior had
+one expected skip and the separate owned-app test passed. Observed owned
+processes, groups and runtime paths were absent afterward; private TMP was empty.
+These are bounded Source/local checks. Hosted CI for this follow-up, compact
+native tests, real providers, release and full-roadmap admission remain open.
+The installed launcher remains `5aaf518`; historical SIGSEGV causes remain UNKNOWN.

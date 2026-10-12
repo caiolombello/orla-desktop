@@ -154,6 +154,34 @@ QString safeMessage(const QString &code)
         return AiTextController::tr("A limpeza do processo local não pôde ser confirmada.");
     if (code == QStringLiteral("cancelled_unconfirmed"))
         return AiTextController::tr("O cancelamento local não pôde ser confirmado.");
+    if (code == QStringLiteral("credential_cancelled"))
+        return AiTextController::tr("A autorização para a geração local foi cancelada. Autorize novamente para tentar.");
+    if (code == QStringLiteral("credential_required"))
+        return AiTextController::tr("A geração local requer uma credencial. Configure a autorização para tentar novamente.");
+    if (code == QStringLiteral("endpoint_rejected"))
+        return AiTextController::tr("O endereço da geração local foi recusado. Verifique a configuração do provedor.");
+    if (code == QStringLiteral("connection_failed"))
+        return AiTextController::tr("Não foi possível conectar ao provedor local. Verifique se ele está em execução e tente novamente.");
+    if (code == QStringLiteral("tls_failed"))
+        return AiTextController::tr("A conexão segura com o provedor local falhou. Verifique a configuração de segurança.");
+    if (code == QStringLiteral("authentication_failed"))
+        return AiTextController::tr("A autenticação no provedor local falhou. Verifique a credencial configurada.");
+    if (code == QStringLiteral("permission_denied"))
+        return AiTextController::tr("O provedor local recusou a permissão para gerar texto. Verifique as permissões configuradas.");
+    if (code == QStringLiteral("model_unavailable"))
+        return AiTextController::tr("O modelo selecionado não está disponível no provedor local. Verifique se ele está instalado ou escolha outro modelo.");
+    if (code == QStringLiteral("rate_limited"))
+        return AiTextController::tr("O provedor local atingiu o limite de solicitações. Aguarde e tente novamente.");
+    if (code == QStringLiteral("provider_unavailable"))
+        return AiTextController::tr("O provedor local está indisponível. Verifique se ele está em execução e tente novamente.");
+    if (code == QStringLiteral("provider_failed"))
+        return AiTextController::tr("O provedor local falhou ao gerar texto. Tente novamente.");
+    if (code == QStringLiteral("unsupported_provider_event"))
+        return AiTextController::tr("O provedor local enviou um evento não suportado. Verifique a compatibilidade do provedor.");
+    if (code == QStringLiteral("response_limit"))
+        return AiTextController::tr("A resposta da geração local excedeu o limite permitido. Reduza o pedido e tente novamente.");
+    if (code == QStringLiteral("unsupported_transport"))
+        return AiTextController::tr("O transporte da geração local não é suportado nesta instalação. Verifique a configuração do provedor.");
     return AiTextController::tr("A resposta da geração local não pôde ser validada.");
 }
 

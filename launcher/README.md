@@ -228,3 +228,12 @@ As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles
 - [KWaylandExtras 6.30](https://github.com/KDE/kwindowsystem/blob/v6.30.0/src/kwaylandextras.h), [política de token — KWin 6.7.5](https://github.com/KDE/kwin/blob/v6.7.5/src/xdgactivationv1.cpp).
 - [TextField](https://doc.qt.io/qt-6.11/qml-qtquick-controls-textfield.html), [Text.PlainText/elide](https://doc.qt.io/qt-6.11/qml-qtquick-text.html), [Keys](https://doc.qt.io/qt-6.11/qml-qtquick-keys.html), [QQuickWindow](https://doc.qt.io/qt-6.11/qquickwindow.html) — Qt 6.11.2.
 - [QProcess](https://doc.qt.io/qt-6.11/qprocess.html) e [QDesktopServices](https://doc.qt.io/qt-6.11/qdesktopservices.html) — subprocesso com argumentos separados e encaminhamento de URI no Qt 6.11.2.
+
+
+A revisão mais recente mantém cancelamento/timeout durante a publicação de
+`started` e apresenta mensagens fixas de recuperação para todos os códigos de
+falha aceitos. Dois revisores independentes aprovaram os escopos; a composição
+passou build novo de 40 passos, seis CTests (90,697s) e 116 testes Python. A fixture cobre a
+escrita completa antes do retorno do sink; não promete entrega/ACK ou escrita
+parcial atômica. CI da revisão, atualização do canary `5aaf518`, provedores reais e
+admissão completa seguem pendentes. Veja o registro de validação de IA.

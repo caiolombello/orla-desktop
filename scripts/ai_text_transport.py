@@ -926,6 +926,8 @@ def _body_contains_secret(value, secret):
 def _publish(sink, events, state):
     for event in events:
         try:
+            if event["type"] == "started":
+                state["started_publication_begun"] = True
             sink.publish(event)
         except (_Cancelled, _TimedOut):
             raise
@@ -1128,6 +1130,7 @@ def _run_call(*, input_reader, connector_factory, clock, signal_boundary, sink):
     operational_error = None
     sink_unavailable = False
     state = {
+        "started_publication_begun": False,
         "published_events": 0,
         "partial_published": False,
         "terminal_attempted": False,
@@ -1190,7 +1193,9 @@ def _run_call(*, input_reader, connector_factory, clock, signal_boundary, sink):
                 _publish(sink, events, state)
                 _check_operational(clock, deadline, token)
     except Exception as error:
-        if not ledger.started_published:
+        if not ledger.started_published and not (
+                state["started_publication_begun"] and
+                isinstance(error, (_Cancelled, _TimedOut))):
             if not ledger.setup_mask_acquired and ledger.handlers_installed:
                 try:
                     ledger.setup_previous_mask = signal_boundary.block(SIGNAL_NAMES)

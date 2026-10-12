@@ -1862,6 +1862,52 @@ class AiTextTransportTests(unittest.TestCase):
                     "completed", "failed", "cancelled",
                 } for event in sink.events), 1)
 
+    def test_lifecycle_exception_inside_started_publish_finalizes_without_ack(self):
+        cases = ((self.target._Cancelled, "cancelled", None),
+                 (self.target._TimedOut, "failed", "operation_timeout"))
+        for exception, terminal_type, code in cases:
+            with self.subTest(exception=exception.__name__):
+                signals = FakeSignals()
+                factories = []
+                terminal_calls = []
+
+                def interrupt(event):
+                    if event["type"] == "started":
+                        raise exception()
+                    terminal_calls.extend(signals.calls)
+
+                sink = RecordingSink(on_publish=interrupt)
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda spec: factories.append(spec),
+                    clock=FakeClock(), signal_boundary=signals, sink=sink,
+                )
+                self.assertEqual(factories, [])
+                self.assertEqual((outcome.state, outcome.exit_code),
+                                 ("terminal_emitted", 0))
+                self.assertEqual((outcome.terminal, outcome.code), (terminal_type, code))
+                self.assertEqual(outcome.published_events, 1)
+                self.assertFalse(outcome.partial_published)
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", terminal_type])
+                self.assertEqual([event["sequence"] for event in sink.events], [0, 1])
+                expected = {"schemaVersion": 1, "requestId": "txt-transport.1",
+                            "sequence": 1, "type": terminal_type}
+                if code is not None:
+                    expected.update(code=code, retryable=True)
+                self.assertEqual(sink.events[-1], expected)
+                self.assertIn(("cancel_timer",), terminal_calls)
+                self.assertIn(("hook", "after_wipe"), terminal_calls)
+                self.assertFalse(any(call[0] == "restore_handler" for call in terminal_calls))
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.calls[-1], ("restore_mask", "original-mask"))
+                retry, retry_sink, *_rest = self.run_local([
+                    b'{"message":{"role":"assistant","content":""},"done":true}\n', b"",
+                ])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["sequence"], 1)
+
     def test_lifecycle_exception_during_delta_publication_keeps_terminal_class(self):
         delta = b'{"message":{"role":"assistant","content":"kept"},"done":false}\n'
         terminal = (

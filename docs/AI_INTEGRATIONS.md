@@ -249,3 +249,12 @@ As versões são janelas de planejamento, sem datas prometidas. Adaptadores inte
 - Provar que dados externos e resultado do modelo não executam ações nem elevam acesso; permissões negadas/revogadas impedem chamadas ao broker.
 
 Esta especificação orienta a implementação. Não concede ao Orla acesso a qualquer conta, assinatura, token, ferramenta ou dado do usuário.
+
+
+A revisão mais recente mantém cancelamento/timeout durante a publicação de
+`started` e apresenta mensagens fixas de recuperação para todos os códigos de
+falha aceitos. Dois revisores independentes aprovaram os escopos; a composição
+passou build novo de 40 passos, seis CTests (90,697s) e 116 testes Python. A fixture cobre a
+escrita completa antes do retorno do sink; não promete entrega/ACK ou escrita
+parcial atômica. CI da revisão, atualização do canary `5aaf518`, provedores reais e
+admissão completa seguem pendentes. Veja o registro de validação de IA.
