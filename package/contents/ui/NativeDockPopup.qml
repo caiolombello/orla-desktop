@@ -6,7 +6,15 @@ PlasmaCore.Dialog {
     id: dialog
     readonly property var owner: popupOwner
     objectName: "nativeDockDialog"
-    visualParent: owner.anchorControl
+    // Retain the tile center, but place the popup outside the complete dock.
+    property Item anchorProxy: Item {
+        parent: dialog.owner.dock
+        width: dialog.owner.anchorControl ? dialog.owner.anchorControl.width : 1
+        x: dialog.owner.anchorX - width / 2
+        y: -10
+        height: dialog.owner.dock.height + 20
+    }
+    visualParent: anchorProxy
     location: owner.dock.popAbove ? PlasmaCore.Types.BottomEdge : PlasmaCore.Types.TopEdge
     // AppletPopup deliberately snaps near-center controls to screen center.
     type: PlasmaCore.Dialog.PopupMenu
