@@ -37,6 +37,7 @@ Q_SIGNALS:
     void changed();
     void closeRequested();
 private:
+    friend class LauncherControllerTestOwner;
     void refresh();
     void steamChanged();
     QString resultId(const QModelIndex &index) const;

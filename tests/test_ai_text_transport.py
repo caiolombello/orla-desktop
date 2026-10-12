@@ -1848,7 +1848,7 @@ class AiTextTransportTests(unittest.TestCase):
 
     def test_restore_failure_after_one_terminal_attempt_changes_only_private_outcome(self):
         terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
-        for failure in (("restore_handler", 1), ("restore_mask", 3)):
+        for failure in tuple(("restore_handler", count) for count in range(1, 7)) + (("restore_mask", 3),):
             with self.subTest(failure=failure):
                 signals = FakeSignals(fail_at={failure})
                 outcome, sink, *_rest = self.run_local(
@@ -1856,11 +1856,62 @@ class AiTextTransportTests(unittest.TestCase):
                 )
                 self.assertEqual(outcome.state, "finalization_failed")
                 self.assertEqual(outcome.exit_code, 3)
+                self.assertEqual(outcome.code, "process_cleanup_failed")
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                # Late-recorder failures still attempt all three originals;
+                # failures restoring an original remain explicitly unconfirmed.
+                if failure[0] == "restore_mask" or failure[1] <= 3:
+                    self.assertEqual(signals.handlers, {name: "original-" + name
+                                                        for name in self.target.SIGNAL_NAMES})
                 self.assertEqual([event["type"] for event in sink.events],
                                  ["started", "delta", "completed"])
                 self.assertEqual(sum(event["type"] in {
                     "completed", "failed", "cancelled",
                 } for event in sink.events), 1)
+
+    def test_late_cleanup_lifecycle_keeps_terminal_failure_and_original_mask(self):
+        target = self.target
+        class PendingSignals(FakeSignals):
+            def __init__(self, name, original_mask):
+                super().__init__()
+                self.name = name
+                self.mask = original_mask
+                self.original_mask = original_mask
+                self.delivered_with_handlers = False
+
+            def block(self, names):
+                self._step("block", ("block", tuple(names)))
+                previous = self.mask
+                self.mask = "blocked"
+                return previous
+
+            def restore_mask(self, mask):
+                count = self._step("restore_mask", ("restore_mask", mask))
+                self.mask = mask
+                if count == 3:
+                    self.delivered_with_handlers = all(callable(self.handlers[name])
+                                                       for name in target.SIGNAL_NAMES)
+                    self.handlers[self.name]()
+                    raise target._TimedOut() if self.name == "SIGALRM" else target._Cancelled()
+
+        completed = b'{"message":{"role":"assistant","content":""},"done":true}\n'
+        cases = (([completed, b""], None, "terminal_emitted", "completed", None, 0),
+                 ([b'invalid json\n'], None, "terminal_emitted", "failed", "protocol_invalid", 0),
+                 ([completed, b""], 2, "sink_failed", None, None, 3))
+        for name in ("SIGTERM", "SIGALRM"):
+            for chunks, sink_failure, state, terminal, code, exit_code in cases:
+                with self.subTest(signal=name, state=state, terminal=terminal):
+                    signals = PendingSignals(name, frozenset({"caller-blocked-signal"}))
+                    sink = RecordingSink(fail_at=sink_failure)
+                    outcome, *_rest = self.run_local(chunks, signals=signals, sink=sink)
+                    self.assertEqual((outcome.state, outcome.terminal, outcome.code, outcome.exit_code),
+                                     (state, terminal, code, exit_code))
+                    self.assertTrue(signals.delivered_with_handlers)
+                    self.assertEqual(signals.mask, signals.original_mask)
+                    self.assertEqual(signals.handlers, {signal_name: "original-" + signal_name
+                                                        for signal_name in target.SIGNAL_NAMES})
+                    self.assertEqual([call[0] for call in signals.calls[-4:]],
+                                     ["restore_mask", "restore_handler", "restore_handler", "restore_handler"])
 
     def test_started_mask_failure_restores_original_mask_and_first_error(self):
         class MaskSignals(FakeSignals):
@@ -1904,7 +1955,7 @@ class AiTextTransportTests(unittest.TestCase):
                 self.assertEqual(factories, [])
                 self.assertEqual(signals.mask, "initial-mask")
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.counts["restore_handler"], 6 if state == "terminal_emitted" else 3)
                 if state == "terminal_emitted":
                     self.assertEqual(sink.events[-1]["code"], "process_cleanup_failed")
                 elif sink_failure:
@@ -1948,8 +1999,13 @@ class AiTextTransportTests(unittest.TestCase):
                 self.assertIn(("hook", "after_wipe"), terminal_calls)
                 self.assertFalse(any(call[0] == "restore_handler" for call in terminal_calls))
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
-                self.assertEqual(signals.calls[-1], ("restore_mask", "original-mask"))
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                self.assertEqual(signals.calls[-4:], [
+                    ("restore_mask", "original-mask"),
+                    ("restore_handler", "SIGALRM", "original-SIGALRM"),
+                    ("restore_handler", "SIGTERM", "original-SIGTERM"),
+                    ("restore_handler", "SIGINT", "original-SIGINT"),
+                ])
                 retry, retry_sink, *_rest = self.run_local([
                     b'{"message":{"role":"assistant","content":""},"done":true}\n', b"",
                 ])
@@ -1976,7 +2032,7 @@ class AiTextTransportTests(unittest.TestCase):
                 )
                 self.assertEqual(trace, ["response.close", "connector.close"])
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.counts["restore_handler"], 6)
                 self.assertEqual(len(response.calls), 1)
                 self.assertEqual((outcome.state, outcome.exit_code),
                                  ("terminal_emitted", 0))
@@ -2013,7 +2069,7 @@ class AiTextTransportTests(unittest.TestCase):
                 )
                 self.assertEqual(trace, ["response.close", "connector.close"])
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.counts["restore_handler"], 6)
                 self.assertEqual((outcome.state, outcome.exit_code), ("sink_failed", 3))
                 self.assertIsNone(outcome.terminal)
                 self.assertEqual([event["type"] for event in sink.events], ["started"])
@@ -2163,7 +2219,7 @@ class AiTextTransportTests(unittest.TestCase):
                     )
 
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.counts["restore_handler"], 6 if kind == "normal" else 3)
                 if kind == "preflight":
                     self.assertEqual(outcome.state, "preflight_failed")
                     self.assertEqual(outcome.exit_code, 2)

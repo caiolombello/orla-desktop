@@ -17,6 +17,7 @@
 #include "AiProviderController.h"
 #include "AiTextController.h"
 #include "LauncherController.h"
+#include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
 #include "WindowSession.h"
@@ -42,9 +43,31 @@ class UiTests final : public QObject
     }
 private Q_SLOTS:
     void initTestCase() { verifyPrivateTestBus(); }
+    void ownedControllerRunnersDieBeforeTheNextCalculatorFixture()
+    {
+        QList<QPointer<KRunner::AbstractRunner>> previousRunners;
+        {
+            LauncherControllerTestOwner first;
+            previousRunners = first.observedRunners();
+            QVERIFY(!previousRunners.isEmpty());
+            first.controller().setQuery(QStringLiteral("2+2"));
+            QTRY_COMPARE_WITH_TIMEOUT(first.controller().status(), QStringLiteral("ready"), 5000);
+            QCOMPARE(first.controller().rows().first().toMap().value("title").toString(), QStringLiteral("4"));
+        }
+        for (const auto &runner : previousRunners) QVERIFY(runner.isNull());
+        LauncherControllerTestOwner second;
+        second.controller().setQuery(QStringLiteral("2+2"));
+        QTRY_COMPARE_WITH_TIMEOUT(second.controller().status(), QStringLiteral("ready"), 5000);
+        QCOMPARE(second.controller().rows().first().toMap().value("title").toString(), QStringLiteral("4"));
+        second.controller().setQuery(QStringLiteral("3+3"));
+        QTRY_COMPARE_WITH_TIMEOUT(second.controller().status(), QStringLiteral("ready"), 5000);
+        QCOMPARE(second.controller().rows().first().toMap().value("title").toString(), QStringLiteral("6"));
+    }
+
     void ownWindowRendersResultsWithoutExecuting()
     {
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
@@ -92,7 +115,8 @@ private Q_SLOTS:
     void headerEntryTargetsFitAndKeepKeyboardControl()
     {
         QFETCH(int, width);
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
@@ -133,7 +157,8 @@ private Q_SLOTS:
 
     void searchKeyboardAndEscape()
     {
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
@@ -196,7 +221,8 @@ private Q_SLOTS:
         helperFile.write("'))\nelse:\n raise SystemExit(2)\n");
         helperFile.close();
 
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
@@ -333,7 +359,8 @@ private Q_SLOTS:
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -378,7 +405,8 @@ private Q_SLOTS:
         helperFile.write("').touch()\nrequest=json.loads(sys.stdin.buffer.readline())\nbase={'schemaVersion':1,'requestId':request['requestId']}\nevents=[dict(base,sequence=0,type='started',provider='ollama_local',destination=request['endpoint'],model=request['model']),dict(base,sequence=1,type='delta',text='resultado parcial')]\nfor event in events:\n print(json.dumps(event,separators=(',',':')),flush=True)\ntime.sleep(60)\n");
         helperFile.close();
 
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
                                 directory.filePath(QStringLiteral("missing-ai.py")));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
@@ -472,7 +500,8 @@ private Q_SLOTS:
         }
         file.close();
 
-        LauncherController controller;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-ai.py")));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-steam.py")));
@@ -554,7 +583,8 @@ private Q_SLOTS:
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), providerHelper, {}, nullptr, {}, 100);
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper, {}, nullptr, {}, 100);
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-steam.py")));
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -632,7 +662,8 @@ private Q_SLOTS:
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
                                 directory.filePath(QStringLiteral("missing-ai-text.py")));
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -684,7 +715,8 @@ private Q_SLOTS:
                                 directory.filePath(QStringLiteral("missing-ai.py")));
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), aiHelper);
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -763,7 +795,8 @@ private Q_SLOTS:
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
                                 {}, nullptr, {}, 100);
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -921,7 +954,8 @@ private Q_SLOTS:
                         || helperReapedAndRuntimeRemoved(receipt));
                 return true;
             });
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -1191,7 +1225,8 @@ private Q_SLOTS:
         AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), textHelper,
                                 {}, nullptr, {}, 100);
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper);
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
@@ -1398,7 +1433,8 @@ private Q_SLOTS:
         QList<QUrl> opened;
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("steam.py")),
             [&](const QUrl &url) { opened.append(url); return true; }); // Owned URI boundary only.
-        LauncherController controller(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("launcher", &controller);
         engine.rootContext()->setContextProperty("aiProviders", &ai);
