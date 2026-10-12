@@ -6,7 +6,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Property, Signal, Slot, QUrl, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Property, Signal, Slot, QUrl, Qt, QPointF
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -263,6 +263,117 @@ class BarTests(unittest.TestCase):
             host.setVisible(False)
             self.wait_property(about, "visible", False)
             self.assertEqual(self.session.calls, [])
+        finally:
+            self.bar.setProperty("popupHost", None)
+            host.close()
+            host.deleteLater()
+            QCoreApplication.sendPostedEvents(host, QEvent.DeferredDelete)
+
+    def test_external_tooltip_remains_visible_outside_short_panel_and_allows_click(self):
+        button = self.item("orlaMenuButton")
+        self.window.setHeight(24)
+        self.engine.rootContext().setContextProperty("fixtureTooltipButton", button)
+        self.engine.rootContext().setContextProperty("fixtureTooltipBar", self.bar)
+        component = QQmlComponent(self.engine)
+        component.setData(b"""
+            import QtQuick
+            import QtQuick.Window
+            Window {
+                flags: Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowTransparentForInput
+                    | Qt.WindowDoesNotAcceptFocus
+                width: 110
+                height: 28
+                x: fixtureTooltipButton.mapToGlobal(0, 0).x
+                y: fixtureTooltipButton.mapToGlobal(0, fixtureTooltipButton.height).y + 4
+                visible: fixtureTooltipButton.hovered && !fixtureTooltipButton.down
+                    && fixtureTooltipBar.menuIsOpen !== true
+                function hideImmediately() { close(); }
+                Text { anchors.centerIn: parent; text: "Menu Orla" }
+            }
+        """, QUrl())
+        tooltip = component.create()
+        self.assertIsNotNone(tooltip, [error.toString() for error in component.errors()])
+        try:
+            self.bar.setProperty("menuTooltipBackend", tooltip)
+            self.evaluate("compactHeight = true; showMenuLabel = false")
+            QTest.qWait(30)
+            point = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+            QTest.mouseMove(self.window, point)
+            QTest.qWait(1200)
+            self.assertTrue(tooltip.property("visible"))
+            self.assertTrue(button.property("hoverEnabled"))
+            self.assertTrue(button.property("hovered"))
+            global_point = button.mapToGlobal(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+            self.assertFalse(tooltip.geometry().contains(global_point))
+            presses = []
+            # Mouse activation is the regression boundary; keyboard activation
+            # alone never proved the hovered tooltip leaves the button reachable.
+            menu = self.window.findChild(QObject, "orlaMenu")
+            menu.aboutToShow.connect(lambda: presses.append("opened"))
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+            self.wait_property(menu, "opened", True)
+            self.assertEqual(presses, ["opened"])
+            self.assertFalse(tooltip.property("visible"))
+            QTest.keyClick(self.key_window(), Qt.Key_Escape)
+            self.wait_property(menu, "visible", False)
+            self.wait_restored_focus(button)
+            # Feedback and pointer activation recover after dismissal/re-entry.
+            QTest.mouseMove(self.window, QPointF(self.window.width() - 1, 20).toPoint())
+            QTest.mouseMove(self.window, point)
+            QTest.qWait(1200)
+            self.assertTrue(tooltip.property("visible"))
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+            self.wait_property(menu, "opened", True)
+            self.assertEqual(presses, ["opened", "opened"])
+            self.assertFalse(tooltip.property("visible"))
+            self.assertEqual(self.session.calls, [])
+        finally:
+            self.evaluate("close()", self.window.findChild(QObject, "orlaMenu"))
+            self.bar.setProperty("menuTooltipBackend", None)
+            self.evaluate("close()", tooltip)
+            tooltip.deleteLater()
+            QCoreApplication.sendPostedEvents(tooltip, QEvent.DeferredDelete)
+
+    @unittest.skipUnless(Path("/usr/lib64/qt6/qml/org/kde/plasma/core/qmldir").exists(),
+                         "Requires the optional installed PlasmaCore native adapter")
+    def test_native_host_keeps_all_menu_rows_in_its_allocated_viewport_on_reopen(self):
+        self.engine.addImportPath("/usr/lib64/qt6/qml")
+        path = Path(__file__).resolve().parents[1] / "bar/contents/ui/NativePopupHost.qml"
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(path)))
+        host = component.create()
+        self.assertIsNotNone(host, [error.toString() for error in component.errors()])
+        try:
+            self.bar.setProperty("popupHost", host)
+            menu = self.window.findChild(QObject, "orlaMenu")
+            button = self.item("orlaMenuButton")
+            QTest.mouseMove(self.window, QPointF(self.window.width() - 1, 20).toPoint())
+            for _ in range(2):
+                self.evaluate("forceActiveFocus()", button)
+                QTest.keyClick(self.window, Qt.Key_Space)
+                self.wait_property(menu, "opened", True)
+                QTest.qWait(1000)
+                # Test visible bounds, rather than an internal overlay formula:
+                # the complete menu and final enabled row must fit its own host.
+                main = host.property("mainItem")
+                content = menu.property("contentItem")
+                self.assertAlmostEqual(menu.property("height"), menu.property("implicitHeight"), delta=1,
+                    msg=f"iteration={_}; host={host.width()}x{host.height()}; main={main.width()}x{main.height()}; overlay={content.parentItem().parentItem().x()},{content.parentItem().parentItem().y()}; menuXY={menu.property('x')},{menu.property('y')}; popupXY={content.parentItem().x()},{content.parentItem().y()}; mainXY={main.x()},{main.y()}")
+                self.assertGreaterEqual(main.height(), menu.property("height"))
+                self.assertGreaterEqual(content.mapToScene(QPointF(0, 0)).y(), 0)
+                self.assertLessEqual(content.mapToScene(QPointF(0, content.height())).y(), host.height())
+                last = self.item("sessionShutdown")
+                self.assertGreaterEqual(self.evaluate("mapToItem(parent.parent, 0, 0).y", last), 0)
+                self.assertLessEqual(self.evaluate("mapToItem(parent.parent, 0, height).y", last), content.height())
+                for _step in range(menu.property("count")):
+                    if last.property("highlighted"):
+                        break
+                    QTest.keyClick(host, Qt.Key_Down)
+                self.assertTrue(last.property("highlighted"))
+                QTest.keyClick(host, Qt.Key_Escape)
+                self.wait_property(menu, "visible", False)
+                self.assertFalse(host.isVisible())
+                self.wait_restored_focus(button)
+                self.assertEqual(self.session.calls, [])
         finally:
             self.bar.setProperty("popupHost", None)
             host.close()

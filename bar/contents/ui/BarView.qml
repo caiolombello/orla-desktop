@@ -10,6 +10,9 @@ Item {
     property var sessionBackend: null
     property var applicationBackend: null
     property var popupHost: null
+    property var menuTooltipBackend: null
+    readonly property alias menuControl: menuButton
+    readonly property bool menuIsOpen: menu.visible
     property string hostVersion: Application.version
     property bool showApplicationName: true
     property bool showMenuLabel: true
@@ -87,8 +90,11 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             Accessible.name: qsTr("Menu Orla")
             Accessible.role: Accessible.ButtonMenu
+            onPressed: if (root.menuTooltipBackend) root.menuTooltipBackend.hideImmediately()
             onClicked: menu.visible ? menu.close() : menu.open()
-            Controls.ToolTip.visible: hovered
+            // Panel tooltips use a separate native surface. The shared Item
+            // tooltip can otherwise be clamped over this short panel's button.
+            Controls.ToolTip.visible: hovered && !root.menuTooltipBackend
             Controls.ToolTip.text: qsTr("Menu Orla")
             contentItem: RowLayout {
                 spacing: 6

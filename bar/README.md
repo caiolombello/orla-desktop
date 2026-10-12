@@ -17,7 +17,7 @@ A ponte privada `org.kde.plasma.private.sessions` fica em um componente isolado 
 
 ### Instalação manual opcional
 
-Requer uma sessão Plasma 6.7.x e `kpackagetool6`. Estes comandos são instruções para uma instalação iniciada por você; **instalação no usuário e uso real no painel ainda não foram testados**. Na raiz do checkout:
+Requer uma sessão Plasma 6.7.x e `kpackagetool6`. A atualização foi testada em um painel real no Fedora 44, Plasma 6.7.5/Wayland; outros ambientes e a primeira instalação continuam sem qualificação. Na raiz do checkout:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i bar
@@ -45,9 +45,9 @@ python3 bar/run_tests.py
 python3 bar/run_tests.py --style org.kde.desktop
 ```
 
-O wrapper executa dez testes com backends injetados, Qt offscreen/software, diretórios XDG temporários e endereços D-Bus próprios indisponíveis. Não instancia os adaptadores nativos nem executa ações de sessão. Fusion/KDE passaram, e uma revisão independente repetiu dez testes KDE e aprovou publicação experimental do código. Quatro componentes compilaram sem erros e sem instanciação nativa; isso não prova comportamento real.
+O wrapper executa 18 testes com backends injetados e um teste opcional do adaptador de janela PlasmaCore, quando o módulo está instalado. Usa Qt offscreen/software, diretórios XDG temporários e endereços D-Bus próprios indisponíveis; não executa ações reais de sessão. Os 19 testes passaram em Fusion e KDE, com revisão independente do código. O adaptador nativo usa uma janela Plasma para o menu e uma dica separada, evitando que a dica cubra o botão em um painel estreito.
 
-**UNRUN:** diálogos nativos/Cancelar, ações reais, abertura de configurações, gestos/foco/grab, applet completo em painel, dois monitores e composição com widgets irmãos. T1/T2/T3 continuam abertos. Veja o [roadmap](../ROADMAP.md).
+Em 12/10/2026, um teste real no painel superior comprovou hover, clique, menu completo, duas aberturas e navegação com ↓/Escape em um monitor com DPR 2. O menu teve 315 px de altura, igual à altura implícita, dentro da janela de 323 px. As capturas pessoais ficaram privadas. Retorno de foco entre aplicativos, ações reais/diálogos de confirmação, vários monitores, RTL, outras escalas e composição completa permanecem sem qualificação. T1/T2/T3 continuam parciais. Veja o [roadmap](../ROADMAP.md).
 
 ## English
 
@@ -64,7 +64,7 @@ The private `org.kde.plasma.private.sessions` bridge is isolated behind a Loader
 
 ### Optional manual installation
 
-Requires a Plasma 6.7.x session and `kpackagetool6`. These instructions describe a user-initiated install; **installation in the user's account and real panel use remain untested**. From the checkout root:
+Requires a Plasma 6.7.x session and `kpackagetool6`. Updating the applet was tested in a real Fedora 44, Plasma 6.7.5/Wayland panel; other environments and first installation remain unqualified. From the checkout root:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i bar
@@ -92,15 +92,15 @@ python3 bar/run_tests.py
 python3 bar/run_tests.py --style org.kde.desktop
 ```
 
-The wrapper runs ten injected-backend tests with offscreen/software Qt, temporary XDG directories and unavailable owned D-Bus addresses. It does not instantiate native adapters or execute session actions. Fusion/KDE passed; independent review repeated ten KDE tests and approved experimental source publication. Four components compiled without errors, without native instantiation; this does not prove real behavior.
+The wrapper runs 18 injected-backend tests and an optional PlasmaCore window-adapter test when the module is installed. It uses offscreen/software Qt, temporary XDG directories and unavailable owned D-Bus addresses; it executes no real session actions. All 19 tests passed in Fusion and KDE, with independent Source review. Production uses a Plasma menu window and a separate tooltip so feedback does not cover the button in a short panel.
 
-**UNRUN:** native dialogs/Cancel, real actions, opening settings, human gestures/focus/grab, the full applet in a panel, two monitors and sibling-widget composition. T1/T2/T3 remain open. See the [roadmap](../ROADMAP.md).
+On 2026-10-12, a real top-panel check verified hover, clicking, the complete menu, two openings and Down/Escape navigation on one DPR 2 monitor. Menu height was 315 px, matching its implicit height inside the 323 px window. Personal captures remain private. Across-application focus return, real actions/confirmation dialogs, multiple monitors, RTL, other scales and the complete bar composition remain unqualified. T1/T2/T3 remain partial. See the [roadmap](../ROADMAP.md).
 
 
 A barra no fonte oferece **Mostrar nome do menu**, **controles compactos (28 px)**
 e o preset **Aplicar estilo inspirado no Mac**. O preset mantém o texto
-personalizado e permite alterar cada controle depois. Os menus usam a janela
-transiente do Qt e abrem abaixo do botão, com visual próprio e navegação por
-teclado. Os 16 testes isolados passaram; foco e posição no Wayland dependem da
-validação no painel real. A composição completa da barra e sua Central de
+personalizado e permite alterar cada controle depois. Os menus usam uma janela
+Plasma e abrem abaixo do botão, com navegação por teclado. A dica usa uma janela
+separada. Os 19 testes isolados passaram e abertura/fechamento foram verificados
+em um painel Wayland; a matriz de foco e monitores segue aberta. A composição completa da barra e sua Central de
 Controle continuam em andamento.

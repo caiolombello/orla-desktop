@@ -18,6 +18,7 @@ PlasmoidItem {
     BarView {
         id: bar
         popupHost: nativePopupHost
+        menuTooltipBackend: nativeMenuTooltip
         anchors.fill: parent
         showApplicationName: Plasmoid.configuration.showApplicationName
         showMenuLabel: Plasmoid.configuration.showMenuLabel
@@ -30,4 +31,15 @@ PlasmoidItem {
             else if (kind === "configure") Plasmoid.containment.configureRequested(Plasmoid);
         }
     }
+    PlasmaCore.ToolTipArea {
+        id: nativeMenuTooltip
+        parent: bar.menuControl
+        anchors.fill: parent
+        mainText: qsTr("Menu Orla")
+        textFormat: Text.PlainText
+        location: Plasmoid.location
+        interactive: false
+        active: bar.menuControl.enabled && !bar.menuControl.down && !bar.menuIsOpen
+    }
+
 }
