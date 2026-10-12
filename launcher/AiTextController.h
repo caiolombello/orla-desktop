@@ -18,6 +18,7 @@ class AiTextController final : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString requestId READ requestId NOTIFY changed)
     Q_PROPERTY(QString output READ output NOTIFY changed)
+    Q_PROPERTY(QString finishReason READ finishReason NOTIFY changed)
     Q_PROPERTY(QString errorCode READ errorCode NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(QString destination READ destination NOTIFY changed)
@@ -38,6 +39,7 @@ public:
     bool busy() const { return m_operationActive || m_process.state() != QProcess::NotRunning || m_cleanupActive; }
     QString requestId() const { return m_requestId; }
     QString output() const { return m_output; }
+    QString finishReason() const { return m_finishReason; }
     QString errorCode() const { return m_errorCode; }
     QString error() const { return m_error; }
     QString destination() const { return m_destination; }
@@ -101,6 +103,8 @@ private:
     QString m_status = QStringLiteral("disabled");
     QString m_requestId;
     QString m_output;
+    QString m_finishReason;
+    QString m_pendingFinishReason;
     QString m_errorCode;
     QString m_error;
     QString m_destination;

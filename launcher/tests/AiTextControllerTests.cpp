@@ -1468,6 +1468,308 @@ time.sleep(60)
         QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
     }
 
+    void completionReasonIsPublishedOnlyAfterExitAndRuntimeCleanup_data()
+    {
+        QTest::addColumn<QString>("reason");
+        for (const QString &reason : {QStringLiteral("stop"), QStringLiteral("length"), QStringLiteral("load"),
+                                    QStringLiteral("completed"), QStringLiteral("incomplete")})
+            QTest::newRow(qPrintable(reason)) << reason;
+    }
+
+    void completionReasonIsPublishedOnlyAfterExitAndRuntimeCleanup()
+    {
+        QFETCH(QString, reason);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("completed-receipts"));
+        const QString release = directory.filePath(QStringLiteral("release-eof"));
+        QByteArray script = reportedResultHelper(marker, true);
+        script.replace("finishReason='stop'", QByteArray("finishReason='") + reason.toUtf8() + "' if not r['requestId'].endswith('.retry') else 'stop'");
+        script.replace("time.sleep(60)", QByteArray("if not r['requestId'].endswith('.retry'):\n while not pathlib.Path(r'")
+            + release.toUtf8() + "').exists(): time.sleep(0.01)");
+        bool allowRemoval = false;
+        int removalAttempts = 0;
+        bool completionExposedWhileBusy = false;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                ++removalAttempts;
+                return allowRemoval && QDir(path).removeRecursively();
+            });
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            allowRemoval = true;
+            QFile gate(release);
+            if (gate.open(QIODevice::WriteOnly)) gate.close();
+            controller.cancelAll();
+            QElapsedTimer timer;
+            timer.start();
+            while (controller.busy() && timer.elapsed() < 3000) QTest::qWait(10);
+            QVERIFY(!controller.busy());
+        });
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy processStarted(&controller.m_process, &QProcess::started);
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (controller.busy() && !controller.property("finishReason").toString().isEmpty())
+                completionExposedWhileBusy = true;
+        });
+        controller.generate(QStringLiteral("reason.pending"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("usable text"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.m_terminalEvent, 1500); // Real stdout terminal parsed; helper still holds EOF.
+        QVERIFY(controller.busy());
+        QCOMPARE(controller.m_process.state(), QProcess::Running);
+        QCOMPARE(controller.output(), QStringLiteral("usable text"));
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        const auto signalsBeforeIgnoredAttempt = changed.size();
+        controller.generate(QStringLiteral("reason.ignored"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("ignored"), QStringLiteral("invalid model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QCOMPARE(changed.size(), signalsBeforeIgnoredAttempt);
+        QCOMPARE(controller.requestId(), QStringLiteral("reason.pending"));
+        QCOMPARE(controller.output(), QStringLiteral("usable text"));
+        QFile gate(release);
+        QVERIFY(gate.open(QIODevice::WriteOnly));
+        gate.close();
+        QTRY_VERIFY_WITH_TIMEOUT(removalAttempts > 0, 1500);
+        QCOMPARE(controller.m_process.state(), QProcess::NotRunning);
+        QVERIFY(controller.busy());
+        QCOMPARE(controller.errorCode(), QStringLiteral("process_cleanup_failed"));
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        allowRemoval = true;
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1500);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("usable text"));
+        QCOMPARE(controller.property("finishReason").toString(), reason);
+        QVERIFY(!completionExposedWhileBusy);
+        QVERIFY(controller.requestClose());
+        QCOMPARE(controller.property("finishReason").toString(), reason);
+        const auto startsBeforeRejectedAttempt = processStarted.size();
+        controller.generate(QStringLiteral("reason.rejected"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("rejected"), QStringLiteral("invalid model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QVERIFY(!controller.busy());
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_request"));
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QVERIFY(controller.output().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(processStarted.size(), startsBeforeRejectedAttempt);
+        controller.generate(QStringLiteral("reason.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("fresh text"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1500);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("fresh text"));
+        QCOMPARE(controller.property("finishReason").toString(), QStringLiteral("stop"));
+        qInfo() << "ORLA_COMPLETION_REASON_COMMIT_PASS" << "reason=" << reason
+                << "heldThroughEof=true heldThroughCleanup=true rejectedCleared=true retryStop=true";
+    }
+
+    void invalidCompletionNeverPublishesAReason_data()
+    {
+        QTest::addColumn<QString>("fault");
+        QTest::newRow("trailing-bytes") << QStringLiteral("trailing");
+        QTest::newRow("nonzero-exit") << QStringLiteral("exit");
+        QTest::newRow("invalid-cost") << QStringLiteral("cost");
+        QTest::newRow("invalid-finish-reason") << QStringLiteral("reason");
+    }
+
+    void invalidCompletionNeverPublishesAReason()
+    {
+        QFETCH(QString, fault);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("invalid-completion-receipts"));
+        QByteArray script = reportedResultHelper(marker);
+        script.replace("finishReason='stop'", fault == QStringLiteral("reason") ? "finishReason='untrusted'" : "finishReason='length'");
+        if (fault == QStringLiteral("trailing")) script.append("sys.stdout.buffer.write(b'junk')\nsys.stdout.flush()\n");
+        if (fault == QStringLiteral("exit")) script.append("raise SystemExit(3)\n");
+        if (fault == QStringLiteral("cost")) script.replace("cost={'status':'unknown'", "cost={'status':'reported'");
+        bool completionExposed = false;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), writeHelper(directory, script));
+        connect(&controller, &AiTextController::changed, this, [&] {
+            completionExposed = completionExposed || !controller.property("finishReason").toString().isEmpty();
+        });
+        controller.generate(QStringLiteral("reason.invalid"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("retained text"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_helper_response"));
+        QCOMPARE(controller.output(), QStringLiteral("retained text"));
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QVERIFY(!completionExposed);
+    }
+
+    void cancellationAfterCompletedEventDoesNotPublishACompletionReason()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("cancel-completion-receipts"));
+        QByteArray script = reportedResultHelper(marker, true);
+        script.replace("finishReason='stop'", "finishReason='length' if not r['requestId'].endswith('.retry') else 'stop'");
+        script.replace("time.sleep(60)", "if not r['requestId'].endswith('.retry'): time.sleep(60)");
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), writeHelper(directory, script), {}, nullptr, {}, 100);
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            controller.cancelAll();
+            QElapsedTimer timer;
+            timer.start();
+            while (controller.busy() && timer.elapsed() < 3000) QTest::qWait(10);
+            QVERIFY(!controller.busy());
+        });
+        controller.generate(QStringLiteral("reason.cancel"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("partial text"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.m_terminalEvent, 1500);
+        QVERIFY(controller.busy());
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        QVERIFY(!controller.requestClose());
+        controller.generate(QStringLiteral("reason.closing-ignored"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("ignored"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QCOMPARE(controller.requestId(), QStringLiteral("reason.cancel"));
+        QCOMPARE(controller.output(), QStringLiteral("partial text"));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(closeReady.size(), 1);
+        QCOMPARE(controller.status(), QStringLiteral("cancelled_unconfirmed"));
+        QCOMPARE(controller.output(), QStringLiteral("partial text"));
+        QVERIFY(controller.property("finishReason").toString().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        controller.generate(QStringLiteral("reason.cancel.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("fresh text"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 1500);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.property("finishReason").toString(), QStringLiteral("stop"));
+    }
+
+    void escapedPromptFrameBoundsRejectBeforeStartAndAcceptTheActualWireBoundary()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("wire-receipts"));
+        QByteArray script = QByteArray("import sys\nsys.path.insert(0,r'")
+            + QFileInfo(QStringLiteral(ORLA_TEST_AI_TEXT_HELPER)).absolutePath().toUtf8()
+            + QByteArray(R"PY(')
+import json,os,pathlib
+from ai_text import parse_input,ContractError,MAX_REQUEST_BYTES
+raw=sys.stdin.buffer.read()
+receipt={'pid':os.getpid(),'runtime':os.getcwd(),'wireBytes':len(raw),'maxRequestBytes':MAX_REQUEST_BYTES}
+try:
+ r,credential=parse_input(raw)
+ receipt['accepted']=True
+except ContractError:
+ receipt['accepted']=False
+record=pathlib.Path(r')PY") + marker.toUtf8() + QByteArray(R"PY(')
+count=len(record.read_text().splitlines())+1 if record.exists() else 1
+with record.open('a') as f: f.write(json.dumps(receipt,separators=(',',':'))+'\n')
+if not receipt['accepted']: raise SystemExit(3)
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(sequence,kind,**extra):
+ print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text='usable-'+str(count))
+emit(2,'completed',finishReason='stop',usage={'status':'reported','inputTokens':2,'outputTokens':3,'totalTokens':5},cost={'status':'unknown','currency':None,'amount':None})
+)PY");
+        QStringList removedRuntime;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                removedRuntime.append(path);
+                return QDir(path).removeRecursively();
+            });
+        QSignalSpy processStarted(&controller.m_process, &QProcess::started);
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        const auto request = [&](const QString &text) {
+            controller.generate(QStringLiteral("request.frame"), QStringLiteral("summarize"), QVariant(),
+                                text, QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        };
+        const auto receipts = [&] {
+            QFile file(marker);
+            if (!file.open(QIODevice::ReadOnly)) return QByteArray();
+            return file.readAll();
+        };
+        const auto helpersGone = [&](const QByteArray &records) {
+            for (const QByteArray &line : records.split('\n')) {
+                if (line.isEmpty()) continue;
+                const QJsonObject receipt = QJsonDocument::fromJson(line).object();
+                const qint64 pid = receipt.value("pid").toInteger();
+                if (pid <= 0) return false;
+                errno = 0;
+                if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+                errno = 0;
+                if (::kill(-static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH
+                    || QFile::exists(receipt.value("runtime").toString())) return false;
+            }
+            return true;
+        };
+        request(QStringLiteral("x"));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("usable-1"));
+        const QByteArray seedReceipts = receipts();
+        QVERIFY(helpersGone(seedReceipts));
+        QCOMPARE(seedReceipts.count('\n'), 1);
+        const QJsonObject seed = QJsonDocument::fromJson(seedReceipts.trimmed()).object();
+        QVERIFY(seed.value("accepted").toBool());
+        const qint64 maximumWireBytes = seed.value("maxRequestBytes").toInteger() + 1;
+        const qint64 emptyWireBytes = seed.value("wireBytes").toInteger() - 1;
+        QVERIFY(maximumWireBytes > emptyWireBytes);
+        const QString runtimeRoot = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        const QStringList priorRuntime = QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        const auto rejectWithoutStart = [&](const QString &prompt) {
+            const qsizetype starts = processStarted.size();
+            const qsizetype removals = removedRuntime.size();
+            const qsizetype signalsBefore = changed.size();
+            const QByteArray priorReceipts = receipts();
+            request(prompt);
+            const bool immediatelyIdle = !controller.busy();
+            const bool runtimeCreated = controller.m_runtimeDirectory != nullptr;
+            QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000); // RED must finish actual helper cleanup.
+            const QByteArray actualReceipts = receipts();
+            QVERIFY(helpersGone(actualReceipts));
+            qInfo() << "ORLA_ESCAPED_FRAME_PREFLIGHT" << "characters=" << prompt.size()
+                    << "immediatelyIdle=" << immediatelyIdle << "runtimeCreated=" << runtimeCreated
+                    << "newStarts=" << processStarted.size() - starts
+                    << "newRemovals=" << removedRuntime.size() - removals
+                    << "errorCode=" << controller.errorCode() << "receipts=" << actualReceipts;
+            QCOMPARE(controller.errorCode(), QStringLiteral("invalid_request"));
+            QVERIFY(immediatelyIdle);
+            QVERIFY(!runtimeCreated);
+            QCOMPARE(processStarted.size(), starts);
+            QCOMPARE(removedRuntime.size(), removals);
+            QCOMPARE(changed.size(), signalsBefore + 1);
+            QCOMPARE(actualReceipts, priorReceipts);
+            QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), priorRuntime);
+            QVERIFY(controller.output().isEmpty());
+            QVERIFY(controller.usage().isEmpty());
+        };
+        rejectWithoutStart(QString(16384, QChar(1)));
+        if (QTest::currentTestFailed()) return;
+        const qint64 available = maximumWireBytes - emptyWireBytes;
+        const QString boundary = QString(available / 6, QChar(1)) + QString(available % 6, QLatin1Char('a'));
+        QVERIFY(boundary.size() <= 16384);
+        request(boundary);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("usable-2"));
+        const QByteArray boundaryReceipts = receipts();
+        QVERIFY(helpersGone(boundaryReceipts));
+        QCOMPARE(boundaryReceipts.count('\n'), 2);
+        const QJsonObject actualBoundary = QJsonDocument::fromJson(boundaryReceipts.trimmed().split('\n').last()).object();
+        QVERIFY(actualBoundary.value("accepted").toBool());
+        QCOMPARE(actualBoundary.value("wireBytes").toInteger(), maximumWireBytes);
+        rejectWithoutStart(boundary + QLatin1Char('a'));
+        if (QTest::currentTestFailed()) return;
+        request(QStringLiteral("valid retry"));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("usable-3"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(receipts().count('\n'), 3);
+        QVERIFY(helpersGone(receipts()));
+        qInfo() << "ORLA_ESCAPED_FRAME_BOUNDARY_PASS" << "actualMaximumWireBytes=" << maximumWireBytes
+                << "helperAcceptedBoundary=true invalidPlusOneNeverStarted=true retryCompleted=true";
+#endif
+    }
+
     void nulPromptFailsPreflightWithoutStartingHelperAndClearsPreviousResult()
     {
 #ifndef Q_OS_UNIX
