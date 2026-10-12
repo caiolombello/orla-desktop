@@ -2,6 +2,9 @@
 
 Revisão: 11/10/2026. Base auditada: CaioDock 0.2.0, publicado como Orla Dock 0.2.1 alpha, Plasma 6.7.5, Qt 6.11.2, Fedora 44, Wayland. A publicação alpha inclui identidade, instalador, documentação e CI; os marcos abaixo continuam sujeitos aos respectivos critérios de aceite.
 
+
+**Direção atual de UX:** substituir os painéis padrão por uma composição Orla inspirada no macOS. A barra superior atual é provisória; menu Orla, menus do app, indicadores e Central de Controle serão módulos opcionais e consistentes. Priorizar busca pela tecla Windows, dock retrátil por hover, fundo translúcido e popups ancorados ao botão. QuotaLantern, PeriGauge e demais projetos passam ao catálogo de plugins opcionais, desativados por padrão. A configuração dos painéis padrão não limita o desenho do Orla.
+
 ## Resultado esperado
 
 Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado no Raycast e notificações configuráveis, integração com os projetos do Caio e instalação acessível para outras pessoas. A identidade Orla continua própria, com uma interface bonita, consistente e personalizável. Temas, widgets, comandos e provedores de IA poderão ser ampliados pela comunidade; autores poderão distribuir addons gratuitos ou comerciais conforme os contratos e políticas abaixo. Caio decide as prioridades e valida o uso diário. Este documento define a sequência proposta; os números de versão são marcos, sem promessa de datas.
