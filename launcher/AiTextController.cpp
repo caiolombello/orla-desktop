@@ -308,7 +308,8 @@ bool AiTextController::validateRequest(const QString &requestId, const QString &
     if (!explicitConsent || !requestPattern.match(requestId).hasMatch()
         || (task != QStringLiteral("rewrite") && task != QStringLiteral("summarize")
             && task != QStringLiteral("translate"))
-        || text.isEmpty() || text.size() > 16384 || text.toUtf8().size() > 65536
+        || text.isEmpty() || text.contains(QChar::Null)
+        || text.size() > 16384 || text.toUtf8().size() > 65536
         || !modelPattern.match(model).hasMatch()
         || (numericHost != QStringLiteral("127.0.0.1") && numericHost != QStringLiteral("::1"))
         || port < 1 || port > 65535) return false;

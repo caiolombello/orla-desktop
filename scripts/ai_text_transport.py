@@ -1065,17 +1065,33 @@ def _finalize_started(*, boundary, ledger, token, parser, pending,
             except _SinkFailure:
                 sink_failed = True
     finally:
-        for name in tuple(reversed(ledger.handlers_installed)):
+        # The operational shim wraps callbacks in raising handlers. Once the
+        # terminal attempt is selected, replace those wrappers while masked:
+        # multiple queued signals must all record without interrupting cleanup.
+        for name in ledger.handlers_installed:
             try:
-                boundary.restore_handler(name, ledger.original_handlers[name])
+                boundary.restore_handler(
+                    name, _signal_handler(token, timeout=(name == "SIGALRM")),
+                )
             except Exception:
                 restore_failed = True
-            else:
-                ledger.handlers_installed.remove(name)
         try:
+            # Deliver queued lifecycle signals to our temporary handlers, never
+            # to the caller's original/default handlers. The terminal attempt
+            # is already committed; late cleanup interrupts cannot replace it.
             boundary.restore_mask(previous_mask)
+        except (_Cancelled, _TimedOut):
+            pass
         except Exception:
             restore_failed = True
+        finally:
+            for name in tuple(reversed(ledger.handlers_installed)):
+                try:
+                    boundary.restore_handler(name, ledger.original_handlers[name])
+                except Exception:
+                    restore_failed = True
+                else:
+                    ledger.handlers_installed.remove(name)
 
     if sink_failed:
         return _TransportOutcome(

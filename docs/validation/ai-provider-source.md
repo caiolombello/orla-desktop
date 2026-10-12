@@ -566,3 +566,42 @@ write: blocked stdout still requires the controller's outer forced cleanup.
 This does not promise a generic blocking-I/O timeout or atomic line delivery.
 C++ code is unchanged; the preceding six-suite result remains historical.
 Hosted CI and native provider qualification for this follow-up remain open.
+
+
+### Pending finalizer signals, NUL preflight and test-owned runner lifetimes
+
+Queued SIGTERM/SIGALRM are delivered while nonraising late lifecycle handlers
+remain installed. A selected completed or operational-failure outcome is retained,
+including both signals queued together. Original handlers/mask are restored;
+genuine restoration failures retain the existing finalization-failed classification.
+The actual child RED/GREEN evidence and independent Source reviews cover single
+and mixed signals, original failure, masks, retry and cleanup. Readiness JSON is
+published by atomic rename, with a deterministic partial-write regression.
+
+Text containing U+0000 is rejected as invalid_request before creating runtime or
+helper. The regression verifies the real helper parser mismatch, clearing prior
+output/usage, immediate idle rejection, no new process and a valid retry.
+
+The installed Fedora calculator plugin separately reproduced a shared-calculator
+lifetime fault with two simultaneous KRunner managers. Test-only controller
+owners now load the same closed runner whitelist eagerly, retain actual runner
+identities and wait for their destruction before allowing another fixture. This
+changes fixture initialization timing; production construction is unchanged. The
+500ms predicate deadline cannot bound synchronous destruction/Qt handlers, so the
+existing outer CTest caps remain unchanged. Old test bodies and queries remain
+identical after the ownership declaration substitutions. The new guard proves
+serialized fixture ownership, not support for simultaneous production managers.
+
+Root's exact nine-file composition passed a fresh 40-step build (49.312s), all
+six registered CTests once (90.288s driver), and 122 Python tests once (15.019s
+driver). UI33 and controller84 finished normally within their 30/40s caps. The
+behavior suite retained its expected owned-app skip; the separate owned-app
+CTest passed. Source183 bytes/modes and 174 protected base paths stayed exact;
+private TMP was empty and all six owned bus cleanup receipts were present.
+
+The original hosted post-totals SIGSEGV remains CAUSE UNKNOWN; the independently
+reproduced calculator fault does not prove its origin. These checks do not
+qualify hosted CI, a new permanent launcher payload, real provider operations,
+native compact UI, release or the full roadmap. The installed launcher remains
+5aaf518. Masked started writes still need the outer controller cleanup if stdout
+blocks; no generic I/O timeout or atomic line-delivery guarantee is added.

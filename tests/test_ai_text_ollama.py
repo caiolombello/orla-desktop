@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -295,6 +296,12 @@ import importlib.util,json,os,signal,socket,sys,time
 from pathlib import Path
 shim_path,ready_path,result_path,interrupt_stage=sys.argv[1:]
 prewrite=interrupt_stage=='started-prewrite'
+finalizing=interrupt_stage.startswith('finalizer-')
+def publish_ready(value):
+ ready=Path(ready_path)
+ temporary=ready.with_suffix('.pending')
+ temporary.write_text(json.dumps(value))
+ temporary.replace(ready)
 spec=importlib.util.spec_from_file_location('owned_ollama_signal_shim',shim_path)
 shim=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shim)
@@ -317,7 +324,10 @@ transport._wipe=recording_wipe
 class Response:
  def __init__(self,retry=False):
   self.chunks=[json.dumps({'message':{'role':'assistant','content':'fresh' if retry else 'controlled partial'},'done':False}).encode()+b'\n',json.dumps({'message':{'role':'assistant','content':''},'done':True,'prompt_eval_count':4,'eval_count':5}).encode()+b'\n',b'']
- def read1(self,limit,timeout): return self.chunks.pop(0)
+ def read1(self,limit,timeout):
+  if interrupt_stage=='finalizer-failure' and not paused and len(self.chunks)==2:
+   return b'invalid json\n'
+  return self.chunks.pop(0)
  def close(self): trace.append('response.close')
 class Connector:
  def __init__(self,retry=False):
@@ -337,13 +347,17 @@ def controlled_write(fd,data):
   terminal_lifecycle.append({'timer_cancelled':signal.getitimer(signal.ITIMER_REAL)==(0.0,0.0),'wipe_completed':bool(wiped) and not any(wiped[-1] or b''),'handlers_installed':all(signal.getsignal(getattr(signal,name))!=handlers[name] for name in names),'signals_blocked':set(getattr(signal,name) for name in names).issubset(signal.pthread_sigmask(signal.SIG_BLOCK,set()))})
  if event and event['type']=='started' and prewrite and not paused:
   paused=True
-  Path(ready_path).write_text(json.dumps({'pid':os.getpid(),'stage':'started-prewrite','written':0,'bytes':len(data)}))
+  publish_ready({'pid':os.getpid(),'stage':'started-prewrite','written':0,'bytes':len(data)})
   os.kill(os.getpid(),int(os.environ['OWNED_PREWRITE_SIGNAL']))
+ if event and finalizing and interrupt_stage=='finalizer-terminal' and event['type']=='completed' and not paused:
+  paused=True
+  os.kill(os.getpid(),int(os.environ['OWNED_PREWRITE_SIGNAL']))
+  publish_ready({'pid':os.getpid(),'stage':interrupt_stage,'pending':int(os.environ['OWNED_PREWRITE_SIGNAL']) in signal.sigpending(),'pending_names':sorted(number.name for number in signal.sigpending())})
  written=original_write(fd,data)
  if event and event['type']==interrupt_stage and not paused:
   if written!=len(data): raise AssertionError('fixture event did not finish writing')
   paused=True
-  Path(ready_path).write_text(json.dumps({'pid':os.getpid(),'stage':interrupt_stage+'-written-inside-publish','written':written,'bytes':len(data)}))
+  publish_ready({'pid':os.getpid(),'stage':interrupt_stage+'-written-inside-publish','written':written,'bytes':len(data)})
   if interrupt_stage=='started':
    deadline=time.monotonic()+1.0
    while not Path(ready_path).with_suffix('.release').exists():
@@ -356,7 +370,16 @@ os.write=controlled_write
 names=transport.SIGNAL_NAMES
 handlers={name:signal.getsignal(getattr(signal,name)) for name in names}
 mask=signal.pthread_sigmask(signal.SIG_BLOCK,set())
-boundary=shim.PosixSignalBoundary(transport)
+class FinalizerBoundary(shim.PosixSignalBoundary):
+ def hook(self,name,token):
+  global paused
+  if interrupt_stage in ('finalizer-wipe','finalizer-failure') and name=='after_wipe' and not paused:
+   paused=True
+   os.kill(os.getpid(),int(os.environ['OWNED_PREWRITE_SIGNAL']))
+   if os.environ.get('OWNED_MIXED'):
+    os.kill(os.getpid(),signal.SIGALRM)
+   publish_ready({'pid':os.getpid(),'stage':interrupt_stage,'pending':int(os.environ['OWNED_PREWRITE_SIGNAL']) in signal.sigpending(),'pending_names':sorted(number.name for number in signal.sigpending())})
+boundary=FinalizerBoundary(transport)
 sink=shim.NdjsonStdoutSink(transport._contract)
 first=transport._run_call(input_reader=shim.FdInputReader(),connector_factory=lambda spec:Connector(),clock=time.monotonic,signal_boundary=boundary,sink=sink)
 first_trace=trace.copy()
@@ -384,8 +407,37 @@ sys.exit(first.exit_code)
     def test_real_posix_signal_before_started_write_keeps_lifecycle_terminal(self):
         self.assert_real_signal_publication("started-prewrite")
 
-    def assert_real_signal_publication(self, interrupt_stage):
-        for number in (signal.SIGTERM, signal.SIGALRM):
+    def test_real_pending_signal_after_finalizer_block_keeps_committed_terminal(self):
+        self.assert_real_signal_publication("finalizer-wipe")
+        self.assert_real_signal_publication("finalizer-terminal")
+        self.assert_real_signal_publication("finalizer-failure")
+
+    def test_ready_marker_is_hidden_until_complete_json_is_published(self):
+        # Capture a partial write deterministically at the same child helper seam.
+        function = self.CHILD.split("def publish_ready(value):", 1)[1].split("spec=", 1)[0]
+        namespace = {"Path": Path, "json": json}
+        with tempfile.TemporaryDirectory(prefix="orla-ready-atomic-") as temporary:
+            ready = Path(temporary) / "ready.json"
+            namespace["ready_path"] = str(ready)
+            exec("def publish_ready(value):" + function, namespace)
+            original_write = Path.write_text
+            captures = []
+            def partial_write(path, value, *args, **kwargs):
+                original_write(path, value[:1], *args, **kwargs)
+                captures.append((ready.exists(), path.read_text()))
+                return original_write(path, value, *args, **kwargs)
+            with mock.patch.object(Path, "write_text", partial_write):
+                namespace["publish_ready"]({"pid": 123, "stage": "ready"})
+            self.assertEqual(captures, [(False, "{")])
+            self.assertEqual(json.loads(ready.read_text()), {"pid": 123, "stage": "ready"})
+            self.assertFalse(ready.with_suffix(".pending").exists())
+
+    def test_mixed_pending_lifecycle_preserves_terminal_and_first_failure(self):
+        self.assert_real_signal_publication("finalizer-wipe", mixed=True)
+        self.assert_real_signal_publication("finalizer-failure", mixed=True)
+
+    def assert_real_signal_publication(self, interrupt_stage, *, mixed=False):
+        for number in ((signal.SIGTERM,) if mixed else (signal.SIGTERM, signal.SIGALRM)):
             with self.subTest(signal=number.name):
                 with tempfile.TemporaryDirectory(prefix="orla-publish-signal-") as temporary:
                     runtime = Path(temporary)
@@ -395,7 +447,7 @@ sys.exit(first.exit_code)
                         [str(PYTHON), "-I", "-B", "-c", self.CHILD,
                          str(HELPER), str(ready), str(result_path), interrupt_stage],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        cwd=runtime, env={"OWNED_PREWRITE_SIGNAL": str(int(number))} if interrupt_stage == "started-prewrite" else {}, start_new_session=True,
+                        cwd=runtime, env={"OWNED_PREWRITE_SIGNAL": str(int(number)), **({"OWNED_MIXED": "1"} if mixed else {})}, start_new_session=True,
                     )
                     try:
                         process.stdin.write(request_wire(11434, text="offline signal marker"))
@@ -406,7 +458,7 @@ sys.exit(first.exit_code)
                             time.sleep(0.005)
                         observed = ready.exists()
                         marker = json.loads(ready.read_text()) if observed else None
-                        if observed and process.poll() is None and interrupt_stage != "started-prewrite":
+                        if observed and process.poll() is None and interrupt_stage not in {"started-prewrite", "finalizer-wipe", "finalizer-terminal", "finalizer-failure"}:
                             process.send_signal(number)
                             ready.with_suffix(".release").write_text("delivered")
                         elif observed:
@@ -440,8 +492,13 @@ sys.exit(first.exit_code)
                 }, sort_keys=True))
                 self.assertTrue(observed)
                 self.assertEqual(marker["pid"], pid)
-                self.assertEqual(marker["stage"], ("started-prewrite" if interrupt_stage == "started-prewrite" else interrupt_stage + "-written-inside-publish"))
-                self.assertEqual(marker["written"], 0 if interrupt_stage == "started-prewrite" else marker["bytes"])
+                if interrupt_stage.startswith("finalizer-"):
+                    self.assertEqual(marker["stage"], interrupt_stage)
+                    self.assertTrue(marker["pending"])
+                    self.assertEqual(marker["pending_names"], ["SIGALRM", "SIGTERM"] if mixed else [number.name])
+                else:
+                    self.assertEqual(marker["stage"], ("started-prewrite" if interrupt_stage == "started-prewrite" else interrupt_stage + "-written-inside-publish"))
+                    self.assertEqual(marker["written"], 0 if interrupt_stage == "started-prewrite" else marker["bytes"])
                 self.assertEqual(stderr, b"")
                 self.assertEqual(returncode, 0)
                 self.assertTrue(result["handlers_restored"])
@@ -463,19 +520,26 @@ sys.exit(first.exit_code)
                 events = [json.loads(line) for line in stdout.splitlines()]
                 first = [event for event in events if event["requestId"] == "ollama-operational.1"]
                 retry = [event for event in events if event["requestId"] == "ollama-operational.retry"]
-                terminal = "cancelled" if number == signal.SIGTERM else "failed"
+                terminal = "failed" if interrupt_stage == "finalizer-failure" else "completed" if interrupt_stage.startswith("finalizer-") else ("cancelled" if number == signal.SIGTERM else "failed")
                 first_types = ["started", terminal] if interrupt_stage.startswith("started") else ["started", "delta", terminal]
                 self.assertEqual([event["type"] for event in first], first_types)
                 self.assertEqual([event["sequence"] for event in first], list(range(len(first_types))))
-                self.assertEqual(result["first"]["published_events"], (len(first_types) if interrupt_stage.startswith("started") else len(first_types) - 1))
-                self.assertFalse(result["first"]["partial_published"])
+                self.assertEqual(result["first"]["published_events"], (len(first_types) if interrupt_stage.startswith(("started", "finalizer-")) else len(first_types) - 1))
+                self.assertEqual(result["first"]["partial_published"], interrupt_stage.startswith("finalizer-"))
                 if interrupt_stage == "delta":
                     self.assertEqual(first[1]["text"], "controlled partial")
                 expected = {"schemaVersion": 1, "requestId": "ollama-operational.1",
                             "sequence": len(first_types) - 1, "type": terminal}
+                if terminal == "completed":
+                    expected.update(finishReason="completed",
+                                    usage={"status": "reported", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9},
+                                    cost={"status": "unknown", "currency": None, "amount": None})
                 if terminal == "failed":
-                    expected.update(code="operation_timeout", retryable=True)
+                    expected.update(code="protocol_invalid" if interrupt_stage == "finalizer-failure" else "operation_timeout",
+                                    retryable=interrupt_stage != "finalizer-failure")
                 self.assertEqual(first[-1], expected)
+                self.assertEqual((result["first"]["terminal"], result["first"]["code"], result["first"]["exit_code"]),
+                                 (terminal, expected.get("code"), 0))
                 self.assertEqual([event["type"] for event in retry], ["started", "delta", "completed"])
                 self.assertEqual([event["sequence"] for event in retry], [0, 1, 2])
                 self.assertEqual(retry[-1]["usage"]["totalTokens"], 9)

@@ -1468,6 +1468,123 @@ time.sleep(60)
         QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
     }
 
+    void nulPromptFailsPreflightWithoutStartingHelperAndClearsPreviousResult()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("Captured PID/group cleanup checks are Unix-specific");
+#else
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("started"));
+        QByteArray script = reportedResultHelper(marker);
+        script.replace("r=json.loads(sys.stdin.buffer.read())", "raw=sys.stdin.buffer.read()\nr=json.loads(raw)");
+        script.replace("b={'schemaVersion'", "parse_request(raw.rstrip(b'\\n'))\nb={'schemaVersion'");
+        script.prepend(QByteArray("import sys\nsys.path.insert(0,r'")
+            + QFileInfo(QStringLiteral(ORLA_TEST_AI_TEXT_HELPER)).absolutePath().toUtf8()
+            + "')\nfrom ai_text import parse_request\n");
+        QStringList removedRuntime;
+        AiTextController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
+            writeHelper(directory, script), {}, nullptr, [&](const QString &path) {
+                removedRuntime.append(path);
+                return QDir(path).removeRecursively();
+            });
+        QSignalSpy changed(&controller, &AiTextController::changed);
+        QSignalSpy closeReady(&controller, &AiTextController::closeReady);
+        QSignalSpy processStarted(&controller.m_process, &QProcess::started);
+        controller.generate(QStringLiteral("request.previous"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("previous result"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QCOMPARE(controller.output(), QStringLiteral("previous result"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 5);
+        QFile record(marker);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray previousRecord = record.readAll();
+        record.close();
+        QCOMPARE(previousRecord.count('\n'), 1);
+        const QString runtimeRoot = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        const QStringList previousRuntime = QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        const qsizetype previousRemovals = removedRuntime.size();
+        const qsizetype previousStarts = processStarted.size();
+        const qsizetype previousSignals = changed.size();
+        bool invalidAttemptPhase = true;
+        bool runtimeCreated = false;
+        bool staleResultNotified = false;
+        connect(&controller, &AiTextController::changed, this, [&] {
+            if (!invalidAttemptPhase) return;
+            runtimeCreated = runtimeCreated || bool(controller.m_runtimeDirectory);
+            staleResultNotified = staleResultNotified || !controller.output().isEmpty()
+                || !controller.usage().isEmpty();
+        });
+        const QString text = QStringLiteral("before") + QChar::Null + QStringLiteral("after");
+        QVERIFY(!text.isEmpty());
+        controller.generate(QStringLiteral("request.nul"), QStringLiteral("summarize"), QVariant(),
+                            text, QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        const bool immediatelyIdle = !controller.busy();
+        // Let a wrongly launched baseline helper exit and remove its owned runtime before any oracle.
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray afterRecord = record.readAll();
+        record.close();
+        for (const QByteArray &identity : afterRecord.split('\n')) {
+            if (identity.isEmpty()) continue;
+            const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+            QVERIFY(pid > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : removedRuntime) QVERIFY(!QFileInfo::exists(path));
+        qInfo() << "OWNED_NUL_PREFLIGHT_CLEANUP" << afterRecord.trimmed()
+                << "immediatelyIdle" << immediatelyIdle << "runtimeCreated" << runtimeCreated
+                << "newStarts" << processStarted.size() - previousStarts
+                << "newRemovals" << removedRuntime.size() - previousRemovals
+                << "errorCode" << controller.errorCode();
+        QCOMPARE(controller.status(), QStringLiteral("failed"));
+        QCOMPARE(controller.errorCode(), QStringLiteral("invalid_request"));
+        QVERIFY(immediatelyIdle);
+        QVERIFY(!runtimeCreated);
+        QCOMPARE(processStarted.size(), previousStarts);
+        QCOMPARE(removedRuntime.size(), previousRemovals);
+        QCOMPARE(afterRecord, previousRecord);
+        QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
+        QCOMPARE(changed.size(), previousSignals + 1);
+        QCOMPARE(closeReady.size(), 0);
+        QVERIFY(controller.output().isEmpty());
+        QVERIFY(controller.usage().isEmpty());
+        QCOMPARE(controller.costStatus(), QStringLiteral("unknown"));
+        QVERIFY(!staleResultNotified);
+        QVERIFY(controller.requestClose());
+        QCOMPARE(closeReady.size(), 0);
+        invalidAttemptPhase = false;
+        controller.generate(QStringLiteral("request.nul.retry"), QStringLiteral("summarize"), QVariant(),
+                            QStringLiteral("fresh result"), QStringLiteral("model"),
+                            QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("completed"));
+        QVERIFY(controller.errorCode().isEmpty());
+        QCOMPARE(controller.output(), QStringLiteral("fresh result"));
+        QCOMPARE(controller.usage().value(QStringLiteral("totalTokens")).toLongLong(), 9);
+        QVERIFY(record.open(QIODevice::ReadOnly));
+        const QByteArray retryRecord = record.readAll();
+        QCOMPARE(retryRecord.count('\n'), 2);
+        for (const QByteArray &identity : retryRecord.split('\n')) {
+            if (identity.isEmpty()) continue;
+            const qint64 pid = identity.left(identity.indexOf(' ')).toLongLong();
+            QVERIFY(pid > 0);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            errno = 0;
+            QVERIFY(::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+        }
+        for (const QString &path : removedRuntime) QVERIFY(!QFileInfo::exists(path));
+        QCOMPARE(QDir(runtimeRoot).entryList(QDir::Dirs | QDir::NoDotAndDotDot), previousRuntime);
+        QCOMPARE(closeReady.size(), 0);
+#endif
+    }
+
     void ignoredGeneratePreservesResultWhileBusyOrClosePending_data()
     {
         QTest::addColumn<bool>("closePending");
