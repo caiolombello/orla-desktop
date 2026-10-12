@@ -948,6 +948,8 @@ def _finalize_started(*, boundary, ledger, token, parser, pending,
                       sink, state):
     try:
         previous_mask = boundary.block(SIGNAL_NAMES)
+        if ledger.setup_mask_acquired:
+            previous_mask = ledger.setup_previous_mask
     except Exception:
         _restore_pending(parser, pending)
         _safe_close(response)
@@ -957,6 +959,7 @@ def _finalize_started(*, boundary, ledger, token, parser, pending,
         except Exception:
             pass
         _rollback_operational(boundary, ledger)
+        _restore_setup_mask(boundary, ledger)
         return _TransportOutcome(
             state="finalization_failed", terminal=None,
             code="process_cleanup_failed", retryable=False,
@@ -1137,8 +1140,36 @@ def _run_call(*, input_reader, connector_factory, clock, signal_boundary, sink):
     }
     try:
         _check_operational(clock, deadline, token)
-        _publish(sink, parser.start(), state)
-        ledger.started_published = True
+        # Defer lifecycle handlers until started and its returned publication ACK
+        # are committed. This masks only this bounded initial frame; a blocked
+        # sink still requires the owning controller's outer process cleanup.
+        ledger.setup_previous_mask = signal_boundary.block(SIGNAL_NAMES)
+        ledger.setup_mask_acquired = True
+        try:
+            _publish(sink, parser.start(), state)
+            ledger.started_published = True
+        except Exception:
+            # A restore must not replace an earlier sink/parser failure with a
+            # queued lifecycle interrupt. Keep an unconfirmed mask for rollback.
+            try:
+                signal_boundary.restore_mask(ledger.setup_previous_mask)
+            except (_Cancelled, _TimedOut):
+                ledger.setup_mask_acquired = False
+            except Exception:
+                pass
+            else:
+                ledger.setup_mask_acquired = False
+            raise
+        else:
+            try:
+                signal_boundary.restore_mask(ledger.setup_previous_mask)
+            except (_Cancelled, _TimedOut):
+                ledger.setup_mask_acquired = False
+                raise
+            except Exception:
+                raise _TransportFailure("process_cleanup_failed", False) from None
+            else:
+                ledger.setup_mask_acquired = False
         _check_operational(clock, deadline, token)
 
         connector = connector_factory({

@@ -1836,7 +1836,7 @@ class AiTextTransportTests(unittest.TestCase):
 
     def test_finalizer_guard_failure_after_started_preserves_partial_without_terminal(self):
         delta = b'{"message":{"role":"assistant","content":"kept"},"done":false}\n'
-        signals = FakeSignals(fail_at={("block", 2)})
+        signals = FakeSignals(fail_at={("block", 3)})
         outcome, sink, _connector, _response, _signals, trace, _specs = self.run_local(
             [delta, TimeoutError()], signals=signals,
         )
@@ -1848,7 +1848,7 @@ class AiTextTransportTests(unittest.TestCase):
 
     def test_restore_failure_after_one_terminal_attempt_changes_only_private_outcome(self):
         terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
-        for failure in (("restore_handler", 1), ("restore_mask", 2)):
+        for failure in (("restore_handler", 1), ("restore_mask", 3)):
             with self.subTest(failure=failure):
                 signals = FakeSignals(fail_at={failure})
                 outcome, sink, *_rest = self.run_local(
@@ -1861,6 +1861,54 @@ class AiTextTransportTests(unittest.TestCase):
                 self.assertEqual(sum(event["type"] in {
                     "completed", "failed", "cancelled",
                 } for event in sink.events), 1)
+
+    def test_started_mask_failure_restores_original_mask_and_first_error(self):
+        class MaskSignals(FakeSignals):
+            def __init__(self, failures=(), lifecycle=False):
+                super().__init__(fail_at=failures)
+                self.mask = "initial-mask"
+                self.lifecycle = lifecycle
+
+            def block(self, names):
+                self._step("block", ("block", tuple(names)))
+                previous = self.mask
+                self.mask = "blocked-mask"
+                return previous
+
+            def restore_mask(self, mask):
+                count = self._step("restore_mask", ("restore_mask", mask))
+                self.mask = mask
+                if self.lifecycle and count == 2:
+                    raise self_target._Cancelled()
+
+        self_target = self.target
+        cases = (
+            ({("block", 2)}, False, False, "preflight_failed", 2, 0),
+            ({("restore_mask", 2)}, False, False, "terminal_emitted", 0, 2),
+            ({("restore_mask", 2), ("block", 3)}, False, False, "finalization_failed", 3, 1),
+            (set(), True, True, "sink_failed", 3, 0),
+            ({("restore_mask", 2)}, False, True, "sink_failed", 3, 0),
+        )
+        for failures, lifecycle, sink_failure, state, exit_code, acknowledged in cases:
+            with self.subTest(failures=failures, lifecycle=lifecycle, sink_failure=sink_failure):
+                signals = MaskSignals(failures, lifecycle)
+                sink = RecordingSink(fail_at=1 if sink_failure else None)
+                factories = []
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda spec: factories.append(spec),
+                    clock=FakeClock(), signal_boundary=signals, sink=sink,
+                )
+                self.assertEqual((outcome.state, outcome.exit_code), (state, exit_code))
+                self.assertEqual(outcome.published_events, acknowledged)
+                self.assertEqual(factories, [])
+                self.assertEqual(signals.mask, "initial-mask")
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 3)
+                if state == "terminal_emitted":
+                    self.assertEqual(sink.events[-1]["code"], "process_cleanup_failed")
+                elif sink_failure:
+                    self.assertEqual(sink.events, [])
 
     def test_lifecycle_exception_inside_started_publish_finalizes_without_ack(self):
         cases = ((self.target._Cancelled, "cancelled", None),
@@ -2089,7 +2137,7 @@ class AiTextTransportTests(unittest.TestCase):
                 self.target, "_wipe", failing_wipe,
             ):
                 signals = FakeSignals(
-                    fail_at={("block", 2)} if kind == "guard" else (),
+                    fail_at={("block", 3)} if kind == "guard" else (),
                 )
                 trace = []
                 response = FakeResponse([stream, b""], trace)

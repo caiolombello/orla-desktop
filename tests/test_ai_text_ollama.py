@@ -294,6 +294,7 @@ class AiTextOllamaPublishSignalTests(unittest.TestCase):
 import importlib.util,json,os,signal,socket,sys,time
 from pathlib import Path
 shim_path,ready_path,result_path,interrupt_stage=sys.argv[1:]
+prewrite=interrupt_stage=='started-prewrite'
 spec=importlib.util.spec_from_file_location('owned_ollama_signal_shim',shim_path)
 shim=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shim)
@@ -334,12 +335,22 @@ def controlled_write(fd,data):
  if event and event['type'] in ('completed','failed','cancelled'):
   terminal_traces.append(trace.copy())
   terminal_lifecycle.append({'timer_cancelled':signal.getitimer(signal.ITIMER_REAL)==(0.0,0.0),'wipe_completed':bool(wiped) and not any(wiped[-1] or b''),'handlers_installed':all(signal.getsignal(getattr(signal,name))!=handlers[name] for name in names),'signals_blocked':set(getattr(signal,name) for name in names).issubset(signal.pthread_sigmask(signal.SIG_BLOCK,set()))})
+ if event and event['type']=='started' and prewrite and not paused:
+  paused=True
+  Path(ready_path).write_text(json.dumps({'pid':os.getpid(),'stage':'started-prewrite','written':0,'bytes':len(data)}))
+  os.kill(os.getpid(),int(os.environ['OWNED_PREWRITE_SIGNAL']))
  written=original_write(fd,data)
  if event and event['type']==interrupt_stage and not paused:
   if written!=len(data): raise AssertionError('fixture event did not finish writing')
   paused=True
   Path(ready_path).write_text(json.dumps({'pid':os.getpid(),'stage':interrupt_stage+'-written-inside-publish','written':written,'bytes':len(data)}))
-  signal.pause()
+  if interrupt_stage=='started':
+   deadline=time.monotonic()+1.0
+   while not Path(ready_path).with_suffix('.release').exists():
+    if time.monotonic()>=deadline: raise AssertionError('parent handshake expired')
+    time.sleep(0.005)
+  else:
+   signal.pause()
  return written
 os.write=controlled_write
 names=transport.SIGNAL_NAMES
@@ -370,6 +381,9 @@ sys.exit(first.exit_code)
     def test_real_posix_signal_inside_started_publish_keeps_lifecycle_terminal(self):
         self.assert_real_signal_publication("started")
 
+    def test_real_posix_signal_before_started_write_keeps_lifecycle_terminal(self):
+        self.assert_real_signal_publication("started-prewrite")
+
     def assert_real_signal_publication(self, interrupt_stage):
         for number in (signal.SIGTERM, signal.SIGALRM):
             with self.subTest(signal=number.name):
@@ -381,7 +395,7 @@ sys.exit(first.exit_code)
                         [str(PYTHON), "-I", "-B", "-c", self.CHILD,
                          str(HELPER), str(ready), str(result_path), interrupt_stage],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        cwd=runtime, env={}, start_new_session=True,
+                        cwd=runtime, env={"OWNED_PREWRITE_SIGNAL": str(int(number))} if interrupt_stage == "started-prewrite" else {}, start_new_session=True,
                     )
                     try:
                         process.stdin.write(request_wire(11434, text="offline signal marker"))
@@ -392,8 +406,11 @@ sys.exit(first.exit_code)
                             time.sleep(0.005)
                         observed = ready.exists()
                         marker = json.loads(ready.read_text()) if observed else None
-                        if observed and process.poll() is None:
+                        if observed and process.poll() is None and interrupt_stage != "started-prewrite":
                             process.send_signal(number)
+                            ready.with_suffix(".release").write_text("delivered")
+                        elif observed:
+                            pass
                         elif process.poll() is None:
                             os.killpg(process.pid, signal.SIGKILL)
                         stdout, stderr = process.communicate(timeout=2.5)
@@ -423,16 +440,16 @@ sys.exit(first.exit_code)
                 }, sort_keys=True))
                 self.assertTrue(observed)
                 self.assertEqual(marker["pid"], pid)
-                self.assertEqual(marker["stage"], interrupt_stage + "-written-inside-publish")
-                self.assertEqual(marker["written"], marker["bytes"])
+                self.assertEqual(marker["stage"], ("started-prewrite" if interrupt_stage == "started-prewrite" else interrupt_stage + "-written-inside-publish"))
+                self.assertEqual(marker["written"], 0 if interrupt_stage == "started-prewrite" else marker["bytes"])
                 self.assertEqual(stderr, b"")
                 self.assertEqual(returncode, 0)
                 self.assertTrue(result["handlers_restored"])
                 self.assertTrue(result["mask_restored"])
                 self.assertTrue(result["timer_cancelled"])
-                first_trace = [] if interrupt_stage == "started" else ["response.close", "connector.close"]
+                first_trace = [] if interrupt_stage.startswith("started") else ["response.close", "connector.close"]
                 self.assertEqual(result["first_close_trace"], first_trace)
-                self.assertEqual(result["first_factory_calls"], [] if interrupt_stage == "started" else [False])
+                self.assertEqual(result["first_factory_calls"], [] if interrupt_stage.startswith("started") else [False])
                 self.assertEqual(result["terminal_lifecycle"], [
                     {"timer_cancelled": True, "wipe_completed": True,
                      "handlers_installed": True, "signals_blocked": True},
@@ -447,10 +464,10 @@ sys.exit(first.exit_code)
                 first = [event for event in events if event["requestId"] == "ollama-operational.1"]
                 retry = [event for event in events if event["requestId"] == "ollama-operational.retry"]
                 terminal = "cancelled" if number == signal.SIGTERM else "failed"
-                first_types = ["started", terminal] if interrupt_stage == "started" else ["started", "delta", terminal]
+                first_types = ["started", terminal] if interrupt_stage.startswith("started") else ["started", "delta", terminal]
                 self.assertEqual([event["type"] for event in first], first_types)
                 self.assertEqual([event["sequence"] for event in first], list(range(len(first_types))))
-                self.assertEqual(result["first"]["published_events"], len(first_types) - 1)
+                self.assertEqual(result["first"]["published_events"], (len(first_types) if interrupt_stage.startswith("started") else len(first_types) - 1))
                 self.assertFalse(result["first"]["partial_published"])
                 if interrupt_stage == "delta":
                     self.assertEqual(first[1]["text"], "controlled partial")
