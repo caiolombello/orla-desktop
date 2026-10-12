@@ -543,6 +543,74 @@ private Q_SLOTS:
         QVERIFY(helperReapedAndRuntimeRemoved(receipt));
     }
 
+    void aiTextCompletionLabelReflectsValidatedFinishReason_data()
+    {
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("expectedLabel");
+        QTest::newRow("stop") << QStringLiteral("stop")
+            << QStringLiteral("Geração concluída. Revise o resultado.");
+        QTest::newRow("length") << QStringLiteral("length")
+            << QStringLiteral("Limite de saída atingido. O resultado pode estar incompleto; revise o texto.");
+        QTest::newRow("incomplete") << QStringLiteral("incomplete")
+            << QStringLiteral("Geração incompleta. Revise o resultado parcial.");
+    }
+
+    void aiTextCompletionLabelReflectsValidatedFinishReason()
+    {
+        QFETCH(QString, reason);
+        QFETCH(QString, expectedLabel);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString receipt = directory.filePath(QStringLiteral("finish-receipt"));
+        const QString helper = directory.filePath(QStringLiteral("finish-helper.py"));
+        QFile file(helper);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("import base64,json,os,pathlib,sys\npathlib.Path(base64.b64decode('");
+        file.write(receipt.toUtf8().toBase64());
+        file.write("').decode()).write_text(str(os.getpid())+'\\n'+os.getcwd())\n"
+                   "r=json.loads(sys.stdin.buffer.read())\nb={'schemaVersion':1,'requestId':r['requestId']}\n"
+                   "def emit(sequence,kind,**extra):\n print(json.dumps(dict(b,sequence=sequence,type=kind,**extra),separators=(',',':')),flush=True)\n"
+                   "emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])\n"
+                   "emit(1,'delta',text='texto utilizável')\n"
+                   "emit(2,'completed',finishReason='");
+        file.write(reason.toUtf8());
+        file.write("',usage={'status':'unknown','inputTokens':None,'outputTokens':None,'totalTokens':None},cost={'status':'unknown','currency':None,'amount':None})\n");
+        file.close();
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &controller = controllerOwner.controller();
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper);
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-steam.py")));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *entry = window->findChild<QQuickItem *>(QStringLiteral("aiEntryButton"));
+        QVERIFY(entry);
+        QVERIFY(QMetaObject::invokeMethod(entry, "click"));
+        aiText.generate(QStringLiteral("finish-label"), QStringLiteral("summarize"), QVariant(),
+                        QStringLiteral("texto"), QStringLiteral("model"), QStringLiteral("127.0.0.1"), 11434, true);
+        QTRY_VERIFY_WITH_TIMEOUT(!aiText.busy(), 1500);
+        QCOMPARE(aiText.status(), QStringLiteral("completed"));
+        QVERIFY(helperReapedAndRuntimeRemoved(receipt));
+        auto *label = window->findChild<QQuickItem *>(QStringLiteral("aiTextStatus"));
+        auto *result = window->findChild<QQuickItem *>(QStringLiteral("aiTextResult"));
+        auto *copy = window->findChild<QQuickItem *>(QStringLiteral("aiTextCopy"));
+        QVERIFY(label && result && copy);
+        QTRY_COMPARE_WITH_TIMEOUT(label->property("text").toString(), expectedLabel, 1000);
+        QCOMPARE(result->property("text").toString(), QStringLiteral("texto utilizável"));
+        QVERIFY(result->property("readOnly").toBool());
+        QVERIFY(copy->isEnabled());
+        qInfo() << "ORLA_FINISH_REASON_LABEL_PASS" << reason << label->property("text").toString()
+                << "usableTextRetained=true copyEnabled=true";
+    }
+
     void departingAiPanelCancelsBothOwnersAndPreservesPartialOutput_data()
     {
         QTest::addColumn<QString>("departure");
@@ -687,6 +755,132 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(!scan->isEnabled() && cancel->isVisible() && !downloads->isEnabled(), 1000);
         QVERIFY(QMetaObject::invokeMethod(cancel, "click"));
         QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+    }
+
+    void departingSteamPanelForAiCancelsOwnedScanAndAllowsRetry()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString receipt = directory.filePath(QStringLiteral("steam-departure-receipt"));
+        const QString cancellationReceipt = directory.filePath(QStringLiteral("steam-departure-cancelled"));
+        const QString retryReceipt = directory.filePath(QStringLiteral("steam-retry-receipt"));
+        const QString helper = directory.filePath(QStringLiteral("steam-departure.py"));
+        const QByteArray document = R"({"apps":[],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
+        QFile helperFile(helper);
+        QVERIFY(helperFile.open(QIODevice::WriteOnly));
+        helperFile.write("import base64,os,pathlib,signal,sys,time\nbase=pathlib.Path(base64.b64decode('");
+        helperFile.write(directory.path().toUtf8().toBase64());
+        helperFile.write("').decode())\ndef cancelled(signum, frame):\n (base/'steam-departure-cancelled').touch()\n raise SystemExit(0)\nsignal.signal(signal.SIGTERM,cancelled)\nfirst=base/'steam-departure-receipt'\nretry=first.exists()\n"
+                         "(base/('steam-retry-receipt' if retry else 'steam-departure-receipt')).write_text(str(os.getpid()))\n"
+                         "if not retry:\n time.sleep(60)\nsys.stdout.buffer.write(base64.b64decode('");
+        helperFile.write(document.toBase64());
+        helperFile.write("'))\n");
+        helperFile.close();
+        const auto reaped = [](const QString &path) {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly)) return false;
+            bool valid = false;
+            const qint64 pid = file.readAll().toLongLong(&valid);
+            if (!valid || pid <= 0) return false;
+            errno = 0;
+            if (::kill(static_cast<pid_t>(pid), 0) != -1 || errno != ESRCH) return false;
+            errno = 0;
+            return ::kill(-static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH;
+        };
+
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-ai.py")));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), directory.filePath(QStringLiteral("missing-ai-text.py")));
+        QList<QUrl> opened;
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&](const QUrl &url) { opened.append(url); return true; }); // Owned URI boundary only.
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
+        bool cancelledBeforeAiVisible = false;
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        const auto cleanupOnReturn = qScopeGuard([&] {
+            steam.cancelAll();
+            QElapsedTimer timer;
+            timer.start();
+            while (steam.busy() && timer.elapsed() < 7000) QTest::qWait(10);
+            QVERIFY(!steam.busy());
+            if (QFile::exists(receipt)) QVERIFY(reaped(receipt));
+            if (QFile::exists(retryReceipt)) QVERIFY(reaped(retryReceipt));
+        });
+        const auto item = [&](const char *name) { return window->findChild<QQuickItem *>(QString::fromLatin1(name)); };
+        auto *steamEntry = item("steamEntryButton");
+        auto *steamPanel = item("steamSettings");
+        auto *input = item("steamRootInput");
+        auto *scan = item("steamScanButton");
+        auto *cancel = item("steamCancelButton");
+        auto *aiEntry = item("aiEntryButton");
+        auto *aiPanel = item("aiSettings");
+        auto *aiBack = item("aiBackButton");
+        auto *discover = item("aiDiscoverButton");
+        auto *text = item("aiTextInput");
+        auto *consent = item("aiTextConsent");
+        auto *generate = item("aiTextGenerate");
+        QVERIFY(steamEntry && steamPanel && input && scan && cancel && aiEntry && aiPanel
+                && aiBack && discover && text && consent && generate);
+        QVERIFY(QMetaObject::invokeMethod(steamEntry, "click"));
+        QVERIFY(steamPanel->isVisible());
+        QVERIFY(!QFile::exists(receipt));
+        QVERIFY(input->setProperty("text", QStringLiteral("native=/synthetic/root")));
+        QVERIFY(QMetaObject::invokeMethod(scan, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(steam.busy() && QFile::exists(receipt), 1500);
+        QVERIFY(cancel->isVisible());
+        QCOMPARE(steam.status(), QStringLiteral("running"));
+        const quint64 scanRevision = steam.inventoryRevision();
+        connect(&steam, &SteamProviderController::changed, window, [&] {
+            if (steam.status() == QStringLiteral("idle")
+                && window->property("activePanel").toString() == QStringLiteral("steam"))
+                cancelledBeforeAiVisible = true;
+        });
+        QVERIFY(QMetaObject::invokeMethod(aiEntry, "click"));
+        QCOMPARE(window->property("activePanel").toString(), QStringLiteral("ai"));
+        QVERIFY(aiPanel->isVisible() && !steamPanel->isVisible());
+        QVERIFY(aiBack->hasActiveFocus());
+        QVERIFY(steam.busy()); // Owned helper remains under cleanup custody until reaped.
+        const bool cancelledOnDeparture = cancelledBeforeAiVisible && steam.inventoryRevision() > scanRevision;
+        QVERIFY(discover->isEnabled() && text->isEnabled());
+        QVERIFY(text->setProperty("text", QStringLiteral("texto privado editável")));
+        QVERIFY(consent->setProperty("checked", true));
+        QTRY_VERIFY_WITH_TIMEOUT(generate->isEnabled(), 1000);
+        QVERIFY(!ai.busy() && !aiText.busy()); // Editing the usable AI panel never starts a provider.
+        QCOMPARE(opened.size(), 0);
+        // RED must still reap its helper before reporting the omitted cancellation.
+        if (!cancelledOnDeparture) steam.cancelAll();
+        QTRY_VERIFY_WITH_TIMEOUT(!steam.busy(), 7000);
+        QVERIFY(reaped(receipt));
+        QVERIFY(QFile::exists(cancellationReceipt)); // The owned worker acknowledges actual SIGTERM.
+        QFile receiptFile(receipt);
+        QVERIFY(receiptFile.open(QIODevice::ReadOnly));
+        qInfo().noquote() << "ORLA_STEAM_DEPARTURE_HELPER" << receiptFile.readAll()
+                         << "pid_group_reaped=true cancellation_on_departure=" << cancelledOnDeparture;
+        QVERIFY2(cancelledOnDeparture, "Switching from Steam to AI left the owned scan running behind the hidden panel");
+        QCOMPARE(steam.status(), QStringLiteral("idle"));
+        QVERIFY(steam.errorCode().isEmpty());
+        QVERIFY(!window->property("pendingDismiss").toBool());
+        QVERIFY(QMetaObject::invokeMethod(steamEntry, "click"));
+        QVERIFY(steamPanel->isVisible());
+        QVERIFY(scan->isEnabled());
+        QVERIFY(!QFile::exists(retryReceipt)); // Opening Steam alone never scans.
+        QVERIFY(QMetaObject::invokeMethod(scan, "click"));
+        QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 1500);
+        QVERIFY(!steam.busy());
+        QVERIFY(reaped(retryReceipt));
+        QVERIFY(steam.errorCode().isEmpty());
+        QCOMPARE(opened.size(), 0);
+        QVERIFY(!ai.busy() && !aiText.busy());
+        qInfo() << "ORLA_STEAM_DEPARTURE_PASS scan_cancelled_before_panel_switch=true acknowledged_sigterm_pid_group_reaped=true ai_panel_usable=true retry_available=true real_uri_calls=0";
     }
 
     void threeOwnerCloseBarrierWaitsForSteamAndAiTextExactlyOnce()

@@ -26,6 +26,7 @@
 
 namespace {
 constexpr qsizetype kMaximumLineBytes = 64 * 1024;
+constexpr qsizetype kMaximumRequestFrameBytes = 96 * 1024 + 1; // JSON body plus the framing newline.
 constexpr qsizetype kMaximumOutputBytes = 256 * 1024;
 constexpr int kMaximumEvents = 4096;
 constexpr int kOuterDeadlineMs = 125000;
@@ -326,6 +327,8 @@ void AiTextController::generate(const QString &requestId, const QString &task,
 {
     if (busy() || m_closePending) return;
     m_output.clear();
+    m_finishReason.clear();
+    m_pendingFinishReason.clear();
     m_usage.clear();
     m_pendingUsage.clear();
     m_knownFailureCode.clear();
@@ -337,11 +340,33 @@ void AiTextController::generate(const QString &requestId, const QString &task,
         emit changed();
         return;
     }
+    const QString destination = numericHost == QStringLiteral("::1")
+        ? QStringLiteral("http://[::1]:%1/api/chat").arg(port)
+        : QStringLiteral("http://127.0.0.1:%1/api/chat").arg(port);
+    QJsonObject frame;
+    frame.insert(QStringLiteral("schemaVersion"), 1);
+    frame.insert(QStringLiteral("requestId"), requestId);
+    frame.insert(QStringLiteral("provider"), QStringLiteral("ollama_local"));
+    frame.insert(QStringLiteral("task"), task);
+    frame.insert(QStringLiteral("targetLanguage"), task == QStringLiteral("translate")
+        ? QJsonValue(targetLanguage.toString()) : QJsonValue(QJsonValue::Null));
+    frame.insert(QStringLiteral("text"), text);
+    frame.insert(QStringLiteral("model"), model);
+    frame.insert(QStringLiteral("endpoint"), destination);
+    frame.insert(QStringLiteral("credentialBytes"), 0);
+    QByteArray requestFrame = QJsonDocument(frame).toJson(QJsonDocument::Compact) + '\n';
+    if (requestFrame.size() > kMaximumRequestFrameBytes) {
+        requestFrame.fill('\0');
+        recordFailure(QStringLiteral("invalid_request"));
+        emit changed();
+        return;
+    }
     const QFileInfo python(m_pythonPath);
     const QFileInfo helper(m_helperPath);
     if (!python.isAbsolute() || !python.isFile() || !python.isExecutable()
         || !helper.isAbsolute() || !helper.isFile() || !helper.isReadable()
         || !prepareRuntime()) {
+        requestFrame.fill('\0');
         recordFailure(QStringLiteral("helper_unavailable"));
         emit changed();
         return;
@@ -350,9 +375,7 @@ void AiTextController::generate(const QString &requestId, const QString &task,
     ++m_generation;
     m_processGeneration = m_generation;
     m_requestId = requestId;
-    m_destination = numericHost == QStringLiteral("::1")
-        ? QStringLiteral("http://[::1]:%1/api/chat").arg(port)
-        : QStringLiteral("http://127.0.0.1:%1/api/chat").arg(port);
+    m_destination = destination;
     m_model = model;
     m_errorCode.clear();
     m_error.clear();
@@ -375,18 +398,7 @@ void AiTextController::generate(const QString &requestId, const QString &task,
     m_processGroup = 0;
     m_status = QStringLiteral("running");
 
-    QJsonObject frame;
-    frame.insert(QStringLiteral("schemaVersion"), 1);
-    frame.insert(QStringLiteral("requestId"), requestId);
-    frame.insert(QStringLiteral("provider"), QStringLiteral("ollama_local"));
-    frame.insert(QStringLiteral("task"), task);
-    frame.insert(QStringLiteral("targetLanguage"), task == QStringLiteral("translate")
-        ? QJsonValue(targetLanguage.toString()) : QJsonValue(QJsonValue::Null));
-    frame.insert(QStringLiteral("text"), text);
-    frame.insert(QStringLiteral("model"), model);
-    frame.insert(QStringLiteral("endpoint"), m_destination);
-    frame.insert(QStringLiteral("credentialBytes"), 0);
-    m_requestFrame = QJsonDocument(frame).toJson(QJsonDocument::Compact) + '\n';
+    m_requestFrame = std::move(requestFrame);
 
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     m_process.setStandardErrorFile(QProcess::nullDevice());
@@ -548,8 +560,10 @@ bool AiTextController::consumeLine(const QByteArray &line)
             || cost.value(QStringLiteral("status")).toString() != QStringLiteral("unknown")
             || !cost.value(QStringLiteral("currency")).isNull()
             || !cost.value(QStringLiteral("amount")).isNull()) return false;
-        if (!m_cancelRequested && !m_timedOut && !m_protocolInvalid)
+        if (!m_cancelRequested && !m_timedOut && !m_protocolInvalid) {
             m_pendingUsage = std::move(usage);
+            m_pendingFinishReason = object.value(QStringLiteral("finishReason")).toString();
+        }
         m_terminalEvent = true;
         m_terminalType = type;
     } else if (type == QStringLiteral("failed")) {
@@ -595,6 +609,7 @@ void AiTextController::beginCancellation()
 {
     if (!busy()) return;
     m_pendingUsage.clear();
+    m_pendingFinishReason.clear();
     m_cleanupActive = true;
 #ifdef Q_OS_UNIX
     killOwnedGroup(SIGTERM);
@@ -722,6 +737,7 @@ void AiTextController::finishAfterCleanup(bool cleanupConfirmed)
                                                        : m_knownFailureCode);
         } else if (m_terminalType == QStringLiteral("completed")) {
             m_usage = std::move(m_pendingUsage);
+            m_finishReason = std::move(m_pendingFinishReason);
             m_status = QStringLiteral("completed");
             m_errorCode.clear();
             m_error.clear();
@@ -755,6 +771,7 @@ void AiTextController::recordFailure(const QString &code)
 void AiTextController::resetOperation()
 {
     m_pendingUsage.clear();
+    m_pendingFinishReason.clear();
     m_knownFailureCode.clear();
     m_cancelFailureCode.clear();
     m_operationActive = false;

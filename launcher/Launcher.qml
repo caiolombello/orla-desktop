@@ -117,7 +117,11 @@ Window {
                 Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
                 onClicked: {
                     if (window.activePanel === "ai") window.closeAiPanel()
-                    else if (!window.pendingDismiss) { window.activePanel = "ai"; aiPanel.focusFirst() }
+                    else if (!window.pendingDismiss) {
+                        if (window.activePanel === "steam") steamProvider.cancelAll()
+                        window.activePanel = "ai"
+                        aiPanel.focusFirst()
+                    }
                 }
                 contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
                 background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }

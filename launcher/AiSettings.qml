@@ -30,7 +30,12 @@ Item {
         if (panel.operationStartBlocked) return qsTr("Encerrando operações. Aguarde antes de iniciar outra.")
         switch (textController.status) {
         case "running": return qsTr("Geração iniciada. Aguarde ou cancele.")
-        case "completed": return qsTr("Geração concluída. Revise o resultado.")
+        case "completed":
+            if (textController.finishReason === "length")
+                return qsTr("Limite de saída atingido. O resultado pode estar incompleto; revise o texto.")
+            if (textController.finishReason === "incomplete")
+                return qsTr("Geração incompleta. Revise o resultado parcial.")
+            return qsTr("Geração concluída. Revise o resultado.")
         case "failed": return qsTr("A geração falhou: %1").arg(textController.error)
         case "cancelled_confirmed": return qsTr("Geração cancelada. O resultado parcial foi preservado.")
         case "cancelled_unconfirmed": return qsTr("Cancelamento local concluído sem confirmação remota. O resultado parcial foi preservado.")
