@@ -546,3 +546,23 @@ processes, groups and runtime paths were absent afterward; private TMP was empty
 These are bounded Source/local checks. Hosted CI for this follow-up, compact
 native tests, real providers, release and full-roadmap admission remain open.
 The installed launcher remains `5aaf518`; historical SIGSEGV causes remain UNKNOWN.
+
+
+### Pre-write signal window
+
+A later causal real SIGTERM/SIGALRM fixture reproduced a terminal without the
+initial started record. Lifecycle handlers are now deferred through the bounded
+initial publication and its returned ACK/ledger commit. Queued signals then use
+the existing finalizer; counters reflect both successfully returned frames.
+Original parser/sink errors keep precedence over a signal delivered on restore.
+Mask acquisition/restoration failures retain cleanup and original-mask recovery.
+
+Independent Source review approved the three-file fix. The complete AI suite
+passed 118 tests once (14.343s unittest), including actual pre-write, post-write
+and delta signal boundaries with owned process/group/runtime cleanup. Three
+existing fault-injection ordinals changed to account for the added mask; other
+113 prior test bodies remain identical. SIGALRM is deferred inside this initial
+write: blocked stdout still requires the controller's outer forced cleanup.
+This does not promise a generic blocking-I/O timeout or atomic line delivery.
+C++ code is unchanged; the preceding six-suite result remains historical.
+Hosted CI and native provider qualification for this follow-up remain open.
