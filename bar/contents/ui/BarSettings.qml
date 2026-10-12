@@ -6,10 +6,30 @@ ColumnLayout {
     id: root
     property alias cfg_showApplicationName: showApplicationName.checked
     property alias cfg_menuLabel: menuLabel.text
+    property alias cfg_showMenuLabel: showMenuLabel.checked
+    property alias cfg_compactHeight: compactHeight.checked
     property string cfg_menuIcon: "orla"
     Controls.CheckBox {
         id: showApplicationName
         text: qsTr("Mostrar nome do aplicativo ativo")
+    }
+    Controls.Button {
+        objectName: "applyMacInspiredPreset"
+        text: qsTr("Aplicar estilo inspirado no Mac")
+        onClicked: {
+            root.cfg_menuIcon = "orla";
+            root.cfg_showMenuLabel = false;
+            root.cfg_compactHeight = true;
+            root.cfg_showApplicationName = true;
+        }
+    }
+    Controls.CheckBox {
+        id: showMenuLabel
+        text: qsTr("Mostrar nome do menu junto ao ícone")
+    }
+    Controls.CheckBox {
+        id: compactHeight
+        text: qsTr("Usar controles compactos (28 px)")
     }
     Controls.Label { text: qsTr("Nome do menu"); textFormat: Text.PlainText }
     Controls.TextField {

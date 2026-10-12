@@ -8,13 +8,15 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     Layout.minimumWidth: 48
-    Layout.minimumHeight: 32
+    Layout.minimumHeight: bar.implicitHeight
     Layout.preferredWidth: bar.implicitWidth
     Layout.preferredHeight: bar.implicitHeight
     BarView {
         id: bar
         anchors.fill: parent
         showApplicationName: Plasmoid.configuration.showApplicationName
+        showMenuLabel: Plasmoid.configuration.showMenuLabel
+        compactHeight: Plasmoid.configuration.compactHeight
         menuLabel: Plasmoid.configuration.menuLabel
         menuIcon: Plasmoid.configuration.menuIcon
         onOpenRequested: kind => {

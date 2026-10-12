@@ -95,3 +95,12 @@ python3 bar/run_tests.py --style org.kde.desktop
 The wrapper runs ten injected-backend tests with offscreen/software Qt, temporary XDG directories and unavailable owned D-Bus addresses. It does not instantiate native adapters or execute session actions. Fusion/KDE passed; independent review repeated ten KDE tests and approved experimental source publication. Four components compiled without errors, without native instantiation; this does not prove real behavior.
 
 **UNRUN:** native dialogs/Cancel, real actions, opening settings, human gestures/focus/grab, the full applet in a panel, two monitors and sibling-widget composition. T1/T2/T3 remain open. See the [roadmap](../ROADMAP.md).
+
+
+A barra no fonte oferece **Mostrar nome do menu**, **controles compactos (28 px)**
+e o preset **Aplicar estilo inspirado no Mac**. O preset mantém o texto
+personalizado e permite alterar cada controle depois. Os menus usam a janela
+transiente do Qt e abrem abaixo do botão, com visual próprio e navegação por
+teclado. Os 16 testes isolados passaram; foco e posição no Wayland dependem da
+validação no painel real. A composição completa da barra e sua Central de
+Controle continuam em andamento.

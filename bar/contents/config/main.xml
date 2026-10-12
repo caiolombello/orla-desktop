@@ -5,6 +5,8 @@
   <kcfgfile name=""/>
   <group name="General">
     <entry name="showApplicationName" type="Bool"><default>true</default></entry>
+    <entry name="showMenuLabel" type="Bool"><default>true</default></entry>
+    <entry name="compactHeight" type="Bool"><default>false</default></entry>
     <entry name="menuLabel" type="String"><default>Orla</default></entry>
     <entry name="menuIcon" type="String"><default>orla</default></entry>
   </group>

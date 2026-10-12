@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Property, Signal, Slot, QUrl, Qt
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 
@@ -112,6 +112,115 @@ class BarTests(unittest.TestCase):
             QTest.qWait(10)
         self.assertEqual(target.property(name), expected, name)
 
+    def key_window(self):
+        menu = self.window.findChild(QObject, "orlaMenu")
+        if menu is not None and menu.property("visible"):
+            return next(window for window in self.app.topLevelWindows()
+                        if window != self.window and window.isVisible() and window.flags() & Qt.Popup)
+        return self.window
+
+    def wait_restored_focus(self, button):
+        # The offscreen plugin does not reactivate a transient popup's parent.
+        # First prove the control owns logical focus, then simulate compositor
+        # activation; this is not proof of native Wayland activation behavior.
+        self.wait_property(button, "focus", True)
+        self.window.requestActivate()
+        self.wait_property(button, "activeFocus", True)
+
+    def test_icon_only_label_control_and_text_only_fallback(self):
+        button = self.item("orlaMenuButton")
+        label = self.item("orlaMenuLabel")
+        self.evaluate("showMenuLabel = false; compactHeight = true")
+        QTest.qWait(20)
+        self.assertFalse(label.property("visible"))
+        self.assertEqual(self.bar.property("implicitHeight"), 28)
+        self.assertLessEqual(button.property("implicitWidth"), 36)
+        self.evaluate("menuIcon = 'none'")
+        QTest.qWait(20)
+        self.assertTrue(label.property("visible"))
+        self.assertGreater(button.property("implicitWidth"), 36)
+        self.evaluate("showMenuLabel = true; compactHeight = false; menuIcon = 'orla'")
+        QTest.qWait(20)
+        self.assertTrue(label.property("visible"))
+        self.assertEqual(self.bar.property("implicitHeight"), 32)
+        self.assertGreater(button.property("implicitWidth"), 36)
+
+    def test_popup_opens_below_own_control_outside_tiny_panel_window(self):
+        self.window.setHeight(28)
+        button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        menu = self.window.findChild(QObject, "orlaMenu")
+        self.wait_property(menu, "opened", True)
+        top = self.evaluate("contentItem.mapToGlobal(0, 0).y - topPadding", menu)
+        bottom = self.evaluate("mapToGlobal(0, height).y", button)
+        self.assertGreaterEqual(top, bottom)
+        self.assertLessEqual(top - bottom, 4)
+        popup_window = self.key_window()
+        self.assertNotEqual(popup_window, self.window)
+        geometry = popup_window.geometry()
+        self.assertTrue(popup_window.screen().availableGeometry().contains(geometry))
+        QTest.keyClick(popup_window, Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.wait_restored_focus(button)
+        self.assertEqual(self.session.calls, [])
+
+    def test_popup_is_constrained_to_screen_at_right_edge(self):
+        bounds = self.window.screen().availableGeometry()
+        self.window.setWidth(48)
+        self.window.setHeight(28)
+        self.window.setPosition(bounds.right() - 47, bounds.top())
+        button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        menu = self.window.findChild(QObject, "orlaMenu")
+        self.wait_property(menu, "opened", True)
+        popup_window = self.key_window()
+        self.assertTrue(bounds.contains(popup_window.geometry()))
+        self.assertGreater(popup_window.width(), self.window.width())
+        QTest.keyClick(popup_window, Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.wait_restored_focus(button)
+        self.assertEqual(self.session.calls, [])
+
+    def test_preset_sets_only_presentation_controls_and_remains_customizable(self):
+        path = Path(__file__).resolve().parents[1] / "bar/contents/ui/BarSettings.qml"
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(path)))
+        settings = component.create()
+        self.assertIsNotNone(settings, [error.toString() for error in component.errors()])
+        try:
+            self.evaluate("cfg_menuLabel = 'Meu menu'; cfg_menuIcon = 'none'; cfg_showMenuLabel = true; cfg_compactHeight = false; cfg_showApplicationName = false", settings)
+            preset = settings.findChild(QQuickItem, "applyMacInspiredPreset")
+            self.assertIsNotNone(preset)
+            self.evaluate("clicked()", preset)
+            self.assertEqual(settings.property("cfg_menuLabel"), "Meu menu")
+            self.assertEqual(settings.property("cfg_menuIcon"), "orla")
+            self.assertFalse(settings.property("cfg_showMenuLabel"))
+            self.assertTrue(settings.property("cfg_compactHeight"))
+            self.assertTrue(settings.property("cfg_showApplicationName"))
+            self.evaluate("cfg_showMenuLabel = true; cfg_compactHeight = false; cfg_showApplicationName = false", settings)
+            self.assertTrue(settings.property("cfg_showMenuLabel"))
+            self.assertFalse(settings.property("cfg_compactHeight"))
+            self.assertFalse(settings.property("cfg_showApplicationName"))
+        finally:
+            settings.deleteLater()
+            QCoreApplication.sendPostedEvents(settings, QEvent.DeferredDelete)
+
+    def test_hidden_availability_row_does_not_leave_a_menu_gap(self):
+        self.evaluate("forceActiveFocus()", self.item("orlaMenuButton"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.wait_property(self.window.findChild(QObject, "orlaMenu"), "opened", True)
+        availability = self.item("sessionAvailability")
+        self.assertFalse(availability.property("visible"))
+        self.assertEqual(availability.height(), 0)
+        self.session.update(status="loading")
+        self.assertTrue(availability.property("visible"))
+        self.assertEqual(availability.height(), 32)
+        self.assertFalse(availability.property("enabled"))
+        self.session.update(status="ready")
+        self.assertEqual(availability.height(), 0)
+        self.assertEqual(self.session.calls, [])
+
     def test_loading_and_unavailable_never_dispatch_session_actions(self):
         for status in ("loading", "unavailable"):
             self.session.update(status=status)
@@ -129,10 +238,10 @@ class BarTests(unittest.TestCase):
     def test_menu_navigation_is_passive_and_explicit_actions_recheck_capabilities(self):
         button = self.item("orlaMenuButton")
         self.evaluate("forceActiveFocus()", button)
-        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
         QTest.qWait(20)
         for key in (Qt.Key_Down, Qt.Key_Down, Qt.Key_Up):
-            QTest.keyClick(self.window, key)
+            QTest.keyClick(self.key_window(), key)
         self.assertEqual(self.session.calls, [])
         self.session.update(canReboot=False)
         self.assertFalse(self.item("sessionReboot").property("enabled"))
@@ -178,12 +287,12 @@ class BarTests(unittest.TestCase):
         QTest.qWait(30)
         self.assertFalse(label.property("visible"))
         self.evaluate("forceActiveFocus()", button)
-        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
         menu = self.window.findChild(QObject, "orlaMenu")
         self.wait_property(menu, "opened", True)
-        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
         self.wait_property(menu, "visible", False)
-        self.wait_property(button, "activeFocus", True)
+        self.wait_restored_focus(button)
         self.assertEqual(self.session.calls, [])
 
 
@@ -242,12 +351,12 @@ class BarTests(unittest.TestCase):
     def test_escape_closes_the_menu_without_dispatch_and_returns_to_button(self):
         button = self.item("orlaMenuButton")
         self.evaluate("forceActiveFocus()", button)
-        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
         menu = self.window.findChild(QObject, "orlaMenu")
         self.wait_property(menu, "opened", True)
-        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
         self.wait_property(menu, "visible", False)
-        self.wait_property(button, "activeFocus", True)
+        self.wait_restored_focus(button)
         self.assertEqual(self.session.calls, [])
         self.assertEqual(self.warnings, [])
 
@@ -265,7 +374,7 @@ class BarTests(unittest.TestCase):
         menu.aboutToShow.connect(lose_active_application)
         button = self.item("orlaMenuButton")
         self.evaluate("forceActiveFocus()", button)
-        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
         self.assertFalse(menu.property("opened"))
         self.assertEqual(self.item("activeApplicationName").property("text"), "Aplicativo sintético")
         self.wait_property(menu, "opened", True)
@@ -273,7 +382,7 @@ class BarTests(unittest.TestCase):
         self.application.name = "Segundo aplicativo"
         self.application.changed.emit()
         self.assertEqual(self.item("activeApplicationName").property("text"), "Aplicativo sintético")
-        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
         self.assertEqual(self.item("activeApplicationName").property("text"), "Aplicativo sintético")
         self.wait_property(menu, "visible", False)
         self.assertEqual(self.item("activeApplicationName").property("text"), "Segundo aplicativo")
