@@ -43,6 +43,7 @@ jobs:
         run: |
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_package_cli.py' -v
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_panel_layout.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_themes.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_updates.py' -v

@@ -317,6 +317,11 @@ def parser() -> argparse.ArgumentParser:
     preview_parser = subparsers.add_parser("preview", help="run plasmawindowed with temporary XDG user directories")
     preview_parser.add_argument("--project-root")
     preview_parser.add_argument("--timeout", type=float, help="stop the preview after this many seconds")
+    if __package__:
+        from . import panel_layout
+    else:
+        import panel_layout
+    panel_layout.add_parser(subparsers)
     return result
 
 
@@ -333,6 +338,15 @@ def main(argv: list[str] | None = None) -> int:
             print("Orla Dock desinstalado; configurações e caches dos projetos foram preservados" if removed else "Serviço próprio removido; pacote não estava instalado")
         elif args.command == "doctor":
             return doctor()
+        elif args.command == "layout":
+            if __package__:
+                from . import panel_layout
+            else:
+                import panel_layout
+            try:
+                return panel_layout.cli(args)
+            except panel_layout.LayoutError as exc:
+                raise PackageError(str(exc)) from exc
         else:
             if args.timeout is not None and args.timeout <= 0:
                 raise PackageError("--timeout must be greater than zero")
