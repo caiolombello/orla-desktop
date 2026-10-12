@@ -112,6 +112,94 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(opened.count(), 1)
         self.assertEqual(self.warnings, [])
 
+    def test_popups_follow_each_clicked_or_keyboard_activated_control(self):
+        self.window.setHeight(720)
+        self.config.setProperty("showControlCenter", True)
+        self.app.processEvents()
+        cases = (("settingsButton", "settingsPopup"),
+                 ("controlCenterButton", "controlCenterPopup"),
+                 ("clockTile", "calendarPopup"))
+        observed = []
+        for control_name, popup_name in cases:
+            control = self.window.findChild(QQuickItem, control_name)
+            if control is None:
+                strip = self.window.findChild(QQuickItem, "widgetStrip")
+                control = next((item for item in strip.childItems() if item.objectName() == control_name), None)
+            popup = self.window.findChild(QObject, popup_name)
+            self.assertIsNotNone(control)
+            self.assertTrue(popup.setProperty("popupType", 0))
+            center = control.mapToItem(self.dock, QPoint(int(control.width() / 2), 0)).x()
+            expected = max(0, min(max(0, self.dock.width() - popup.property("width")),
+                                  center - popup.property("width") / 2))
+            for keyboard in (False, True):
+                control.forceActiveFocus(Qt.TabFocusReason)
+                if keyboard:
+                    QTest.keyClick(self.window, Qt.Key_Space)
+                else:
+                    point = control.mapToScene(QPoint(int(control.width() / 2), int(control.height() / 2)))
+                    QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+                QTest.qWait(40)
+                self.assertTrue(popup.property("visible"))
+                self.assertAlmostEqual(popup.property("x"), expected, delta=1)
+                observed.append(popup.property("x"))
+                closed = QSignalSpy(popup.closed)
+                QTest.keyClick(self.window, Qt.Key_Escape)
+                if not closed.count():
+                    self.assertTrue(closed.wait(1000))
+                self.assertFalse(popup.property("visible"))
+                self.assertEqual(self.window.activeFocusItem(), control)
+        self.assertGreater(max(observed) - min(observed), 20)
+        self.assertEqual(self.warnings, [])
+
+    def test_popup_geometry_keeps_bottom_panel_content_above_and_clamps_narrow_docks(self):
+        self.dock.setProperty("popAbove", True)
+        popup = self.window.findChild(QObject, "settingsPopup")
+        button = self.window.findChild(QQuickItem, "settingsButton")
+        self.assertTrue(popup.setProperty("popupType", 0))
+        self.dock.setWidth(240)
+        button.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(40)
+        self.assertTrue(popup.property("visible"))
+        self.assertEqual(popup.property("x"), 0)
+        self.assertAlmostEqual(popup.property("y") + popup.property("height"), -10)
+        self.assertLessEqual(popup.property("height"), self.window.screen().size().height() - self.dock.height() - 30)
+        self.assertEqual(popup.property("margins"), -1)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+
+    def test_task_menu_uses_the_captured_control_center_and_panel_parent(self):
+        self.window.setHeight(720)
+        self.app.processEvents()
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        menu.setProperty("popupType", 0)
+        self.dock.setProperty("popAbove", True)
+        observed = []
+        for name in ("settingsButton", "musicTile"):
+            button = self.window.findChild(QQuickItem, name)
+            if button is None:
+                strip = self.window.findChild(QQuickItem, "widgetStrip")
+                button = next(item for item in strip.childItems() if item.objectName() == name)
+            center = button.mapToItem(self.dock, QPoint(int(button.width() / 2), 0)).x()
+            self.engine.rootContext().setContextProperty("ownedAnchorControl", button)
+            expression = QQmlExpression(self.engine.rootContext(), self.dock,
+                "showTaskMenuAt(0, {AppName:'Owned fixture', IsWindow:false}, ownedAnchorControl)")
+            expression.evaluate()
+            self.assertFalse(expression.hasError(), expression.error().toString())
+            QTest.qWait(40)
+            expected = max(0, min(max(0, self.dock.width() - menu.property("width")),
+                                  center - menu.property("width") / 2))
+            self.assertAlmostEqual(menu.property("x"), expected, delta=1)
+            self.assertEqual(menu.property("parent"), self.dock)
+            self.assertEqual(menu.property("margins"), -1)
+            self.assertAlmostEqual(menu.property("y") + menu.property("height"), -8)
+            observed.append(menu.property("x"))
+            closed = QSignalSpy(menu.closed)
+            menu.close()
+            if not closed.count():
+                self.assertTrue(closed.wait(1000))
+        self.assertNotEqual(observed[0], observed[1])
+        self.assertEqual(self.warnings, [])
+
     def test_task_context_menu_supports_keyboard_and_returns_focus(self):
         if self.app.platformName() == "offscreen":
             self.skipTest("TaskManager needs a Wayland or X11 connection")

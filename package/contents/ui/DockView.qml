@@ -112,13 +112,13 @@ Item {
     }
     function widgetVisible(id) { const widget = presentation.widgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
-    function openWidget(id) {
+    function openWidget(id, sourceItem) {
         if (!widgetVisible(id)) return false;
-        if (id === "clock") calendarPopup.open();
-        else if (id === "pomodoro") pomodoroPopup.open();
-        else if (id === "music") musicPopup.open();
-        else if (id === "systemBattery") batteryPopup.open();
-        else { selectedIntegration = id; integrationPopup.open(); }
+        if (id === "clock") calendarPopup.openAt(sourceItem);
+        else if (id === "pomodoro") pomodoroPopup.openAt(sourceItem);
+        else if (id === "music") musicPopup.openAt(sourceItem);
+        else if (id === "systemBattery") batteryPopup.openAt(sourceItem);
+        else { selectedIntegration = id; integrationPopup.openAt(sourceItem); }
         return true;
     }
     function closeContext() {
@@ -384,7 +384,7 @@ Item {
         foreground: root.accent; accent: root.accent; animationDuration: root.motion
         tooltip: qsTr("Personalizar Orla Dock")
         onActiveFocusChanged: if (activeFocus) root.revealInViewport(settingsButton)
-        onClicked: settings.open()
+        onClicked: settings.openAt(settingsButton)
     }
     Rectangle {
         id: settingsDivider
@@ -466,7 +466,7 @@ Item {
                 foreground: root.muted; accent: root.accent; animationDuration: root.motion
                 tooltip: qsTr("Fixar aplicativo · ou arraste um app para o dock")
                 onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
-                onClicked: addDialog.open()
+                onClicked: addDialog.openAt(this)
             }
             Tile {
                 objectName: "controlCenterButton"
@@ -478,7 +478,7 @@ Item {
                 animationDuration: root.motion
                 tooltip: qsTr("Central de Controle")
                 onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
-                onClicked: controlCenterPopup.open()
+                onClicked: controlCenterPopup.openAt(this)
             }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: 1; height: 30; color: root.muted; opacity: 0.3 }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
@@ -514,8 +514,10 @@ Item {
     Controls.Menu {
         id: taskMenu
         objectName: "taskContextMenu"
+        parent: root
+        margins: -1
         popupType: Controls.Popup.Window
-        x: Math.max(0, Math.min(root.width - width, root.menuAnchorX - width / 2))
+        x: Math.max(0, Math.min(Math.max(0, root.width - width), root.menuAnchorX - width / 2))
         y: root.popAbove ? -height - 8 : root.height + 8
         Controls.MenuItem { text: root.menuData.title || ""; enabled: false }
         Controls.MenuSeparator {}
@@ -544,9 +546,8 @@ Item {
     DockPopup {
         id: settings
         objectName: "settingsPopup"
-        // Screen.height bounds the current monitor; desktopAvailableHeight
-        // excludes reserved areas but describes the entire virtual desktop.
-        property real heightBudget: Math.max(1, Math.min(root.Screen.height || 640, root.Screen.desktopAvailableHeight || 640) - 40)
+        // Leave room for the panel and gap on the current monitor.
+        property real heightBudget: maximumPopupHeight
         height: Math.min(implicitHeight, heightBudget)
         dock: settingsAnchor
         title: qsTr("Seu dock, do seu jeito")
@@ -653,11 +654,8 @@ Item {
         readonly property real screenWidth: root.Screen.width > 0
             ? (root.Screen.desktopAvailableWidth > 0 ? Math.min(root.Screen.width, root.Screen.desktopAvailableWidth) : root.Screen.width)
             : root.Screen.desktopAvailableWidth
-        readonly property real screenHeight: root.Screen.height > 0
-            ? (root.Screen.desktopAvailableHeight > 0 ? Math.min(root.Screen.height, root.Screen.desktopAvailableHeight) : root.Screen.height)
-            : root.Screen.desktopAvailableHeight
         property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : 350
-        property real heightBudget: screenHeight > 0 ? Math.max(1, screenHeight - 40) : 420
+        property real heightBudget: maximumPopupHeight
         width: Math.max(1, Math.min(350, widthBudget))
         height: Math.max(1, Math.min(implicitHeight, heightBudget))
         dock: root
