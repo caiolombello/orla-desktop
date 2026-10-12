@@ -8,6 +8,9 @@ Fazer do Orla uma plataforma que a comunidade possa personalizar e ampliar sem e
 
 O caminho proposto começa por conteúdo declarativo simples e componentes de interface controlados pelo Orla. Código de terceiros só entra depois de existir um host isolado, permissões verificáveis, contrato versionado e uma experiência clara de revogação e recuperação. A prévia pode usar contrato experimental explicitamente identificado; oferta comercial de compatibilidade exige API estável e política de suporte.
 
+
+QuotaLantern, PeriGauge, FalaTrace e outros projetos específicos serão plugins opcionais do catálogo. Nenhum será requisito ou widget padrão do Orla. A fundação atual desliga esses widgets por padrão e exige `install --with-integrations` para registrar os adaptadores experimentais incluídos. Extraí-los em pacotes externos, oferecer busca/instalação no catálogo e permitir distribuição gratuita ou comercial ainda são próximos marcos; não há marketplace implementado.
+
 ## Categorias de contribuição
 
 | Categoria | O que pode oferecer | Forma inicial proposta |

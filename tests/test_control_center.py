@@ -113,7 +113,7 @@ class ControlCenterTests(unittest.TestCase):
         muted = QColor("#a7b7c4")
         button = self.item("controlCenterSoundAction")
         selector = self.item("controlCenterOutputSelector")
-        display = self.item("controlCenterOutputDisplay")
+        display_color_before = self.evaluate("contentItem.color", selector)
         button_text_before = self.evaluate("palette.buttonText", button)
         selector_text_before = self.evaluate("palette.buttonText", selector)
 
@@ -137,8 +137,25 @@ class ControlCenterTests(unittest.TestCase):
 
         self.assertEqual(self.evaluate("palette.buttonText", button), button_text_before)
         self.assertEqual(self.evaluate("palette.buttonText", selector), selector_text_before)
-        self.assertEqual(display.property("color"), selector_text_before)
+        self.assertEqual(self.evaluate("contentItem.color", selector), display_color_before)
         self.assertNotEqual(button_text_before.name(), foreground.name())
+        self.assertEqual(self.warnings, [])
+
+    def test_output_label_uses_one_style_renderer_and_keeps_literal_bounded_text(self):
+        selector = self.item("controlCenterOutputSelector")
+        self.evaluate("audioBackend.snapshot = {status:'ready',normalVolume:65536,defaultOutputId:'owned',outputs:[{id:'owned',label:'<b>'+ 'Z'.repeat(200),volumeRaw:0,muted:false,writable:true,isDefault:true}]}; audioBackend.revision += 1", self.window)
+        QTest.qWait(20)
+        text = selector.property("displayText")
+        self.assertTrue(text.startswith("<b>"))
+        self.assertLessEqual(len(text), 128)
+        self.assertEqual(self.evaluate("contentItem.text", selector), text)
+        self.assertEqual(self.evaluate("contentItem.length", selector), len(text))
+        if os.environ.get("QT_QUICK_CONTROLS_STYLE") == "org.kde.desktop":
+            self.assertEqual(self.evaluate("background.text", selector), text)
+            self.assertFalse(self.evaluate("contentItem.visible", selector), "Native style already paints the noneditable label")
+        else:
+            self.assertTrue(self.evaluate("contentItem.visible", selector))
+        self.assertEqual(self.calls(), [])
         self.assertEqual(self.warnings, [])
 
     def test_keyboard_focus_reveals_each_action_in_a_narrow_view(self):

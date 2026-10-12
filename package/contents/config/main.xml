@@ -15,9 +15,9 @@
     <entry name="showMusic" type="Bool"><default>true</default></entry>
     <entry name="showSystemBattery" type="Bool"><default>false</default></entry>
     <entry name="showPomodoro" type="Bool"><default>true</default></entry>
-    <entry name="showQuota" type="Bool"><default>true</default></entry>
-    <entry name="showPeripherals" type="Bool"><default>true</default></entry>
-    <entry name="showRecording" type="Bool"><default>true</default></entry>
+    <entry name="showQuota" type="Bool"><default>false</default></entry>
+    <entry name="showPeripherals" type="Bool"><default>false</default></entry>
+    <entry name="showRecording" type="Bool"><default>false</default></entry>
     <entry name="showLocalToasts" type="Bool"><default>false</default></entry>
     <entry name="showAudioHud" type="Bool"><default>false</default></entry>
     <entry name="showControlCenter" type="Bool"><default>false</default></entry>

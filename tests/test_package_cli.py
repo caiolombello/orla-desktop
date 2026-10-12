@@ -103,6 +103,56 @@ class PackageCliTests(unittest.TestCase):
         self.assertEqual([call.args[0][3] for call in run.call_args_list], ["--install", "--upgrade"])
         self.assertEqual(run.call_args_list[0].args[1]["XDG_DATA_HOME"], str(data))
 
+    def test_default_install_does_not_register_integrations_or_refresh_bus(self):
+        archive = caiodock.build(self.root, self.root)
+        data = self.root / "default-data"
+        installed = data / "plasma/plasmoids" / caiodock.PACKAGE_ID
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "/usr/bin/kpackagetool6":
+                with zipfile.ZipFile(command[4]) as package:
+                    package.extractall(installed)
+            return mock.Mock(returncode=0)
+
+        statuses = {"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
+        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+        self.assertTrue((installed / "contents/ui/main.qml").is_file())
+        self.assertFalse((data / "dbus-1/services" / caiodock.SERVICE_NAME).exists())
+        self.assertEqual(len(commands), 1)
+
+        service = data / "dbus-1/services" / caiodock.SERVICE_NAME
+        service.parent.mkdir(parents=True)
+        original_service = caiodock.SERVICE_MARKER + "[D-BUS Service]\nExec=existing helper\n"
+        service.write_text(original_service)
+        service.chmod(0o600)
+        before_service = service.stat()
+        settings = self.root / "config/plasma-org.kde.plasma.desktop-appletsrc"
+        settings.parent.mkdir()
+        saved_opt_in = "[Containments][17][Applets][22][Configuration][General]\nshowQuota=true\nshowPeripherals=true\nshowRecording=true\n"
+        settings.write_text(saved_opt_in)
+        cache = self.root / "state/project-cache"
+        cache.parent.mkdir()
+        cache.write_text("saved project state")
+        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(settings.parent), "XDG_STATE_HOME": str(cache.parent)}), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+        self.assertEqual([command[3] for command in commands], ["--install", "--upgrade"])
+        self.assertEqual(service.read_text(), original_service)
+        self.assertEqual(service.stat().st_mtime_ns, before_service.st_mtime_ns)
+        self.assertEqual(service.stat().st_mode, before_service.st_mode)
+        self.assertEqual(settings.read_text(), saved_opt_in)
+        self.assertEqual(cache.read_text(), "saved project state")
+
+    def test_default_install_skips_optional_dependency_probes(self):
+        archive = caiodock.build(self.root, self.root)
+        with mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: "/usr/bin/kpackagetool6" if name == "kpackagetool6" else None), mock.patch.object(caiodock, "_plasma_version", return_value=None), mock.patch.object(caiodock.importlib.util, "find_spec") as find_spec, mock.patch.object(caiodock, "_session_bus_available") as bus, mock.patch.object(caiodock, "run_checked"), contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(caiodock.install(archive, self.root / "data"), "--install")
+        find_spec.assert_not_called()
+        bus.assert_not_called()
+        self.assertEqual(errors.getvalue(), "")
+
     def test_install_validates_archive_and_foreign_service_before_package_mutation(self):
         archive = self.root / "widget.plasmoid"
         archive.write_text("invalid")
@@ -157,13 +207,13 @@ class PackageCliTests(unittest.TestCase):
 
                 errors = io.StringIO()
                 with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", return_value="/usr/bin/kpackagetool6"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                    self.assertEqual(caiodock.main(["install", str(archive), "--with-integrations", "--data-home", str(data)]), 0)
                     self.assertTrue((installed / "contents/ui/main.qml").is_file())
                     self.assertFalse(service.exists())
                     service.parent.mkdir(parents=True)
                     original_service = caiodock.SERVICE_MARKER + "[D-BUS Service]\nExec=existing helper\n"
                     service.write_text(original_service)
-                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                    self.assertEqual(caiodock.main(["install", str(archive), "--with-integrations", "--data-home", str(data)]), 0)
                 self.assertEqual(actions, ["--install", "--upgrade"])
                 self.assertIn(missing, errors.getvalue())
                 self.assertEqual(service.read_text(), original_service)
@@ -180,7 +230,7 @@ class PackageCliTests(unittest.TestCase):
                     return mock.Mock(returncode=0)
 
                 with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=recovered_run), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                    self.assertEqual(caiodock.main(["install", str(archive), "--with-integrations", "--data-home", str(data)]), 0)
                 import shlex
                 service_text = service.read_text()
                 command = next(line[5:] for line in service_text.splitlines() if line.startswith("Exec="))
@@ -218,7 +268,7 @@ class PackageCliTests(unittest.TestCase):
 
                 errors = io.StringIO()
                 with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
+                    self.assertEqual(caiodock.main(["install", str(archive), "--with-integrations", "--data-home", str(data)]), 0)
                 self.assertEqual(len(commands), 2)
                 self.assertEqual((installed / "contents/ui/main.qml").read_text(), "Item {}")
                 service = data / "dbus-1/services" / caiodock.SERVICE_NAME
@@ -228,7 +278,7 @@ class PackageCliTests(unittest.TestCase):
                 self.assertIn("dock instalado", errors.getvalue())
                 self.assertIn("integrações locais opcionais", errors.getvalue())
                 self.assertIn("doctor", errors.getvalue())
-                self.assertIn("reinstale", errors.getvalue())
+                self.assertIn("reinstale com --with-integrations", errors.getvalue())
 
     def test_uninstall_removes_only_owned_package_service_and_preserves_other_data(self):
         data = self.root / "data"
