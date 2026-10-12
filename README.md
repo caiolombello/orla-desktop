@@ -76,7 +76,7 @@ python3 scripts/orla.py doctor
 python3 scripts/orla.py install orla-dock-0.2.9.plasmoid
 ```
 
-Project integrations are off by default. To explicitly enable the bundled experimental adapters, add `--with-integrations` to the install command. Plain install/upgrade preserves any existing integration mapping and saved preferences without enabling new adapters. `doctor` reports optional dependencies separately. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
+The published 0.2.9 ZIP still uses its earlier helper. The options described here apply to the current source checkout: project integrations are off by default. To explicitly enable the bundled experimental adapters, add `--with-integrations` to the install command. Plain install/upgrade preserves any existing integration mapping and saved preferences without enabling new adapters. `doctor` reports optional dependencies separately. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
 
 To build and install from a source checkout instead:
 
