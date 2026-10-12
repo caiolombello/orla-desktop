@@ -221,6 +221,54 @@ class BarTests(unittest.TestCase):
         self.assertEqual(availability.height(), 0)
         self.assertEqual(self.session.calls, [])
 
+    def test_full_sized_popup_host_keeps_menu_outside_panel_and_closes_passively(self):
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(Path(__file__).with_name("PopupHostHarness.qml"))))
+        host = component.create()
+        self.assertIsNotNone(host, [error.toString() for error in component.errors()])
+        try:
+            self.bar.setProperty("popupHost", host)
+            self.assertEqual(self.bar.property("popupHost"), host)
+            self.window.setHeight(28)
+            button = self.item("orlaMenuButton")
+            self.evaluate("forceActiveFocus()", button)
+            QTest.keyClick(self.window, Qt.Key_Space)
+            menu = self.window.findChild(QObject, "orlaMenu")
+            self.wait_property(menu, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertGreater(host.height(), self.window.height())
+            self.assertEqual(self.evaluate("parent", menu), host.property("hostItem"))
+            self.assertEqual(self.evaluate("popupType", menu), 0)  # Popup.Item inside full host
+            self.assertEqual(self.evaluate("contentItem.mapToGlobal(0, 0).y - topPadding", menu), host.y())
+            self.assertGreaterEqual(host.y(), self.evaluate("mapToGlobal(0, height).y", button))
+            self.application.active = False
+            self.application.changed.emit()
+            self.assertEqual(self.item("activeApplicationName").property("text"), "Aplicativo sintético")
+            QTest.keyClick(host, Qt.Key_Escape)
+            self.wait_property(menu, "visible", False)
+            self.assertFalse(host.isVisible())
+            self.wait_restored_focus(button)
+            self.assertEqual(self.session.calls, [])
+            # Native host deactivation must close the same menu, not dispatch.
+            QTest.keyClick(self.window, Qt.Key_Space)
+            self.wait_property(menu, "opened", True)
+            host.setVisible(False)
+            self.wait_property(menu, "visible", False)
+            self.assertEqual(self.session.calls, [])
+            self.assertTrue(self.evaluate("open('about')"))
+            about = self.window.findChild(QObject, "aboutOrlaPopup")
+            self.wait_property(about, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertGreater(host.height(), self.window.height())
+            self.assertEqual(self.evaluate("parent", about), host.property("hostItem"))
+            host.setVisible(False)
+            self.wait_property(about, "visible", False)
+            self.assertEqual(self.session.calls, [])
+        finally:
+            self.bar.setProperty("popupHost", None)
+            host.close()
+            host.deleteLater()
+            QCoreApplication.sendPostedEvents(host, QEvent.DeferredDelete)
+
     def test_loading_and_unavailable_never_dispatch_session_actions(self):
         for status in ("loading", "unavailable"):
             self.session.update(status=status)

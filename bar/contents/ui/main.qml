@@ -11,8 +11,13 @@ PlasmoidItem {
     Layout.minimumHeight: bar.implicitHeight
     Layout.preferredWidth: bar.implicitWidth
     Layout.preferredHeight: bar.implicitHeight
+    NativePopupHost {
+        id: nativePopupHost
+        location: Plasmoid.location
+    }
     BarView {
         id: bar
+        popupHost: nativePopupHost
         anchors.fill: parent
         showApplicationName: Plasmoid.configuration.showApplicationName
         showMenuLabel: Plasmoid.configuration.showMenuLabel

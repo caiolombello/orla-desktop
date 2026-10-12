@@ -13,6 +13,7 @@ Item {
     objectName: "dock"
     required property var configuration
     property bool popAbove: false
+    property bool nativePopups: false
     property date now: new Date()
     property string notice: ""
     property var menuData: ({})
@@ -122,7 +123,7 @@ Item {
         return true;
     }
     function closeContext() {
-        taskMenu.close(); addDialog.close();
+        taskMenu.close(); nativeTaskMenu.close(); addDialog.close();
         calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.close();
         menuRow = -1; menuData = {}; appInput.clear();
     }
@@ -216,7 +217,8 @@ Item {
     }
     function showTaskMenu(row, data) {
         captureTaskMenu(row, data, null);
-        taskMenu.open();
+        if (nativePopups) nativeTaskMenu.openAt(null);
+        else taskMenu.open();
     }
     function captureTaskMenu(row, data, sourceItem) {
         // Capture identity: model rows may change while a menu is open.
@@ -232,7 +234,8 @@ Item {
     }
     function showTaskMenuAt(row, data, sourceItem) {
         captureTaskMenu(row, data, sourceItem);
-        taskMenu.open();
+        if (nativePopups) nativeTaskMenu.openAt(sourceItem);
+        else taskMenu.open();
     }
     function menuIndex() {
         if (menuData.scope !== profileState.activeProfileId || menuData.revision !== profileState.revision) return null;
@@ -533,11 +536,47 @@ Item {
         Controls.MenuItem { text: qsTr("Minimizar / restaurar"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.minimizable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestToggleMinimized(index); } }
         Controls.MenuItem { text: qsTr("Fechar janela"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.closable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestClose(index); } }
     }
+    DockPopup {
+        id: nativeTaskMenu
+        objectName: "nativeTaskContextMenu"
+        dock: root
+        width: 300
+        title: root.menuData.title || ""
+        ColumnLayout {
+            id: nativeTaskActions
+            Layout.fillWidth: true
+            spacing: 2
+            function advanceFocus(direction) {
+                const actions = Array.from(children).filter(item => item.visible && item.enabled && item.forceActiveFocus && item.text !== undefined);
+                if (!actions.length) return;
+                const current = actions.findIndex(item => item.activeFocus);
+                const next = current < 0 ? (direction > 0 ? 0 : actions.length - 1)
+                    : (current + direction + actions.length) % actions.length;
+                actions[next].forceActiveFocus(Qt.TabFocusReason);
+            }
+            Keys.onDownPressed: event => { advanceFocus(1); event.accepted = true; }
+            Keys.onUpPressed: event => { advanceFocus(-1); event.accepted = true; }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus;
+                text: root.menuData.pinned ? qsTr("Desafixar") : qsTr("Fixar no dock")
+                enabled: Boolean(root.menuData.url)
+                onTriggered: { nativeTaskMenu.close(); if (root.menuData.pinned) root.removeLauncher(root.menuData.url, root.menuData.scope, root.menuData.revision); else root.addLauncher(root.menuData.url, root.menuData.scope, root.menuData.revision); }
+            }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Nova janela"); enabled: Boolean(root.menuData.canLaunch); onTriggered: { nativeTaskMenu.close(); const index = root.menuIndex(); if (index) tasks.requestNewInstance(index); } }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Mover para a esquerda"); enabled: root.menuRow > 0; onTriggered: { nativeTaskMenu.close(); root.moveMenuTask(-1); } }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Mover para a direita"); enabled: root.menuRow < tasks.count - 1; onTriggered: { nativeTaskMenu.close(); root.moveMenuTask(1); } }
+            Controls.MenuSeparator { Layout.fillWidth: true; visible: Boolean(root.menuData.window) }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Minimizar / restaurar"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.minimizable); onTriggered: { nativeTaskMenu.close(); const index = root.menuIndex(); if (index) tasks.requestToggleMinimized(index); } }
+            Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Fechar janela"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.closable); onTriggered: { nativeTaskMenu.close(); const index = root.menuIndex(); if (index) tasks.requestClose(index); } }
+        }
+        onOpened: nativeTaskActions.advanceFocus(1)
+    }
+
     // Keep the editor legible even when the draft uses low-contrast dock colors.
     Item {
         id: settingsAnchor
         anchors.fill: parent
         readonly property bool popAbove: root.popAbove
+        readonly property bool nativePopups: root.nativePopups
         readonly property bool light: root.presentation.appearance.theme === "paper"
         readonly property color surface: light ? "#f4f0e8" : "#111923"
         readonly property color foreground: light ? "#252b35" : "#edf1f9"
@@ -740,5 +779,5 @@ Item {
             }
         }
     }
-    Controls.ToolTip { parent: root; visible: root.notice.length > 0 && !addDialog.opened; text: root.notice; timeout: 8000 }
+    Controls.ToolTip { parent: root; visible: root.notice.length > 0 && !addDialog.visible; text: root.notice; timeout: 8000 }
 }

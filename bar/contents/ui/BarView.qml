@@ -9,6 +9,7 @@ Item {
     id: root
     property var sessionBackend: null
     property var applicationBackend: null
+    property var popupHost: null
     property string hostVersion: Application.version
     property bool showApplicationName: true
     property bool showMenuLabel: true
@@ -186,14 +187,15 @@ Item {
         onAboutToShow: {
             root.preserveApplication = true;
             restoreFocus = true;
+            if (root.popupHost) root.popupHost.showPopup(menu, menuButton);
         }
         objectName: "orlaMenu"
-        parent: menuButton
-        // Qt 6.11 Popup.Window is positioned against the current screen, rather
-        // than clamped into the short panel window (QQuickPopupPositioner).
-        popupType: Controls.Popup.Window
+        parent: root.popupHost ? root.popupHost.hostItem : menuButton
+        // Plasma uses a full-sized appletpopup host. Standalone presentation
+        // uses Popup.Window; neither places a tall menu in the panel overlay.
+        popupType: root.popupHost ? Controls.Popup.Item : Controls.Popup.Window
         x: 0
-        y: menuButton.height + 2
+        y: root.popupHost ? 0 : menuButton.height + 2
         margins: -1
         width: 268
         padding: 5
@@ -226,6 +228,7 @@ Item {
         OrlaMenuItem { objectName: "sessionShutdown"; text: qsTr("Desligar…"); enabled: actions.can("shutdown"); onTriggered: root.requestSession("shutdown") }
         OrlaMenuItem { enabled: false; visible: actions.error !== ""; text: actions.error }
         onClosed: {
+            if (root.popupHost) root.popupHost.hidePopup(menu);
             root.preserveApplication = false;
             if (restoreFocus) menuButton.forceActiveFocus(Qt.PopupFocusReason);
         }
@@ -233,9 +236,9 @@ Item {
     Controls.Popup {
         id: about
         objectName: "aboutOrlaPopup"
-        parent: menuButton
-        popupType: Controls.Popup.Window
-        y: menuButton.height + 2
+        parent: root.popupHost ? root.popupHost.hostItem : menuButton
+        popupType: root.popupHost ? Controls.Popup.Item : Controls.Popup.Window
+        y: root.popupHost ? 0 : menuButton.height + 2
         width: 360
         margins: -1
         padding: 16
@@ -246,6 +249,10 @@ Item {
             Controls.Label { text: qsTr("Barra experimental · 0.1\nComponentes opcionais para KDE Plasma.\nMenus globais e bandeja usam widgets nativos separados."); textFormat: Text.PlainText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Controls.Button { text: qsTr("Fechar"); onClicked: about.close() }
         }
-        onClosed: menuButton.forceActiveFocus(Qt.PopupFocusReason)
+        onAboutToShow: if (root.popupHost) root.popupHost.showPopup(about, menuButton)
+        onClosed: {
+            if (root.popupHost) root.popupHost.hidePopup(about);
+            menuButton.forceActiveFocus(Qt.PopupFocusReason);
+        }
     }
 }

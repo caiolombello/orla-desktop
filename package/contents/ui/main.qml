@@ -16,6 +16,7 @@ PlasmoidItem {
         id: dock
         anchors.fill: parent
         configuration: Plasmoid.configuration
+        nativePopups: true
         popAbove: Plasmoid.location === PlasmaCore.Types.BottomEdge
     }
 }
