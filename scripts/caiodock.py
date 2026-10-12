@@ -164,32 +164,39 @@ def _session_bus_available() -> bool:
     return result.returncode == 0
 
 
-def dependency_status() -> dict[str, bool]:
+def dependency_status(*, include_integrations: bool = True) -> dict[str, bool]:
+    statuses = {
+        "Python 3": sys.version_info >= (3, 10),
+        "kpackagetool6": shutil.which("kpackagetool6") is not None,
+    }
+    if not include_integrations:
+        return statuses
     try:
         qtdbus = importlib.util.find_spec("PySide6.QtDBus") is not None
     except (ImportError, ModuleNotFoundError, ValueError):
         qtdbus = False
-    return {
-        "Python 3": sys.version_info >= (3, 10),
-        "kpackagetool6": shutil.which("kpackagetool6") is not None,
+    statuses.update({
         "busctl": shutil.which("busctl") is not None,
         "PySide6.QtDBus": qtdbus,
         "sessão D-Bus do usuário": _session_bus_available(),
-    }
+    })
+    return statuses
 
 
-def _require_install_runtime() -> bool:
-    statuses = dependency_status()
+def _require_install_runtime(*, with_integrations: bool = False) -> bool:
+    statuses = dependency_status(include_integrations=with_integrations)
     missing = [name for name, available in statuses.items() if not available and name not in OPTIONAL_INTEGRATION_DEPENDENCIES]
     if missing:
         raise PackageError("missing install/runtime dependencies: " + ", ".join(missing))
     version = _plasma_version()
     if version is not None and version[:2] < MINIMUM_PLASMA:
         raise PackageError(f"Plasma 6.7 or newer is required; detected {'.'.join(map(str, version))}")
+    if not with_integrations:
+        return False
     optional_missing = [name for name, available in statuses.items() if not available and name in OPTIONAL_INTEGRATION_DEPENDENCIES]
     if optional_missing:
         print("orla: integrações locais indisponíveis (opcionais): " + ", ".join(optional_missing)
-              + "; instalação do dock continua. Execute doctor após instalar as dependências e reinstale o pacote para ativar as integrações.", file=sys.stderr)
+              + "; instalação do dock continua. Execute doctor após instalar as dependências e reinstale com --with-integrations para ativar as integrações.", file=sys.stderr)
     return not optional_missing
 
 
@@ -199,11 +206,11 @@ def run_checked(command: list[str], env: dict[str, str] | None = None) -> None:
         raise PackageError(f"command failed with exit status {result.returncode}: {command[0]}")
 
 
-def install(package: Path, data_home: Path | None = None) -> str:
+def install(package: Path, data_home: Path | None = None, *, with_integrations: bool = False) -> str:
     _archive_metadata(package)
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
     _check_service_path(home)
-    integrations_available = _require_install_runtime()
+    integrations_available = _require_install_runtime(with_integrations=with_integrations)
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
     action = "--upgrade" if installed.exists() else "--install"
     env = environment_with(XDG_DATA_HOME=str(home))
@@ -221,7 +228,7 @@ def install(package: Path, data_home: Path | None = None) -> str:
             refreshed = False
         if not refreshed:
             print("orla: dock instalado; a sessão D-Bus não atualizou as integrações locais opcionais. "
-                  "O serviço foi preservado. Execute doctor na sessão KDE e reinstale o pacote para tentar ativar as integrações novamente.", file=sys.stderr)
+                  "O serviço foi preservado. Execute doctor na sessão KDE e reinstale com --with-integrations para tentar ativar as integrações novamente.", file=sys.stderr)
     return action
 
 
@@ -305,6 +312,7 @@ def parser() -> argparse.ArgumentParser:
     build_parser.add_argument("--project-root")
     install_parser = subparsers.add_parser("install", help="install or upgrade this widget for the current user")
     install_parser.add_argument("package", type=Path)
+    install_parser.add_argument("--with-integrations", action="store_true", help="opt in to the bundled local integration bridge")
     install_parser.add_argument("--data-home", type=Path, help=argparse.SUPPRESS)
     preview_parser = subparsers.add_parser("preview", help="run plasmawindowed with temporary XDG user directories")
     preview_parser.add_argument("--project-root")
@@ -318,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "build":
             print(build(project_root(args.project_root)))
         elif args.command == "install":
-            action = install(args.package, args.data_home)
+            action = install(args.package, args.data_home, with_integrations=args.with_integrations)
             print(f"Orla Dock {'atualizado' if action == '--upgrade' else 'instalado'} para este usuário")
         elif args.command == "uninstall":
             removed = uninstall()

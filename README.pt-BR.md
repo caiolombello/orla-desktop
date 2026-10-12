@@ -74,7 +74,7 @@ python3 scripts/orla.py doctor
 python3 scripts/orla.py install orla-dock-0.2.9.plasmoid
 ```
 
-O helper registra o serviço local quando a bridge e as dependências opcionais estão disponíveis. `doctor` identifica as dependências opcionais ausentes. Após instalá-las, reinstale o mesmo pacote para ativar as integrações. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
+As integrações de projetos ficam desligadas por padrão. Para habilitar explicitamente os adaptadores experimentais incluídos, acrescente `--with-integrations` ao comando de instalação. Instalar/atualizar sem essa opção preserva serviços e preferências existentes sem habilitar novos adaptadores. `doctor` identifica dependências opcionais ausentes. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
 
 Para compilar e instalar a partir do código-fonte:
 
