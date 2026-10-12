@@ -2,6 +2,7 @@
 #include "LauncherController.h"
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QVariant>
 #include <KGlobalAccel>
 #include <KWaylandExtras>
 #include <KWindowSystem>
@@ -49,7 +50,12 @@ void WindowSession::setNotice(const QString &notice)
 void WindowSession::showFromShortcut()
 {
     if (!m_window) return;
-    if (m_window->isVisible() && m_window->isActive()) { m_controller->dismiss(); return; }
+    if (m_window->isVisible() && m_window->isActive()) {
+        ++m_activationGeneration; // A pending compositor token must not reactivate a closing window.
+        // Reuse the QML three-owner close barrier. A missing method leaves the window visible.
+        QMetaObject::invokeMethod(m_window.data(), "requestDismiss", Q_ARG(QVariant, QVariant(false)));
+        return;
+    }
     // QGuiApplication only returns this process's windows. Never inspect another app's window.
     QWindow *origin = QGuiApplication::focusWindow();
     if (origin && !origin->isActive()) origin = nullptr;

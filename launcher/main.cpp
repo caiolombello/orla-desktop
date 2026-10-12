@@ -5,6 +5,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include "AiProviderController.h"
+#include "AiTextController.h"
 #include "LauncherController.h"
 #include "SteamProviderController.h"
 #include "WindowSession.h"
@@ -29,9 +30,13 @@ int main(int argc, char **argv)
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_PYTHON_PATH)});
     parser.addOption({QStringLiteral("ai-helper"), QStringLiteral("Helper limitado de IA absoluto; ausente significa indisponível."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_HELPER_PATH)});
+    parser.addOption({QStringLiteral("ai-text-helper"), QStringLiteral("Helper operacional de texto local absoluto."),
+                      QStringLiteral("caminho"), QStringLiteral(ORLA_AI_TEXT_HELPER_PATH)});
     parser.process(app);
     AiProviderController aiController(parser.value(QStringLiteral("ai-python")),
                                       parser.value(QStringLiteral("ai-helper")));
+    AiTextController aiTextController(parser.value(QStringLiteral("ai-python")),
+                                      parser.value(QStringLiteral("ai-text-helper")));
     SteamProviderController steamController(QStringLiteral(ORLA_STEAM_PYTHON_PATH),
                                             QStringLiteral(ORLA_STEAM_HELPER_PATH));
     LauncherController controller(&steamController);
@@ -39,6 +44,7 @@ int main(int argc, char **argv)
     QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);
     engine.rootContext()->setContextProperty(QStringLiteral("launcher"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("aiProviders"), &aiController);
+    engine.rootContext()->setContextProperty(QStringLiteral("aiText"), &aiTextController);
     engine.rootContext()->setContextProperty(QStringLiteral("steamProvider"), &steamController);
     // A window session is attached after QML creation; initial content is usable without a shortcut.
     engine.rootContext()->setContextProperty(QStringLiteral("windowSession"), QVariant::fromValue<QObject *>(nullptr));
@@ -50,6 +56,8 @@ int main(int argc, char **argv)
                           parser.value(QStringLiteral("shortcut")));
     QObject::connect(&controller, &LauncherController::closeRequested, &aiController,
                      &AiProviderController::cancelAll);
+    QObject::connect(&controller, &LauncherController::closeRequested, &aiTextController,
+                     &AiTextController::cancelAll);
     QObject::connect(&controller, &LauncherController::closeRequested, &steamController,
                      &SteamProviderController::cancelAll);
     engine.rootContext()->setContextProperty(QStringLiteral("windowSession"), &session);

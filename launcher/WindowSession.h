@@ -19,6 +19,7 @@ public:
 Q_SIGNALS:
     void noticeChanged();
 private:
+    friend class UiTests;
     void showFromShortcut();
     void dismiss();
     void setNotice(const QString &notice);
