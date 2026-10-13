@@ -9,23 +9,23 @@ Item {
     id: popup
     required property var dock
     property string title: ""
-    property real anchorX: dock.width / 2
+    property real anchorX: dock ? dock.width / 2 : 0
     property var anchorControl: dock
     property bool nativeOpenActive: false
-    readonly property bool nativeBackend: Boolean(dock.nativePopups)
-    readonly property real screenHeight: dock.Screen.height > 0 ? dock.Screen.height : 640
-    readonly property real maximumPopupHeight: Math.max(1, screenHeight - dock.height - 30)
+    readonly property bool nativeBackend: Boolean(dock && dock.nativePopups)
+    readonly property real screenHeight: dock && dock.Screen.height > 0 ? dock.Screen.height : 640
+    readonly property real maximumPopupHeight: Math.max(1, screenHeight - (dock ? dock.height : 0) - 30)
     readonly property alias popupSurface: surface
     readonly property alias background: surfaceBackground
     readonly property alias contentItem: surface.contentItem
     // Popups follow the system's lightness with Orla tones, so native KDE
     // controls inside them always match. The dock body keeps the user theme.
-    readonly property var scheme: dock.popupScheme !== undefined ? dock.popupScheme : Style.scheme("dark")
+    readonly property var scheme: dock && dock.popupScheme !== undefined ? dock.popupScheme : Style.scheme("dark")
     readonly property alias nativeDialog: nativeLoader.item
     // Transparent room around the glass for its shadow; the dialog window
     // includes it, so spacing is measured between visible surfaces.
     readonly property int shadowMargin: Style.space.md + Style.space.xxs
-    readonly property real glassEdge: dock.glassTop !== undefined ? dock.glassTop : 0
+    readonly property real glassEdge: dock && dock.glassTop !== undefined ? dock.glassTop : 0
     readonly property real edgeGap: Style.space.sm + Style.space.xxs
     readonly property bool lightScheme: Style.luminance(scheme.surface) > 0.4
     property alias popupType: fallback.popupType
@@ -40,8 +40,9 @@ Item {
     width: Style.size.popupWidth + 2 * shadowMargin
     implicitHeight: surface.implicitHeight
     height: Math.min(implicitHeight, maximumPopupHeight)
-    x: Math.max(0, Math.min(Math.max(0, dock.width - width), anchorX - width / 2))
-    y: dock.popAbove ? glassEdge + shadowMargin - edgeGap - height : dock.height - glassEdge - shadowMargin + edgeGap
+    // Typed hosts clear during teardown, before their owned facade is deleted.
+    x: dock ? Math.max(0, Math.min(Math.max(0, dock.width - width), anchorX - width / 2)) : 0
+    y: dock ? (dock.popAbove ? glassEdge + shadowMargin - edgeGap - height : dock.height - glassEdge - shadowMargin + edgeGap) : 0
 
     function openAt(control) {
         anchorControl = control || dock;

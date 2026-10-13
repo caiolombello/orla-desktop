@@ -119,6 +119,7 @@ class Gallery:
         engine = self.engine()
         engine.rootContext().setContextProperty("fixtureSession", session)
         engine.rootContext().setContextProperty("fixtureApplication", application)
+        engine.rootContext().setContextProperty("fixtureControlCenter", None)
         engine.load(QUrl.fromLocalFile(str(TESTS / "BarHarness.qml")))
         window = engine.rootObjects()[0]
         bar = window.findChild(QQuickItem, "barUnderTest")

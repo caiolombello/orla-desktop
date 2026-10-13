@@ -92,6 +92,15 @@ jobs:
           PYTHONPATH: tests
         run: $ORLA_CI_PYTHON -B -m unittest test_audio_control -v
 
+      - name: Run portable shared Control Center routing and lifecycle checks
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+          QT_QUICK_CONTROLS_STYLE: Fusion
+          QT_QPA_PLATFORMTHEME: ""
+          PYTHONPATH: tests
+        run: $ORLA_CI_PYTHON -B -m unittest test_shared_control_center_registry test_control_center_session -v
+
       - name: Run portable local event state checks
         env:
           QT_QPA_PLATFORM: offscreen

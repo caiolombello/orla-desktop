@@ -14,6 +14,7 @@ import caiodock
 # The optional menu is Source-only; its fixtures need bar/, which is not bundled.
 # Design checks and the gallery compare the bar and launcher token copies too.
 SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml",
+                               "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
                                "tests/test_design_system.py", "tests/design_gallery.py"))
 
 

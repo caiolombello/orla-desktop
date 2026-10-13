@@ -12,9 +12,42 @@ Item {
     property var applicationBackend: null
     property var popupHost: null
     property var menuTooltipBackend: null
+    property var controlCenterTooltipBackend: null
+    readonly property alias controlCenterControl: controlCenterButton
     readonly property alias menuControl: menuButton
     readonly property bool menuIsOpen: menu.visible
     property string hostVersion: Application.version
+    property bool showOrlaMenu: true
+    property bool showControlCenter: false
+    property QtObject controlCenterClient: null
+    property Item controlCenterHost: null
+    property string controlCenterLoadError: ""
+    property bool reducedMotion: false
+    property QtObject leasedControlCenterClient: null
+    property int controlCenterGeneration: 0
+    property bool controlCenterDispatchActive: false
+    readonly property bool controlCenterCompatible: Boolean(controlCenterClient && controlCenterClient.apiVersion === 1
+        && typeof controlCenterClient.open === "function" && typeof controlCenterClient.release === "function")
+    readonly property string controlCenterStatus: controlCenterCompatible ? boundedText(controlCenterClient.status, 32) : "unavailable"
+    readonly property bool controlCenterAvailable: controlCenterCompatible && controlCenterClient.available === true
+        && controlCenterStatus === "ready" && controlCenterHost !== null
+        && controlCenterHost.Window.window === root.Window.window && root.Window.window !== null
+    readonly property bool controlCenterIsOpen: controlCenterCompatible && controlCenterClient.isOpen === true
+    readonly property string controlCenterError: controlCenterCompatible ? boundedText(controlCenterClient.error, 240)
+        : controlCenterClient ? qsTr("A Central de Controle instalada é incompatível.")
+        : boundedText(controlCenterLoadError, 240) || qsTr("Central de Controle indisponível. Ative uma única Orla Dock.")
+    readonly property string controlCenterDescription: controlCenterError || (controlCenterAvailable
+        ? qsTr("Central de Controle") : qsTr("Central de Controle indisponível. Ative uma única Orla Dock."))
+    onShowOrlaMenuChanged: if (!showOrlaMenu) {
+        menu.restoreFocus = false;
+        menu.close();
+        about.close();
+    }
+    onShowControlCenterChanged: releaseControlCenter()
+    onControlCenterClientChanged: releaseControlCenter()
+    onControlCenterAvailableChanged: if (!controlCenterAvailable) releaseControlCenter()
+    onControlCenterHostChanged: releaseControlCenter()
+    Component.onDestruction: releaseControlCenter()
     property bool showApplicationName: true
     property bool showMenuLabel: true
     property bool compactHeight: false
@@ -41,7 +74,7 @@ Item {
     SessionActions {
         id: actions
         backend: root.sessionBackend
-        hostVersion: root.hostVersion
+        hostVersion: root.showOrlaMenu || root.showApplicationName ? root.hostVersion : ""
     }
     Loader {
         id: nativeApplication
@@ -50,6 +83,53 @@ Item {
     }
     function boundedText(value, maximum) {
         return String(value || "").slice(0, maximum).replace(/\s+/g, " ").trim();
+    }
+    function releaseControlCenter() {
+        controlCenterGeneration += 1;
+        // A client callback may invalidate an opening before it returns acceptance.
+        // Keep the exact typed lease until the outer dispatch can cancel it.
+        if (controlCenterDispatchActive) return false;
+        const client = leasedControlCenterClient;
+        leasedControlCenterClient = null;
+        if (!client) return true;
+        controlCenterDispatchActive = true;
+        try {
+            client.release();
+            return true;
+        } catch (_) {
+            return false;
+        } finally {
+            controlCenterDispatchActive = false;
+        }
+    }
+    function toggleControlCenter() {
+        if (controlCenterDispatchActive || !showControlCenter || !controlCenterAvailable) return false;
+        const client = controlCenterClient;
+        const host = controlCenterHost;
+        const window = root.Window.window;
+        leasedControlCenterClient = client;
+        if (controlCenterIsOpen) return releaseControlCenter();
+        const generation = ++controlCenterGeneration;
+        controlCenterDispatchActive = true;
+        try {
+            let accepted = false;
+            try { accepted = client.open(host, controlCenterButton) === true; }
+            catch (_) { accepted = false; }
+            const current = accepted && leasedControlCenterClient === client
+                && generation === controlCenterGeneration && showControlCenter && controlCenterAvailable
+                && controlCenterClient === client && controlCenterHost === host && root.Window.window === window;
+            if (!current) {
+                const pending = leasedControlCenterClient;
+                leasedControlCenterClient = null;
+                if (pending) {
+                    try { pending.release(); }
+                    catch (_) { /* The rejected dispatch must never adopt another client's lease. */ }
+                }
+            }
+            return current;
+        } finally {
+            controlCenterDispatchActive = false;
+        }
     }
     function requestSession(action) {
         if (!actions.can(action)) return false;
@@ -74,6 +154,7 @@ Item {
         Templates.ToolButton {
             id: menuButton
             objectName: "orlaMenuButton"
+            visible: root.showOrlaMenu
             text: root.boundedText(root.menuLabel, 32) || "Orla"
             icon.source: root.menuIcon === "none" ? "" : Qt.resolvedUrl("../images/orla.svg")
             readonly property bool wantsLabel: root.showMenuLabel || root.menuIcon === "none"
@@ -152,9 +233,102 @@ Item {
                 Behavior on color { ColorAnimation { duration: Style.motion.fast } }
             }
         }
+        Templates.ToolButton {
+            id: controlCenterButton
+            objectName: "barControlCenterButton"
+            visible: root.showControlCenter
+            enabled: root.controlCenterAvailable
+            text: qsTr("Central de Controle")
+            palette: menuButton.palette
+            implicitWidth: Style.size.iconButton + Style.space.xs
+            implicitHeight: root.implicitHeight
+            padding: Style.space.xs
+            focusPolicy: Qt.StrongFocus
+            hoverEnabled: true
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            Layout.alignment: Qt.AlignVCenter
+            Accessible.name: text
+            Accessible.description: root.controlCenterDescription
+            Accessible.role: Accessible.Button
+            onPressed: if (root.controlCenterTooltipBackend) root.controlCenterTooltipBackend.hideImmediately()
+            onClicked: root.toggleControlCenter()
+            Controls.ToolTip {
+                id: controlCenterTooltip
+                objectName: "barControlCenterTooltip"
+                visible: controlCenterButton.hovered && !root.controlCenterTooltipBackend
+                text: root.controlCenterDescription
+                width: Math.min(Style.size.popupWidth, implicitWidth)
+                contentItem: Text {
+                    objectName: "barControlCenterTooltipText"
+                    text: controlCenterTooltip.text
+                    textFormat: Text.PlainText
+                    font: controlCenterTooltip.font
+                    color: controlCenterTooltip.palette.windowText
+                    wrapMode: Text.WordWrap
+                }
+            }
+            contentItem: Canvas {
+                objectName: "barControlCenterIcon"
+                readonly property color ink: controlCenterButton.palette.windowText
+                readonly property bool available: root.controlCenterAvailable
+                onInkChanged: requestPaint()
+                onAvailableChanged: requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+                onPaint: {
+                    const context = getContext("2d");
+                    context.reset();
+                    const size = Math.min(width, height);
+                    const unit = size / Style.space.xxl;
+                    const left = (width - size) / 2;
+                    const top = (height - size) / 2;
+                    context.strokeStyle = ink;
+                    context.fillStyle = ink;
+                    context.lineCap = "round";
+                    context.lineWidth = Style.space.xxs * unit;
+                    // Two opposing sliders, kept monochrome like the menu mark.
+                    [Style.space.sm, Style.space.lg].forEach((rowY, index) => {
+                        context.beginPath();
+                        const half = (Style.space.xs + Style.space.xxs) / 2;
+                        const start = left + (Style.space.xs + half) * unit;
+                        const end = left + (Style.space.xl - half) * unit;
+                        const center = top + rowY * unit;
+                        context.moveTo(start, center - half * unit);
+                        context.lineTo(end, center - half * unit);
+                        context.arc(end, center, half * unit, -Math.PI / 2, Math.PI / 2);
+                        context.lineTo(start, center + half * unit);
+                        context.arc(start, center, half * unit, Math.PI / 2, 3 * Math.PI / 2);
+                        context.closePath();
+                        context.stroke();
+                        context.beginPath();
+                        context.arc(left + (index ? Style.space.lg : Style.space.sm) * unit,
+                            top + rowY * unit, Style.space.xxs * unit, 0, 2 * Math.PI);
+                        context.fill();
+                    });
+                    if (!available) {
+                        context.beginPath();
+                        context.moveTo(left + Style.space.xs * unit, top + Style.space.xl * unit);
+                        context.lineTo(left + Style.space.xl * unit, top + Style.space.xs * unit);
+                        context.stroke();
+                    }
+                }
+            }
+            background: Rectangle {
+                radius: Style.radius.control
+                color: Style.alpha(controlCenterButton.palette.windowText,
+                    controlCenterButton.down || root.controlCenterIsOpen ? Style.state.pressed
+                    : controlCenterButton.hovered ? Style.state.hover : 0)
+                border.width: controlCenterButton.visualFocus ? Style.space.xxs : 0
+                border.color: controlCenterButton.palette.highlight
+                visible: controlCenterButton.down || controlCenterButton.hovered
+                    || controlCenterButton.visualFocus || root.controlCenterIsOpen
+                Behavior on color { ColorAnimation { objectName: "barControlCenterHoverAnimation"; duration: Style.duration(Style.motion.fast, root.reducedMotion) } }
+            }
+        }
         Controls.ToolButton {
             objectName: "sessionActionError"
-            visible: root.actionError !== ""
+            visible: root.showOrlaMenu && root.actionError !== ""
             text: qsTr("Falha na ação")
             Accessible.description: root.actionError
             Controls.ToolTip.visible: hovered

@@ -70,6 +70,38 @@ class FixtureApplication(QObject):
     hasActiveApplication = Property(bool, lambda self: self.active, notify=changed)
 
 
+class FixtureControlCenter(QObject):
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.values = dict(apiVersion=1, status="ready", available=True, isOpen=False, error="")
+        self.calls = []
+        self.on_open = None
+        self.on_release = None
+
+    def update(self, **values):
+        self.values.update(values); self.changed.emit()
+
+    apiVersion = Property(int, lambda self: self.values["apiVersion"], notify=changed)
+    status = Property(str, lambda self: self.values["status"], notify=changed)
+    available = Property(bool, lambda self: self.values["available"], notify=changed)
+    isOpen = Property(bool, lambda self: self.values["isOpen"], notify=changed)
+    error = Property(str, lambda self: self.values["error"], notify=changed)
+
+    @Slot(QObject, QObject, result=bool)
+    def open(self, host, anchor):
+        self.calls.append(("open", host, anchor)); self.update(isOpen=True)
+        if self.on_open: self.on_open()
+        return True
+
+    @Slot()
+    def release(self):
+        self.calls.append(("release",))
+        if self.on_release: self.on_release()
+        self.update(isOpen=False)
+
+
 class BarTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -78,11 +110,13 @@ class BarTests(unittest.TestCase):
     def setUp(self):
         self.session = FixtureSession()
         self.application = FixtureApplication()
+        self.control_center = FixtureControlCenter()
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
         self.engine.rootContext().setContextProperty("fixtureSession", self.session)
         self.engine.rootContext().setContextProperty("fixtureApplication", self.application)
+        self.engine.rootContext().setContextProperty("fixtureControlCenter", self.control_center)
         self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("BarHarness.qml").resolve())))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.window = self.engine.rootObjects()[0]
@@ -126,6 +160,178 @@ class BarTests(unittest.TestCase):
         self.wait_property(button, "focus", True)
         self.window.requestActivate()
         self.wait_property(button, "activeFocus", True)
+
+    def test_cc_is_opt_in_and_keyboard_dispatches_exact_same_window_anchor(self):
+        button = self.item("barControlCenterButton")
+        self.assertFalse(button.property("visible"))
+        self.assertTrue(self.bar.property("showOrlaMenu"))
+        self.evaluate("showOrlaMenu = false; showApplicationName = false; showControlCenter = true")
+        self.assertFalse(self.item("orlaMenuButton").property("visible"))
+        self.assertTrue(button.property("visible"))
+        self.assertTrue(button.property("enabled"))
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.control_center.calls, [("open", self.bar, button)])
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.control_center.calls[-1], ("release",))
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_unavailable_incompatible_and_invalid_host_never_dispatch(self):
+        self.evaluate("showControlCenter = true")
+        button = self.item("barControlCenterButton")
+        for values in (dict(status="unavailable", available=False), dict(status="ambiguous", available=False),
+                       dict(status="ready", available=True, apiVersion=2)):
+            self.control_center.update(**values)
+            self.assertFalse(button.property("enabled"))
+            self.evaluate("clicked()", button)
+            self.assertEqual(self.control_center.calls, [])
+        self.control_center.update(apiVersion=1, status="ready", available=True)
+        self.evaluate("controlCenterHost = null")
+        self.assertFalse(button.property("enabled"))
+        self.evaluate("clicked()", button)
+        self.assertEqual(self.control_center.calls, [])
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_hide_and_client_replacement_release_only_its_lease(self):
+        self.evaluate("showControlCenter = true")
+        button = self.item("barControlCenterButton")
+        self.evaluate("clicked()", button)
+        self.evaluate("showControlCenter = false")
+        self.assertEqual(self.control_center.calls, [("open", self.bar, button), ("release",)])
+        self.evaluate("showControlCenter = true")
+        self.evaluate("clicked()", button)
+        self.evaluate("controlCenterClient = null")
+        self.assertEqual(self.control_center.calls[-1], ("release",))
+        self.assertFalse(button.property("enabled"))
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_client_swapped_inside_open_releases_exact_dispatch_client(self):
+        replacement = FixtureControlCenter()
+        self.evaluate("showControlCenter = true")
+        button = self.item("barControlCenterButton")
+        self.control_center.on_open = lambda: self.bar.setProperty("controlCenterClient", replacement)
+        self.assertFalse(self.evaluate("toggleControlCenter()"))
+        self.assertEqual(self.control_center.calls, [("open", self.bar, button), ("release",)])
+        self.assertFalse(self.control_center.values["isOpen"])
+        self.evaluate("showControlCenter = false")
+        self.assertEqual(replacement.calls, [])
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_open_cancels_when_context_changes_even_if_it_returns_to_same_values(self):
+        replacement = FixtureControlCenter()
+        self.evaluate("showControlCenter = true")
+        button = self.item("barControlCenterButton")
+        def client_cycle():
+            self.bar.setProperty("controlCenterClient", replacement)
+            self.bar.setProperty("controlCenterClient", self.control_center)
+        def availability_cycle():
+            self.control_center.update(status="ambiguous", available=False)
+            self.control_center.update(status="ready", available=True)
+        mutations = (
+            lambda: self.evaluate("showControlCenter = false; showControlCenter = true"),
+            lambda: self.bar.setProperty("controlCenterHost", self.window.contentItem()),
+            client_cycle, availability_cycle,
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation.__name__):
+                self.bar.setProperty("controlCenterHost", self.bar)
+                self.control_center.calls.clear()
+                self.control_center.on_open = mutation
+                self.assertFalse(self.evaluate("toggleControlCenter()"))
+                self.assertEqual(self.control_center.calls, [("open", self.bar, button), ("release",)])
+                self.assertFalse(self.control_center.values["isOpen"])
+                self.evaluate("showControlCenter = false; showControlCenter = true")
+                self.assertEqual(self.control_center.calls.count(("release",)), 1)
+                self.assertEqual(replacement.calls, [])
+        self.control_center.on_open = None
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_release_callback_cannot_reenter_open_or_release_a_new_client(self):
+        replacement = FixtureControlCenter()
+        reentrant_results = []
+        self.evaluate("showControlCenter = true")
+        self.assertTrue(self.evaluate("toggleControlCenter()"))
+        def releasing():
+            self.bar.setProperty("controlCenterClient", replacement)
+            reentrant_results.append(self.evaluate("toggleControlCenter()"))
+            reentrant_results.append(self.evaluate("releaseControlCenter()"))
+        self.control_center.on_release = releasing
+        self.assertTrue(self.evaluate("toggleControlCenter()"))
+        self.assertEqual(reentrant_results, [False, False])
+        self.assertFalse(self.control_center.values["isOpen"])
+        self.assertEqual(self.control_center.calls.count(("release",)), 1)
+        self.assertEqual(replacement.calls, [])
+        self.assertTrue(self.evaluate("toggleControlCenter()"))
+        self.assertEqual(replacement.calls, [("open", self.bar, self.item("barControlCenterButton"))])
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_open_callback_cannot_dispatch_a_nested_open(self):
+        results = []
+        self.evaluate("showControlCenter = true")
+        self.control_center.on_open = lambda: results.append(self.evaluate("toggleControlCenter()"))
+        self.assertTrue(self.evaluate("toggleControlCenter()"))
+        self.assertEqual(results, [False])
+        self.assertEqual(self.control_center.calls, [("open", self.bar, self.item("barControlCenterButton"))])
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_tab_focus_has_two_pixel_ring_and_reduced_motion(self):
+        self.evaluate("showOrlaMenu = false; showApplicationName = false; showControlCenter = true; forceActiveFocus()")
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        button = self.item("barControlCenterButton")
+        self.assertTrue(button.property("visualFocus"))
+        self.assertEqual(self.evaluate("background.border.width", button), 2)
+        self.assertTrue(self.evaluate("background.visible", button))
+        self.evaluate("reducedMotion = true")
+        animation = self.window.findChild(QObject, "barControlCenterHoverAnimation")
+        self.assertIsNotNone(animation)
+        self.assertEqual(animation.property("duration"), 0)
+        self.assertEqual(self.control_center.calls, [])
+        self.assertEqual(self.session.calls, [])
+
+    def test_cc_cross_window_host_refuses_and_host_replacement_releases(self):
+        from PySide6.QtQuick import QQuickWindow
+        other = QQuickWindow()
+        try:
+            self.evaluate("showControlCenter = true")
+            self.bar.setProperty("controlCenterHost", other.contentItem())
+            button = self.item("barControlCenterButton")
+            self.assertFalse(button.property("enabled"))
+            self.evaluate("clicked()", button)
+            self.assertEqual(self.control_center.calls, [])
+            self.bar.setProperty("controlCenterHost", self.bar)
+            self.evaluate("clicked()", button)
+            self.bar.setProperty("controlCenterHost", self.window.contentItem())
+            self.assertEqual(self.control_center.calls, [("open", self.bar, button), ("release",)])
+        finally:
+            other.deleteLater()
+            QCoreApplication.sendPostedEvents(other, QEvent.DeferredDelete)
+
+    def test_cc_settings_are_opt_in_and_presentation_preset_preserves_choice(self):
+        path = Path(__file__).resolve().parents[1] / "bar/contents/ui/BarSettings.qml"
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(path)))
+        settings = component.create()
+        self.assertIsNotNone(settings, [error.toString() for error in component.errors()])
+        try:
+            self.assertTrue(settings.property("cfg_showOrlaMenu"))
+            self.assertFalse(settings.property("cfg_showControlCenter"))
+            self.evaluate("cfg_showOrlaMenu = false; cfg_showControlCenter = true", settings)
+            self.evaluate("clicked()", settings.findChild(QQuickItem, "applyMacInspiredPreset"))
+            self.assertFalse(settings.property("cfg_showOrlaMenu"))
+            self.assertTrue(settings.property("cfg_showControlCenter"))
+        finally:
+            settings.deleteLater()
+            QCoreApplication.sendPostedEvents(settings, QEvent.DeferredDelete)
+
+    def test_cc_error_is_plain_bounded_and_shows_real_status(self):
+        self.evaluate("showControlCenter = true")
+        self.control_center.update(status="ambiguous", available=False, error="<b>Central indisponível</b>" + "x" * 1000)
+        self.assertEqual(self.bar.property("controlCenterStatus"), "ambiguous")
+        self.assertLessEqual(len(self.bar.property("controlCenterError")), 240)
+        tooltip = self.item("barControlCenterTooltipText")
+        self.assertEqual(self.evaluate("Number(textFormat)", tooltip), 0)  # Text.PlainText
+        self.assertEqual(tooltip.property("text"), self.bar.property("controlCenterError"))
+        self.assertFalse(self.item("barControlCenterButton").property("enabled"))
+        self.assertEqual(self.control_center.calls, [])
 
     def test_icon_only_label_control_and_text_only_fallback(self):
         button = self.item("orlaMenuButton")
