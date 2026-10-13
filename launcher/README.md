@@ -208,9 +208,69 @@ ctest --test-dir build/launcher --output-on-failure
 build/launcher/orla-launcher --no-global-shortcut
 ```
 
-Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Super+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro próprio. Não há autostart, instalação automática, alteração de painel ou integração de menu nesta pasta.
+Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Meta+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro temporário próprio. Não há autostart, instalação automática, alteração de painel ou integração de menu nesta pasta.
 
 `--start-hidden` inicia a janela oculta quando o registro do atalho funciona. Se o atalho estiver ocupado ou desativado, a janela permanece visível para que o launcher continue acessível.
+
+### Windows/Meta para Orla Search — escolha explícita
+
+O modo `--managed-shortcuts` registra uma única instância com a identidade
+persistente `org.orla.Launcher` / `orla-search-open`. Na primeira execução, tenta
+salvar **Ctrl+Alt+Meta+O** sem substituir uma combinação ocupada; nas seguintes,
+reutiliza a configuração salva, inclusive quando desativada. Encerrar o processo
+preserva esses atalhos, mas eles só abrem a busca enquanto o launcher estiver
+ativo. Esse modo não aceita `--shortcut` nem `--no-global-shortcut`.
+
+Inicie o launcher em um terminal e mantenha-o ativo; execute a CLI em outro:
+
+```sh
+build/launcher/orla-launcher --managed-shortcuts
+```
+
+```sh
+python3 scripts/orla.py search-shortcut status
+python3 scripts/orla.py search-shortcut enable
+python3 scripts/orla.py search-shortcut disable
+python3 scripts/orla.py search-shortcut recover
+```
+
+`status` apenas consulta o proprietário atual de Meta, o registro de recuperação
+e se o launcher gerenciado está ativo; não cria registro nem altera atalhos.
+`enable` exige esse launcher já ativo e **Ctrl+Alt+Meta+O** configurado antes de
+adicionar Meta isolada à ação Orla. Antes de remover Meta do proprietário
+anterior, salva um registro privado em `$XDG_STATE_HOME/orla/search-shortcut`
+(ou no diretório de estado padrão). Não há tomada automática de Meta ao iniciar.
+
+`disable` desfaz a atribuição de Meta; `recover` retoma uma restauração pendente
+após falha ou interrupção. Ambos removem apenas Meta de Orla e a devolvem à ação
+anterior registrada, preservando os demais atalhos atuais dessas ações e outras
+alterações no desktop. Não restauram um arquivo de configuração completo nem
+removem o atalho persistente Ctrl+Alt+Meta+O. Se Meta recebeu outro proprietário,
+a recuperação recusa a alteração e preserva o registro para resolver o conflito.
+
+Esse fluxo usa `busctl` e KGlobalAccel da sessão Plasma, sem iniciar serviços.
+Múltiplos proprietários e contextos personalizados de Meta são recusados. As
+consultas e confirmações reduzem conflitos, mas KDE não oferece compare-and-swap
+(CAS) para essa escrita: uma alteração concorrente na mesma ação entre consulta
+e gravação ainda pode ser sobrescrita. Evite editar essa ação em paralelo.
+Não há instalador de serviço, autostart ou API pública de extensões nesta fatia.
+
+**Qualificação local de 13/10:** passaram 19 testes da CLI, 23 casos de atalhos e
+sete CTests em build permanente (97,17 s). No Plasma 6.7.5/Wayland, Qt 6.11.2,
+com DPR observado de 1,45, Meta abriu a busca, ↓ selecionou a fixture própria e
+Enter executou somente essa seleção. O processo permaneceu ativo e reabriu;
+Escape devolveu o foco, o atalho alternativo funcionou e Meta+O não abriu a busca.
+Reiniciar o serviço preservou Meta; desativar restaurou o KRunner e reativar
+voltou ao Orla. Os defaults anteriores foram conferidos e preservados.
+
+O primeiro teste real encontrou saída automática do Qt após o job KIO executar
+um app com a janela oculta. A correção usa `setQuitLockEnabled(false)`, como o
+[KRunner 6.7.5](https://github.com/KDE/plasma-workspace/blob/v6.7.5/krunner/main.cpp),
+e a regressão executa o `main` real, reabre a busca e verifica saída explícita.
+Não foi qualificada digitação antes do foco: um probe sem pausa perdeu a primeira
+letra. Latência de ativação, outros monitores, atalhos inibidos e reinício do
+daemon continuam abertos. Ctrl+Q foi verificado na regressão isolada, sem novo
+teste nativo nesta revisão. Os recibos históricos abaixo mantêm seu escopo.
 
 ## Limites de qualificação
 
@@ -225,8 +285,9 @@ Meta isolada, provedores reais ou múltiplos monitores; L0/L2 seguem abertos.
 A revisão visual de 13/10 foi instalada com backup e passou nova consulta/Escape
 com retorno à janela de teste em uma tela Wayland/DPR 2. A galeria claro/escuro
 é sintética; esquema claro nativo, múltiplas telas, Enter/execução e provedores
-reais permanecem sem qualificação. Os probes e canaries anteriores são históricos. Meta continua atribuída ao KRunner até configuração explícita e
-prova própria, com recuperação do atalho anterior.
+reais permanecem sem qualificação. Os probes e canaries anteriores são históricos.
+Nesses recibos, Meta permaneceu atribuída ao KRunner. A configuração explícita
+descrita acima exige prova própria, incluindo recuperação do atalho anterior.
 
 As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles. O ZIP 0.2.9 carrega apenas os helpers-fonte `scripts/ai.py` e `tests/test_ai.py`; eles não instalam nem habilitam o launcher. O painel experimental de IA permanece apenas no fonte e não é qualificado para uso diário; empacotamento e instalação opcional do launcher seguem pendentes.
 

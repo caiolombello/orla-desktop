@@ -1,6 +1,9 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDebug>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusReply>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -18,11 +21,14 @@ int main(int argc, char **argv)
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setDesktopFileName(QStringLiteral("org.orla.Launcher"));
     app.setQuitOnLastWindowClosed(false);
+    // KIO launch jobs release a quit lock after the search window has hidden.
+    app.setQuitLockEnabled(false);
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Orla Launcher opcional: aplicativos, calculadora e inventário Steam local explícito."));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({QStringLiteral("no-global-shortcut"), QStringLiteral("Não registrar atalho; Escape encerra o processo.")});
+    parser.addOption({QStringLiteral("managed-shortcuts"), QStringLiteral("Usar o atalho persistente gerenciado pelo Orla, com uma única instância.")});
     parser.addOption({QStringLiteral("start-hidden"), QStringLiteral("Iniciar oculto somente quando o atalho global estiver registrado.")});
     parser.addOption({QStringLiteral("shortcut"), QStringLiteral("Atalho temporário disponível, sem substituir bindings."),
                       QStringLiteral("combinação"), QStringLiteral("Ctrl+Alt+Meta+O")});
@@ -33,6 +39,26 @@ int main(int argc, char **argv)
     parser.addOption({QStringLiteral("ai-text-helper"), QStringLiteral("Helper operacional de texto local absoluto."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_TEXT_HELPER_PATH)});
     parser.process(app);
+    const bool managedShortcuts = parser.isSet(QStringLiteral("managed-shortcuts"));
+    if (managedShortcuts) {
+        if (parser.isSet(QStringLiteral("shortcut")) || parser.isSet(QStringLiteral("no-global-shortcut"))) {
+            qCritical().noquote() << "--managed-shortcuts não pode ser combinado com --shortcut ou --no-global-shortcut.";
+            return 2;
+        }
+        const auto bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected() || !bus.interface()) {
+            qCritical().noquote() << "O modo gerenciado exige o D-Bus da sessão disponível.";
+            return 2;
+        }
+        // Claim the callback identity before constructing controllers or registering a QAction.
+        const auto lease = bus.interface()->registerService(QStringLiteral("org.orla.Launcher"),
+                                                            QDBusConnectionInterface::DontQueueService,
+                                                            QDBusConnectionInterface::DontAllowReplacement);
+        if (!lease.isValid() || lease.value() != QDBusConnectionInterface::ServiceRegistered) {
+            qCritical().noquote() << "Orla Launcher gerenciado já está em execução ou a identidade D-Bus está indisponível.";
+            return 2;
+        }
+    }
     AiProviderController aiController(parser.value(QStringLiteral("ai-python")),
                                       parser.value(QStringLiteral("ai-helper")));
     AiTextController aiTextController(parser.value(QStringLiteral("ai-python")),
@@ -53,7 +79,8 @@ int main(int argc, char **argv)
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
     if (!window) return 1;
     WindowSession session(&controller, window, !parser.isSet(QStringLiteral("no-global-shortcut")),
-                          parser.value(QStringLiteral("shortcut")));
+                          parser.value(QStringLiteral("shortcut")), nullptr,
+                          managedShortcuts ? WindowSession::ShortcutMode::Managed : WindowSession::ShortcutMode::Temporary);
     QObject::connect(&controller, &LauncherController::closeRequested, &aiController,
                      &AiProviderController::cancelAll);
     QObject::connect(&controller, &LauncherController::closeRequested, &aiTextController,
