@@ -446,6 +446,15 @@ claro/escuro e distingue esse resultado de KWin/TaskManager, gesto/foco e escopo
 por monitor na sessão real, ainda UNRUN. W1 permanece parcial e não habilita
 automação de perfis ou um novo atalho global.
 
+**W1 nativo — parcial:** `97c913f` instalado; seleção passiva e troca por mouse
+passaram com KWin/TaskManager reais. A área atual foi conferida ao reabrir,
+inclusive após atalho KDE. A área temporária foi removida e a original restaurada.
+O roteiro de teclado com menu aberto não trocou; causa/foco ainda não qualificados.
+O hash de `kwinrc` mudou durante o ensaio e não voltou ao preflight; restauração
+integral permanece UNKNOWN. Os demais arquivos protegidos, applets, barra,
+launcher e bancos passaram. Não ampliar esse resultado para teclado completo,
+exact-once, monitores ou preservação byte a byte de toda configuração.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
