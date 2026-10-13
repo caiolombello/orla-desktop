@@ -1,31 +1,48 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
+import "../code/Style.js" as Style
 
+// One dock slot, macOS-like: artwork only, a dot for running apps, a gentle lift
+// on hover and a bounce while launching or asking for attention. Widgets set
+// `liveKind` and render a LiveIcon instead of a theme icon.
 Controls.AbstractButton {
     id: tile
     property var iconSource: ""
     property string title: ""
     property string subtitle: ""
-    property color foreground: "#edf1f9"
-    property color muted: "#9da9bf"
-    property color accent: "#8cb7ff"
-    property bool wide: false
+    property color foreground: Style.dockThemes.glass.foreground
+    property color muted: Style.dockThemes.glass.muted
+    property color accent: Style.dockThemes.glass.accent
+    property string liveKind: ""
+    property var liveInfo: ({})
+    // True when a widget has data worth showing; false shows its idle face.
+    property bool live: false
+    property date now: new Date()
     property bool running: false
     property bool activeTask: false
     property bool attention: false
+    property bool launching: false
     property int iconSize: 42
-    property int animationDuration: 120
+    property int animationDuration: Style.motion.fast
     property string tooltip: title
-    implicitWidth: wide ? 158 : iconSize + 16
+    // DockView draws a floating label in Plasma; fixtures keep the Controls tooltip.
+    property bool nativeLabel: false
+    readonly property var scheme: Style.scheme(Style.luminance(foreground) < 0.4 ? "light" : "dark")
+    readonly property int artworkSize: iconSize + Style.dock.artwork
+    readonly property bool lifted: (hovered || visualFocus) && !down
+    readonly property bool bouncing: (launching || attention) && animationDuration > 0
+    readonly property alias artwork: artworkBox
+    implicitWidth: iconSize + Style.dock.slotGap
     implicitHeight: iconSize + 16
+    padding: 0
     hoverEnabled: true
     Accessible.name: tooltip
     Controls.ToolTip {
         id: hoverTip
         parent: tile
         text: tile.tooltip
-        visible: tile.hovered && tile.tooltip.length > 0
+        visible: tile.hovered && tile.tooltip.length > 0 && !tile.nativeLabel
         delay: 650
         contentItem: Text {
             objectName: "tileTooltipText"
@@ -36,44 +53,79 @@ Controls.AbstractButton {
             wrapMode: Text.Wrap
         }
     }
-    background: Rectangle {
-        radius: 14
-        color: tile.down ? Qt.rgba(0.5, 0.6, 0.8, 0.26)
-                        : tile.hovered || tile.visualFocus ? Qt.rgba(0.5, 0.6, 0.8, 0.14) : "transparent"
-        border.width: tile.visualFocus ? 2 : 0
-        border.color: tile.accent
-    }
+    background: Item {}
     contentItem: Item {
-        Kirigami.Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.leftMargin: tile.wide ? 10 : (parent.width - width) / 2
-            width: tile.wide ? 26 : tile.iconSize
+        Item {
+            id: artworkBox
+            objectName: "tileArtwork"
+            width: tile.artworkSize
             height: width
-            source: tile.iconSource
-            color: tile.foreground
-            scale: tile.hovered && !tile.wide ? 1.12 : 1
+            x: Math.round((parent.width - width) / 2)
+            // Sit above center so the running dot has room underneath.
+            y: Math.round((parent.height - height) / 2) - 2
+            scale: tile.down ? Style.motion.pressScale : tile.lifted ? Style.motion.hoverScale : 1
+            transformOrigin: Item.Bottom
+            transform: [
+                Translate {
+                    y: tile.lifted ? -Style.motion.lift : 0
+                    Behavior on y { NumberAnimation { duration: tile.animationDuration; easing.type: Easing.OutCubic } }
+                },
+                Translate { id: bounce }
+            ]
             Behavior on scale { NumberAnimation { duration: tile.animationDuration; easing.type: Easing.OutCubic } }
-        }
-        Column {
-            visible: tile.wide
-            anchors.verticalCenter: parent.verticalCenter
-            x: 44
-            width: parent.width - x - 8
-            spacing: 2
-            Text { objectName: "tileTitle"; text: tile.title; textFormat: Text.PlainText; color: tile.foreground; font.pixelSize: 13; font.weight: Font.DemiBold; width: parent.width; elide: Text.ElideRight }
-            Text { objectName: "tileSubtitle"; text: tile.subtitle; textFormat: Text.PlainText; color: tile.muted; font.pixelSize: 10; width: parent.width; elide: Text.ElideRight }
+            Kirigami.Icon {
+                anchors.fill: parent
+                visible: tile.liveKind.length === 0
+                source: tile.iconSource
+                color: tile.foreground
+                active: tile.hovered
+            }
+            LiveIcon {
+                anchors.centerIn: parent
+                width: tile.iconSize + 2
+                height: width
+                visible: tile.liveKind.length > 0
+                kind: tile.liveKind
+                info: tile.liveInfo
+                live: tile.live
+                now: tile.now
+                animationDuration: tile.animationDuration
+            }
         }
         Rectangle {
+            objectName: "tileFocusRing"
+            // Keep focus inside the hit target while its artwork lifts or bounces.
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: artworkBox.y
+            width: Math.min(tile.artworkSize, parent.width)
+            height: width
+            radius: Math.round(width * Style.dock.iconRadius)
+            visible: tile.visualFocus
+            color: "transparent"
+            border.width: 2
+            border.color: tile.accent
+        }
+        SequentialAnimation {
+            running: tile.bouncing
+            loops: Animation.Infinite
+            alwaysRunToEnd: true
+            NumberAnimation { target: bounce; property: "y"; to: -Style.motion.bounce; duration: Style.motion.slow; easing.type: Easing.OutQuad }
+            NumberAnimation { target: bounce; property: "y"; to: 0; duration: Style.motion.slow * 2; easing.type: Easing.OutBounce }
+            PauseAnimation { duration: Style.motion.slow * 2 }
+        }
+        Rectangle {
+            id: indicator
+            objectName: "tileIndicator"
             visible: tile.running || tile.attention
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 1
-            width: tile.activeTask ? 16 : 5
-            height: 3
-            radius: 2
-            color: tile.attention ? "#f5b65d" : tile.activeTask ? tile.accent : tile.muted
-            Behavior on width { NumberAnimation { duration: tile.animationDuration } }
+            width: Style.size.indicator
+            height: width
+            radius: width / 2
+            color: tile.attention ? tile.scheme.warning : tile.foreground
+            opacity: tile.attention || tile.activeTask ? 1 : 0.55
+            Behavior on opacity { NumberAnimation { duration: tile.animationDuration } }
         }
     }
 }

@@ -21,12 +21,11 @@ espaço. Um aviso aparece temporariamente sobre a extremidade direita do dock,
 sem alterar sua largura ou a posição de rolagem. O aviso não pede foco; ao
 fechá-lo pelo teclado, o foco pode retornar ao controle anterior do dock.
 
-Widgets de música, bateria e integrações ficam como ícones compactos quando
-não têm dados úteis. Continuam clicáveis e acessíveis pelo teclado, com o
-estado completo no tooltip. Dados úteis disponíveis, inclusive dados
-explicitamente desatualizados, recuperam a apresentação ampla sem substituir
-o controle focado. A dock
-mantém rolagem horizontal e revela o item focado, sem uma barra persistente.
+Widgets de música, bateria e integrações são live icons no dock, com ou sem
+dados úteis. Permanecem clicáveis e acessíveis pelo teclado; nomes e detalhes,
+inclusive ausência ou idade da leitura, ficam no hover/tooltip e no popup.
+Atualizações não substituem o controle focado. O dock mantém rolagem horizontal
+e revela o item focado, sem uma barra persistente.
 
 Este incremento pertence ao código atual; os arquivos já publicados da
 release 0.2.9 permanecem inalterados. Testes determinísticos e revisão
@@ -56,11 +55,11 @@ A notice temporarily overlays the right end of the dock without changing its
 width or scroll position. Arrival does not request focus; keyboard dismissal
 can restore focus to the previous dock control.
 
-Music, battery and integration widgets use compact icons when useful data
-is absent. They remain clickable and keyboard accessible, with their complete
-status in the tooltip. Useful available data, including explicitly stale data,
-restores the wide presentation without replacing the focused control. Horizontal scrolling and
-focus reveal remain available without a persistent scrollbar.
+Music, battery and integration widgets remain live icons in the dock,
+with or without useful data. They remain clickable and keyboard accessible;
+names and details, including missing or stale readings, belong in hover labels,
+tooltips and popovers. Updates do not replace the focused control. Horizontal
+scrolling and focus reveal remain available without a persistent scrollbar.
 
 This increment belongs to the current source; published 0.2.9 assets remain
 unchanged. Deterministic tests and independent review cover confirmation,

@@ -12,7 +12,9 @@ import caiodock
 
 
 # The optional menu is Source-only; its fixtures need bar/, which is not bundled.
-SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml"))
+# Design checks and the gallery compare the bar and launcher token copies too.
+SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml",
+                               "tests/test_design_system.py", "tests/design_gallery.py"))
 
 
 def bundle(root: Path) -> tuple[Path, Path, Path]:

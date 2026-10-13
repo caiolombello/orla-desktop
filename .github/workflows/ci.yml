@@ -56,6 +56,13 @@ jobs:
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_contexts.py' -v
 
+      - name: Check the design system
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $ORLA_CI_PYTHON -B scripts/design.py check
+          $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_design_system.py' -v
+
       - name: Run portable theme parser and appearance consumer checks
         env:
           QT_QPA_PLATFORM: offscreen

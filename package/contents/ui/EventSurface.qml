@@ -1,17 +1,18 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import "../code/Style.js" as Style
 
 Item {
     id: surface
     objectName: "localEventSurface"
 
     required property var eventState
-    property color surfaceColor: "#182231"
-    property color borderColor: "#53647a"
-    property color foregroundColor: "#f4f7fb"
-    property color mutedColor: "#aeb9c8"
-    property color accentColor: "#70d7c7"
-    property int animationDuration: 120
+    property color surfaceColor: Style.schemes.dark.surface
+    property color borderColor: Style.schemes.dark.borderStrong
+    property color foregroundColor: Style.schemes.dark.text
+    property color mutedColor: Style.schemes.dark.textMuted
+    property color accentColor: Style.schemes.dark.accent
+    property int animationDuration: Style.motion.fast
     property alias closeControl: closeButton
     property bool closeOwnedFocus: false
     signal focusRestoreRequested()
@@ -52,7 +53,7 @@ Item {
     Rectangle {
         visible: surface.hasEvent
         anchors.fill: parent
-        radius: Math.min(14, height / 2)
+        radius: Math.min(Style.radius.tile, height / 2)
         color: surface.surfaceColor
         border.color: surface.accentColor
         border.width: 1
@@ -68,7 +69,7 @@ Item {
         width: surface.mode === 0 ? 12 : 16
         text: surface.hasEvent ? "✓" : ""
         color: surface.accentColor
-        font.pixelSize: surface.mode === 0 ? 13 : 15
+        font.pixelSize: surface.mode === 0 ? Style.type.body : Style.type.title
         font.bold: surface.hasEvent
         horizontalAlignment: Text.AlignHCenter
         textFormat: Text.PlainText
@@ -84,7 +85,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: surface.hasEvent ? qsTr("Fim") : ""
         color: surface.foregroundColor
-        font.pixelSize: 9
+        font.pixelSize: Style.type.overline
         font.bold: surface.hasEvent
         horizontalAlignment: Text.AlignHCenter
         textFormat: Text.PlainText
@@ -102,7 +103,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: surface.hasEvent ? surface.eventState.current.title : ""
         color: surface.foregroundColor
-        font.pixelSize: 11
+        font.pixelSize: Style.type.caption
         font.bold: surface.hasEvent
         elide: Text.ElideRight
         textFormat: Text.PlainText
@@ -121,7 +122,7 @@ Item {
             width: parent.width
             text: surface.hasEvent ? surface.eventState.current.title : ""
             color: surface.foregroundColor
-            font.pixelSize: 11
+            font.pixelSize: Style.type.caption
             font.bold: surface.hasEvent
             elide: Text.ElideRight
             textFormat: Text.PlainText
@@ -132,7 +133,7 @@ Item {
             visible: surface.hasEvent
             text: surface.hasEvent ? surface.eventState.current.detail : ""
             color: surface.mutedColor
-            font.pixelSize: 9
+            font.pixelSize: Style.type.overline
             elide: Text.ElideRight
             textFormat: Text.PlainText
             Accessible.ignored: true
@@ -172,16 +173,16 @@ Item {
         Keys.onReturnPressed: surface.eventState.dismiss()
         Keys.onEnterPressed: surface.eventState.dismiss()
         background: Rectangle {
-            radius: 8
-            color: closeButton.down ? Qt.rgba(0.5, 0.6, 0.8, 0.26)
-                : closeButton.visualFocus ? Qt.rgba(0.5, 0.6, 0.8, 0.14) : "transparent"
+            radius: Style.radius.control
+            color: closeButton.down ? Style.alpha(surface.foregroundColor, Style.state.pressed)
+                : closeButton.hovered || closeButton.visualFocus ? Style.alpha(surface.foregroundColor, Style.state.hover) : "transparent"
             border.width: closeButton.visualFocus ? 2 : 0
             border.color: surface.accentColor
         }
         contentItem: Text {
             text: closeButton.text
             color: surface.foregroundColor
-            font.pixelSize: 16
+            font.pixelSize: Style.type.title
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             textFormat: Text.PlainText

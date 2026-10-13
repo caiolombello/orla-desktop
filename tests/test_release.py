@@ -39,7 +39,7 @@ class ReleaseBundleTests(unittest.TestCase):
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir()
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
-            for name in ("test_bar.py", "BarHarness.qml"):
+            for name in ("test_bar.py", "BarHarness.qml", "test_design_system.py", "design_gallery.py"):
                 (root / "tests" / name).write_text("source-only fixture\n", encoding="utf-8")
             (root / "bar").mkdir()
             (root / "bar/main.qml").write_text("source-only applet\n", encoding="utf-8")
@@ -75,7 +75,8 @@ class ReleaseBundleTests(unittest.TestCase):
                         self.assertEqual(package_archive.read(name), (root / "package" / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
-                for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml"):
+                for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
+                             "tests/test_design_system.py", "tests/design_gallery.py"):
                     self.assertNotIn(prefix + name, archive.namelist())
                 unpacked = root / "unpacked"
                 archive.extractall(unpacked)

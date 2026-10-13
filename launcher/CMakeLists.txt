@@ -41,7 +41,7 @@ target_compile_definitions(orla-launcher PRIVATE
     ORLA_AI_TEXT_HELPER_PATH="${ORLA_AI_TEXT_HELPER_PATH}"
     ORLA_STEAM_PYTHON_PATH="${Python3_EXECUTABLE}"
     ORLA_STEAM_HELPER_PATH="${ORLA_STEAM_HELPER_PATH}")
-qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml)
+qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
 target_link_libraries(orla-launcher PRIVATE orla-launcher-core Qt6::Widgets Qt6::Qml Qt6::Quick
     KF6::GlobalAccel KF6::WindowSystem)
 
@@ -66,7 +66,7 @@ if(BUILD_TESTING)
     add_executable(orla-launcher-ui-tests tests/UiTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-ui-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
-    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml)
+    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_test(NAME launcher-ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py

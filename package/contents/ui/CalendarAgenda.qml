@@ -4,6 +4,7 @@ import QtQuick.Controls as Controls
 import QtQuick.Templates as Templates
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.workspace.calendar as PlasmaCalendar
+import "../code/Style.js" as Style
 
 ColumnLayout {
     id: root
@@ -231,7 +232,7 @@ ColumnLayout {
         Accessible.name: text
         color: root.dock.muted
         wrapMode: Text.WordWrap
-        font.pixelSize: 11
+        font.pixelSize: Style.type.caption
     }
     Controls.Button {
         objectName: "calendarGoogleButton"

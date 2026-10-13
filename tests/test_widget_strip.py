@@ -63,10 +63,14 @@ class WidgetStripTests(unittest.TestCase):
         text = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
         self.assertTrue(self.evaluate("acceptSnapshot(" + json.dumps(text) + ")", self.integrations))
 
-    def assert_compact(self, tile, title, subtitle):
-        self.assertFalse(tile.property("wide"))
-        self.assertEqual(tile.width(), 58)
-        self.assertEqual(tile.property("implicitWidth"), 58)
+    # Widgets are square live icons (slot = iconSize 42 + Style.dock.slotGap 8);
+    # `live` says whether the icon shows data or its idle face.
+    SLOT = 50
+
+    def assert_idle(self, tile, title, subtitle):
+        self.assertFalse(tile.property("live"))
+        self.assertEqual(tile.width(), self.SLOT)
+        self.assertEqual(tile.property("implicitWidth"), self.SLOT)
         self.assertEqual(tile.property("title"), title)
         self.assertEqual(tile.property("subtitle"), subtitle)
         self.assertIn(title, tile.property("tooltip"))
@@ -75,17 +79,18 @@ class WidgetStripTests(unittest.TestCase):
         self.assertIsNotNone(interface)
         self.assertEqual(interface.text(QAccessible.Text.Name), tile.property("tooltip"))
 
-    def assert_wide(self, tile, width, title, subtitle):
-        self.assertTrue(tile.property("wide"))
-        self.assertEqual(tile.width(), width)
-        self.assertEqual(tile.property("implicitWidth"), width)
+    def assert_live(self, tile, title, subtitle):
+        self.assertTrue(tile.property("live"))
+        self.assertEqual(tile.width(), self.SLOT)
+        self.assertEqual(tile.property("implicitWidth"), self.SLOT)
         self.assertEqual(tile.property("title"), title)
         self.assertEqual(tile.property("subtitle"), subtitle)
+        self.assertIn(title, tile.property("tooltip"))
 
-    def test_music_keeps_one_focused_actionable_tile_while_compacting_and_expanding(self):
+    def test_music_keeps_one_focused_actionable_tile_while_going_idle_and_live(self):
         music = self.tile("musicTile")
         identity = music
-        self.assert_compact(music, "Sua música", "Nenhum player aberto")
+        self.assert_idle(music, "Sua música", "Nenhum player aberto")
         music.forceActiveFocus(Qt.TabFocusReason)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertEqual(json.loads(self.evaluate("JSON.stringify(openCalls)")), ["music"])
@@ -94,7 +99,7 @@ class WidgetStripTests(unittest.TestCase):
         QTest.qWait(10)
         self.assertIs(self.tile("musicTile"), identity)
         self.assertTrue(music.property("activeFocus"))
-        self.assert_wide(music, 158, "Faixa real", "Artista real")
+        self.assert_live(music, "Faixa real", "Artista real")
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertEqual(json.loads(self.evaluate("JSON.stringify(openCalls)")), ["music", "music"])
 
@@ -102,7 +107,7 @@ class WidgetStripTests(unittest.TestCase):
         QTest.qWait(10)
         self.assertIs(self.tile("musicTile"), identity)
         self.assertTrue(music.property("activeFocus"))
-        self.assert_compact(music, "Sua música", "Nenhum player aberto")
+        self.assert_idle(music, "Sua música", "Nenhum player aberto")
 
     def test_provider_state_matrix_compacts_only_states_without_meaningful_data(self):
         quota = self.tile("quotaTile")
@@ -111,10 +116,10 @@ class WidgetStripTests(unittest.TestCase):
         recording = self.tile("recordingTile")
         identities = [quota, peripherals, battery, recording]
 
-        self.assert_compact(quota, "QuotaLantern", "Sem leitura disponível")
-        self.assert_compact(peripherals, "PeriGauge", "Sem cache local")
-        self.assert_compact(battery, "Energia", "Bateria indisponível")
-        self.assert_compact(recording, "FalaTrace", "Sem estado disponível")
+        self.assert_idle(quota, "QuotaLantern", "Sem leitura disponível")
+        self.assert_idle(peripherals, "PeriGauge", "Sem cache local")
+        self.assert_idle(battery, "Energia", "Bateria indisponível")
+        self.assert_idle(recording, "FalaTrace", "Sem estado disponível")
         quota.forceActiveFocus(Qt.TabFocusReason)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertEqual(json.loads(self.evaluate("JSON.stringify(openCalls)")), ["quota"])
@@ -126,10 +131,10 @@ class WidgetStripTests(unittest.TestCase):
         )
         self.evaluate("status = 'ready'; percentKnown = true; percent = 99; charging = 'not-charging'", self.battery)
         QTest.qWait(10)
-        self.assert_wide(quota, 164, "QuotaLantern", "codex · 37% usado")
-        self.assert_wide(peripherals, 164, "PeriGauge", "Mouse · 64%")
-        self.assert_wide(battery, 132, "99%", "Na tomada")
-        self.assert_wide(recording, 164, "FalaTrace", "Estado salvo · gravando")
+        self.assert_live(quota, "QuotaLantern", "codex · 37% usado")
+        self.assert_live(peripherals, "PeriGauge", "Mouse · 64%")
+        self.assert_live(battery, "99%", "Na tomada")
+        self.assert_live(recording, "FalaTrace", "Estado salvo · gravando")
         self.assertTrue(quota.property("activeFocus"))
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertEqual(json.loads(self.evaluate("JSON.stringify(openCalls)")), ["quota", "quota"])
@@ -140,8 +145,8 @@ class WidgetStripTests(unittest.TestCase):
             recording={"status": "unknown", "state": "recording"},
         )
         QTest.qWait(10)
-        self.assert_wide(quota, 164, "QuotaLantern", "Dados desatualizados")
-        self.assert_wide(peripherals, 164, "PeriGauge", "Dados desatualizados")
+        self.assert_live(quota, "QuotaLantern", "Dados desatualizados")
+        self.assert_live(peripherals, "PeriGauge", "Dados desatualizados")
 
         self.publish(
             quota={"status": "stale", "windows": [{"provider": "codex", "usedPercent": 37, "stale": True}], "costs": []},
@@ -149,15 +154,15 @@ class WidgetStripTests(unittest.TestCase):
             recording={"status": "unknown", "state": "recording"},
         )
         QTest.qWait(10)
-        self.assert_wide(peripherals, 164, "PeriGauge", "Mouse · fora de alcance")
+        self.assert_live(peripherals, "PeriGauge", "Mouse · fora de alcance")
 
         self.evaluate("unavailable('Falha de conexão')", self.integrations)
         self.evaluate("status = 'unavailable'; percentKnown = false; percent = -1", self.battery)
         QTest.qWait(10)
-        self.assert_compact(quota, "QuotaLantern", "Integração indisponível")
-        self.assert_compact(peripherals, "PeriGauge", "Integração indisponível")
-        self.assert_compact(battery, "Energia", "Bateria indisponível")
-        self.assert_compact(recording, "FalaTrace", "Sem estado disponível")
+        self.assert_idle(quota, "QuotaLantern", "Integração indisponível")
+        self.assert_idle(peripherals, "PeriGauge", "Integração indisponível")
+        self.assert_idle(battery, "Energia", "Bateria indisponível")
+        self.assert_idle(recording, "FalaTrace", "Sem estado disponível")
         self.assertEqual([self.tile(name) for name in ("quotaTile", "peripheralsTile", "systemBatteryTile", "recordingTile")], identities)
 
     def test_whitespace_only_absent_name_stays_compact_through_real_snapshot_contract(self):
@@ -171,8 +176,8 @@ class WidgetStripTests(unittest.TestCase):
         QTest.qWait(10)
         self.assertIs(self.tile("peripheralsTile"), identity)
         self.assertTrue(peripherals.property("activeFocus"))
-        self.assertFalse(peripherals.property("wide"))
-        self.assertEqual(peripherals.width(), 58)
+        self.assertFalse(peripherals.property("live"))
+        self.assertEqual(peripherals.width(), self.SLOT)
 
         self.publish(peripherals={
             "status": "unknown",
@@ -181,15 +186,15 @@ class WidgetStripTests(unittest.TestCase):
         QTest.qWait(10)
         self.assertIs(self.tile("peripheralsTile"), identity)
         self.assertTrue(peripherals.property("activeFocus"))
-        self.assert_wide(peripherals, 164, "PeriGauge", " Mouse  · fora de alcance")
+        self.assert_live(peripherals, "PeriGauge", " Mouse  · fora de alcance")
 
-    def test_clock_and_idle_pomodoro_stay_wide_and_disabled_widget_stays_hidden(self):
+    def test_clock_and_idle_pomodoro_stay_live_and_disabled_widget_stays_hidden(self):
         clock = self.tile("clockTile")
-        self.assertTrue(clock.property("wide"))
-        self.assertEqual(clock.width(), 112)
+        self.assertTrue(clock.property("live"))
+        self.assertEqual(clock.width(), self.SLOT)
         self.assertEqual(clock.property("title"), "09:29")
         self.assertTrue(clock.property("subtitle"))
-        self.assert_wide(self.tile("pomodoroButton"), 126, "25:00", "Foco · Pomodoro")
+        self.assert_live(self.tile("pomodoroButton"), "25:00", "Foco")
         widgets = [
             {"id": "clock", "visible": True},
             {"id": "pomodoro", "visible": True},

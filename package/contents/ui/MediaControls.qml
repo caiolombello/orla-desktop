@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import "../code/Style.js" as Style
 
 Controls.Control {
     id: root
@@ -153,7 +154,7 @@ Controls.Control {
                     Layout.minimumWidth: 36
                     Layout.maximumWidth: 44
                     text: "‹"
-                    font.pixelSize: 22
+                    font.pixelSize: Style.type.headline
                     enabled: root.mediaState.canPrevious
                     Accessible.name: qsTr("Anterior")
                     Controls.ToolTip.visible: hovered
@@ -197,7 +198,7 @@ Controls.Control {
                     Layout.minimumWidth: 36
                     Layout.maximumWidth: 44
                     text: "›"
-                    font.pixelSize: 22
+                    font.pixelSize: Style.type.headline
                     enabled: root.mediaState.canNext
                     Accessible.name: qsTr("Próxima")
                     Controls.ToolTip.visible: hovered

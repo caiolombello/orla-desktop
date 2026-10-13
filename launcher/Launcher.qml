@@ -1,9 +1,13 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.impl as ControlsImpl
 import QtQuick.Layouts
+import "Style.js" as Style
 
 Window {
     id: window
+    // The launcher is a dark overlay in every system scheme.
+    readonly property var ui: Style.scheme("dark")
     objectName: "launcherWindow"
     visible: true
     width: 660
@@ -11,8 +15,16 @@ Window {
     minimumWidth: 440
     minimumHeight: 380
     title: qsTr("Orla Launcher")
-    color: "#111923"
-    flags: Qt.Window
+    // Spotlight-like: a frameless window whose only visible part is the glass
+    // panel. WindowSession asks KWin to blur behind it when available.
+    color: "transparent"
+    flags: Qt.Window | Qt.FramelessWindowHint
+    readonly property int shadowMargin: Style.space.lg + Style.space.xxs
+    readonly property var blurRequest: windowSession ? [glass.x, glass.y, glass.width, glass.height, glass.radius] : null
+    onBlurRequestChanged: {
+        if (blurRequest && windowSession.setBlurRegion)
+            windowSession.setBlurRegion(Qt.rect(glass.x, glass.y, glass.width, glass.height), glass.radius)
+    }
     property string activePanel: "search"
     property bool pendingDismiss: false
     property bool pendingQuit: false
@@ -90,20 +102,57 @@ Window {
         }
     }
 
-    ColumnLayout {
+    // Soft shadow in the transparent margin: stacked translucent outlines stay
+    // cheap for the scene graph, unlike a blurred Canvas.
+    Repeater {
+        model: 6
+        Rectangle {
+            required property int index
+            readonly property real spread: (index + 1) * (window.shadowMargin - Style.space.xs) / 6
+            x: glass.x - spread
+            y: glass.y - spread + Style.space.xs
+            width: glass.width + spread * 2
+            height: glass.height + spread * 2
+            radius: glass.radius + spread
+            color: Style.alpha(Style.glass.shade, 0.07 - index * 0.01)
+        }
+    }
+    Rectangle {
+        id: glass
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 12
+        anchors.margins: window.shadowMargin
+        radius: Style.radius.popup + Style.space.xs
+        color: Style.alpha(ui.canvas, 0.86)
+        border.width: 1
+        border.color: Style.alpha(Style.glass.highlight, 0.14)
+        // Specular top edge.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            gradient: Gradient {
+                GradientStop { position: 0; color: Style.alpha(Style.glass.highlight, Style.glass.sheenDark) }
+                GradientStop { position: 0.4; color: "transparent" }
+            }
+        }
+    }
+
+    ColumnLayout {
+        anchors.fill: glass
+        anchors.margins: Style.space.lg
+        spacing: Style.space.md
         RowLayout {
             objectName: "launcherHeader"
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Style.space.sm
+            // The frameless window moves by dragging its header.
+            DragHandler { target: null; onActiveChanged: if (active) window.startSystemMove() }
             Rectangle {
-                width: 32; height: 32; radius: 11; color: "#69D7C2"
-                Text { anchors.centerIn: parent; text: "o"; color: "#111923"; font.pixelSize: 26; font.weight: Font.Medium; textFormat: Text.PlainText }
+                width: Style.size.iconButton; height: width; radius: Math.round(width * 0.3); color: ui.accent
+                Text { anchors.centerIn: parent; text: "o"; color: ui.onAccent; font.pixelSize: Style.type.headline; font.weight: Font.DemiBold; textFormat: Text.PlainText }
             }
-            Text { text: "Orla"; color: "#EAF4F1"; font.pixelSize: 20; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; wrapMode: Text.Wrap; text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: "#9FAFBC"; font.pixelSize: 11; textFormat: Text.PlainText }
+            Text { text: "Orla"; color: ui.text; font.pixelSize: Style.type.title; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; wrapMode: Text.Wrap; text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
             Button {
                 id: aiEntry
                 objectName: "aiEntryButton"
@@ -123,8 +172,8 @@ Window {
                         aiPanel.focusFirst()
                     }
                 }
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: window.activePanel === "ai" ? ui.onAccent : ui.text; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: height / 2; color: window.activePanel === "ai" ? ui.accent : parent.hovered ? Style.alpha(ui.text, Style.state.pressed) : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
             }
             Button {
                 id: steamEntry
@@ -148,26 +197,52 @@ Window {
                         steamPanel.focusFirst()
                     }
                 }
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: 8; color: "#22313D"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: window.activePanel === "steam" ? ui.onAccent : ui.text; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: height / 2; color: window.activePanel === "steam" ? ui.accent : parent.hovered ? Style.alpha(ui.text, Style.state.pressed) : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
             }
         }
         TextField {
             id: search
             objectName: "searchInput"
             Layout.fillWidth: true
-            Layout.preferredHeight: 54
-            color: "#EAF4F1"
+            Layout.preferredHeight: Style.size.target + Style.space.lg
+            color: ui.text
             placeholderText: qsTr("Buscar aplicativo, jogo ou calcular…")
-            placeholderTextColor: "#A7B7C4"
-            font.pixelSize: 18
-            leftPadding: 18
-            rightPadding: 18
+            placeholderTextColor: ui.textMuted
+            font.pixelSize: Style.type.headline
+            leftPadding: Style.size.target + Style.space.sm
+            rightPadding: Style.space.lg
             selectByMouse: true
             maximumLength: 512
             Accessible.name: qsTr("Buscar aplicativos, jogos ou calcular")
             visible: window.activePanel === "search"
-            background: Rectangle { radius: 14; color: "#1B2733"; border.width: 1; border.color: search.activeFocus ? "#69D7C2" : "#3B4B5A" }
+            background: Rectangle {
+                radius: height / 2
+                color: Style.alpha(ui.text, Style.state.hover)
+                border.width: 1
+                border.color: search.activeFocus ? Style.alpha(ui.accent, 0.6) : Style.alpha(ui.text, Style.state.pressed)
+                // Magnifier glyph, drawn so the launcher needs no icon theme.
+                Canvas {
+                    x: Style.space.lg
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.size.iconMd
+                    height: width
+                    onPaint: {
+                        const context = getContext("2d")
+                        context.reset()
+                        context.strokeStyle = ui.textMuted
+                        context.lineWidth = 2
+                        context.lineCap = "round"
+                        context.beginPath()
+                        context.arc(width * 0.42, height * 0.42, width * 0.3, 0, 2 * Math.PI)
+                        context.stroke()
+                        context.beginPath()
+                        context.moveTo(width * 0.65, height * 0.65)
+                        context.lineTo(width * 0.92, height * 0.92)
+                        context.stroke()
+                    }
+                }
+            }
             onTextEdited: launcher.query = text
             Keys.priority: Keys.BeforeItem
             Keys.onDownPressed: function(event) { launcher.moveSelection(1); event.accepted = true }
@@ -179,9 +254,9 @@ Window {
         RowLayout {
             visible: window.activePanel === "search"
             Layout.fillWidth: true
-            Text { text: qsTr("APLICATIVOS + CALCULADORA + STEAM"); color: "#9FAFBC"; font.pixelSize: 10; font.letterSpacing: 1.4; textFormat: Text.PlainText }
+            Text { text: qsTr("APLICATIVOS · CALCULADORA · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
-            Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: "#69D7C2"; font.pixelSize: 11; textFormat: Text.PlainText }
+            Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: ui.accent; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
         }
         Item {
             visible: window.activePanel === "search"
@@ -197,8 +272,9 @@ Window {
                 section.property: "categoryLabel"
                 section.delegate: Text {
                     required property string section
-                    width: results.width; height: 24; text: section; color: "#91A5B4"
-                    font.pixelSize: 10; font.letterSpacing: 1.2; textFormat: Text.PlainText
+                    width: results.width; height: Style.size.iconButton; text: section; color: ui.textMuted
+                    verticalAlignment: Text.AlignBottom; bottomPadding: Style.space.xs; leftPadding: Style.space.sm
+                    font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText
                 }
                 ScrollBar.vertical: ScrollBar { }
                 delegate: ItemDelegate {
@@ -207,31 +283,56 @@ Window {
                     required property var modelData
                     property var rowData: modelData
                     property var executionTicket: null
-                    width: results.width
-                    height: 60
+                    // Leave the scrollbar its own lane.
+                    width: results.width - (results.ScrollBar.vertical.visible ? results.ScrollBar.vertical.width + Style.space.xs : 0)
+                    readonly property bool selected: launcher.selectedIndex === result.index
+                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink" : "sea"]
+                    height: Style.size.target + Style.space.md
                     enabled: rowData.enabled && !window.executionBlocked
                     hoverEnabled: true
+                    leftPadding: Style.space.sm
+                    rightPadding: Style.space.md
                     Accessible.name: rowData.title + ", " + rowData.source
                     background: Rectangle {
-                        radius: 12
-                        color: launcher.selectedIndex === result.index ? "#283F47" : result.hovered ? "#202D3A" : "transparent"
-                        border.width: launcher.selectedIndex === result.index ? 1 : 0
-                        border.color: "#69D7C2"
+                        radius: Style.radius.card
+                        color: result.selected ? ui.accent : result.hovered ? Style.alpha(ui.text, Style.state.hover) : "transparent"
+                        border.width: result.activeFocus ? 2 : 0
+                        border.color: ui.focus
                     }
                     contentItem: RowLayout {
-                        spacing: 12
-                        Rectangle {
-                            Layout.preferredWidth: 34; Layout.preferredHeight: 34
-                            radius: 10; color: "#283542"
-                            Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : "▦"; color: "#69D7C2"; font.pixelSize: 23; textFormat: Text.PlainText }
+                        spacing: Style.space.md
+                        Item {
+                            Layout.preferredWidth: Style.size.iconLg + Style.space.xs
+                            Layout.preferredHeight: Style.size.iconLg + Style.space.xs
+                            // The app's own icon from the theme, as Spotlight shows it.
+                            ControlsImpl.IconImage {
+                                id: resultIcon
+                                anchors.fill: parent
+                                name: result.rowData.iconName || ""
+                                sourceSize.width: width * 2
+                                sourceSize.height: height * 2
+                                visible: name.length > 0 && status === Image.Ready
+                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: !resultIcon.visible
+                                radius: Math.round(width * Style.dock.iconRadius)
+                                gradient: Gradient {
+                                    GradientStop { position: 0; color: result.tile.top }
+                                    GradientStop { position: 1; color: result.tile.bottom }
+                                }
+                                border.width: 1
+                                border.color: Style.alpha(Style.glass.highlight, 0.18)
+                                Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : "▦"; color: result.tile.ink; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
+                            }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 3
-                            Text { Layout.fillWidth: true; text: result.rowData.title; color: "#EAF4F1"; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
-                            Text { Layout.fillWidth: true; text: result.rowData.description || result.rowData.source; color: "#A7B7C4"; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
+                            spacing: 1
+                            Text { Layout.fillWidth: true; text: result.rowData.title; color: result.selected ? ui.onAccent : ui.text; font.pixelSize: Style.type.title; font.weight: Font.DemiBold; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; text: result.rowData.description || result.rowData.source; color: result.selected ? Style.alpha(ui.onAccent, 0.8) : ui.textMuted; font.pixelSize: Style.type.label; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
                         }
-                        Text { text: launcher.selectedIndex === result.index ? "↵" : ""; color: "#69D7C2"; font.pixelSize: 20; textFormat: Text.PlainText }
+                        Text { text: result.selected ? "↵" : ""; color: ui.onAccent; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
                     }
                     onPressed: executionTicket = { row: index, generation: rowData.generation, id: rowData.id }
                     onClicked: {
@@ -247,11 +348,11 @@ Window {
                 spacing: 10
                 visible: launcher.rows.length === 0
                 Text {
-                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: "#EAF4F1"; font.pixelSize: 18; textFormat: Text.PlainText
+                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: ui.text; font.pixelSize: Style.type.headline; textFormat: Text.PlainText
                     text: launcher.status === "error" ? qsTr("Não foi possível buscar") : launcher.status === "loading" ? qsTr("Buscando no seu computador") : launcher.status === "empty" ? qsTr("Nenhum resultado") : qsTr("O que você quer abrir?")
                 }
                 Text {
-                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: "#A7B7C4"; font.pixelSize: 13; wrapMode: Text.Wrap; textFormat: Text.PlainText
+                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: ui.textMuted; font.pixelSize: Style.type.body; wrapMode: Text.Wrap; textFormat: Text.PlainText
                     text: launcher.status === "error" ? launcher.error : launcher.status === "empty" ? qsTr("Tente outro nome ou uma expressão como 24 * 7.") : launcher.status === "loading" ? qsTr("Você pode continuar digitando ou cancelar com Esc.") : qsTr("Digite um nome ou uma conta. Enter executa a seleção.")
                 }
             }
@@ -261,14 +362,14 @@ Window {
             Layout.fillWidth: true
             visible: window.activePanel === "search" && (window.executionBlocked || (windowSession && windowSession.notice.length > 0))
             text: window.executionBlocked ? qsTr("Aguarde o encerramento das operações antes de abrir um resultado.") : windowSession ? windowSession.notice : ""
-            color: "#E7C58E"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText
+            color: ui.warning; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#283542"; visible: window.activePanel === "search" }
+        Rectangle { Layout.fillWidth: true; height: 1; color: Style.alpha(ui.text, Style.state.hover); visible: window.activePanel === "search" }
         RowLayout {
             visible: window.activePanel === "search"
             Layout.fillWidth: true
             spacing: 8
-            Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: "#A7B7C4"; font.pixelSize: 11; textFormat: Text.PlainText }
+            Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
             Repeater {
                 model: window.selectedRow ? window.selectedRow.actions.slice(0, window.width < 560 ? 1 : 2) : []
@@ -279,8 +380,11 @@ Window {
                     enabled: launcher.status === "ready" && !window.executionBlocked
                     onPressed: executionTicket = { row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id }
                     onClicked: window.executeTicket(executionTicket, false)
-                    contentItem: Text { text: parent.text; color: parent.enabled ? "#69D7C2" : "#A7B7C4"; font.pixelSize: 11; textFormat: Text.PlainText; elide: Text.ElideRight }
-                    background: Rectangle { radius: 7; color: "#283542"; border.color: parent.activeFocus ? "#69D7C2" : "transparent"; border.width: 1 }
+                    leftPadding: Style.space.md
+                    rightPadding: Style.space.md
+                    Layout.preferredHeight: Style.size.iconButton + Style.space.xs
+                    contentItem: Text { text: parent.text; color: parent.enabled ? ui.accent : ui.textMuted; font.pixelSize: Style.type.label; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText; elide: Text.ElideRight }
+                    background: Rectangle { radius: height / 2; color: Style.alpha(ui.text, Style.state.hover); border.color: parent.activeFocus ? ui.focus : "transparent"; border.width: 2 }
                     Layout.maximumWidth: window.width < 560 ? 118 : 150
                 }
             }
@@ -290,8 +394,11 @@ Window {
                 enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
                 onClicked: window.executeTicket(executionTicket, false)
-                contentItem: Text { text: parent.text; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: 7; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
+                leftPadding: Style.space.md
+                rightPadding: Style.space.md
+                Layout.preferredHeight: Style.size.iconButton + Style.space.xs
+                contentItem: Text { text: parent.text; color: parent.enabled ? ui.onAccent : ui.textMuted; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText }
+                background: Rectangle { radius: height / 2; color: parent.enabled ? ui.accent : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.text }
             }
         }
         AiSettings {
