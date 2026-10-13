@@ -23,3 +23,9 @@ Capturas offscreen com dados sintéticos: prévia em 420 px e exportação em 35
 ## Limites
 
 C1/X1 continuam parciais. Importação de arquivo, organização dos apps fixados, importação com reorder nas preferências anteriores e catálogo mantêm suas fatias próprias. Persistência KConfig, clipboard e acessibilidade nativos e o fluxo de importação real ainda não foram qualificados por estes testes offscreen.
+
+## Canary local limitado — 2026-10-13
+
+O commit `768697f` foi instalado na dock da sessão Plasma 6.7.5/Wayland: 66 arquivos, somente os 11 deltas esperados. Na preferência anterior, abrir a seção e usar Tab/Space em Exportar mostrou o JSON selecionável na interface real. Valores dos applets, configurações protegidas, barra, launcher e bancos permaneceram iguais; Plasma terminou ativo, sem crash ou restart automático. Os dispositivos de input próprios foram liberados.
+
+Esse canary confirma abertura e saída visível nas preferências anteriores. Não exercitou clipboard, acessibilidade por tecnologia assistiva, foco de retorno ou Aplicar/Cancelar/Desfazer de um preset em perfil gerenciado. A evidência Source desses fluxos permanece separada.

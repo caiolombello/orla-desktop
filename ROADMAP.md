@@ -473,7 +473,10 @@ sete guards, design check, galeria e build passaram. A revisão independente
 qualificou a guarda pré-write com zero escritas após cancelamento. O
 [registro](docs/validation/appearance-presets-source.md) inclui capturas sintéticas
 e separa Source de KConfig/foco nativos. Arquivo, apps fixados, legacy/reorder e
-catálogo seguem pendentes; C1/X1 não estão concluídos.
+catálogo seguem pendentes; C1/X1 não estão concluídos. `768697f` foi instalado
+localmente; abertura e exportação por Tab/Space nas preferências anteriores
+passaram, com configuração, barra, launcher e bancos preservados. A importação
+em perfil gerenciado, clipboard e foco nativos mantêm qualificação separada.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
 |---|---|---|
