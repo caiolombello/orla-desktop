@@ -26,6 +26,7 @@ Item {
     property alias pomodoro: focusTimer
     property alias integrations: localIntegrations
     property alias appearance: appearanceState
+    property alias appearancePreset: appearancePresetState
     property alias systemBattery: power
     property alias profiles: profileState
     property alias contexts: contextState
@@ -44,6 +45,7 @@ Item {
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
     readonly property bool nativeAudioBackendLoaded: nativeAudioBackend.item !== null
     readonly property var presentation: profileState.effective
+    readonly property var displayWidgets: appearancePresetState.previewWidgets || presentation.widgets
     readonly property string launcherSnapshot: JSON.stringify(presentation.launchers)
     property string selectedIntegration: "quota"
     readonly property bool light: appearanceState.effective.baseTheme === "paper"
@@ -83,7 +85,7 @@ Item {
     ProfileState {
         id: profileState
         configuration: root.configuration
-        transitionGuard: () => !appearanceState.dirty
+        transitionGuard: () => !appearanceState.dirty && !appearancePresetState.dirty
     }
     readonly property var unavailableContextSnapshot: ({
         outputName: "",
@@ -124,6 +126,11 @@ Item {
         configuration: root.configuration
         profiles: profileState
         contexts: contextState
+    }
+    AppearancePresetState {
+        id: appearancePresetState
+        profiles: profileState
+        appearance: appearanceState
     }
     AppearanceState {
         id: appearanceState
@@ -167,7 +174,7 @@ Item {
         active: root.nativePopups
         source: active ? Qt.resolvedUrl("DockLabel.qml") : ""
     }
-    function widgetVisible(id) { const widget = presentation.widgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
+    function widgetVisible(id) { const widget = displayWidgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
     function openWidget(id, sourceItem) {
         if (!widgetVisible(id)) return false;
@@ -195,7 +202,7 @@ Item {
             });
         }
     }
-    onPresentationChanged: if (ready) {
+    onDisplayWidgetsChanged: if (ready) {
         if (!widgetVisible("clock")) calendarPopup.close();
         if (!widgetVisible("pomodoro")) pomodoroPopup.close();
         if (!widgetVisible("music")) musicPopup.close();
@@ -696,14 +703,15 @@ Item {
         dock: settingsAnchor
         title: qsTr("Seu dock, do seu jeito")
         onAboutToShow: { root.contextCommandsVisible = true; appearanceState.begin(); }
-        onAboutToHide: root.contextCommandsVisible = false
-        onClosed: appearanceState.cancel()
+        onAboutToHide: { root.contextCommandsVisible = false; appearancePresetState.cancel(); }
+        onClosed: appearancePresetState.cancel()
         SettingsContents {
             id: settingsContents
             configuration: root.configuration
             profiles: profileState
             resetTimer: focusTimer.reset
             appearance: appearanceState
+            appearancePreset: appearancePresetState
             contexts: contextState
             contextBindings: contextBindingsState
             desktopSwitch: desktopSwitchState

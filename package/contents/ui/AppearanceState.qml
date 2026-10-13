@@ -90,12 +90,20 @@ QtObject {
         error = "";
         message = "";
     }
-    function refreshDraft(value) {
-        draft = value;
+    function refreshDraft(value, guard) {
+        const live = () => typeof guard !== "function" || guard() === true;
         const result = Appearance.validate(value);
+        if (!live()) return false;
+        draft = value;
+        // A newer token edit may run synchronously from draftChanged.
+        const current = () => live() && (typeof guard !== "function" || draft === value);
+        if (!current()) return false;
         error = result.error;
+        if (!current()) return false;
         message = "";
+        if (!current()) return false;
         if (result.value) preview = result.value;
+        return current();
     }
     function setToken(key, value) {
         if (!editing || !draft) return;

@@ -9,6 +9,8 @@ ColumnLayout {
     required property var configuration
     required property var resetTimer
     required property var appearance
+    property var appearancePreset: null
+    readonly property bool importing: appearancePreset !== null && appearancePreset.dirty
     required property var profiles
     required property var contexts
     property var desktopSwitch: null
@@ -17,6 +19,7 @@ ColumnLayout {
     signal appearanceCanceled()
     spacing: Style.space.sm
     function setPreference(key, value) {
+        if (importing) return false;
         const patch = {};
         patch[key] = value;
         return profiles.commitPresentation(patch, profiles.activeProfileId, profiles.revision);
@@ -84,7 +87,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 470
         currentIndex: tabs.currentIndex
-        AppearanceEditor { appearance: settings.appearance; onCanceled: settings.appearanceCanceled() }
+        AppearanceEditor { appearance: settings.appearance; preset: settings.appearancePreset; onProfilesRequested: tabs.currentIndex = 2; onCanceled: settings.appearanceCanceled() }
         Controls.ScrollView {
             id: widgetScroll
             contentWidth: availableWidth
@@ -93,8 +96,8 @@ ColumnLayout {
                 width: widgetScroll.availableWidth
                 spacing: Style.space.sm
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Widgets e filtro de janelas são salvos imediatamente. Cancelar aparência não desfaz estas opções."); wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                Controls.CheckBox { objectName: "filterDesktop"; enabled: settings.profiles.writable; text: qsTr("Janelas apenas da área de trabalho atual"); checked: settings.profiles.effective.currentDesktopOnly; onToggled: settings.setPreference("currentDesktopOnly", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
-                Controls.CheckBox { objectName: "calendarEvents"; enabled: settings.profiles.writable; text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.profiles.effective.calendarEvents; onToggled: settings.setPreference("calendarEvents", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
+                Controls.CheckBox { objectName: "filterDesktop"; enabled: settings.profiles.writable && !settings.importing; text: qsTr("Janelas apenas da área de trabalho atual"); checked: settings.profiles.effective.currentDesktopOnly; onToggled: settings.setPreference("currentDesktopOnly", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
+                Controls.CheckBox { objectName: "calendarEvents"; enabled: settings.profiles.writable && !settings.importing; text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.profiles.effective.calendarEvents; onToggled: settings.setPreference("calendarEvents", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
                 Controls.CheckBox {
                     objectName: "showLocalToasts"
                     Layout.fillWidth: true
@@ -113,7 +116,7 @@ ColumnLayout {
                 Controls.CheckBox {
                     objectName: "showAudioHud"
                     Layout.fillWidth: true
-                    enabled: settings.profiles.writable
+                    enabled: settings.profiles.writable && !settings.importing
                     text: qsTr("Mostrar confirmações de áudio dentro do dock")
                     checked: Boolean(settings.profiles.effective.showAudioHud)
                     onToggled: settings.setPreference("showAudioHud", checked)
@@ -160,7 +163,7 @@ ColumnLayout {
                                     text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
                                         : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
                                         : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
-                                    enabled: settings.profiles.writable
+                                    enabled: settings.profiles.writable && !settings.importing
                                     checked: modelData.visible
                                     onToggled: settings.setWidgetVisible(modelData.id, checked)
                                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
@@ -171,7 +174,7 @@ ColumnLayout {
                                     Layout.preferredWidth: Style.size.iconButton + Style.space.xs
                                     text: "↑"
                                     Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
-                                    enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index > 0
+                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index > 0
                                     onClicked: settings.moveWidget(modelData.id, -1)
                                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                                 }
@@ -181,7 +184,7 @@ ColumnLayout {
                                     Layout.preferredWidth: Style.size.iconButton + Style.space.xs
                                     text: "↓"
                                     Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
-                                    enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index < 6
+                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index < 6
                                     onClicked: settings.moveWidget(modelData.id, 1)
                                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                                 }
@@ -193,7 +196,7 @@ ColumnLayout {
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Para ocultar automaticamente: configure a visibilidade do painel no modo de edição do Plasma."); wrapMode: Text.WordWrap; opacity: 0.65 }
             }
         }
-        ProfileControls { profiles: settings.profiles; appearance: settings.appearance }
+        ProfileControls { profiles: settings.profiles; appearance: settings.appearance; preset: settings.appearancePreset }
         ContextControls {
             objectName: "contextControls"
             desktopSwitch: settings.desktopSwitch

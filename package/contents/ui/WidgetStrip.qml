@@ -7,7 +7,7 @@ Row {
     id: strip
     required property var dock
     spacing: dock.appearance.effective.tokens.spacing
-    visible: dock.presentation.widgets.some(widget => widget.visible)
+    visible: (dock.displayWidgets || dock.presentation.widgets).some(widget => widget.visible)
     function finiteNumber(value) { return typeof value === "number" && isFinite(value); }
     function meaningful(key) {
         if (key === "clock" || key === "pomodoro") return true;
@@ -75,7 +75,7 @@ Row {
             title: title, subtitle: subtitle};
     }
     Repeater {
-        model: strip.dock.presentation.widgets
+        model: (strip.dock.displayWidgets || strip.dock.presentation.widgets)
         delegate: Tile {
             required property var modelData
             readonly property var info: strip.info(modelData.id)

@@ -463,6 +463,18 @@ e monitores mantêm seus gates próprios.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
+**Aparência portátil C1/X1 — incremento Source:** exportação do estado salvo por
+whitelist e importação colada com prévia de aparência, ordem e visibilidade dos
+sete widgets. Aplicar/Desfazer usam uma escrita conjunta no perfil gerenciado;
+Cancelar/Escape descartam a prévia. As preferências anteriores exportam e orientam
+criar/escolher perfil para importar, sem migração automática. No checkout
+integrado passaram 129 de 130 testes por estilo, com um skip de TaskManager/display;
+sete guards, design check, galeria e build passaram. A revisão independente
+qualificou a guarda pré-write com zero escritas após cancelamento. O
+[registro](docs/validation/appearance-presets-source.md) inclui capturas sintéticas
+e separa Source de KConfig/foco nativos. Arquivo, apps fixados, legacy/reorder e
+catálogo seguem pendentes; C1/X1 não estão concluídos.
+
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
 |---|---|---|
 | 1. Composição visual instalada — R1/UX0 | Qualificar esta revisão no painel; depende da revisão e instalação reversível do Source preparado | Abrir/fechar cada popup por clique/Escape, foco visível, claro/escuro, movimento reduzido, autohide sob hover/fullscreen e configuração preservada. Registrar tela/escala/revisão; ambientes não disponíveis permanecem UNRUN. |
