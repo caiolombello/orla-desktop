@@ -421,11 +421,17 @@ existente, preservando os cinco IDs. A aplicação nativa confirmou o recibo v2,
 os cinco IDs e os arquivos originais de recuperação; o launcher e os atalhos
 permaneceram preservados. Observação temporária confirmou registro canônico,
 dono único e view/estado idênticos nas duas entradas, com zero escritas de áudio.
-Os roteiros de abertura ainda não passaram. A atribuição da janela do painel
+Os roteiros iniciais não qualificaram abertura. A atribuição da janela do painel
 a um `Window` QML foi reproduzida como falha com hosts C++ e corrigida para
 `QtObject`; 57 testes passaram em cada um dos dois estilos. A [validação](docs/validation/shared-control-center-source.md)
-distingue essa regressão offscreen de abertura, âncora, foco e áudio no Plasma,
-que continuam gates separados.
+distingue essa regressão offscreen da prova nativa posterior: abrir/Tab/Escape
+e foco de retorno passaram pela barra e pela dock retrátil em uma tela com
+escala 2, com âncora/transient parent corretos e zero escritas de áudio. O teste
+da dock incluiu pressão na borda antes do hover confirmado. Uma prova separada
+confirmou mudo e volume pela interface com readback real, restauração exata e
+Escape/foco de retorno. A instrumentação temporária foi removida; os pacotes
+finais mantêm o fix e a composição atual. Transferência com popup aberto,
+seleção de saída e outros ambientes continuam gates separados.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
