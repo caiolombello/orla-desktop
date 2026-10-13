@@ -449,11 +449,14 @@ automação de perfis ou um novo atalho global.
 **W1 nativo — parcial:** `97c913f` instalado; seleção passiva e troca por mouse
 passaram com KWin/TaskManager reais. A área atual foi conferida ao reabrir,
 inclusive após atalho KDE. A área temporária foi removida e a original restaurada.
-O roteiro de teclado com menu aberto não trocou; causa/foco ainda não qualificados.
-O hash de `kwinrc` mudou durante o ensaio e não voltou ao preflight; restauração
-integral permanece UNKNOWN. Os demais arquivos protegidos, applets, barra,
-launcher e bancos passaram. Não ampliar esse resultado para teclado completo,
-exact-once, monitores ou preservação byte a byte de toda configuração.
+O primeiro roteiro de teclado com menu aberto não trocou. Uma regressão Source
+identificou o foco tomado pelo Menu KDE e passou com `popup.focus: false`:
+45 testes por estilo, sete guards, design check, galeria e build. O fluxo corrigido
+ainda aguarda prova nativa. Uma cópia anterior de `kwinrc`, com hash igual ao
+preflight, permitiu remover somente a seção de tiling da área temporária e
+restaurar bytes e modo exatos. A conferência confirmou configurações protegidas,
+applets, barra, launcher e bancos preservados. Teclado/foco completos, exact-once
+e monitores mantêm seus gates próprios.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 

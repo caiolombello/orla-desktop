@@ -30,6 +30,8 @@ Card {
             Layout.fillWidth: true
             model: root.choices
             textRole: "label"
+            // ComboBox handles keys; KDE Menu skips its NoFocus delegates.
+            popup.focus: false
             currentIndex: root.command ? root.choices.findIndex(item => item.id === root.command.selectedId) : -1
             enabled: root.command && root.command.available && !root.command.pending
             Accessible.name: qsTr("Área de trabalho de destino")

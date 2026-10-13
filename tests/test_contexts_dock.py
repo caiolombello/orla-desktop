@@ -33,7 +33,7 @@ os.environ.update({
 assert os.environ.get("HOME") == _ORIGINAL_HOME
 assert os.environ.get("CODEX_HOME") == _ORIGINAL_CODEX_HOME
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
@@ -142,6 +142,56 @@ class ContextsDockTests(unittest.TestCase):
         self.popup.close()
         QTest.qWait(10)
         self.assertFalse(state.property("active"))
+
+    def test_desktop_switch_keyboard_selection_and_single_tab_request(self):
+        for open_by_mouse in (False, True):
+            with self.subTest(open_by_mouse=open_by_mouse):
+                if open_by_mouse:
+                    self.dispose()
+                    self.create()
+                self.initialize_profiles()
+                self.evaluate("contextSnapshot = ({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'ready',currentId:'one',ids:['one','two'],names:['Uma','Outra']}})", self.window)
+                self.open_contexts()
+                state = self.window.findChild(QObject, "dockDesktopSwitchState")
+                backend = self.window.findChild(QObject, "desktopSwitchFixtureBackend")
+                selector = self.window.findChild(QQuickItem, "desktopSwitchSelector")
+                button = self.window.findChild(QQuickItem, "desktopSwitchButton")
+                before = self.evaluate("JSON.stringify([configuration.profilesJSON,configuration.contextsJSON,profiles.activeProfileId,configuration.timerDeadline,appearance.dirty])")
+                selector.forceActiveFocus(Qt.TabFocusReason)
+                if open_by_mouse:
+                    point = selector.mapToScene(QPointF(selector.width() / 2, selector.height() / 2)).toPoint()
+                    QTest.mouseClick(selector.window(), Qt.LeftButton, Qt.NoModifier, point)
+                    QTest.qWait(150)
+                    self.assertTrue(self.evaluate("popup.opened", selector))
+                QTest.keyClick(selector.window(), Qt.Key_Down)
+                QTest.keyClick(selector.window(), Qt.Key_Return)
+                QTest.qWait(150)
+                self.assertEqual(state.property("selectedId"), "two")
+                self.assertFalse(self.evaluate("popup.visible", selector))
+                self.assertEqual(backend.property("calls"), 0)
+                QTest.keyClick(selector.window(), Qt.Key_Tab)
+                self.assertTrue(button.property("activeFocus"))
+                QTest.keyClick(selector.window(), Qt.Key_Space)
+                QTest.qWait(10)
+                self.assertEqual(backend.property("calls"), 1)
+                self.assertEqual(self.evaluate("JSON.stringify([configuration.profilesJSON,configuration.contextsJSON,profiles.activeProfileId,configuration.timerDeadline,appearance.dirty])"), before)
+
+    def test_desktop_switch_popup_mouse_selection_does_not_request(self):
+        self.initialize_profiles()
+        self.evaluate("contextSnapshot = ({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'ready',currentId:'one',ids:['one','two'],names:['Uma','Outra']}})", self.window)
+        self.open_contexts()
+        selector = self.window.findChild(QQuickItem, "desktopSwitchSelector")
+        point = selector.mapToScene(QPointF(selector.width() / 2, selector.height() / 2)).toPoint()
+        QTest.mouseClick(selector.window(), Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(150)
+        self.assertTrue(self.evaluate("popup.opened", selector))
+        position = json.loads(self.evaluate("var choice = popup.contentItem.itemAtIndex(1); var p = choice.mapToItem(null, Math.min(choice.width, popup.contentItem.width) / 2, choice.height / 2); JSON.stringify({x:p.x,y:p.y})", selector))
+        point = QPointF(position["x"], position["y"]).toPoint()
+        QTest.mouseClick(selector.window(), Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(150)
+        self.assertEqual(self.window.findChild(QObject, "dockDesktopSwitchState").property("selectedId"), "two")
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.assertEqual(self.window.findChild(QObject, "desktopSwitchFixtureBackend").property("calls"), 0)
 
     def test_desktop_switch_failure_cancel_and_close_preserve_real_dependencies(self):
         self.initialize_profiles()
