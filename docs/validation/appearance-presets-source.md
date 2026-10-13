@@ -29,3 +29,28 @@ C1/X1 continuam parciais. Importação de arquivo, organização dos apps fixado
 O commit `768697f` foi instalado na dock da sessão Plasma 6.7.5/Wayland: 66 arquivos, somente os 11 deltas esperados. Na preferência anterior, abrir a seção e usar Tab/Space em Exportar mostrou o JSON selecionável na interface real. Valores dos applets, configurações protegidas, barra, launcher e bancos permaneceram iguais; Plasma terminou ativo, sem crash ou restart automático. Os dispositivos de input próprios foram liberados.
 
 Esse canary confirma abertura e saída visível nas preferências anteriores. Não exercitou clipboard, acessibilidade por tecnologia assistiva, foco de retorno ou Aplicar/Cancelar/Desfazer de um preset em perfil gerenciado. A evidência Source desses fluxos permanece separada.
+
+## Encerramento das fixtures do launcher — 2026-10-13
+
+A CI de `80d6153` passou as verificações de `launcher-behavior`, mas o processo
+terminou com SIGSEGV após a suíte. Uma reprodução com o mesmo Source e as versões
+da CI falhou na segunda execução. O core identificou o worker `krunner_services`
+finalizando dados locais da thread após a destruição do registro global do Qt.
+Destruir o objeto do runner não garantia o término dessa limpeza.
+
+A guarda dos testes agora captura somente as threads dos runners próprios e
+exige `QThread::wait` bem-sucedido antes de processar a exclusão assíncrona.
+O prazo compartilhado de 500 ms foi preservado. Uma regressão com runner real
+falhou na guarda anterior e passou com o join; ela observa o estado antes da
+limpeza de segurança, sem transformar essa limpeza em PASS. A fixture final
+também mantém seus dados vivos em retornos antecipados de assertions.
+
+Build e sete CTests passaram no container com as dependências da CI. Após o
+ajuste final da fixture, o checkout integrado com KRunner 6.30 passou build e
+sete CTests em 97,17 s; o caso dirigido passou também com estilo KDE. Revisões independentes
+aprovaram o join e o ajuste de lifetime. A nova CI hospedada permanece pendente.
+
+Essa mudança é somente de testes. Não qualifica o encerramento do launcher
+nativo nem explica retrospectivamente outros crashes sem core. Falhas e
+recibos anteriores permanecem preservados; importação gerenciada nativa segue
+UNRUN. [Contrato Qt de término da thread](https://doc.qt.io/qt-6.11/qthread.html#isFinished).
