@@ -37,11 +37,45 @@ class ManifestTests(unittest.TestCase):
 def inventory():
     return {"version": "6.7.5", "screenIds": [2, 7],
         "selectedScreen": {"id": 7, "connector": "DP-1", "geometry": {"x": 0, "y": 0, "width": 1600, "height": 900}},
-        "knownWidgetTypes": sorted(list(layout.MODULE_IDS.values()) + list(layout.CONTROL_IDS.values())),
+        "knownWidgetTypes": sorted(set(layout.MODULE_IDS.values()) | set(layout.CONTROL_IDS.values())),
         "panels": [{"id": 28, "type": "org.kde.panel", "screen": 7, "height": 32,
             "widgets": [{"id": 35, "type": "org.orla.bar", "index": 0},
                         {"id": 7, "type": "org.kde.plasma.systemtray", "index": 1}],
             "marker": {"token": "", "schemaVersion": 0}}]}
+
+
+def control_center_manifest():
+    data = manifest()
+    data["modules"].insert(-1, {"key": "control-center", "enabled": True,
+        "config": {"showOrlaMenu": False, "showApplicationName": False, "showControlCenter": True}})
+    return data
+
+
+class ControlCenterManifestTests(unittest.TestCase):
+    def test_opt_in_cc_only_and_old_manifest_roundtrip(self):
+        old = manifest()
+        self.assertEqual(layout.validate_manifest(old), old)
+        data = control_center_manifest()
+        self.assertEqual(layout.validate_plan(layout.build_plan(data, inventory()))["manifest"], data)
+        self.assertEqual([m["key"] for m in data["modules"]][-3:], ["tray", "control-center", "clock"])
+
+    def test_cc_config_refuses_other_presentation_or_arbitrary_keys(self):
+        for config in ({"showOrlaMenu": True, "showApplicationName": False, "showControlCenter": True},
+                       {"showOrlaMenu": False, "showApplicationName": True, "showControlCenter": True},
+                       {"showOrlaMenu": False, "showApplicationName": False, "showControlCenter": False},
+                       {"audio": True}, {"showControlCenter": "true"}):
+            data = control_center_manifest(); data["modules"][-2]["config"] = config
+            with self.subTest(config=config), self.assertRaises(layout.LayoutError):
+                layout.validate_manifest(data)
+
+    def test_default_preset_leaves_cc_disabled(self):
+        import json
+        from pathlib import Path
+        data = json.loads((Path(__file__).parents[1] / "layouts/mac-inspired-topbar.json").read_text())
+        cc = next(module for module in data["modules"] if module["key"] == "control-center")
+        self.assertFalse(cc["enabled"])
+        data["replacePanelIds"] = [28]; data["screen"]["connector"] = "DP-1"
+        self.assertEqual(layout.validate_manifest(data), data)
 
 
 class PlanningTests(unittest.TestCase):
@@ -81,6 +115,46 @@ class ScriptTests(unittest.TestCase):
         source = stub.read_text().replace("__TYPES__", json.dumps(inventory()["knownWidgetTypes"]))
         self.assertFalse(engine.evaluate(source).isError())
         return engine
+
+    def test_cc_only_uses_second_plugin_instance_unique_id_right_order_and_disable(self):
+        import json
+        engine = self.engine(); data = control_center_manifest()
+        # The menu and CC can independently reuse the same plugin type.
+        data["reuseWidgetIds"]["menu"] = 35
+        plan = layout.build_plan(data, inventory())
+        result = engine.evaluate(layout.render_script("apply", plan=plan))
+        self.assertFalse(result.isError(), result.toString())
+        owned = json.loads(engine.evaluate("messages[0]").toString())
+        bars = [w for w in owned["widgets"] if w["type"] == "org.orla.bar"]
+        self.assertEqual(len(bars), 2)
+        self.assertEqual(bars[0]["id"], 35)
+        self.assertNotEqual(bars[0]["id"], bars[1]["id"])
+        self.assertEqual([w["index"] for w in bars], [0, 4])
+        cc = bars[1]["id"]
+        self.assertEqual(json.loads(engine.evaluate("JSON.stringify(panelById(" + str(owned["panelId"]) +
+            ").widgetById(" + str(cc) + ").values)").toString()),
+            {"General/showOrlaMenu": False, "General/showApplicationName": False, "General/showControlCenter": True})
+        self.assertEqual(engine.evaluate("Object.keys(panelById(" + str(owned["panelId"]) +
+            ").widgetById(35).values).sort().join(',')").toString(), "General/compactHeight,General/showMenuLabel")
+        current = layout._managed_inventory(plan, owned)
+        forged = copy.deepcopy(owned); forged["widgets"][4]["id"] = 35
+        with self.assertRaises(layout.LayoutError): layout._managed_inventory(plan, forged)
+        result = engine.evaluate(layout.render_script("remove-owned", panel_id=owned["panelId"],
+            token=owned["token"], connector="DP-1", expected_inventory=current))
+        self.assertFalse(result.isError(), result.toString())
+        self.assertEqual(engine.evaluate("panels().length").toInt(), 0)
+
+    def test_disabled_cc_changes_neither_old_widget_count_nor_old_configs(self):
+        import json
+        data = control_center_manifest(); data["modules"][-2]["enabled"] = False
+        engine = self.engine(); plan = layout.build_plan(data, inventory())
+        result = engine.evaluate(layout.render_script("apply", plan=plan))
+        self.assertFalse(result.isError(), result.toString())
+        owned = json.loads(engine.evaluate("messages[0]").toString())
+        self.assertEqual(len(owned["widgets"]), 5)
+        self.assertEqual(len([w for w in owned["widgets"] if w["type"] == "org.orla.bar"]), 1)
+        self.assertEqual(json.loads(engine.evaluate("JSON.stringify(panels()[0].items[0].values)").toString()),
+            {"General/showMenuLabel": False, "General/compactHeight": True})
 
     def test_real_fixed_script_moves_only_planned_widget_and_replaces_selected_panel(self):
         import json
@@ -1613,6 +1687,22 @@ class AsyncOrderScriptTests(unittest.TestCase):
     setUpClass = ScriptTests.setUpClass
     engine = ScriptTests.engine
 
+    def test_cc_duplicate_plugin_instances_reorder_by_applet_id(self):
+        import json
+        engine = self.engine(); engine.evaluate("fakeDelayedOrder=true;fakeNativeEnumeration=true")
+        data = control_center_manifest(); data["reuseWidgetIds"]["menu"] = 35
+        plan = layout.build_plan(data, inventory())
+        result = engine.evaluate(layout.render_script("apply", plan=plan))
+        self.assertFalse(result.isError(), result.toString())
+        owned = json.loads(engine.evaluate("messages[messages.length-1]").toString())
+        engine.evaluate("readyOrder(panels()[0])")
+        current = self.read(engine)
+        self.assertNotEqual(current["panels"][0]["widgets"], owned["widgets"])
+        result = engine.evaluate(self.reorder_source(owned, current))
+        self.assertFalse(result.isError(), result.toString())
+        self.assertEqual(self.read(engine)["panels"][0]["widgets"], owned["widgets"])
+        self.assertEqual([widget["id"] for widget in owned["widgets"] if widget["type"] == "org.orla.bar"][0], 35)
+
     def test_initial_apply_succeeds_with_uninitialized_id_sorted_widgets_without_index_setters(self):
         import json
         engine = self.engine()
@@ -2488,6 +2578,28 @@ class SyntheticStartLimitCommands(FakeCommands):
         if "show" in argv and not self.active and (getattr(self,"failed",False) or self.baseline_failed):
             result.stdout = result.stdout.replace("ActiveState=inactive","ActiveState=failed")
         return result
+
+
+class ControlCenterLifecycleTests(unittest.TestCase):
+    setUp = TransactionTests.setUp
+
+    def test_cc_receipt_disable_restore_preserves_original_bytes_and_independent_dock(self):
+        runtime = FakeRuntime(self.config)
+        dock = {"id": 29, "type": "org.kde.panel", "screen": 7, "height": 56,
+            "widgets": [{"id": 40, "type": "org.caiodock.dock", "index": 0}], "marker": {"token": "", "schemaVersion": 0}}
+        runtime.extra_panels = [dock]
+        plan = layout.build_plan(control_center_manifest(), runtime.inspect("DP-1"))
+        receipt = layout.apply_layout(plan, runtime, self.store)
+        bars = [widget for widget in receipt["owned"]["widgets"] if widget["type"] == "org.orla.bar"]
+        self.assertEqual(len(bars), 2)
+        self.assertEqual(len(set(widget["id"] for widget in bars)), 2)
+        self.assertEqual(self.store.current(), receipt)
+        disabled = layout.disable_layout(receipt, runtime, self.store)
+        self.assertEqual(runtime.inspect("DP-1")["panels"], [dock])
+        layout.restore_layout(disabled, runtime, self.store)
+        for name, data in self.original.items():
+            self.assertEqual((self.config / name).read_bytes(), data)
+            self.assertEqual((self.config / name).stat().st_mode & 0o777, 0o640)
 
 
 class StartLimitRecoveryTests(unittest.TestCase):

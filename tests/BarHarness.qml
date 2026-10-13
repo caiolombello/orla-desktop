@@ -7,8 +7,11 @@ Window {
     height: 64
     visible: true
     BarUI.BarView {
+        id: bar
         objectName: "barUnderTest"
         anchors.fill: parent
+        controlCenterClient: fixtureControlCenter
+        controlCenterHost: bar
         sessionBackend: fixtureSession
         applicationBackend: fixtureApplication
         hostVersion: "6.7.5"

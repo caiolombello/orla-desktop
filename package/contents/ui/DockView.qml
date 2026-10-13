@@ -8,6 +8,7 @@ import org.kde.plasma.private.mpris as Mpris
 import "../code/Logic.js" as Logic
 import "../code/Profiles.js" as Profiles
 import "../code/Style.js" as Style
+import "../controlcenter" as SharedControls
 
 Item {
     id: root
@@ -158,7 +159,7 @@ Item {
     }
     function closeContext() {
         taskMenu.close(); nativeTaskMenu.close(); addDialog.close();
-        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.close();
+        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
         menuRow = -1; menuData = {}; appInput.clear();
     }
     Connections {
@@ -361,8 +362,22 @@ Item {
         id: localIntegrations
         active: root.widgetVisible("quota") || root.widgetVisible("peripherals") || root.widgetVisible("recording")
     }
-    Component.onCompleted: { ready = true; reloadLaunchers(); }
-    Component.onDestruction: ready = false
+    function requestControlCenter(client, host, anchor) {
+        return ready && controlCenterPopup.openFromClient(client, host, anchor);
+    }
+    function releaseControlCenter(client) { return controlCenterPopup.releaseClient(client); }
+    function controlCenterVisibleFor(client) { return controlCenterPopup.visibleFor(client); }
+    function controlCenterErrorFor(client) { return controlCenterPopup.errorFor(client); }
+    Component.onCompleted: {
+        ready = true;
+        reloadLaunchers();
+        SharedControls.Registry.registerOwner(root, 1);
+    }
+    Component.onDestruction: {
+        ready = false;
+        SharedControls.Registry.unregisterOwner(root);
+        controlCenterPopup.shutdown();
+    }
     Mpris.Mpris2Model { id: media }
     property var mediaSource: media
     readonly property var player: mediaSource ? mediaSource.currentPlayer : null
@@ -717,7 +732,7 @@ Item {
     Connections {
         target: root.configuration
         function onShowControlCenterChanged() {
-            if (!root.configuration.showControlCenter) controlCenterPopup.close();
+            if (!root.configuration.showControlCenter) controlCenterPopup.closeDockOrigin();
         }
     }
     Loader {
@@ -758,30 +773,19 @@ Item {
             }, Date.now());
         }
     }
-    DockPopup {
+    ControlCenterPopup {
         id: controlCenterPopup
         objectName: "controlCenterPopup"
-        readonly property real screenWidth: root.Screen.width > 0
-            ? (root.Screen.desktopAvailableWidth > 0 ? Math.min(root.Screen.width, root.Screen.desktopAvailableWidth) : root.Screen.width)
-            : root.Screen.desktopAvailableWidth
-        property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : Style.size.popupWidth
-        property real heightBudget: maximumPopupHeight
-        width: Math.max(1, Math.min(Style.size.popupWidth + 2 * shadowMargin, widthBudget))
-        height: Math.max(1, Math.min(implicitHeight, heightBudget))
-        dock: root
-        title: qsTr("Central de Controle")
-        ControlCenter {
-            id: controlCenterContents
-            objectName: "controlCenterContents"
-            Layout.fillWidth: true
-            actions: kdeControlActions
-            player: root.player
-            battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle,
-                percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
-            playing: root.mediaPlaying
-            audio: audioControlState
-            foreground: root.popupScheme.text
-            muted: root.popupScheme.textMuted
+        owner: root
+        actions: kdeControlActions
+        player: root.player
+        battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle,
+            percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
+        playing: root.mediaPlaying
+        audio: audioControlState
+        validateClient: function(client) {
+            return root.ready && client && client.available
+                && SharedControls.Registry.status === "ready" && SharedControls.Registry.owner === root;
         }
     }
     DockPopup {

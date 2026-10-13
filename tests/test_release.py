@@ -30,6 +30,9 @@ class ReleaseBundleTests(unittest.TestCase):
             for name in ("contents/code/Theme.js", "contents/code/Appearance.js",
                          "contents/ui/AppearanceState.qml", "contents/ui/AppearanceEditor.qml",
                          "contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
+                         "contents/controlcenter/qmldir", "contents/controlcenter/Registry.qml",
+                         "contents/ui/ControlCenterEntry.qml", "contents/ui/ControlCenterPopup.qml",
+                         "contents/ui/ControlCenterSession.qml",
                          "contents/config/main.xml"):
                 target = root / "package" / name
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +42,8 @@ class ReleaseBundleTests(unittest.TestCase):
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir()
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
-            for name in ("test_bar.py", "BarHarness.qml", "test_design_system.py", "design_gallery.py"):
+            for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
+                         "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py"):
                 (root / "tests" / name).write_text("source-only fixture\n", encoding="utf-8")
             (root / "bar").mkdir()
             (root / "bar/main.qml").write_text("source-only applet\n", encoding="utf-8")
@@ -66,17 +70,24 @@ class ReleaseBundleTests(unittest.TestCase):
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
                             "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml",
                             "package/contents/ui/EventState.qml", "package/contents/ui/EventSurface.qml",
+                            "package/contents/controlcenter/qmldir", "package/contents/controlcenter/Registry.qml",
+                            "package/contents/ui/ControlCenterEntry.qml", "package/contents/ui/ControlCenterPopup.qml",
+                            "package/contents/ui/ControlCenterSession.qml",
                             "package/contents/config/main.xml")
                 for name in required:
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
                 with zipfile.ZipFile(root / "dist/orla-dock-1.2.3.plasmoid") as package_archive:
                     for name in ("contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
+                                 "contents/controlcenter/qmldir", "contents/controlcenter/Registry.qml",
+                                 "contents/ui/ControlCenterEntry.qml", "contents/ui/ControlCenterPopup.qml",
+                                 "contents/ui/ControlCenterSession.qml",
                                  "contents/config/main.xml"):
                         self.assertEqual(package_archive.read(name), (root / "package" / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
                 for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
-                             "tests/test_design_system.py", "tests/design_gallery.py"):
+                             "tests/test_design_system.py", "tests/design_gallery.py",
+                             "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml"):
                     self.assertNotIn(prefix + name, archive.namelist())
                 unpacked = root / "unpacked"
                 archive.extractall(unpacked)

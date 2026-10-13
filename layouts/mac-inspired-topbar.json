@@ -49,6 +49,15 @@
       }
     },
     {
+      "key": "control-center",
+      "enabled": false,
+      "config": {
+        "showOrlaMenu": false,
+        "showApplicationName": false,
+        "showControlCenter": true
+      }
+    },
+    {
       "key": "clock",
       "enabled": true,
       "config": {

@@ -12,6 +12,8 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 ## Map
 - `package/` — Orla Dock applet (`org.caiodock.dock`). `contents/ui/*.qml` components,
   `contents/code/*.js` pure logic and the design tokens (`Style.js`).
+- `package/contents/controlcenter/` — package-local, experimental routing singleton.
+  The dock owns the single view/audio state; bar clients borrow a popup host only.
 - `bar/` — Menu Orla top bar (`org.orla.bar`), source-only.
 - `launcher/` — Orla Launcher (C++/Qt Quick), its own CMake build and CTests.
 - `scripts/` — `orla.py` (doctor/build/install/preview/layout), `release.py`, `design.py`, helpers.
@@ -25,6 +27,8 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 - One QML suite: `PYTHONPATH=tests QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion python3 -B -m unittest test_qml`
 - Dock UI suites: `test_qml test_widget_strip test_appearance test_control_center test_local_events test_profiles_dock test_contexts_dock test_calendar test_media`
 - Bar suite: `python3 bar/run_tests.py` (add `--style org.kde.desktop` when the KDE style is installed)
+- Shared controls: `PYTHONPATH=tests QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software python3 -B -m unittest test_shared_control_center_registry test_control_center_session`;
+  `test_shared_control_center` additionally needs the local KDE QML modules.
 - Design guards: `python3 -B -m unittest discover -s tests -p 'test_design_system.py'`
 - Build the applet: `python3 scripts/orla.py build`; release bundle: `python3 scripts/release.py`
 - Portable CI list: `.github/workflows/ci.yml`. Run the QML suites with both `Fusion` and
@@ -61,7 +65,9 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 - Inject fixtures through existing `*Override` / backend properties, never through globals.
 - Files loaded by portable CI harnesses (`AppearanceEditor`, `AppearanceState`, `OrlaButton`,
   `SectionLabel`, `FormRow`, `Card`, `EventState`, `AudioControlState`, profile/context state,
-  `BarView`) must not import `org.kde.*`; CI has PySide6 only.
+  `BarView`, shared Registry/Entry/Session) must not import `org.kde.*`; CI has PySide6 only.
+- Shared CC transfers must fully close before changing host. Preserve exact-client release,
+  newer requests and newer focus; never add a second audio backend to the bar.
 - Comments explain why, briefly. Match the surrounding density.
 
 ## Boundaries

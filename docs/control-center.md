@@ -9,6 +9,20 @@ Ative **Mostrar Central de Controle no dock (global)** em **Widgets** para
 exibir o botão opcional. A preferência herdada de CC0 é global, começa
 desligada, é salva imediatamente e permanece fora dos perfis.
 
+O Source S1 também oferece **Mostrar Central de Controle na barra**. Uma
+instância separada do módulo `control-center` no preset fica à direita,
+depois da bandeja e antes do relógio; o módulo começa desativado. Essa instância
+usa `showOrlaMenu=false`, `showApplicationName=false` e `showControlCenter=true`.
+A instância do Menu Orla permanece independente à esquerda. Para alterar o
+layout, prepare e revise o plano com o helper `orla layout` antes de aplicar.
+
+As duas entradas usam a mesma Central e o mesmo estado de áudio do dock.
+Desativar/remover a entrada da barra preserva dock, pins e perfis; ocultar o
+botão do dock não fecha uma abertura originada pela barra. A rota experimental
+exige uma única Orla Dock compatível; falta/ambiguidade deixa a entrada
+indisponível. A qualificação da barra na sessão real ainda é o gate S2, conforme
+o [registro Source compartilhado](validation/shared-control-center-source.md).
+
 Além dos cards compartilhados de mídia MPRIS e bateria, o card de áudio do
 Source atual permite:
 

@@ -187,20 +187,23 @@ Item {
             expected = max(0, min(max(0, self.dock.width() - popup.property("width")),
                                   center - popup.property("width") / 2))
             for keyboard in (False, True):
+                opened = QSignalSpy(popup.opened)
                 control.forceActiveFocus(Qt.TabFocusReason)
                 if keyboard:
                     QTest.keyClick(self.window, Qt.Key_Space)
                 else:
                     point = control.mapToScene(QPoint(int(control.width() / 2), int(control.height() / 2)))
                     QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
-                QTest.qWait(40)
+                # CC opens on a queued transaction and native styles animate enter.
+                if not opened.count():
+                    self.assertTrue(opened.wait(1000), (control_name, keyboard, "open"))
                 self.assertTrue(popup.property("visible"))
                 self.assertAlmostEqual(popup.property("x"), expected, delta=1)
                 observed.append(popup.property("x"))
                 closed = QSignalSpy(popup.closed)
                 QTest.keyClick(self.window, Qt.Key_Escape)
                 if not closed.count():
-                    self.assertTrue(closed.wait(1000))
+                    self.assertTrue(closed.wait(1000), (control_name, keyboard, "close"))
                 self.assertFalse(popup.property("visible"))
                 self.assertEqual(self.window.activeFocusItem(), control)
         self.assertGreater(max(observed) - min(observed), 20)
