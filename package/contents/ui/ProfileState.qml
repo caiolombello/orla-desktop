@@ -61,10 +61,11 @@ QtObject {
         internal.presentation = Profiles.freeze(Profiles.copy(activeProfileId === "legacy" ? Profiles.flat(configuration)
             : Profiles.presentation(internal.document.profiles.find(profile => profile.id === activeProfileId))));
     }
-    function store(document) {
+    function store(document, beforeWrite) {
         const raw = JSON.stringify(document);
         const result = Profiles.parse(raw);
         if (result.error) return fail(result.error);
+        if (beforeWrite !== undefined && beforeWrite() !== true) return false;
         configuration.profilesJSON = raw;
         return true;
     }
@@ -113,12 +114,15 @@ QtObject {
     }
     // Patches are plain data; configuration is the typed, writable KConfig map.
     // Legacy field writes are not a backend transaction if a setter throws.
-    function commitPresentation(patch, expectedScope, expectedRevision) {
+    function commitPresentation(patch, expectedScope, expectedRevision, continuationGuard) {
+        if (continuationGuard !== undefined && typeof continuationGuard !== "function") return false;
         if (!check(expectedScope, expectedRevision, false)) return false;
         const validated = Profiles.validatePatch(patch);
         if (validated.error) return fail(validated.error);
         if (!check(expectedScope, expectedRevision, false)) return false;
         if (activeProfileId === "legacy") {
+            // Guarded batches require the one-setter managed-profile path.
+            if (continuationGuard !== undefined) return false;
             if (validated.value.widgets && validated.value.widgets.some((widget, index) => widget.id !== Profiles.widgetIds[index]))
                 return fail(qsTr("Crie/use um perfil para organizar os widgets"));
             // Validate the whole patch first; legacy writes only its supplied fields.
@@ -137,8 +141,17 @@ QtObject {
         const profile = document.profiles[index];
         document.profiles[index] = Object.assign(Profiles.merge(Profiles.presentation(profile), validated.value),
             {id: profile.id, name: profile.name});
-        if (JSON.stringify(document) === JSON.stringify(internal.document)) return true;
-        return store(document);
+        const beforeWrite = () => {
+            if (!writable || expectedScope !== activeProfileId || expectedRevision !== revision) return false;
+            if (continuationGuard !== undefined) {
+                try { if (continuationGuard() !== true) return false; }
+                catch (_) { return false; }
+            }
+            // The caller guard may itself dispatch a synchronous handler.
+            return writable && expectedScope === activeProfileId && expectedRevision === revision;
+        };
+        if (JSON.stringify(document) === JSON.stringify(internal.document)) return beforeWrite();
+        return store(document, beforeWrite);
     }
     onSavedJSONChanged: if (internal.completed) load()
     onLegacyPresentationChanged: if (internal.completed && activeProfileId === "legacy" && writable) {

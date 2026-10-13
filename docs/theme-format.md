@@ -41,6 +41,16 @@ strictly bound native clipboard memory.
 See the [consumer validation record](validation/theme-consumer-0.2.6.md) for the
 synthetic evidence and unqualified native behavior.
 
+## Aparência portátil / Portable appearance
+
+O módulo recolhível **Aparência portátil experimental**, na aba Aparência, exporta o estado salvo da aparência e a ordem/visibilidade dos sete widgets. A exportação não inclui apps fixados, nome/ID de perfil, eventos, contexto, caminhos ou dados de integrações. O campo de saída permite selecionar e copiar manualmente; não lê arquivos nem grava automaticamente no clipboard.
+
+Para importar, use um perfil criado na aba Perfis, cole o documento e escolha **Usar na prévia**. Apenas colar não muda o dock. **Aplicar** salva aparência e widgets juntos no perfil atual; **Cancelar**, Escape ou fechar descartam a prévia; **Desfazer** restaura os dois campos enquanto o perfil/revisão não tiver mudado. Texto inválido não escreve e preserva a última prévia válida. As preferências anteriores podem ser exportadas; sua importação exige criar ou escolher um perfil explicitamente.
+
+Este preset usa `kind: "orla-appearance-preset"` e `formatVersion: "0.1-experimental"`. É um documento separado do tema com autoria descrito abaixo. O [schema de preset](../themes/schema/appearance-preset-0.1-experimental.schema.json) exige `appearance` com os dez tokens/baseTheme e `widgets` com cada ID conhecido exatamente uma vez; a ordem da lista é a ordem da dock. Versão, campos extras, duplicatas, tipos/ranges inválidos e entrada acima dos limites do parser são rejeitados. O formato continua experimental.
+
+The expandable **Experimental portable appearance** module exports saved appearance and the order/visibility of the seven widgets. Copy the selectable output manually. To import, explicitly create or choose a managed profile, paste the document and choose **Use in preview**. Apply commits appearance and widgets together; Cancel/Escape discard, and Undo restores both while the profile/revision is unchanged. This separate experimental preset contains presentation data only; it is not a theme with authorship or a profile backup.
+
 ## Autoria / Authoring
 
 Copie um [exemplo claro](../themes/examples/essential.json) ou

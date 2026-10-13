@@ -11,6 +11,14 @@ Revisão: 13/10/2026. Base auditada: CaioDock 0.2.0, publicado como Orla Dock 0.
 
 **Busca por Windows/Meta instalada — prova delimitada de 13/10:** modo gerenciado com ação estável, instância única, atalho alternativo preservado e CLI `search-shortcut status/enable/disable/recover`. Passaram 19 testes da CLI, 23 casos de atalhos e os sete CTests em build permanente (97,17 s), com revisão independente. Em Plasma 6.7.5/Wayland, Qt 6.11.2, DPR observado 1,45, Meta abriu Orla, ↓ selecionou a fixture própria e Enter executou somente essa seleção; o processo permaneceu vivo, reabriu e Escape devolveu o foco. Atalho alternativo, supressão de Meta+O, reinício do serviço, restauração física do KRunner e reativação foram verificados. Os defaults anteriores foram preservados; fixtures e dispositivos temporários foram removidos. O teste real encontrou e corrigiu a saída automática por QuitLock após o job KIO, com regressão usando o `main` real. A digitação imediata antes do foco ainda precisa de qualificação: um probe sem pausa perdeu a primeira letra. Outros monitores, estado de atalho inibido, reinício do daemon e provedores reais continuam UNRUN; L0/L2 e UX0 seguem parciais.
 
+**Encerramento das fixtures do launcher:** a falha pós-suíte do PR 45 foi
+reproduzida em container; o core identificou limpeza tardia da thread de
+`krunner_services`. A guarda Source passou a aguardar somente os workers
+próprios, no prazo existente. Regressão causal e sete CTests passaram; não há
+mudança no launcher instalado ou qualificação de seu encerramento nativo.
+Nova CI e os gates de personalização continuam separados. Veja o
+[registro](docs/validation/appearance-presets-source.md).
+
 ## Resultado esperado
 
 Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado no Raycast e notificações configuráveis, integração com os projetos do Caio e instalação acessível para outras pessoas. A identidade Orla continua própria, com uma interface bonita, consistente e personalizável. Temas, widgets, comandos e provedores de IA poderão ser ampliados pela comunidade; autores poderão distribuir addons gratuitos ou comerciais conforme os contratos e políticas abaixo. Caio decide as prioridades e valida o uso diário. Este documento define a sequência proposta; os números de versão são marcos, sem promessa de datas.
@@ -462,6 +470,21 @@ integral antes da criação e restauração exata depois. Foco completo, exact-o
 e monitores mantêm seus gates próprios.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
+
+**Aparência portátil C1/X1 — incremento Source:** exportação do estado salvo por
+whitelist e importação colada com prévia de aparência, ordem e visibilidade dos
+sete widgets. Aplicar/Desfazer usam uma escrita conjunta no perfil gerenciado;
+Cancelar/Escape descartam a prévia. As preferências anteriores exportam e orientam
+criar/escolher perfil para importar, sem migração automática. No checkout
+integrado passaram 129 de 130 testes por estilo, com um skip de TaskManager/display;
+sete guards, design check, galeria e build passaram. A revisão independente
+qualificou a guarda pré-write com zero escritas após cancelamento. O
+[registro](docs/validation/appearance-presets-source.md) inclui capturas sintéticas
+e separa Source de KConfig/foco nativos. Arquivo, apps fixados, legacy/reorder e
+catálogo seguem pendentes; C1/X1 não estão concluídos. `768697f` foi instalado
+localmente; abertura e exportação por Tab/Space nas preferências anteriores
+passaram, com configuração, barra, launcher e bancos preservados. A importação
+em perfil gerenciado, clipboard e foco nativos mantêm qualificação separada.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
 |---|---|---|

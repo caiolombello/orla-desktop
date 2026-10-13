@@ -7,14 +7,28 @@ import "../code/Style.js" as Style
 ColumnLayout {
     id: editor
     required property var appearance
+    property var preset: null
+    readonly property bool importing: preset !== null && preset.dirty
+    signal profilesRequested()
     signal canceled()
     spacing: Style.space.sm
-    function reveal(control) {
+    property var focusReveal: null
+    function reveal(control, owner) {
+        focusReveal = {control:control, owner:owner || control};
+        revealNow(control);
+        Qt.callLater(() => { if (editor) editor.revealFocused(); });
+    }
+    function revealFocused() {
+        const target = focusReveal;
+        if (target && target.owner && target.control && editor.visible && target.owner.activeFocus && target.control.visible) revealNow(target.control);
+    }
+    function revealNow(control) {
         const viewport = fields.contentItem;
         const point = control.mapToItem(viewport, 0, 0);
-        if (point.y < 0) viewport.contentY += point.y;
-        else if (point.y + control.height > viewport.height)
-            viewport.contentY += point.y + control.height - viewport.height;
+        const margin = Style.space.xs;
+        if (point.y < margin) viewport.contentY += point.y - margin;
+        else if (point.y + control.height + margin > viewport.height)
+            viewport.contentY += point.y + control.height + margin - viewport.height;
     }
     Controls.Label {
         Layout.fillWidth: true
@@ -26,14 +40,25 @@ ColumnLayout {
     }
     Controls.ScrollView {
         id: fields
+        onHeightChanged: Qt.callLater(() => { if (editor) editor.revealFocused(); })
+        onContentHeightChanged: Qt.callLater(() => { if (editor) editor.revealFocused(); })
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.preferredHeight: 320
         contentWidth: availableWidth
         clip: true
         ColumnLayout {
-            width: fields.availableWidth
+            x: Style.space.xs
+            width: fields.availableWidth - 2 * Style.space.xs
             spacing: Style.space.sm
+            Item { Layout.preferredHeight: Style.space.xxs }
+            AppearancePresetControls {
+                Layout.fillWidth: true
+                visible: editor.preset !== null
+                preset: editor.preset || ({dirty:false, managed:false, busy:false, editing:false, inputText:"", exportText:""})
+                onFocusRequested: (control, owner) => editor.reveal(control, owner)
+                onProfilesRequested: editor.profilesRequested()
+            }
             SectionLabel { text: qsTr("Ponto de partida") }
             RowLayout {
                 Layout.fillWidth: true
@@ -56,6 +81,7 @@ ColumnLayout {
                         hoverEnabled: true
                         focusPolicy: Qt.StrongFocus
                         Accessible.name: text
+                        enabled: !editor.importing
                         checked: editor.appearance.draft && editor.appearance.draft.baseTheme === modelData.key
                         onActiveFocusChanged: if (activeFocus) editor.reveal(this)
                         onClicked: editor.appearance.selectTheme(modelData.key)
@@ -107,6 +133,7 @@ ColumnLayout {
             }
             Controls.Button {
                 id: themeDisclosure
+                enabled: !editor.importing
                 objectName: "appearanceThemeJSON"
                 Layout.fillWidth: true
                 text: qsTr("Tema JSON experimental")
@@ -119,6 +146,7 @@ ColumnLayout {
             ColumnLayout {
                 Layout.fillWidth: true
                 visible: themeDisclosure.checked
+                enabled: !editor.importing
                 Controls.Label {
                     Layout.fillWidth: true
                     text: qsTr("Cole o JSON de um tema 0.1-experimental. Usar na prévia substitui os ajustes desta prévia; Aplicar salva neste perfil.")
@@ -193,6 +221,7 @@ ColumnLayout {
             }
             SectionLabel { text: qsTr("Cores · #RRGGBB") }
             Card {
+                enabled: !editor.importing
                 Layout.fillWidth: true
                 padding: 0
                 ColumnLayout {
@@ -228,6 +257,7 @@ ColumnLayout {
             }
             SectionLabel { text: qsTr("Forma e movimento") }
             Card {
+                enabled: !editor.importing
                 Layout.fillWidth: true
                 padding: 0
                 ColumnLayout {
@@ -266,19 +296,22 @@ ColumnLayout {
             }
             OrlaButton {
                 objectName: "appearanceDefaults"
+                enabled: !editor.importing
                 variant: "ghost"
                 text: qsTr("Restaurar aparência anterior ao editor")
                 Layout.fillWidth: true
                 onActiveFocusChanged: if (activeFocus) editor.reveal(this)
                 onClicked: editor.appearance.restoreDefaults()
             }
+            Item { Layout.preferredHeight: Style.space.xxs }
         }
     }
     Controls.Label {
         objectName: "appearanceError"
         Layout.fillWidth: true
         visible: text.length > 0
-        text: editor.appearance.stale ? qsTr("A aparência salva mudou. Cancele e abra novamente antes de aplicar.")
+        text: editor.preset && editor.preset.error.length ? editor.preset.error
+            : editor.appearance.stale ? qsTr("A aparência salva mudou. Cancele e abra novamente antes de aplicar.")
             : editor.appearance.themeError || editor.appearance.error
                 || (editor.appearance.saved.error ? qsTr("Aparência salva inválida; usando as preferências anteriores.") : "")
         wrapMode: Text.WordWrap
@@ -288,16 +321,16 @@ ColumnLayout {
     Controls.Label {
         Layout.fillWidth: true
         visible: text.length > 0
-        text: editor.appearance.message
+        text: editor.preset && editor.preset.message.length ? editor.preset.message : editor.appearance.message
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
     }
     RowLayout {
         Layout.fillWidth: true
         spacing: Style.space.sm
-        OrlaButton { objectName: "appearanceApply"; variant: "primary"; text: qsTr("Aplicar"); enabled: editor.appearance.canApply; onClicked: editor.appearance.apply() }
-        OrlaButton { objectName: "appearanceCancel"; text: qsTr("Cancelar"); onClicked: { editor.appearance.cancel(); editor.canceled(); } }
+        OrlaButton { objectName: "appearanceApply"; Keys.onReturnPressed: event => { clicked(); event.accepted = true; }; variant: "primary"; text: qsTr("Aplicar"); enabled: editor.importing ? editor.preset.canApply : editor.appearance.canApply; onClicked: editor.importing ? editor.preset.apply() : editor.appearance.apply() }
+        OrlaButton { objectName: "appearanceCancel"; text: qsTr("Cancelar"); onClicked: { if (editor.preset) editor.preset.cancel(); else editor.appearance.cancel(); editor.canceled(); } }
         Item { Layout.fillWidth: true }
-        OrlaButton { objectName: "appearanceUndo"; variant: "ghost"; text: qsTr("Desfazer"); enabled: editor.appearance.canUndo; onClicked: editor.appearance.undo() }
+        OrlaButton { objectName: "appearanceUndo"; Keys.onReturnPressed: event => { clicked(); event.accepted = true; }; variant: "ghost"; text: qsTr("Desfazer"); enabled: !editor.importing && (editor.preset && editor.preset.canUndo || editor.appearance.canUndo); onClicked: editor.preset && editor.preset.canUndo ? editor.preset.undo() : editor.appearance.undo() }
     }
 }

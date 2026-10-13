@@ -6,6 +6,8 @@ Controls.ScrollView {
     id: controls
     required property var profiles
     required property var appearance
+    property var preset: null
+    readonly property bool dirty: appearance.dirty || (preset !== null && preset.dirty)
     property string pendingId: profiles.activeProfileId
     readonly property var choices: [{id: "legacy", name: qsTr("Preferências anteriores")}].concat(profiles.profiles)
     contentWidth: availableWidth
@@ -27,7 +29,7 @@ Controls.ScrollView {
             Layout.fillWidth: true
             visible: !controls.profiles.initialized
             text: qsTr("Criar Trabalho, Pessoal e Jogos")
-            enabled: controls.profiles.writable && !controls.appearance.dirty
+            enabled: controls.profiles.writable && !controls.dirty
             onActiveFocusChanged: if (activeFocus) controls.reveal(this)
             onClicked: controls.profiles.initializeDefaults(controls.profiles.activeProfileId, controls.profiles.revision)
         }
@@ -54,7 +56,7 @@ Controls.ScrollView {
             objectName: "profileUse"
             Layout.fillWidth: true
             text: qsTr("Usar perfil")
-            enabled: controls.profiles.writable && !controls.appearance.dirty && controls.pendingId !== controls.profiles.activeProfileId
+            enabled: controls.profiles.writable && !controls.dirty && controls.pendingId !== controls.profiles.activeProfileId
             onActiveFocusChanged: if (activeFocus) controls.reveal(this)
             onClicked: controls.profiles.select(controls.pendingId, controls.profiles.activeProfileId, controls.profiles.revision)
         }
@@ -72,7 +74,7 @@ Controls.ScrollView {
             objectName: "profileCreate"
             Layout.fillWidth: true
             text: qsTr("Criar e usar")
-            enabled: controls.profiles.writable && !controls.appearance.dirty && name.text.trim().length > 0
+            enabled: controls.profiles.writable && !controls.dirty && name.text.trim().length > 0
             onActiveFocusChanged: if (activeFocus) controls.reveal(this)
             onClicked: if (controls.profiles.create(name.text, controls.profiles.activeProfileId, controls.profiles.revision)) name.clear()
         }
@@ -80,7 +82,7 @@ Controls.ScrollView {
             objectName: "profileStatus"
             Layout.fillWidth: true
             visible: text.length > 0
-            text: controls.appearance.dirty ? qsTr("Aplique ou cancele a prévia na aba Aparência antes de trocar ou criar um perfil.") : controls.profiles.error || controls.profiles.message
+            text: controls.dirty ? qsTr("Aplique ou cancele a prévia na aba Aparência antes de trocar ou criar um perfil.") : controls.profiles.error || controls.profiles.message
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
             Accessible.role: Accessible.AlertMessage
