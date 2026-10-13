@@ -4,6 +4,12 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QUrl>
+#include <QQmlEngine>
+#include <QQmlComponent>
+#include <QQuickItem>
+#include <QJSValue>
+#include <QQuickWindow>
+#include <memory>
 
 #ifdef Q_OS_UNIX
 #include <cerrno>
@@ -67,6 +73,196 @@ class SteamProviderTests final : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void locatesNativeRootOnlyFromTheExplicitDataBase()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString home = directory.filePath(QStringLiteral("home"));
+        const QString data = directory.filePath(QStringLiteral("data"));
+        QVERIFY(QDir().mkpath(home));
+        QVERIFY(QDir().mkpath(data + QStringLiteral("/Steam")));
+        QCOMPARE(SteamProviderController::discoverLocalRoots(home, data),
+                 QStringList{QStringLiteral("native=") + data + QStringLiteral("/Steam")});
+    }
+
+    void knownRootsAreCanonicalAndDeduplicated_data()
+    {
+        QTest::addColumn<QString>("scenario");
+        for (const QString &scenario : {QStringLiteral("absent"), QStringLiteral("flatpak"),
+                QStringLiteral("root-alias"), QStringLiteral("steam-alias"),
+                QStringLiteral("deduplicated"), QStringLiteral("both-kinds"),
+                QStringLiteral("file-and-broken-link"), QStringLiteral("invalid-bases"),
+                QStringLiteral("unsafe-canonical-target")})
+            QTest::newRow(qPrintable(scenario)) << scenario;
+    }
+
+    void knownRootsAreCanonicalAndDeduplicated()
+    {
+        QFETCH(QString, scenario);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QString home = directory.filePath(QStringLiteral("home"));
+        QString data = directory.filePath(QStringLiteral("data"));
+        const QString native = data + QStringLiteral("/Steam");
+        const QString flatpak = home + QStringLiteral("/.var/app/com.valvesoftware.Steam/data/Steam");
+        const QString target = directory.filePath(QStringLiteral("alias target"));
+        QStringList expected;
+        QVERIFY(QDir().mkpath(home + QStringLiteral("/.steam")));
+        QVERIFY(QDir().mkpath(data));
+        if (scenario == QStringLiteral("flatpak")) {
+            QVERIFY(QDir().mkpath(flatpak));
+            expected = {QStringLiteral("flatpak=") + flatpak};
+        } else if (scenario == QStringLiteral("root-alias") || scenario == QStringLiteral("steam-alias")) {
+            QVERIFY(QDir().mkpath(target));
+            const QString alias = scenario == QStringLiteral("root-alias") ? QStringLiteral("root") : QStringLiteral("steam");
+            QVERIFY(QFile::link(target, home + QStringLiteral("/.steam/") + alias));
+            expected = {QStringLiteral("native=") + target};
+        } else if (scenario == QStringLiteral("deduplicated")) {
+            QVERIFY(QDir().mkpath(native));
+            QVERIFY(QFile::link(native, home + QStringLiteral("/.steam/root")));
+            QVERIFY(QFile::link(native, home + QStringLiteral("/.steam/steam")));
+            QVERIFY(QDir().mkpath(QFileInfo(flatpak).path()));
+            QVERIFY(QFile::link(native, flatpak));
+            expected = {QStringLiteral("native=") + native};
+        } else if (scenario == QStringLiteral("both-kinds")) {
+            QVERIFY(QDir().mkpath(native));
+            QVERIFY(QDir().mkpath(flatpak));
+            expected = {QStringLiteral("native=") + native, QStringLiteral("flatpak=") + flatpak};
+        } else if (scenario == QStringLiteral("file-and-broken-link")) {
+            QFile file(native);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.close();
+            QVERIFY(QFile::link(target, home + QStringLiteral("/.steam/root")));
+        } else if (scenario == QStringLiteral("invalid-bases")) {
+            QVERIFY(QDir().mkpath(native));
+            QVERIFY(QDir().mkpath(home + QStringLiteral("/Steam")));
+            for (const QString &invalid : {QString(), QStringLiteral("relative"), QStringLiteral(":/resource"),
+                    home + QStringLiteral("/../home"), home + QStringLiteral("/"),
+                    home + QChar::Null, home + QStringLiteral("\n"),
+                    home + QChar(0x202e), QStringLiteral("/")})
+                QVERIFY(SteamProviderController::discoverLocalRoots(invalid, invalid).isEmpty());
+            return;
+        } else if (scenario == QStringLiteral("unsafe-canonical-target")) {
+            const QString unsafe = directory.filePath(QStringLiteral("bad\nroot"));
+            QVERIFY(QDir().mkpath(unsafe));
+            QVERIFY(QFile::link(unsafe, native));
+        }
+        QCOMPARE(SteamProviderController::discoverLocalRoots(home, data), expected);
+    }
+
+    void locatingRootsFillsThePanelWithoutScanning_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 440;
+        QTest::newRow("standard") << 660;
+    }
+
+    void locatingRootsFillsThePanelWithoutScanning()
+    {
+        QFETCH(int, width);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString home = directory.filePath(QStringLiteral("home"));
+        const QString data = directory.filePath(QStringLiteral("data"));
+        const QString native = data + QStringLiteral("/Steam");
+        QVERIFY(QDir().mkpath(home));
+        QVERIFY(QDir().mkpath(native));
+        const QString marker = directory.filePath(QStringLiteral("scan-started"));
+        const QString helper = writeHelper(directory, QByteArray("import base64,pathlib,sys\n")
+            + "pathlib.Path(r'" + marker.toUtf8() + "').touch()\n"
+            + "sys.stdout.buffer.write(base64.b64decode('" + availableDocument().toBase64() + "'))\n");
+        int locates = 0;
+        QList<QUrl> opened;
+        SteamProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
+            [&] { ++locates; return SteamProviderController::discoverLocalRoots(home, data); });
+        QQmlEngine engine;
+        const QUrl panelUrl = QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
+            .filePath(QStringLiteral("../launcher/SteamSettings.qml")));
+        QQmlComponent component(&engine, panelUrl);
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(width, 420);
+        std::unique_ptr<QObject> object(component.createWithInitialProperties(
+            {{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+        auto *panel = qobject_cast<QQuickItem *>(object.get());
+        QVERIFY(panel);
+        panel->setParentItem(window.contentItem());
+        panel->setSize(QSizeF(width, 420));
+        window.setColor(QColor(panel->property("ui").value<QJSValue>().property("canvas").toString()));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *locate = panel->findChild<QQuickItem *>(QStringLiteral("steamLocateRootsButton"));
+        auto *input = panel->findChild<QQuickItem *>(QStringLiteral("steamRootInput"));
+        auto *message = panel->findChild<QQuickItem *>(QStringLiteral("steamRootDiscoveryMessage"));
+        auto *scan = panel->findChild<QQuickItem *>(QStringLiteral("steamScanButton"));
+        QVERIFY(locate && input && message && scan);
+        QVERIFY(locate->mapToItem(panel, QPointF(locate->width(), 0)).x() <= width);
+        QCOMPARE(locates, 0);
+        QVERIFY(!QFile::exists(marker));
+        QVERIFY(input->setProperty("text", QStringLiteral("native=/manual/synthetic")));
+        locate->forceActiveFocus();
+        QTest::keyClick(&window, Qt::Key_Space);
+        QCOMPARE(locates, 1);
+        QCOMPARE(input->property("text").toString(), QStringLiteral("native=") + native);
+        QVERIFY(!message->property("text").toString().isEmpty());
+        QCOMPARE(controller.status(), QStringLiteral("unconfigured"));
+        QCOMPARE(controller.inventoryRevision(), quint64(0));
+        QVERIFY(controller.apps().isEmpty());
+        QVERIFY(!controller.busy());
+        QVERIFY(!QFile::exists(marker));
+        QVERIFY(opened.isEmpty());
+
+        QVERIFY(QMetaObject::invokeMethod(scan, "click"));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QCOMPARE(controller.status(), QStringLiteral("available"));
+        QCOMPARE(controller.apps().size(), 1);
+        const quint64 revision = controller.inventoryRevision();
+        QVERIFY(QFile::exists(marker));
+        QVERIFY(QFile::remove(marker));
+        QVERIFY(QMetaObject::invokeMethod(locate, "click"));
+        QCOMPARE(controller.status(), QStringLiteral("available"));
+        QCOMPARE(controller.inventoryRevision(), revision);
+        QCOMPARE(controller.apps().size(), 1);
+        QVERIFY(!QFile::exists(marker));
+        QVERIFY(opened.isEmpty());
+
+        QVERIFY(QDir(native).removeRecursively());
+        const QString manual = QStringLiteral("native=/manual/synthetic");
+        QVERIFY(input->setProperty("text", manual));
+        QVERIFY(QMetaObject::invokeMethod(locate, "click"));
+        QCOMPARE(input->property("text").toString(), manual);
+        QVERIFY(message->property("text").toString().contains(QStringLiteral("locais conhecidos")));
+        QCOMPARE(controller.status(), QStringLiteral("available"));
+        QCOMPARE(controller.inventoryRevision(), revision);
+        QCOMPARE(controller.apps().size(), 1);
+        QVERIFY(!QFile::exists(marker));
+
+        const int beforeBlock = locates;
+        QVERIFY(panel->setProperty("operationStartBlocked", true));
+        QVERIFY(!locate->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(locate, "clicked"));
+        QCOMPARE(locates, beforeBlock);
+        QCOMPARE(input->property("text").toString(), manual);
+        QVERIFY(panel->setProperty("operationStartBlocked", false));
+        controller.scan({manual});
+        QVERIFY(controller.busy());
+        QVERIFY(!locate->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(locate, "clicked"));
+        QCOMPARE(locates, beforeBlock);
+        QCOMPARE(input->property("text").toString(), manual);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QVERIFY(QFile::exists(marker));
+        QVERIFY(opened.isEmpty());
+        const QString capture = qEnvironmentVariable("ORLA_UI_CAPTURE_DIR");
+        if (!capture.isEmpty()) {
+            QTest::qWait(100);
+            const QImage image = window.grabWindow();
+            QVERIFY(!image.isNull());
+            QVERIFY(image.save(QDir(capture).filePath(QStringLiteral("steam-discovery-empty-%1.png").arg(width))));
+        }
+    }
+
     void constructionDoesNothingAndExplicitScanPublishesOnlyValidatedInventory()
     {
         QTemporaryDir directory;

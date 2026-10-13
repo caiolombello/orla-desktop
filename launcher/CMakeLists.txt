@@ -99,7 +99,7 @@ if(BUILD_TESTING)
     target_compile_definitions(orla-steam-provider-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
         ORLA_TEST_STEAM_HELPER="${ORLA_STEAM_HELPER_PATH}")
-    target_link_libraries(orla-steam-provider-tests PRIVATE orla-launcher-core Qt6::Test)
+    target_link_libraries(orla-steam-provider-tests PRIVATE orla-launcher-core Qt6::Test Qt6::Qml Qt6::Quick)
     add_test(NAME launcher-steam-provider COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
         --private-path
         $<TARGET_FILE:orla-steam-provider-tests>)
