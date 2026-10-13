@@ -13,6 +13,18 @@ from scripts import caiodock
 
 
 class PackageCliTests(unittest.TestCase):
+    def test_script_and_module_entrypoints_show_layout_help(self):
+        import subprocess
+        import sys
+        source = Path(__file__).resolve().parents[1]
+        for entry in ([sys.executable, "-B", "scripts/orla.py"],
+                      [sys.executable, "-B", "-m", "scripts.orla"]):
+            with self.subTest(entry=entry):
+                result = subprocess.run(entry + ["layout", "--help"], cwd=source,
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("restore", result.stdout)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
