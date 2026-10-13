@@ -43,6 +43,8 @@ function validName(value) {
 }
 function validLauncher(value) {
     if (typeof value !== "string" || value.length > 2048 || controls.test(value)) return false;
+    // Keep KDE's default-app binding instead of pinning today's resolved app.
+    if (/^preferred:\/\/(browser|mailer|terminal|filemanager)$/.test(value)) return true;
     if (/^applications:[A-Za-z0-9_.-]+\.desktop$/.test(value)) return true;
     if (!/^file:\/\/\/(?!\/)[^?#\\]+\.desktop$/.test(value) || /%(?![0-9A-Fa-f]{2})/.test(value)) return false;
     try {
@@ -54,7 +56,7 @@ function validLauncher(value) {
 function fieldError(key, value) {
     if (key === "launchers") {
         if (!Array.isArray(value) || value.length > 32 || !value.every(validLauncher)
-                || new Set(value).size !== value.length) return "Apps fixados inválidos. Use até 32 arquivos .desktop locais.";
+                || new Set(value).size !== value.length) return "Apps fixados inválidos. Use até 32 apps .desktop locais ou apps padrão do KDE.";
     } else if (key === "widgets") {
         if (!Array.isArray(value) || value.length !== widgetIds.length
                 || !value.every(entry => Appearance.exactKeys(entry, ["id", "visible"])

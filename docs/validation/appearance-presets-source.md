@@ -54,3 +54,35 @@ Essa mudança é somente de testes. Não qualifica o encerramento do launcher
 nativo nem explica retrospectivamente outros crashes sem core. Falhas e
 recibos anteriores permanecem preservados; importação gerenciada nativa segue
 UNRUN. [Contrato Qt de término da thread](https://doc.qt.io/qt-6.11/qthread.html#isFinished).
+
+
+## Compatibilidade com apps padrão do KDE — 2026-10-13
+
+Na sessão Plasma 6.7.5/Wayland, `Criar e usar` recusou as preferências anteriores
+quando um app fixado usava `preferred://filemanager`. A lista tinha sete entradas
+únicas, dentro dos limites; nenhum perfil foi gravado e as configurações
+protegidas permaneceram iguais.
+
+O validador passa a aceitar exatamente `preferred://browser`,
+`preferred://mailer`, `preferred://terminal` e `preferred://filemanager`.
+A URL é preservada, para continuar acompanhando o app padrão do usuário.
+As restrições de tamanho, quantidade, duplicatas e URLs locais permanecem.
+Targets desconhecidos, caminhos, query, fragmento, credenciais e escapes são
+recusados. [Contrato KDE 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/tasktools.cpp).
+
+Uma regressão de criação falhou antes do fix e passou depois, cobrindo também
+edição, troca e recarga. A matriz de URLs inválidas confirma recusa sem gravação.
+As suítes pertinentes passaram 39 testes em cada estilo, Fusion e KDE, com um
+skip de TaskManager em cada rodada; sete design guards e o design check passaram.
+A galeria KDE foi revisada nos dois esquemas. A falha histórica da galeria Fusion
+não foi repetida nem convertida em aprovação. Revisão independente: zero bloqueios.
+
+| Escuro | Claro |
+|---|---|
+| ![Configurações escuras](../screenshots/profile-preferred/settings-dark.png) | ![Configurações claras](../screenshots/profile-preferred/settings-light.png) |
+
+Capturas sintéticas offscreen; não comprovam foco ou persistência nativos.
+Nesta etapa, o fix local e o fluxo gerenciado completo ainda aguardam validação.
+A custódia de clipboard recusou o limite de dados e encontrou timeouts de
+formatos do provider; os helpers encerraram sem writes. Copiar/colar e
+restauração de clipboard não foram qualificados.
