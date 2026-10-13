@@ -405,6 +405,22 @@ separa a composição offscreen dos próximos gates de pacote ativo,
 âncora/foco e áudio na sessão real. CC0/CC1/T1 continuam parciais. A prontidão
 da busca em outros ambientes permanece como gate de qualificação.
 
+**Atualização da composição — Source preparado:** a versão local já contém o
+Source S1, mas a entrada direita ainda não foi habilitada pelo helper. O recibo
+do layout atual permanece válido; seu banco `after` diverge da configuração
+atual por uma mudança no tamanho do diálogo de configuração da barra. O helper
+recusa restaurar esse arquivo antigo. A próxima fatia acrescenta `plan-update`
+e `update` para adicionar a Central ao painel existente, guardando o estado
+atual para rollback e mantendo o primeiro backup imutável. Alterações em pins,
+perfis ou outras configurações nunca se tornam autorização para um restore
+original por terem sido capturadas durante um update. Passaram 177 testes de
+layout (124 antigos, 41 de transação e 12 do script), 20 da CLI/pacote, o teste
+de release e o design check. A revisão independente passou 21 regressões e
+aprovou o Source congelado; corrigiu-se a projeção Unicode que poderia ocultar
+uma alteração externa. O plano nativo somente leitura foi gerado para a barra
+existente, preservando os cinco IDs. Aplicação na sessão real, abertura,
+âncora, foco e áudio continuam gates separados.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |

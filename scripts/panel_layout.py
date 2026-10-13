@@ -304,10 +304,13 @@ def validate_plan(plan):
 
 
 def render_script(operation, *, plan=None, connector="", token="", panel_id=None, expected_inventory=None,
-                  ordered_widgets=None):
-    if operation not in ("inspect", "apply", "remove-owned", "reorder-owned"):
+                  ordered_widgets=None, update_plan=None):
+    if operation not in ("inspect", "apply", "remove-owned", "reorder-owned", "update-owned"):
         raise LayoutError("unsupported panel operation")
-    if operation == "apply":
+    if operation == "update-owned":
+        update_plan = validate_update_plan(update_plan)
+        connector = update_plan["originPlan"]["manifest"]["screen"]["connector"]
+    elif operation == "apply":
         plan = validate_plan(plan)
     elif operation in ("remove-owned", "reorder-owned"):
         _integer(panel_id, 1, 2147483647, "managed panel ID")
@@ -338,6 +341,8 @@ def render_script(operation, *, plan=None, connector="", token="", panel_id=None
         raise LayoutError("invalid monitor connector")
     request = {"operation": operation, "plan": plan, "connector": connector,
                "token": token, "panelId": panel_id, "expectedInventory":expected_inventory, "orderedWidgets":ordered_widgets}
+    if operation == "update-owned":
+        request = {"operation": operation, "updatePlan": update_plan, "connector": connector}
     encoded = json.dumps(request, ensure_ascii=True, separators=(",", ":"))
     if len(encoded) > 131072:
         raise LayoutError("panel request exceeds size limit")
@@ -621,6 +626,9 @@ class NativeRuntime:
     def apply(self, plan, *, ready_deadline=None, clock=None):
         return self._script(render_script("apply", plan=plan), ready_deadline=ready_deadline, clock=clock)
 
+    def update_owned(self, plan, *, ready_deadline=None, clock=None):
+        return self._script(render_script("update-owned", update_plan=plan), ready_deadline=ready_deadline, clock=clock)
+
     def reorder_owned(self, panel_id, token, expected_inventory, ordered_widgets, *, ready_deadline=None, clock=None):
         return self._script(render_script("reorder-owned", panel_id=panel_id, token=token,
             connector=expected_inventory["selectedScreen"]["connector"], expected_inventory=expected_inventory,
@@ -689,14 +697,18 @@ class FileStore:
         path = self.state_home / "current.json"
         self._safe_path(path)
         if not path.exists(): return None
-        pointer = read_json(path, 262144)
+        pointer = _read_layout_receipt(path)
         # The per-transaction journal is authoritative; current.json only selects it.
-        journal = read_json(self._directory(pointer) / "receipt.json", 262144)
+        journal = read_json(self._directory(pointer) / "receipt.json", 524288 if pointer["schemaVersion"] == 2 else 262144)
         if journal.get("transactionId") != pointer.get("transactionId"):
             raise LayoutError("current transaction journal identity changed")
+        if type(journal.get("schemaVersion")) is not int or journal["schemaVersion"] != pointer["schemaVersion"]:
+            raise LayoutError("current layout journal version changed")
         return journal
 
     def save(self, receipt):
+        if receipt.get("schemaVersion") == 2:
+            return save_update_receipt(self, receipt)
         data = json.dumps(receipt, sort_keys=True).encode()
         original = self._directory(receipt) / "apply-receipt.json"
         if receipt["phase"] == "COMMITTED":
@@ -708,6 +720,12 @@ class FileStore:
 
     def _directory(self, receipt):
         transaction = receipt.get("transactionId", "")
+        version = receipt.get("schemaVersion", 1)
+        if type(version) is not int or version not in (1, 2): raise LayoutError("unsupported layout receipt version")
+        if receipt.get("schemaVersion") == 2:
+            if not isinstance(transaction, str) or not re.fullmatch(r"u2-[0-9a-f]{64}-[0-9a-f]{16}", transaction):
+                raise LayoutError("invalid managed update transaction identity")
+            return self.state_home / transaction
         if not re.fullmatch(r"[0-9a-f]{64}-[0-9a-f]{16}", transaction):
             raise LayoutError("invalid layout transaction identity")
         return self.state_home / transaction
@@ -747,6 +765,8 @@ class FileStore:
             raise LayoutError("layout configuration changed; original and current layouts retained")
 
     def verify_apply_receipt(self, receipt):
+        if receipt.get("schemaVersion") == 2:
+            return verify_update_receipt(self, receipt)
         path = self._directory(receipt) / "apply-receipt.json"
         self._safe_path(path)
         original = read_json(path, 262144)
@@ -760,7 +780,12 @@ class FileStore:
         return digest
 
     def verify_backup(self, receipt, *, snapshot="before"):
-        folders = {"before":"before", "disableBefore":"disable-before"}
+        folders = {"before":"before", "disableBefore":"disable-before", "updateBefore":"update-before"}
+        if receipt.get("schemaVersion") != 2: folders.pop("updateBefore")
+        if receipt.get("schemaVersion") == 2 and snapshot == "before":
+            original = _updates()._origin(self, receipt["origin"], receipt["plan"])
+            if receipt["before"] != original["before"]: raise LayoutError("update original backup changed")
+            return self.verify_backup(original)
         if snapshot not in folders: raise LayoutError("invalid recovery snapshot")
         before = receipt[snapshot]
         if not isinstance(before, dict) or set(before) != set(CONFIG_FILES):
@@ -826,7 +851,19 @@ def read_json(path, limit=65536):
         raise LayoutError("invalid layout JSON data") from exc
 
 
+def _read_layout_receipt(path):
+    receipt = read_json(path, 524288)
+    if type(receipt.get("schemaVersion")) is not int or receipt["schemaVersion"] not in (1, 2):
+        raise LayoutError("unsupported layout receipt version")
+    if receipt["schemaVersion"] == 1 and Path(path).stat().st_size > 262144:
+        raise LayoutError("layout data exceeds size limit")
+    return receipt
+
+
 def _check_owned(receipt, inventory):
+    if receipt.get("schemaVersion") == 2:
+        _inventory_match(receipt["activeInventory"], inventory)
+        return
     owned = receipt["owned"]
     if not isinstance(owned, dict) or owned.get("token") != receipt["plan"]["planId"]:
         raise LayoutError("managed panel receipt changed")
@@ -973,6 +1010,7 @@ def _rollback(receipt, runtime, store, clock, pause):
     receipt["phase"] = "RESTORING"
     _stage(receipt, store, "RECOVERY_CAPTURE")
     store.capture_recovery(receipt)
+    if receipt.get("schemaVersion") == 2: _updates().guard_original_recovery(store, receipt)
     _stage(receipt, store, "RECOVERY_REPLACE")
     store.restore_before(receipt)
     _stage(receipt, store, "RECOVERY_START")
@@ -994,6 +1032,8 @@ def apply_layout(plan, runtime, store, *, clock=None, pause=None):
     _guard_target(runtime, store)
     with store.lock():
         previous = store.current()
+        if previous and previous.get("schemaVersion") == 2 and previous.get("phase") != "RESTORED":
+            raise LayoutError("active managed update must be restored or recovered before schema1 apply")
         if previous and previous["phase"] != "RESTORED":
             if previous["phase"] == "COMMITTED" and previous["plan"]["planId"] == plan["planId"]:
                 if previous["service"] != runtime.unit or previous.get("serviceIdentity") != runtime.identity:
@@ -1063,7 +1103,7 @@ def apply_layout(plan, runtime, store, *, clock=None, pause=None):
             raise LayoutError("layout preparation failed before panel mutation") from exc
 
 
-def restore_layout(receipt, runtime, store, *, recover=False, clock=None, pause=None):
+def _restore_layout_v1(receipt, runtime, store, *, recover=False, clock=None, pause=None):
     import time
     clock = time.monotonic if clock is None else clock
     pause = time.sleep if pause is None else pause
@@ -1105,8 +1145,10 @@ def restore_layout(receipt, runtime, store, *, recover=False, clock=None, pause=
                 connector = receipt["plan"]["manifest"]["screen"]["connector"]
                 if restarted:
                     _stage(receipt, store, "RESTORE_VERIFY_CURRENT")
-                    inventory = (_managed_inventory(receipt["plan"], receipt["owned"]) if receipt["phase"] == "COMMITTED"
-                                 else _disabled_inventory(receipt))
+                    if receipt["phase"] == "COMMITTED":
+                        inventory = (receipt["activeInventory"] if receipt.get("schemaVersion") == 2
+                                     else _managed_inventory(receipt["plan"], receipt["owned"]))
+                    else: inventory = _disabled_inventory(receipt)
                     info, deadline = _inspect_ready(inventory, connector, runtime, store,
                                                    receipt["serviceIdentity"], clock, pause)
                     _readiness_check(deadline, clock)
@@ -1120,6 +1162,8 @@ def restore_layout(receipt, runtime, store, *, recover=False, clock=None, pause=
                 except LayoutError:
                     runtime.start()
                     raise
+                if receipt.get("schemaVersion") == 2:
+                    receipt["originalRestoreFrom"] = copy.deepcopy(expected)
             _rollback(receipt, runtime, store, clock, pause)
             return receipt
         except (LayoutError, OSError, ValueError, KeyError, TypeError) as exc:
@@ -1133,13 +1177,17 @@ def restore_layout(receipt, runtime, store, *, recover=False, clock=None, pause=
 def add_parser(subparsers):
     parser = subparsers.add_parser("layout", help="enable/disable a managed top bar; dock is managed independently")
     actions = parser.add_subparsers(dest="layout_action", required=True)
-    for action in ("plan", "status", "apply", "disable", "restore"):
+    for action in ("plan", "plan-update", "status", "apply", "update", "disable", "restore"):
         child = actions.add_parser(action)
         child.add_argument("--service", required=True, help="explicit current-user Plasma dbus service unit")
         if action == "plan":
             child.add_argument("--manifest", type=Path, required=True)
             child.add_argument("--output", type=Path, required=True, help="private plan file; no panel mutation")
-        elif action == "apply":
+        elif action == "plan-update":
+            child.add_argument("--receipt", type=Path, required=True)
+            child.add_argument("--add", choices=("control-center",), required=True)
+            child.add_argument("--output", type=Path, required=True, help="private update plan; no panel mutation")
+        elif action in ("apply", "update"):
             child.add_argument("--plan", type=Path, required=True)
         elif action in ("disable", "restore"):
             child.add_argument("--receipt", type=Path, required=True)
@@ -1175,14 +1223,22 @@ def cli(args):
             result["panelId"] = record["owned"]["panelId"]
         print(json.dumps(result, sort_keys=True))
         return 0
+    if args.layout_action == "plan-update":
+        plan = build_update_plan(read_json(args.receipt, 262144), runtime, store, add=args.add)
+        FileStore._atomic(args.output, json.dumps(plan, sort_keys=True).encode())
+        print("Update plan saved; no panel changed. Review before update.")
+        return 0
     if args.layout_action == "apply":
         receipt = apply_layout(read_json(args.plan, 262144), runtime, store)
         print("Managed top bar enabled; dock is managed independently. Native validation pending.")
+    elif args.layout_action == "update":
+        receipt = update_layout(read_json(args.plan, 262144), runtime, store)
+        print("Managed top bar updated; original recovery data retained. Native validation pending.")
     elif args.layout_action == "disable":
-        receipt = disable_layout(read_json(args.receipt, 262144), runtime, store)
+        receipt = disable_layout(_read_layout_receipt(args.receipt), runtime, store)
         print("Managed top bar disabled; other panels and dock retained. Original recovery data retained.")
     else:
-        receipt = restore_layout(read_json(args.receipt, 262144), runtime, store, recover=args.recover)
+        receipt = restore_layout(_read_layout_receipt(args.receipt), runtime, store, recover=args.recover)
         if receipt["phase"] == "COMMITTED":
             print("Interrupted disable recovered; active managed top bar restored.")
         else:
@@ -1209,6 +1265,8 @@ def _disabled_inventory(receipt):
 
 
 def _rollback_disable(receipt, runtime, store, clock, pause):
+    if receipt.get("schemaVersion") == 2:
+        return _updates().rollback_disable(receipt, runtime, store, clock, pause)
     if not runtime.stopped(): runtime.stop()
     _guard_target(runtime, store, receipt["serviceIdentity"])
     receipt["recoveryIntent"] = "disable"; receipt["phase"] = "RESTORING"
@@ -1225,7 +1283,7 @@ def _rollback_disable(receipt, runtime, store, clock, pause):
     receipt.pop("recoveryIntent", None); store.save(receipt)
 
 
-def disable_layout(receipt, runtime, store, *, clock=None, pause=None):
+def _disable_layout_v1(receipt, runtime, store, *, clock=None, pause=None):
     import time
     clock = time.monotonic if clock is None else clock
     pause = time.sleep if pause is None else pause
@@ -1314,3 +1372,47 @@ def disable_layout(receipt, runtime, store, *, clock=None, pause=None):
                 raise _failure_error(receipt, store, "disable failed; active-layout recovery required, backups retained",
                                      recovery_required=True) from exc
             raise LayoutError("disable failed; active managed layout restored") from exc
+
+
+def _updates():
+    if __package__:
+        from . import panel_layout_update
+    else:
+        import panel_layout_update
+    return panel_layout_update
+
+
+def build_update_plan(parent, runtime, store, *, add="control-center"):
+    return _updates().build_update_plan(parent, runtime, store, add=add)
+
+
+def validate_update_plan(plan):
+    return _updates().validate_update_plan(plan)
+
+
+def update_layout(plan, runtime, store, *, clock=None, pause=None):
+    return _updates().update_layout(plan, runtime, store, clock=clock, pause=pause)
+
+
+def save_update_receipt(store, receipt):
+    return _updates().save_update_receipt(store, receipt)
+
+
+def verify_update_receipt(store, receipt):
+    return _updates().verify_update_receipt(store, receipt)
+
+
+def restore_layout(receipt, runtime, store, *, recover=False, clock=None, pause=None):
+    version = receipt.get("schemaVersion")
+    if type(version) is not int or version not in (1, 2): raise LayoutError("unsupported layout receipt version")
+    if version == 2: return _updates().restore_update(receipt, runtime, store, recover=recover, clock=clock, pause=pause)
+    return _restore_layout_v1(receipt, runtime, store, recover=recover, clock=clock, pause=pause)
+
+
+def disable_layout(receipt, runtime, store, *, clock=None, pause=None):
+    version = receipt.get("schemaVersion")
+    if type(version) is not int or version not in (1, 2): raise LayoutError("unsupported layout receipt version")
+    if version == 2:
+        _updates().validate_revision(store, receipt)
+        verify_update_receipt(store, receipt)
+    return _disable_layout_v1(receipt, runtime, store, clock=clock, pause=pause)

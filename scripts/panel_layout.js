@@ -81,6 +81,78 @@
         print(JSON.stringify({reordered:true}));
         return;
     }
+    if (request.operation === "update-owned") {
+        const plan = request.updatePlan;
+        const config = {showOrlaMenu:false, showApplicationName:false, showControlCenter:true};
+        const validId = value => Number.isInteger(value) && value > 0 && value <= 2147483647;
+        if (!plan || plan.schemaVersion !== 1 || plan.kind !== "managed-panel-update"
+                || plan.operation !== "add-control-center" || typeof plan.planId !== "string"
+                || !/^[0-9a-f]{64}$/.test(plan.planId) || !plan.entry
+                || plan.entry.key !== "control-center" || !equal(plan.entry.config, config))
+            throw new Error("invalid control-center update request");
+        const prior = plan.owned;
+        if (!prior || !validId(prior.panelId) || typeof prior.token !== "string"
+                || !/^[0-9a-f]{64}$/.test(prior.token) || prior.nativeValidated !== false
+                || !Array.isArray(prior.widgets) || !prior.widgets.length)
+            throw new Error("invalid prior managed identity");
+        const modules = plan.originPlan.manifest.modules.filter(module => module.enabled === true);
+        const insertion = plan.insertionIndex;
+        if (modules.length !== prior.widgets.length || !Number.isInteger(insertion)
+                || insertion < 1 || insertion >= modules.length
+                || modules[insertion - 1].key !== "tray" || modules[insertion].key !== "clock"
+                || prior.token !== plan.originPlan.planId)
+            throw new Error("invalid control-center insertion roles");
+        const seenIds = {}, seenRoles = {};
+        for (let index = 0; index < prior.widgets.length; index++) {
+            const item = prior.widgets[index], key = modules[index].key;
+            if (!item || !validId(item.id) || item.index !== index || seenIds[item.id]
+                    || !Object.prototype.hasOwnProperty.call(moduleIds, key) || seenRoles[key]
+                    || key === "control-center" || item.type !== moduleIds[key])
+                throw new Error("prior managed widget identity or role changed");
+            seenIds[item.id] = true; seenRoles[key] = true;
+        }
+        if (!equal(inventory(request.connector), plan.inventory))
+            throw new Error("planned update inventory changed");
+        const panel = requireOwned(prior.panelId, prior.token);
+        if (panel.screen !== prior.screen || panel.height !== prior.height || !equal(widgets(panel), prior.widgets))
+            throw new Error("prior managed panel structure changed");
+        const existingIds = [];
+        plan.inventory.panels.forEach(item => item.widgets.forEach(widget => existingIds.push(widget.id)));
+        const added = panel.addWidget(moduleIds["control-center"]);
+        const addedId = added ? added.id : null;
+        if (!added || added.type !== moduleIds["control-center"] || !validId(addedId)
+                || existingIds.indexOf(addedId) >= 0)
+            throw new Error("control-center widget creation failed");
+        // Persist a unique update link before the trio so a lost reply can qualify a partial entry.
+        added.currentConfigGroup = ["OrlaManagedUpdate"];
+        added.writeConfig("token", plan.planId);
+        if (added.readConfig("token", "") !== plan.planId)
+            throw new Error("control-center update marker readback failed");
+        added.currentConfigGroup = ["General"];
+        Object.keys(config).forEach(key => added.writeConfig(key, config[key]));
+        added.reloadConfig();
+        added.currentConfigGroup = ["General"];
+        Object.keys(config).forEach(key => {
+            if (added.readConfig(key, !config[key]) !== config[key])
+                throw new Error("control-center configuration readback failed");
+        });
+        added.currentConfigGroup = [];
+        const intended = prior.widgets.map((item, index) => ({id:item.id, type:item.type,
+            index:index < insertion ? index : index + 1}));
+        intended.splice(insertion, 0, {id:addedId, type:moduleIds["control-center"], index:insertion});
+        if (added.id !== addedId || added.type !== moduleIds["control-center"])
+            throw new Error("created control-center identity changed");
+        requireOwned(prior.panelId, prior.token);
+        if (!equal(members(panel), intended.map(item => ({id:item.id, type:item.type})).sort((a,b) => a.id-b.id)))
+            throw new Error("updated managed panel membership changed");
+        const after = inventory(request.connector);
+        // Deferred indices belong to the cold reorder guard. Every other inventory fact stays exact.
+        after.panels.find(item => item.id === prior.panelId).widgets = prior.widgets;
+        if (!equal(after, plan.inventory)) throw new Error("update changed unrelated panel inventory");
+        print(JSON.stringify({panelId:prior.panelId, token:prior.token, widgets:intended,
+            screen:prior.screen, height:prior.height, nativeValidated:false}));
+        return;
+    }
     if (request.operation !== "apply") throw new Error("unsupported operation");
     const plan = request.plan;
     if (!equal(inventory(plan.manifest.screen.connector), plan.inventory))
