@@ -11,6 +11,7 @@ ColumnLayout {
     required property var appearance
     required property var profiles
     required property var contexts
+    property var desktopSwitch: null
     required property var contextBindings
     readonly property bool contextsTabActive: tabs.currentIndex === 3
     signal appearanceCanceled()
@@ -195,6 +196,7 @@ ColumnLayout {
         ProfileControls { profiles: settings.profiles; appearance: settings.appearance }
         ContextControls {
             objectName: "contextControls"
+            desktopSwitch: settings.desktopSwitch
             contexts: settings.contexts
             bindingsState: settings.contextBindings
             profiles: settings.profiles

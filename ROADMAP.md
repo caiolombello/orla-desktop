@@ -433,6 +433,19 @@ Escape/foco de retorno. A instrumentação temporária foi removida; os pacotes
 finais mantêm o fix e a composição atual. Transferência com popup aberto,
 seleção de saída e outros ambientes continuam gates separados.
 
+**Seletor de áreas W1 — incremento Source:** a aba Contextos permite selecionar
+um ID observado e acionar Trocar área. Seleção e navegação são passivas; uma
+resposta aceita só confirma após readback no owner capturado e convergência do
+modelo. O estado transitório mantém perfis, associações e Pomodoro independentes.
+Passaram 43 testes em cada estilo, sete guards e build; a revisão independente
+reproduziu e corrigiu cancelamento reentrante e confirmação tardia sem depender
+da ordem dos listeners. O adaptador exato passou quatro casos com o módulo KDE
+real em D-Bus privado, incluindo ausência de troca e mudança/perda de owner.
+A [validação Source](docs/validation/desktop-switch-source.md) inclui capturas
+claro/escuro e distingue esse resultado de KWin/TaskManager, gesto/foco e escopo
+por monitor na sessão real, ainda UNRUN. W1 permanece parcial e não habilita
+automação de perfis ou um novo atalho global.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
