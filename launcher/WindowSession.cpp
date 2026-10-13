@@ -3,8 +3,11 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QVariant>
+#include <QPainterPath>
+#include <QRegion>
 #include <KGlobalAccel>
 #include <KWaylandExtras>
+#include <KWindowEffects>
 #include <KWindowSystem>
 
 WindowSession::WindowSession(LauncherController *controller, QQuickWindow *window, bool useShortcut,
@@ -38,6 +41,18 @@ WindowSession::~WindowSession()
 {
     ++m_activationGeneration;
     if (m_registered) KGlobalAccel::self()->removeAllShortcuts(&m_action);
+}
+
+void WindowSession::setBlurRegion(const QRectF &rect, qreal radius)
+{
+    if (!m_window) return;
+    if (rect.isEmpty()) {
+        KWindowEffects::enableBlurBehind(m_window, false);
+        return;
+    }
+    QPainterPath path;
+    path.addRoundedRect(rect, radius, radius);
+    KWindowEffects::enableBlurBehind(m_window, true, QRegion(path.toFillPolygon().toPolygon()));
 }
 
 void WindowSession::setNotice(const QString &notice)

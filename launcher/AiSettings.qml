@@ -1,9 +1,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "Style.js" as Style
 
 Item {
     id: panel
+    // The launcher is a dark overlay in every system scheme.
+    readonly property var ui: Style.scheme("dark")
     objectName: "aiSettingsPanel"
     implicitWidth: 0
     implicitHeight: 0
@@ -94,22 +97,22 @@ Item {
                     text: qsTr("← Busca")
                     Accessible.name: qsTr("Voltar à busca local")
                     onClicked: panel.backRequested()
-                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 12; textFormat: Text.PlainText }
-                    background: Rectangle { radius: 8; color: "#1B2733"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
+                    background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 1 : 0; border.color: ui.accent }
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
-                    radius: 10; color: "#27323D"
+                    radius: Style.radius.card; color: ui.raised
                     Layout.preferredWidth: stateLabel.implicitWidth + 18; Layout.preferredHeight: 28
-                    Text { id: stateLabel; anchors.centerIn: parent; text: qsTr("DESLIGADA"); color: "#A7B7C4"; font.pixelSize: 10; font.letterSpacing: 1; textFormat: Text.PlainText }
+                    Text { id: stateLabel; anchors.centerIn: parent; text: qsTr("DESLIGADA"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.letterSpacing: 1; textFormat: Text.PlainText }
                 }
             }
             Text {
-                Layout.fillWidth: true; text: qsTr("Provedores de IA"); color: "#EAF4F1"
-                font.pixelSize: 22; font.weight: Font.DemiBold; textFormat: Text.PlainText
+                Layout.fillWidth: true; text: qsTr("Provedores de IA"); color: ui.text
+                font.pixelSize: Style.type.headline; font.weight: Font.DemiBold; textFormat: Text.PlainText
             }
             Text {
-                Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#A7B7C4"; font.pixelSize: 12
+                Layout.fillWidth: true; wrapMode: Text.Wrap; color: ui.textMuted; font.pixelSize: Style.type.label
                 text: qsTr("Nada é executado ao abrir esta tela. A verificação procura apenas clientes locais em uma lista fixa; todos continuam desativados.")
                 textFormat: Text.PlainText
             }
@@ -121,12 +124,12 @@ Item {
                 text: panel.controller.busy && panel.controller.operation === "detect" ? qsTr("Verificando…") : qsTr("Verificar clientes instalados")
                 Accessible.description: qsTr("Consulta presença e versões permitidas em isolamento local; não autentica nem faz inferência")
                 onClicked: if (!panel.operationStartBlocked) panel.controller.discover()
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: 9; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.onAccent : ui.textMuted; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: Style.radius.control; color: parent.enabled ? ui.accent : ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: ui.text }
             }
             Text {
                 Layout.fillWidth: true; visible: panel.controller.status === "error"
-                text: panel.controller.error; wrapMode: Text.Wrap; color: "#E7C58E"; font.pixelSize: 11; textFormat: Text.PlainText
+                text: panel.controller.error; wrapMode: Text.Wrap; color: ui.warning; font.pixelSize: Style.type.caption; textFormat: Text.PlainText
             }
             Repeater {
                 model: panel.controller.providers
@@ -134,36 +137,36 @@ Item {
                     required property var modelData
                     Layout.fillWidth: true
                     Layout.preferredHeight: providerColumn.implicitHeight + 24
-                    radius: 12; color: "#1B2733"; border.width: 1; border.color: "#314352"
+                    radius: Style.radius.card; color: ui.surface; border.width: 1; border.color: ui.border
                     ColumnLayout {
                         id: providerColumn
                         anchors.fill: parent; anchors.margins: 12; spacing: 5
                         RowLayout {
                             Layout.fillWidth: true
-                            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap; text: modelData.displayName; color: "#EAF4F1"; font.pixelSize: 15; font.weight: Font.Medium; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap; text: modelData.displayName; color: ui.text; font.pixelSize: Style.type.title; font.weight: Font.Medium; textFormat: Text.PlainText }
                             Item { Layout.fillWidth: true }
-                            Text { Layout.maximumWidth: providerColumn.width / 2; wrapMode: Text.WrapAnywhere; text: modelData.clientVersion ? "v" + modelData.clientVersion : qsTr("sem versão"); color: "#91A5B4"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { Layout.maximumWidth: providerColumn.width / 2; wrapMode: Text.WrapAnywhere; text: modelData.clientVersion ? "v" + modelData.clientVersion : qsTr("sem versão"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                         }
-                        Text { Layout.fillWidth: true; text: panel.installationText(modelData); color: "#B9CCC7"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText }
-                        Text { Layout.fillWidth: true; text: panel.protocolText(modelData); color: panel.capability(modelData, "anonymous_protocol") === "supported" ? "#69D7C2" : "#91A5B4"; font.pixelSize: 11; wrapMode: Text.Wrap; textFormat: Text.PlainText }
-                        Text { Layout.fillWidth: true; visible: panel.messageText(modelData).length > 0; text: panel.messageText(modelData); color: "#91A5B4"; font.pixelSize: 10; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+                        Text { Layout.fillWidth: true; text: panel.installationText(modelData); color: ui.textMuted; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+                        Text { Layout.fillWidth: true; text: panel.protocolText(modelData); color: panel.capability(modelData, "anonymous_protocol") === "supported" ? ui.accent : ui.textMuted; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+                        Text { Layout.fillWidth: true; visible: panel.messageText(modelData).length > 0; text: panel.messageText(modelData); color: ui.textMuted; font.pixelSize: Style.type.overline; wrapMode: Text.Wrap; textFormat: Text.PlainText }
                     }
                 }
             }
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: consentColumn.implicitHeight + 24
-                radius: 12; color: "#172D30"; border.width: 1; border.color: "#3A756C"
+                radius: Style.radius.card; color: Style.alpha(ui.accent, 0.08); border.width: 1; border.color: Style.alpha(ui.accent, 0.45)
                 ColumnLayout {
                     id: consentColumn
                     anchors.fill: parent; anchors.margins: 12; spacing: 7
-                    Text { Layout.fillWidth: true; text: qsTr("Teste anônimo do Codex"); color: "#EAF4F1"; font.pixelSize: 15; font.weight: Font.Medium; textFormat: Text.PlainText }
+                    Text { Layout.fillWidth: true; text: qsTr("Teste anônimo do Codex"); color: ui.text; font.pixelSize: Style.type.title; font.weight: Font.Medium; textFormat: Text.PlainText }
                     Text {
-                        Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#B9CCC7"; font.pixelSize: 11; textFormat: Text.PlainText
+                        Layout.fillWidth: true; wrapMode: Text.Wrap; color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText
                         text: qsTr("Faz uma verificação local limitada de compatibilidade. Não envia texto pessoal, não entra em conta e não inicia modelo, turno ou geração.")
                     }
                     Text {
-                        Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#91A5B4"; font.pixelSize: 10; textFormat: Text.PlainText
+                        Layout.fillWidth: true; wrapMode: Text.Wrap; color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText
                         text: qsTr("Autenticação, inferência, cancelamento real, uso e cobrança continuarão não verificados.")
                     }
                     Button {
@@ -179,18 +182,18 @@ Item {
                             else if (!panel.operationStartBlocked && !panel.controller.busy)
                                 panel.controller.probeCodex("qml-consent")
                         }
-                        contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                        background: Rectangle { radius: 8; color: "#253F42"; border.width: parent.activeFocus ? 2 : 1; border.color: "#69D7C2" }
+                        contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.caption; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                        background: Rectangle { radius: Style.radius.control; color: Style.alpha(ui.accent, 0.14); border.width: parent.activeFocus ? 2 : 1; border.color: ui.accent }
                     }
                 }
             }
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: textGenerationColumn.implicitHeight + 28
-                radius: 14
-                color: "#18252F"
+                radius: Style.radius.popup
+                color: ui.surface
                 border.width: 1
-                border.color: textController.busy ? "#69D7C2" : "#314352"
+                border.color: textController.busy ? ui.accent : ui.border
                 ColumnLayout {
                     id: textGenerationColumn
                     anchors.fill: parent
@@ -203,22 +206,22 @@ Item {
                             Layout.minimumWidth: 0
                             wrapMode: Text.Wrap
                             text: qsTr("Transformar texto")
-                            color: "#EAF4F1"
-                            font.pixelSize: 17
+                            color: ui.text
+                            font.pixelSize: Style.type.title
                             font.weight: Font.DemiBold
                             textFormat: Text.PlainText
                         }
                         Rectangle {
                             Layout.preferredWidth: generationState.implicitWidth + 16
                             Layout.preferredHeight: 24
-                            radius: 8
-                            color: textController.busy ? "#244B49" : "#27323D"
+                            radius: Style.radius.control
+                            color: textController.busy ? Style.alpha(ui.accent, 0.18) : ui.raised
                             Text {
                                 id: generationState
                                 anchors.centerIn: parent
                                 text: textController.busy ? qsTr("EM EXECUÇÃO") : qsTr("OPCIONAL")
-                                color: textController.busy ? "#8BE7D5" : "#A7B7C4"
-                                font.pixelSize: 9
+                                color: textController.busy ? ui.accentHover : ui.textMuted
+                                font.pixelSize: Style.type.overline
                                 font.letterSpacing: 1
                                 textFormat: Text.PlainText
                             }
@@ -227,8 +230,8 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         text: qsTr("Envie somente o texto digitado abaixo a um serviço em loopback, após revisar o destino e permitir o envio nesta sessão.")
-                        color: "#A7B7C4"
-                        font.pixelSize: 11
+                        color: ui.textMuted
+                        font.pixelSize: Style.type.caption
                         wrapMode: Text.Wrap
                         textFormat: Text.PlainText
                     }
@@ -240,7 +243,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
-                            Text { text: qsTr("Tarefa"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Tarefa"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             ComboBox {
                                 id: taskChoice
                                 objectName: "aiTextTask"
@@ -253,7 +256,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
-                            Text { text: qsTr("Modelo"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Modelo"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             TextField {
                                 id: modelInput
                                 objectName: "aiTextModel"
@@ -269,7 +272,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
-                            Text { text: qsTr("Host numérico"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Host numérico"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             ComboBox {
                                 id: hostChoice
                                 objectName: "aiTextHost"
@@ -283,7 +286,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
-                            Text { text: qsTr("Porta"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Porta"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             SpinBox {
                                 id: portInput
                                 objectName: "aiTextPort"
@@ -302,7 +305,7 @@ Item {
                         Layout.fillWidth: true
                         visible: panel.taskValues[taskChoice.currentIndex] === "translate"
                         spacing: 4
-                        Text { text: qsTr("Idioma de destino"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                        Text { text: qsTr("Idioma de destino"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                         TextField {
                             id: languageInput
                             objectName: "aiTextLanguage"
@@ -319,9 +322,9 @@ Item {
                         spacing: 4
                         RowLayout {
                             Layout.fillWidth: true
-                            Text { text: qsTr("Texto a enviar"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Texto a enviar"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             Item { Layout.fillWidth: true }
-                            Text { text: qsTr("%1 / 16.384").arg(textInput.length); color: textInput.length >= 16384 ? "#E7C58E" : "#91A5B4"; font.pixelSize: 9; textFormat: Text.PlainText }
+                            Text { text: qsTr("%1 / 16.384").arg(textInput.length); color: textInput.length >= 16384 ? ui.warning : ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                         }
                         TextArea {
                             id: textInput
@@ -330,38 +333,38 @@ Item {
                             Layout.preferredHeight: 116
                             enabled: !textController.busy
                             placeholderText: qsTr("Digite ou cole conscientemente o texto para transformar…")
-                            color: "#EAF4F1"
-                            placeholderTextColor: "#91A5B4"
-                            selectionColor: "#3A756C"
-                            selectedTextColor: "#FFFFFF"
+                            color: ui.text
+                            placeholderTextColor: ui.textMuted
+                            selectionColor: Style.alpha(ui.accent, 0.45)
+                            selectedTextColor: ui.text
                             wrapMode: TextEdit.Wrap
                             selectByMouse: true
                             onTextChanged: if (length > 16384) remove(16384, length)
                             Accessible.name: qsTr("Texto enviado ao modelo")
-                            background: Rectangle { radius: 9; color: "#111923"; border.width: 1; border.color: textInput.activeFocus ? "#69D7C2" : "#3B4B5A" }
+                            background: Rectangle { radius: Style.radius.control; color: ui.sunken; border.width: 1; border.color: textInput.activeFocus ? ui.accent : ui.borderStrong }
                         }
                     }
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: previewColumn.implicitHeight + 20
-                        radius: 10
-                        color: "#172D30"
+                        radius: Style.radius.card
+                        color: Style.alpha(ui.accent, 0.08)
                         border.width: 1
-                        border.color: "#3A756C"
+                        border.color: Style.alpha(ui.accent, 0.45)
                         ColumnLayout {
                             id: previewColumn
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 4
-                            Text { Layout.fillWidth: true; text: qsTr("Revise antes de enviar"); color: "#EAF4F1"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                            Text { Layout.fillWidth: true; text: qsTr("Destino: %1").arg(panel.normalizedDestination()); color: "#B9CCC7"; font.pixelSize: 10; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText }
-                            Text { Layout.fillWidth: true; text: qsTr("Modelo: %1 · Tarefa: %2").arg(modelInput.text || qsTr("não informado")).arg(panel.taskLabel()); color: "#B9CCC7"; font.pixelSize: 10; wrapMode: Text.Wrap; textFormat: Text.PlainText }
-                            Text { Layout.fillWidth: true; text: qsTr("Dados: somente o texto acima%1 · Custo: não informado").arg(languageInput.visible ? qsTr(" e o idioma de destino") : ""); color: "#B9CCC7"; font.pixelSize: 10; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; text: qsTr("Revise antes de enviar"); color: ui.text; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; text: qsTr("Destino: %1").arg(panel.normalizedDestination()); color: ui.textMuted; font.pixelSize: Style.type.overline; wrapMode: Text.WrapAnywhere; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; text: qsTr("Modelo: %1 · Tarefa: %2").arg(modelInput.text || qsTr("não informado")).arg(panel.taskLabel()); color: ui.textMuted; font.pixelSize: Style.type.overline; wrapMode: Text.Wrap; textFormat: Text.PlainText }
+                            Text { Layout.fillWidth: true; text: qsTr("Dados: somente o texto acima%1 · Custo: não informado").arg(languageInput.visible ? qsTr(" e o idioma de destino") : ""); color: ui.textMuted; font.pixelSize: Style.type.overline; wrapMode: Text.Wrap; textFormat: Text.PlainText }
                             Text {
                                 Layout.fillWidth: true
                                 text: qsTr("Esse endereço é local, mas pode ser outro programa ou encaminhar o texto para a nuvem. O Orla não confirma que é Ollama nem que o processamento é offline.")
-                                color: "#E7C58E"
-                                font.pixelSize: 10
+                                color: ui.warning
+                                font.pixelSize: Style.type.overline
                                 wrapMode: Text.Wrap
                                 textFormat: Text.PlainText
                             }
@@ -379,8 +382,8 @@ Item {
                             id: consentLabel
                             leftPadding: textConsent.indicator.width + textConsent.spacing
                             text: textConsent.text
-                            color: textConsent.enabled ? "#EAF4F1" : "#91A5B4"
-                            font.pixelSize: 11
+                            color: textConsent.enabled ? ui.text : ui.textMuted
+                            font.pixelSize: Style.type.caption
                             verticalAlignment: Text.AlignVCenter
                             wrapMode: Text.Wrap
                             textFormat: Text.PlainText
@@ -412,8 +415,8 @@ Item {
                                     hostChoice.currentIndex === 0 ? "127.0.0.1" : "::1",
                                     portInput.value, textConsent.checked)
                             }
-                            contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                            background: Rectangle { radius: 9; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
+                            contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.onAccent : ui.textMuted; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                            background: Rectangle { radius: Style.radius.control; color: parent.enabled ? ui.accent : ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: ui.text }
                         }
                     }
                     Text {
@@ -421,8 +424,8 @@ Item {
                         objectName: "aiTextStatus"
                         Layout.fillWidth: true
                         text: panel.terminalStatusText()
-                        color: textController.status === "failed" || textController.status === "cancelled_unconfirmed" ? "#E7C58E" : "#A7B7C4"
-                        font.pixelSize: 10
+                        color: textController.status === "failed" || textController.status === "cancelled_unconfirmed" ? ui.warning : ui.textMuted
+                        font.pixelSize: Style.type.overline
                         wrapMode: Text.Wrap
                         textFormat: Text.PlainText
                         Accessible.role: Accessible.StaticText
@@ -434,9 +437,9 @@ Item {
                         spacing: 4
                         RowLayout {
                             Layout.fillWidth: true
-                            Text { text: qsTr("Resultado revisável"); color: "#B9CCC7"; font.pixelSize: 10; textFormat: Text.PlainText }
+                            Text { text: qsTr("Resultado revisável"); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                             Item { Layout.fillWidth: true }
-                            Text { text: qsTr("Uso: %1 · Custo: não informado").arg(textController.usage.status === "reported" ? qsTr("reportado") : qsTr("desconhecido")); color: "#91A5B4"; font.pixelSize: 9; textFormat: Text.PlainText }
+                            Text { text: qsTr("Uso: %1 · Custo: não informado").arg(textController.usage.status === "reported" ? qsTr("reportado") : qsTr("desconhecido")); color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText }
                         }
                         TextArea {
                             id: resultOutput
@@ -444,14 +447,14 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 132
                             readOnly: true
-                            color: "#EAF4F1"
-                            selectionColor: "#3A756C"
-                            selectedTextColor: "#FFFFFF"
+                            color: ui.text
+                            selectionColor: Style.alpha(ui.accent, 0.45)
+                            selectedTextColor: ui.text
                             selectByMouse: true
                             wrapMode: TextEdit.Wrap
                             text: textController.output
                             Accessible.name: qsTr("Resultado gerado, somente leitura")
-                            background: Rectangle { radius: 9; color: "#111923"; border.width: 1; border.color: resultOutput.activeFocus ? "#69D7C2" : "#3B4B5A" }
+                            background: Rectangle { radius: Style.radius.control; color: ui.sunken; border.width: 1; border.color: resultOutput.activeFocus ? ui.accent : ui.borderStrong }
                         }
                         Button {
                             id: copyButton
@@ -471,8 +474,8 @@ Item {
                         Layout.fillWidth: true
                         visible: textController.status === "cancelled_confirmed" || textController.status === "cancelled_unconfirmed"
                         text: qsTr("Fechar a conexão não garante que o programa ou modelo deixou de processar o pedido.")
-                        color: "#E7C58E"
-                        font.pixelSize: 10
+                        color: ui.warning
+                        font.pixelSize: Style.type.overline
                         wrapMode: Text.Wrap
                         textFormat: Text.PlainText
                     }

@@ -1035,11 +1035,11 @@ class LocalEventsProductTests(unittest.TestCase):
             QTest.mouseMove(window, point.toPoint())
             QTest.qWait(20)
             self.assertTrue(tile.property("hovered"))
-            self.assertAlmostEqual(fixture_evaluate("contentItem.children[0].scale", tile), 1.12)
+            self.assertAlmostEqual(fixture_evaluate("contentItem.children[0].scale", tile), 1.04)  # Style.motion.hoverScale
             icon_bounds = fixture_evaluate("(function(){const icon=contentItem.children[0]; const extra=(icon.width*icon.scale-icon.width)/2; return [icon.x-extra,icon.x+icon.width+extra];})()", tile)
             self.assertGreaterEqual(icon_bounds[0], 0)
             self.assertLessEqual(icon_bounds[1], tile.width())
-            self.assertTrue(fixture_evaluate("contentItem.children.find(item => item.height === 3).visible", tile))
+            self.assertTrue(fixture_evaluate("contentItem.children.find(item => item.objectName === 'tileIndicator').visible", tile))
             tooltip = tile.findChild(QObject, "tileTooltipText")
             self.assertIsNotNone(tooltip)
             self.assertTrue(fixture_evaluate("textFormat === 0", tooltip))

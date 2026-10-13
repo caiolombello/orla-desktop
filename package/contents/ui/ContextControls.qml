@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import "../code/Style.js" as Style
 
 Controls.ScrollView {
     id: controls
@@ -98,7 +99,7 @@ Controls.ScrollView {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: activityColumn.implicitHeight + 20
-            radius: 10
+            radius: Style.radius.card
             color: "transparent"
             border.width: 1
             border.color: activityBind.activeFocus || activityUnbind.activeFocus ? controls.palette.highlight : controls.palette.mid
@@ -181,7 +182,7 @@ Controls.ScrollView {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: desktopColumn.implicitHeight + 20
-            radius: 10
+            radius: Style.radius.card
             color: "transparent"
             border.width: 1
             border.color: desktopBind.activeFocus || desktopUnbind.activeFocus ? controls.palette.highlight : controls.palette.mid

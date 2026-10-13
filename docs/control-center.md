@@ -36,10 +36,11 @@ indisponível. O atalho explícito **Abrir Som no KDE** permanece disponível co
 fallback. Seu despacho não comprova que a janela abriu nem que uma configuração
 mudou.
 
-Os títulos, valores, detalhes e erros livres usam as cores `foreground` e
-`muted` da aparência do Orla. Controles como botões e o seletor de saída mantêm
-a paleta interna do estilo Qt/KDE, evitando texto escuro herdado sobre o fundo
-escuro do card sem recolorir os controles nativos.
+Os títulos, valores, detalhes e erros usam o esquema do popup
+(`dock.popupScheme`), que acompanha a luminosidade do sistema. Cards e controles
+herdam a paleta correspondente; as cores personalizadas do dock permanecem no
+seu vidro, conforme [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). A mudança visual não
+qualifica os serviços ou hardware nativos.
 
 CC1 continua parcial. Microfone, brilho, Não perturbe e os gates reais do
 serviço de áudio ainda estão abertos; rede, Bluetooth e energia pertencem às

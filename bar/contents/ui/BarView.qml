@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtQuick.Controls as Controls
 import QtQuick.Templates as Templates
 import QtQuick.Layouts
+import "../code/Style.js" as Style
 
 // Presentation only: providers, panel geometry and app menus have other owners.
 Item {
@@ -69,7 +70,7 @@ Item {
     RowLayout {
         id: row
         anchors.fill: parent
-        spacing: root.compactHeight ? 8 : 10
+        spacing: root.compactHeight ? Style.space.sm : Style.space.md
         Templates.ToolButton {
             id: menuButton
             objectName: "orlaMenuButton"
@@ -77,7 +78,7 @@ Item {
             icon.source: root.menuIcon === "none" ? "" : Qt.resolvedUrl("../images/orla.svg")
             readonly property bool wantsLabel: root.showMenuLabel || root.menuIcon === "none"
             implicitWidth: Math.max(32, (menuGlyph.visible ? 20 : 0)
-                + (wantsLabel ? Math.min(120, menuLabelText.implicitWidth) + (menuGlyph.visible ? 6 : 0) : 0)
+                + (wantsLabel ? Math.ceil(Math.min(120, menuLabelText.implicitWidth)) + (menuGlyph.visible ? 6 : 0) : 0)
                 + leftPadding + rightPadding)
             implicitHeight: root.implicitHeight
             padding: 6
@@ -98,15 +99,35 @@ Item {
             Controls.ToolTip.text: qsTr("Menu Orla")
             contentItem: RowLayout {
                 spacing: 6
-                Image {
+                // Monochrome Orla mark in the text color, like a menu bar glyph:
+                // the sun arc over the horizon line.
+                Canvas {
                     id: menuGlyph
                     objectName: "orlaMenuIcon"
-                    source: menuButton.icon.source
-                    visible: source.toString() !== ""
-                    sourceSize.width: 20; sourceSize.height: 20
+                    readonly property color ink: menuButton.palette.buttonText
+                    visible: menuButton.icon.source.toString() !== ""
                     Layout.preferredWidth: 20; Layout.preferredHeight: 20
                     Layout.minimumWidth: 20; Layout.maximumWidth: 20
-                    fillMode: Image.PreserveAspectFit
+                    onInkChanged: requestPaint()
+                    onPaint: {
+                        const context = getContext("2d");
+                        context.reset();
+                        const unit = width / 20;
+                        context.strokeStyle = ink;
+                        context.fillStyle = ink;
+                        context.lineCap = "round";
+                        context.lineWidth = 1.8 * unit;
+                        context.beginPath();
+                        context.arc(10 * unit, 13 * unit, 6 * unit, Math.PI, 2 * Math.PI);
+                        context.stroke();
+                        context.beginPath();
+                        context.moveTo(2.5 * unit, 15.5 * unit);
+                        context.lineTo(17.5 * unit, 15.5 * unit);
+                        context.stroke();
+                        context.beginPath();
+                        context.arc(10 * unit, 9.5 * unit, 1.3 * unit, 0, 2 * Math.PI);
+                        context.fill();
+                    }
                 }
                 Text {
                     id: menuLabelText
@@ -122,12 +143,13 @@ Item {
                 }
             }
             background: Rectangle {
-                radius: 6
-                color: Qt.rgba(menuButton.palette.highlight.r, menuButton.palette.highlight.g,
-                    menuButton.palette.highlight.b, menuButton.down ? 0.24 : menuButton.hovered ? 0.12 : 0)
-                border.width: menuButton.visualFocus ? 1 : 0
+                radius: Style.radius.control
+                color: Style.alpha(menuButton.palette.windowText, menuButton.down || root.menuIsOpen
+                    ? Style.state.pressed : menuButton.hovered ? Style.state.hover : 0)
+                border.width: menuButton.visualFocus ? 2 : 0
                 border.color: menuButton.palette.highlight
-                visible: menuButton.down || menuButton.hovered || menuButton.visualFocus
+                visible: menuButton.down || menuButton.hovered || menuButton.visualFocus || root.menuIsOpen
+                Behavior on color { ColorAnimation { duration: Style.motion.fast } }
             }
         }
         Controls.ToolButton {
@@ -156,12 +178,12 @@ Item {
     // Use the controls' keyboard semantics with our own compact presentation.
     component OrlaMenuItem: Templates.MenuItem {
         id: entry
-        implicitWidth: 268
-        implicitHeight: 32
+        implicitWidth: 248
+        implicitHeight: Style.size.control - Style.space.sm - Style.space.xxs
         height: visible ? implicitHeight : 0
-        padding: 8
-        leftPadding: 12
-        rightPadding: 12
+        padding: Style.space.xs
+        leftPadding: Style.space.md - Style.space.xxs
+        rightPadding: Style.space.md - Style.space.xxs
         font: menuButton.font
         contentItem: Text {
             text: entry.text
@@ -173,7 +195,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
-            radius: 5
+            radius: Style.radius.sm
             color: entry.palette.highlight
             visible: entry.enabled && (entry.highlighted || entry.down)
         }
@@ -183,8 +205,7 @@ Item {
         padding: 4
         contentItem: Rectangle {
             implicitHeight: 1
-            color: Qt.rgba(menuButton.palette.windowText.r, menuButton.palette.windowText.g,
-                menuButton.palette.windowText.b, 0.15)
+            color: Style.alpha(menuButton.palette.windowText, 0.12)
         }
     }
     Controls.Menu {
@@ -203,17 +224,16 @@ Item {
         x: 0
         y: root.popupHost ? 0 : menuButton.height + 2
         margins: -1
-        width: 268
-        padding: 5
+        width: 248
+        padding: Style.space.xs + 1
         spacing: 0
         focus: true
         closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
         background: Rectangle {
-            radius: 9
+            radius: Style.radius.card
             color: menuButton.palette.window
             border.width: 1
-            border.color: Qt.rgba(menuButton.palette.windowText.r, menuButton.palette.windowText.g,
-                menuButton.palette.windowText.b, 0.18)
+            border.color: Style.alpha(menuButton.palette.windowText, 0.14)
         }
         OrlaMenuItem { objectName: "aboutOrla"; text: qsTr("Sobre Orla Desktop"); onTriggered: root.open("about") }
         OrlaMenuItem { objectName: "aboutSystem"; text: qsTr("Sobre o sistema"); onTriggered: root.open("system") }
@@ -247,13 +267,34 @@ Item {
         y: root.popupHost ? 0 : menuButton.height + 2
         width: 360
         margins: -1
-        padding: 16
+        padding: Style.space.xl
         modal: false
         focus: true
+        background: Rectangle {
+            radius: Style.radius.popup
+            color: about.palette.window
+            border.width: 1
+            border.color: Style.alpha(about.palette.windowText, 0.14)
+        }
         contentItem: ColumnLayout {
-            Controls.Label { text: qsTr("Orla Desktop"); font.bold: true; textFormat: Text.PlainText }
-            Controls.Label { text: qsTr("Barra experimental · 0.1\nComponentes opcionais para KDE Plasma.\nMenus globais e bandeja usam widgets nativos separados."); textFormat: Text.PlainText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-            Controls.Button { text: qsTr("Fechar"); onClicked: about.close() }
+            spacing: Style.space.md
+            RowLayout {
+                spacing: Style.space.md
+                Image {
+                    source: Qt.resolvedUrl("../images/orla.svg")
+                    sourceSize.width: Style.size.target + Style.space.sm
+                    sourceSize.height: Style.size.target + Style.space.sm
+                    Layout.preferredWidth: Style.size.target + Style.space.sm
+                    Layout.preferredHeight: Style.size.target + Style.space.sm
+                }
+                ColumnLayout {
+                    spacing: Style.space.xxs
+                    Controls.Label { text: qsTr("Orla Desktop"); font.pixelSize: Style.type.title; font.weight: Style.weight.demiBold; textFormat: Text.PlainText }
+                    Controls.Label { text: qsTr("Barra experimental · 0.1"); font.pixelSize: Style.type.caption; opacity: 0.72; textFormat: Text.PlainText }
+                }
+            }
+            Controls.Label { text: qsTr("Componentes opcionais para KDE Plasma.\nMenus globais e bandeja usam widgets nativos separados."); textFormat: Text.PlainText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Controls.Button { text: qsTr("Fechar"); Layout.alignment: Qt.AlignRight; onClicked: about.close() }
         }
         onAboutToShow: if (root.popupHost) root.popupHost.showPopup(about, menuButton)
         onClosed: {

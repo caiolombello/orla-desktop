@@ -70,6 +70,7 @@ void LauncherController::refresh()
         QVariantMap result{{"id", resultId(index)}, {"generation", m_generation},
             {"title", m_model.data(index, Qt::DisplayRole)},
             {"description", m_model.data(index, KRunner::ResultsModel::SubtextRole)},
+            {"iconName", match.iconName()},
             {"enabled", m_model.data(index, KRunner::ResultsModel::EnabledRole)},
             {"kind", calculator ? QStringLiteral("calculator") : QStringLiteral("app")},
             {"category", calculator ? QStringLiteral("calculator") : QStringLiteral("applications")},

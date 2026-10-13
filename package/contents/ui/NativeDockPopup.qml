@@ -6,13 +6,15 @@ PlasmaCore.Dialog {
     id: dialog
     readonly property var owner: popupOwner
     objectName: "nativeDockDialog"
-    // Retain the tile center, but place the popup outside the complete dock.
+    // Retain the tile center; keep `edgeGap` between the dock's visible glass and
+    // the popup's glass (the dialog window also holds the popup's shadow).
     property Item anchorProxy: Item {
+        readonly property real inset: dialog.owner.glassEdge + dialog.owner.shadowMargin - dialog.owner.edgeGap
         parent: dialog.owner.dock
         width: dialog.owner.anchorControl ? dialog.owner.anchorControl.width : 1
         x: dialog.owner.anchorX - width / 2
-        y: -10
-        height: dialog.owner.dock.height + 20
+        y: inset
+        height: Math.max(1, dialog.owner.dock.height - 2 * inset)
     }
     visualParent: anchorProxy
     location: owner.dock.popAbove ? PlasmaCore.Types.BottomEdge : PlasmaCore.Types.TopEdge

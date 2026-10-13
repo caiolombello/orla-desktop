@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import org.kde.kirigami as Kirigami
+import "../code/Style.js" as Style
 
 Item {
     id: popup
@@ -14,7 +16,18 @@ Item {
     readonly property real screenHeight: dock.Screen.height > 0 ? dock.Screen.height : 640
     readonly property real maximumPopupHeight: Math.max(1, screenHeight - dock.height - 30)
     readonly property alias popupSurface: surface
+    readonly property alias background: surfaceBackground
+    readonly property alias contentItem: surface.contentItem
+    // Popups follow the system's lightness with Orla tones, so native KDE
+    // controls inside them always match. The dock body keeps the user theme.
+    readonly property var scheme: dock.popupScheme !== undefined ? dock.popupScheme : Style.scheme("dark")
     readonly property alias nativeDialog: nativeLoader.item
+    // Transparent room around the glass for its shadow; the dialog window
+    // includes it, so spacing is measured between visible surfaces.
+    readonly property int shadowMargin: Style.space.md + Style.space.xxs
+    readonly property real glassEdge: dock.glassTop !== undefined ? dock.glassTop : 0
+    readonly property real edgeGap: Style.space.sm + Style.space.xxs
+    readonly property bool lightScheme: Style.luminance(scheme.surface) > 0.4
     property alias popupType: fallback.popupType
     property real margins: -1
     default property alias body: bodyColumn.data
@@ -24,11 +37,11 @@ Item {
     signal closed()
     parent: dock
     visible: false
-    width: 350
+    width: Style.size.popupWidth + 2 * shadowMargin
     implicitHeight: surface.implicitHeight
     height: Math.min(implicitHeight, maximumPopupHeight)
     x: Math.max(0, Math.min(Math.max(0, dock.width - width), anchorX - width / 2))
-    y: dock.popAbove ? -height - 10 : dock.height + 10
+    y: dock.popAbove ? glassEdge + shadowMargin - edgeGap - height : dock.height - glassEdge - shadowMargin + edgeGap
 
     function openAt(control) {
         anchorControl = control || dock;
@@ -99,25 +112,74 @@ Item {
         id: surface
         width: popup.width
         height: popup.height
-        padding: 20
+        leftInset: popup.shadowMargin
+        rightInset: popup.shadowMargin
+        topInset: popup.shadowMargin
+        bottomInset: popup.shadowMargin
+        padding: Style.space.lg + popup.shadowMargin
         focus: true
         Keys.onEscapePressed: event => { popup.close(); event.accepted = true; }
-        palette.window: dock.surface
-        palette.windowText: dock.foreground
-        palette.text: dock.foreground
-        palette.buttonText: dock.foreground
-        palette.base: dock.light ? "#ffffff" : "#20293b"
-        palette.button: dock.light ? "#e4e0d8" : "#2c3850"
-        palette.highlight: dock.accent
-        background: Rectangle { color: dock.light ? "#f7f3ec" : "#1d2535"; radius: 18; border.width: 1; border.color: dock.light ? "#cec9bf" : "#3c4b65" }
-        contentItem: ColumnLayout {
-            spacing: 16
-            RowLayout {
-                Layout.fillWidth: true
-                Controls.Label { text: popup.title; font.bold: true; font.pixelSize: 16; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-                Controls.ToolButton { text: "×"; Accessible.name: qsTr("Fechar"); onClicked: popup.close() }
+        palette.window: popup.scheme.surface
+        palette.windowText: popup.scheme.text
+        palette.text: popup.scheme.text
+        palette.buttonText: popup.scheme.text
+        palette.base: popup.scheme.raised
+        palette.alternateBase: popup.scheme.sunken
+        palette.button: popup.scheme.raised
+        palette.mid: popup.scheme.border
+        palette.dark: popup.scheme.borderStrong
+        palette.highlight: popup.scheme.accent
+        palette.highlightedText: popup.scheme.onAccent
+        palette.placeholderText: popup.scheme.textMuted
+        palette.link: popup.scheme.accent
+        Kirigami.Theme.inherit: false
+        Kirigami.Theme.colorSet: Kirigami.Theme.Window
+        Kirigami.Theme.backgroundColor: popup.scheme.surface
+        Kirigami.Theme.alternateBackgroundColor: popup.scheme.raised
+        Kirigami.Theme.textColor: popup.scheme.text
+        Kirigami.Theme.disabledTextColor: popup.scheme.textMuted
+        Kirigami.Theme.highlightColor: popup.scheme.accent
+        Kirigami.Theme.highlightedTextColor: popup.scheme.onAccent
+        Kirigami.Theme.linkColor: popup.scheme.accent
+        Kirigami.Theme.focusColor: popup.scheme.focus
+        Kirigami.Theme.hoverColor: popup.scheme.accent
+        background: Item {
+            GlassShadow {
+                target: surfaceBackground
+                radius: surfaceBackground.radius
+                strength: popup.lightScheme ? Style.glass.shadowLight : Style.glass.shadowDark
+                blur: popup.shadowMargin - Style.space.xs
+                offset: Style.space.xs
             }
-            ColumnLayout { id: bodyColumn; Layout.fillWidth: true; spacing: 10 }
+            Rectangle {
+                id: surfaceBackground
+                objectName: "dockPopupBackground"
+                anchors.fill: parent
+                color: popup.scheme.surface
+                radius: Style.radius.popup
+                border.width: 1
+                border.color: popup.scheme.border
+                GlassRim {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    light: popup.lightScheme
+                }
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: Style.space.md
+            Controls.Label {
+                objectName: "dockPopupTitle"
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: popup.title
+                textFormat: Text.PlainText
+                color: popup.scheme.text
+                font.pixelSize: Style.type.title
+                font.weight: Style.weight.bold
+                wrapMode: Text.WordWrap
+            }
+            ColumnLayout { id: bodyColumn; Layout.fillWidth: true; spacing: Style.space.md }
         }
     }
 }

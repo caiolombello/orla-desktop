@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import "../code/Profiles.js" as Profiles
+import "../code/Style.js" as Style
 
 ColumnLayout {
     id: settings
@@ -13,7 +14,7 @@ ColumnLayout {
     required property var contextBindings
     readonly property bool contextsTabActive: tabs.currentIndex === 3
     signal appearanceCanceled()
-    spacing: 8
+    spacing: Style.space.sm
     function setPreference(key, value) {
         const patch = {};
         patch[key] = value;
@@ -60,21 +61,22 @@ ColumnLayout {
         if (point.y < 0) viewport.contentY += point.y;
         else if (point.y + control.height > viewport.height) viewport.contentY += point.y + control.height - viewport.height;
     }
-    Controls.Label { text: "Orla Dock 0.2.8 alpha · Plasma 6.7+"; opacity: 0.6 }
-    Controls.TabBar {
+    SegmentedTabs {
         id: tabs
         objectName: "settingsTabs"
         Layout.fillWidth: true
-        Controls.TabButton { text: qsTr("Aparência") }
-        Controls.TabButton { text: qsTr("Widgets") }
-        Controls.TabButton { text: qsTr("Perfis") }
-        Controls.TabButton { objectName: "contextsTab"; text: qsTr("Contextos") }
+        SegmentTab { text: qsTr("Aparência") }
+        SegmentTab { text: qsTr("Widgets") }
+        SegmentTab { text: qsTr("Perfis") }
+        SegmentTab { objectName: "contextsTab"; text: qsTr("Contextos") }
     }
     Controls.Label {
         Layout.fillWidth: true
         text: qsTr("Perfil: %1").arg(settings.profiles.activeProfileId === "legacy" ? qsTr("Preferências anteriores")
             : (settings.profiles.profiles.find(profile => profile.id === settings.profiles.activeProfileId)?.name || ""))
         textFormat: Text.PlainText
+        font.pixelSize: Style.type.caption
+        opacity: 0.72
         elide: Text.ElideRight
     }
     StackLayout {
@@ -88,7 +90,7 @@ ColumnLayout {
             clip: true
             ColumnLayout {
                 width: widgetScroll.availableWidth
-                spacing: 8
+                spacing: Style.space.sm
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Widgets e filtro de janelas são salvos imediatamente. Cancelar aparência não desfaz estas opções."); wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Controls.CheckBox { objectName: "filterDesktop"; enabled: settings.profiles.writable; text: qsTr("Janelas apenas da área de trabalho atual"); checked: settings.profiles.effective.currentDesktopOnly; onToggled: settings.setPreference("currentDesktopOnly", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
                 Controls.CheckBox { objectName: "calendarEvents"; enabled: settings.profiles.writable; text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.profiles.effective.calendarEvents; onToggled: settings.setPreference("calendarEvents", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
@@ -131,50 +133,58 @@ ColumnLayout {
                     textFormat: Text.PlainText
                     opacity: 0.65
                 }
-                Controls.Label { text: qsTr("Widgets"); font.bold: true }
+                SectionLabel { text: qsTr("Widgets") }
                 Controls.Label { Layout.fillWidth: true; visible: settings.profiles.activeProfileId === "legacy"; text: qsTr("Crie/use um perfil para organizar os widgets. Aqui você pode mudar a visibilidade."); textFormat: Text.PlainText; wrapMode: Text.WordWrap }
-                Repeater {
-                    id: widgetRows
-                    model: settings.profiles.effective.widgets
-                    RowLayout {
-                        required property var modelData
-                        required property int index
-                        property string widgetId: modelData.id
-                        property alias upButton: up
-                        property alias downButton: down
-                        property alias checkbox: checkbox
-                        Layout.fillWidth: true
-                        Controls.CheckBox {
-                            id: checkbox
-                            objectName: "widgetVisible" + modelData.id
-                            Layout.fillWidth: true
-                            text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
-                                : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
-                                : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
-                            enabled: settings.profiles.writable
-                            checked: modelData.visible
-                            onToggled: settings.setWidgetVisible(modelData.id, checked)
-                            onActiveFocusChanged: if (activeFocus) settings.reveal(this)
-                        }
-                        Controls.Button {
-                            id: up
-                            objectName: "widgetUp" + modelData.id
-                            Layout.preferredWidth: 36
-                            text: "↑"
-                            Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
-                            enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index > 0
-                            onClicked: settings.moveWidget(modelData.id, -1)
-                            onActiveFocusChanged: if (activeFocus) settings.reveal(this)
-                        }
-                        Controls.Button {
-                            id: down
-                            objectName: "widgetDown" + modelData.id
-                            Layout.preferredWidth: 36
-                            text: "↓"
-                            Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
-                            enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index < 6
-                            onClicked: settings.moveWidget(modelData.id, 1)
-                            onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                Card {
+                    Layout.fillWidth: true
+                    padding: 0
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+                        Repeater {
+                            id: widgetRows
+                            model: settings.profiles.effective.widgets
+                            FormRow {
+                                required property var modelData
+                                required property int index
+                                property string widgetId: modelData.id
+                                property alias upButton: up
+                                property alias downButton: down
+                                property alias checkbox: checkbox
+                                last: index === widgetRows.count - 1
+                                Controls.CheckBox {
+                                    id: checkbox
+                                    objectName: "widgetVisible" + modelData.id
+                                    Layout.fillWidth: true
+                                    text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
+                                        : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
+                                        : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
+                                    enabled: settings.profiles.writable
+                                    checked: modelData.visible
+                                    onToggled: settings.setWidgetVisible(modelData.id, checked)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                }
+                                Controls.ToolButton {
+                                    id: up
+                                    objectName: "widgetUp" + modelData.id
+                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                    text: "↑"
+                                    Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
+                                    enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index > 0
+                                    onClicked: settings.moveWidget(modelData.id, -1)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                }
+                                Controls.ToolButton {
+                                    id: down
+                                    objectName: "widgetDown" + modelData.id
+                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                    text: "↓"
+                                    Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
+                                    enabled: settings.profiles.writable && settings.profiles.activeProfileId !== "legacy" && index < 6
+                                    onClicked: settings.moveWidget(modelData.id, 1)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                }
+                            }
                         }
                     }
                 }
