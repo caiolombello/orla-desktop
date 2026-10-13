@@ -28,4 +28,14 @@ O primeiro recibo registrou uma diferença em `kwinrc`. A investigação posteri
 
 ## Correção de teclado — Source
 
-O estilo KDE usa um Menu que toma foco ao abrir, mas pula os delegates `NoFocus` do ComboBox. `popup.focus: false` mantém Down/Return no próprio ComboBox, sem substituir o controle ou alterar sua geometria. A regressão com abertura por mouse falhou antes da mudança e passou depois: Down/Return selecionam o segundo destino; um Tab chega ao botão; Space solicita uma única troca no fixture. Seleção por mouse também permanece passiva. Passaram 45 testes em cada estilo, sete guards, design check e build; a galeria foi revisada em claro/escuro. Esse resultado offscreen ainda não demonstra o fluxo corrigido na sessão Wayland.
+O estilo KDE usa um Menu que toma foco ao abrir, mas pula os delegates `NoFocus` do ComboBox. `popup.focus: false` mantém Down/Return no próprio ComboBox, sem substituir o controle ou alterar sua geometria. A regressão com abertura por mouse falhou antes da mudança e passou depois: Down/Return selecionam o segundo destino; um Tab chega ao botão; Space solicita uma única troca no fixture. Seleção por mouse também permanece passiva. Passaram 45 testes em cada estilo, sete guards, design check e build; a galeria foi revisada em claro/escuro. A revisão independente também passou Space/Escape, End/Return e Tab/Backtab nos dois estilos.
+
+## Fluxo corrigido na sessão KDE — 2026-10-13
+
+O commit `6a205d6` foi instalado, com uma única alteração no pacote da dock. Na sessão Plasma 6.7.5/Wayland, em uma tela com escala 2, abrir a lista por mouse, pressionar Down/Enter, um Tab e Space mudou para o destino. A seleção permaneceu passiva por dois segundos antes da ação. KWin e `TaskManager::VirtualDesktopInfo` reais convergiram para a área escolhida, com owner estável; ao reabrir, a interface mostrou o destino como atual.
+
+O retorno pelo atalho existente Ctrl+F1 e a remoção da área temporária foram confirmados. Somente sua seção de tiling residual foi removida, restaurando bytes e modo de `kwinrc` a partir da cópia feita antes do ensaio. Configurações protegidas, valores dos applets, barra, launcher e bancos permaneceram iguais; Plasma ficou ativo, sem crash ou restart automático. Todos os observers e dispositivos de input próprios foram encerrados.
+
+![Área atual após o fluxo de teclado](../screenshots/desktop-switch/desktop-switch-native-keyboard.png)
+
+Recorte nativo limitado ao módulo, com nome sintético da área temporária. Essa prova qualifica a troca pelo fluxo exercitado; foco de retorno, contagem exata de escritas D-Bus, outros monitores e um novo atalho global Orla permanecem UNRUN. W1 continua parcial.

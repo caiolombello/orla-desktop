@@ -452,10 +452,13 @@ inclusive após atalho KDE. A área temporária foi removida e a original restau
 O primeiro roteiro de teclado com menu aberto não trocou. Uma regressão Source
 identificou o foco tomado pelo Menu KDE e passou com `popup.focus: false`:
 45 testes por estilo, sete guards, design check, galeria e build. O fluxo corrigido
-ainda aguarda prova nativa. Uma cópia anterior de `kwinrc`, com hash igual ao
+passou também na sessão real após instalar `6a205d6`: abertura por mouse,
+Down/Enter, um Tab e Space trocaram a área; KWin/TaskManager convergiram e a UI
+mostrou o destino ao reabrir. Uma cópia anterior de `kwinrc`, com hash igual ao
 preflight, permitiu remover somente a seção de tiling da área temporária e
 restaurar bytes e modo exatos. A conferência confirmou configurações protegidas,
-applets, barra, launcher e bancos preservados. Teclado/foco completos, exact-once
+applets, barra, launcher e bancos preservados. O segundo ensaio teve cópia
+integral antes da criação e restauração exata depois. Foco completo, exact-once
 e monitores mantêm seus gates próprios.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
