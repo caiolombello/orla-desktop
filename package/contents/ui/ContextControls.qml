@@ -5,6 +5,7 @@ import "../code/Style.js" as Style
 
 Controls.ScrollView {
     id: controls
+    property var desktopSwitch: null
     required property var contexts
     required property var bindingsState
     required property var profiles
@@ -89,6 +90,11 @@ Controls.ScrollView {
     ColumnLayout {
         width: controls.availableWidth
         spacing: 10
+        DesktopSwitchControls {
+            Layout.fillWidth: true
+            command: controls.desktopSwitch
+            onFocusRequested: control => controls.reveal(control)
+        }
         Controls.Label {
             Layout.fillWidth: true
             text: qsTr("Associar organiza suas preferências. Nesta versão, isso não troca automaticamente o perfil, a Activity ou a área de trabalho.")

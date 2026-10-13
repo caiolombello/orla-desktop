@@ -30,6 +30,12 @@ Item {
     property alias profiles: profileState
     property alias contexts: contextState
     property alias contextBindings: contextBindingsState
+    property alias desktopSwitch: desktopSwitchState
+    property var desktopSwitchBackendOverride: null
+    // Qualified with the final adapter against a private Qt/KDE service fixture.
+    property bool desktopSwitchWriterQualified: true
+    property bool contextCommandsVisible: false
+    readonly property bool nativeDesktopSwitchBackendLoaded: desktopSwitchBackendLoader.item !== null
     property var contextSnapshotOverride: null
     property var controlCenterBackendOverride: null
     property var audioBackendOverride: null
@@ -96,6 +102,21 @@ Item {
         objectName: "dockContextState"
         sourceSnapshot: root.contextSnapshotOverride !== null ? root.contextSnapshotOverride
             : contextSourceLoader.item ? contextSourceLoader.item.snapshot : root.unavailableContextSnapshot
+    }
+    Loader {
+        id: desktopSwitchBackendLoader
+        objectName: "desktopSwitchBackendLoader"
+        active: root.desktopSwitchWriterQualified && root.desktopSwitchBackendOverride === null
+            && root.contextSnapshotOverride === null && settings.visible && root.contextCommandsVisible && settingsContents.contextsTabActive
+        source: active ? Qt.resolvedUrl("KdeDesktopSwitchBackend.qml") : ""
+        onLoaded: { item.contexts = contextState; item.active = true; }
+    }
+    DesktopSwitchState {
+        id: desktopSwitchState
+        objectName: "dockDesktopSwitchState"
+        contexts: contextState
+        backend: root.desktopSwitchBackendOverride !== null ? root.desktopSwitchBackendOverride : desktopSwitchBackendLoader.item
+        active: settings.visible && root.contextCommandsVisible && settingsContents.contextsTabActive
     }
     ContextBindingsState {
         id: contextBindingsState
@@ -674,7 +695,8 @@ Item {
         height: Math.min(implicitHeight, heightBudget)
         dock: settingsAnchor
         title: qsTr("Seu dock, do seu jeito")
-        onAboutToShow: appearanceState.begin()
+        onAboutToShow: { root.contextCommandsVisible = true; appearanceState.begin(); }
+        onAboutToHide: root.contextCommandsVisible = false
         onClosed: appearanceState.cancel()
         SettingsContents {
             id: settingsContents
@@ -684,6 +706,7 @@ Item {
             appearance: appearanceState
             contexts: contextState
             contextBindings: contextBindingsState
+            desktopSwitch: desktopSwitchState
             onAppearanceCanceled: settings.close()
         }
     }

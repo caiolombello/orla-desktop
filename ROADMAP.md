@@ -433,6 +433,34 @@ Escape/foco de retorno. A instrumentação temporária foi removida; os pacotes
 finais mantêm o fix e a composição atual. Transferência com popup aberto,
 seleção de saída e outros ambientes continuam gates separados.
 
+**Seletor de áreas W1 — incremento Source:** a aba Contextos permite selecionar
+um ID observado e acionar Trocar área. Seleção e navegação são passivas; uma
+resposta aceita só confirma após readback no owner capturado e convergência do
+modelo. O estado transitório mantém perfis, associações e Pomodoro independentes.
+Passaram 43 testes em cada estilo, sete guards e build; a revisão independente
+reproduziu e corrigiu cancelamento reentrante e confirmação tardia sem depender
+da ordem dos listeners. O adaptador exato passou quatro casos com o módulo KDE
+real em D-Bus privado, incluindo ausência de troca e mudança/perda de owner.
+A [validação Source](docs/validation/desktop-switch-source.md) inclui capturas
+claro/escuro e distingue esse resultado de KWin/TaskManager, gesto/foco e escopo
+por monitor na sessão real, ainda UNRUN. W1 permanece parcial e não habilita
+automação de perfis ou um novo atalho global.
+
+**W1 nativo — parcial:** `97c913f` instalado; seleção passiva e troca por mouse
+passaram com KWin/TaskManager reais. A área atual foi conferida ao reabrir,
+inclusive após atalho KDE. A área temporária foi removida e a original restaurada.
+O primeiro roteiro de teclado com menu aberto não trocou. Uma regressão Source
+identificou o foco tomado pelo Menu KDE e passou com `popup.focus: false`:
+45 testes por estilo, sete guards, design check, galeria e build. O fluxo corrigido
+passou também na sessão real após instalar `6a205d6`: abertura por mouse,
+Down/Enter, um Tab e Space trocaram a área; KWin/TaskManager convergiram e a UI
+mostrou o destino ao reabrir. Uma cópia anterior de `kwinrc`, com hash igual ao
+preflight, permitiu remover somente a seção de tiling da área temporária e
+restaurar bytes e modo exatos. A conferência confirmou configurações protegidas,
+applets, barra, launcher e bancos preservados. O segundo ensaio teve cópia
+integral antes da criação e restauração exata depois. Foco completo, exact-once
+e monitores mantêm seus gates próprios.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |

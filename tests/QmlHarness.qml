@@ -102,12 +102,26 @@ Window {
         property var currentPlayer: fixturePlayer
         property int currentIndex: -1
     }
+    QtObject {
+        id: desktopSwitchBackend
+        objectName: "desktopSwitchFixtureBackend"
+        property bool available: true
+        property string status: "ready"
+        property int calls: 0
+        property int lastId: -1
+        signal setReplied(int requestId, string owner)
+        signal readback(int requestId, string currentId, string owner)
+        signal failed(int requestId)
+        function requestDesktopSwitch(targetId, requestId, validate) { calls++; lastId=requestId; return validate("dispatch"); }
+        function cancel(requestId) {}
+    }
     DockUI.DockView {
         id: dockView
         anchors.centerIn: parent
         width: Math.min(implicitWidth, parent.width - 64)
         height: implicitHeight
         configuration: config
+        desktopSwitchBackendOverride: desktopSwitchBackend
         contextSnapshotOverride: contextSnapshot
         controlCenterBackendOverride: controlCenterBackend
         audioBackendOverride: audioBackend
