@@ -13,7 +13,8 @@ QtObject {
     property QtObject _dispatchOwner: null
     property Item _host: null
     property Item _anchor: null
-    property Window _window: null
+    // Plasma panels use C++ QQuickViews rather than QML Window instances.
+    property QtObject _window: null
     property int _requestGeneration: 0
     property bool _releasing: false
 

@@ -405,21 +405,27 @@ separa a composição offscreen dos próximos gates de pacote ativo,
 âncora/foco e áudio na sessão real. CC0/CC1/T1 continuam parciais. A prontidão
 da busca em outros ambientes permanece como gate de qualificação.
 
-**Atualização da composição — Source preparado:** a versão local já contém o
-Source S1, mas a entrada direita ainda não foi habilitada pelo helper. O recibo
-do layout atual permanece válido; seu banco `after` diverge da configuração
-atual por uma mudança no tamanho do diálogo de configuração da barra. O helper
-recusa restaurar esse arquivo antigo. A próxima fatia acrescenta `plan-update`
-e `update` para adicionar a Central ao painel existente, guardando o estado
-atual para rollback e mantendo o primeiro backup imutável. Alterações em pins,
+**Atualização da composição — aplicada localmente em 13/10:** a versão local já contém o
+Source S1 e o helper acrescentou a entrada direita ao painel existente. Antes
+do update, o banco `after` divergia da configuração por uma mudança no tamanho
+do diálogo de configuração da barra; o helper recusava restaurar esse arquivo
+antigo. A fatia acrescentou `plan-update` e `update` para adicionar a Central,
+guardando o estado atual para rollback e mantendo o primeiro backup imutável. Alterações em pins,
 perfis ou outras configurações nunca se tornam autorização para um restore
 original por terem sido capturadas durante um update. Passaram 177 testes de
 layout (124 antigos, 41 de transação e 12 do script), 20 da CLI/pacote, o teste
 de release e o design check. A revisão independente passou 21 regressões e
 aprovou o Source congelado; corrigiu-se a projeção Unicode que poderia ocultar
 uma alteração externa. O plano nativo somente leitura foi gerado para a barra
-existente, preservando os cinco IDs. Aplicação na sessão real, abertura,
-âncora, foco e áudio continuam gates separados.
+existente, preservando os cinco IDs. A aplicação nativa confirmou o recibo v2,
+os cinco IDs e os arquivos originais de recuperação; o launcher e os atalhos
+permaneceram preservados. Observação temporária confirmou registro canônico,
+dono único e view/estado idênticos nas duas entradas, com zero escritas de áudio.
+Os roteiros de abertura ainda não passaram. A atribuição da janela do painel
+a um `Window` QML foi reproduzida como falha com hosts C++ e corrigida para
+`QtObject`; 57 testes passaram em cada um dos dois estilos. A [validação](docs/validation/shared-control-center-source.md)
+distingue essa regressão offscreen de abertura, âncora, foco e áudio no Plasma,
+que continuam gates separados.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 

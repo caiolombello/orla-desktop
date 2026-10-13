@@ -75,6 +75,30 @@ real. O pequeno trecho no topo do crop pertence à âncora sintética.
 
 ## Gate seguinte: S2 nativo
 
+### Referência da janela do painel — correção em 13/10
+
+A sessão real confirmou o registro canônico e o estado compartilhado pela
+barra e pelo dock. A atualização gerenciada acrescentou a entrada ao mesmo
+painel, mantendo os cinco IDs anteriores e o banco original de recuperação.
+A abertura ainda não foi qualificada: o primeiro roteiro parou na guarda de
+hover; o segundo confirmou hover e envio do clique, mas não observou popup.
+Foco no botão e acknowledgment do dispositivo não comprovam `clicked`.
+
+Uma regressão isolada reproduziu uma causa de falha de abertura: `Window` do
+QML rejeita os hosts C++ `QQuickWindow` e `QQuickView` usados pelos painéis.
+A atribuição interrompia `ControlCenterEntry.open()` antes de encaminhar ao
+dono; a captura da exceção na barra podia deixar o botão sem ação nem erro.
+A referência agora usa `QtObject`, mantendo a identidade exata da janela e
+as guardas de visibilidade, destruição e release. O teste público reutiliza
+o cliente e verifica abrir, liberar, reabrir e cancelar ao ocultar cada host.
+
+O teste falhou nos dois hosts antes da correção. Depois passaram 57 testes
+(Registry 21, Session 29, composição 7) em Fusion e os mesmos 57 em
+`org.kde.desktop`, sem skips ou warnings. A galeria foi regenerada e revisada
+em claro e escuro; não houve mudança de composição visual. Essa prova usa
+hosts C++ offscreen. Abertura/foco com o código corrigido e áudio real
+continuam gates nativos separados.
+
 Comprovar o URL/engine e o dono do pacote efetivamente instalado; entrada à
 direita, posicionamento/escala, transient parent, clique/Escape/foco e remoção
 na sessão Plasma/Wayland. Depois, qualificar áudio real em prova separada com
