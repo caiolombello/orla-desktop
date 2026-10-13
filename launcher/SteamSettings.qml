@@ -13,8 +13,17 @@ Item {
     clip: true
     required property var controller
     property bool operationStartBlocked: false
+    property string rootDiscoveryMessage: ""
     signal backRequested()
     function focusFirst() { backButton.forceActiveFocus() }
+    function locateRoots() {
+        if (panel.operationStartBlocked || panel.controller.busy) return
+        const specs = panel.controller.locateRoots()
+        if (specs.length > 0) rootInput.text = specs.join("\n")
+        rootDiscoveryMessage = specs.length > 0
+            ? qsTr("Pastas encontradas nos locais conhecidos: %1. Confira as raízes e use Carregar jogos para ler os metadados.").arg(specs.length)
+            : qsTr("Nenhuma pasta encontrada nos locais conhecidos. Você ainda pode informar outra raiz.")
+    }
     function rootSpecs() {
         const lines = rootInput.text.split("\n")
         const result = []
@@ -38,11 +47,12 @@ Item {
     }
 
     ScrollView {
+        id: panelScroll
         anchors.fill: parent
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ColumnLayout {
-            width: panel.width - 14
+            width: panelScroll.width - panelScroll.effectiveScrollBarWidth - Style.space.sm
             spacing: 12
             RowLayout {
                 Layout.fillWidth: true
@@ -64,7 +74,7 @@ Item {
             }
             Text {
                 Layout.fillWidth: true; wrapMode: Text.Wrap; color: ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText
-                text: qsTr("Nada é lido ao abrir esta tela. Informe somente pastas locais de uma instalação Steam. Bibliotecas externas listadas por essas pastas também serão consultadas. O resultado mostra presença local e não confirma que sua conta pode acessar o jogo.")
+                text: qsTr("Nada é lido ao abrir esta tela. Localize pastas nos locais conhecidos ou informe outras raízes. Só Carregar jogos lê metadados; bibliotecas externas declaradas nessas raízes também serão consultadas. Presença local não confirma acesso pela sua conta.")
             }
             TextArea {
                 id: rootInput
@@ -73,6 +83,7 @@ Item {
                 placeholderText: "native=/caminho/absoluto/Steam\nflatpak=/caminho/absoluto/Steam"
                 Accessible.name: qsTr("Pastas locais do Steam, uma por linha")
                 color: ui.text; placeholderTextColor: ui.textMuted; wrapMode: TextEdit.NoWrap
+                onTextChanged: panel.rootDiscoveryMessage = ""
                 background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 1 : 0; border.color: ui.accent }
             }
             RowLayout {
@@ -94,6 +105,24 @@ Item {
                     text: qsTr("Cancelar")
                     onClicked: panel.controller.cancelAll()
                 }
+            }
+            Button {
+                id: locateButton
+                objectName: "steamLocateRootsButton"
+                Layout.fillWidth: true; Layout.preferredHeight: Style.size.target
+                Layout.minimumWidth: Style.size.target
+                enabled: !panel.operationStartBlocked && !panel.controller.busy
+                text: qsTr("Localizar pastas do Steam")
+                Accessible.description: qsTr("Preenche raízes existentes nos locais conhecidos sem ler metadados dos jogos")
+                onClicked: panel.locateRoots()
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.text : ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
+                background: Rectangle { radius: Style.radius.control; color: ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
+            }
+            Text {
+                objectName: "steamRootDiscoveryMessage"
+                Layout.fillWidth: true; visible: panel.rootDiscoveryMessage.length > 0
+                text: panel.rootDiscoveryMessage; wrapMode: Text.Wrap
+                color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText
             }
             Text {
                 Layout.fillWidth: true; text: panel.statusText(); wrapMode: Text.Wrap

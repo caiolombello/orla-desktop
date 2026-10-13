@@ -3,6 +3,7 @@
 #include <functional>
 #include <QObject>
 #include <QProcess>
+#include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -21,9 +22,10 @@ class SteamProviderController final : public QObject
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
     using UrlOpener = std::function<bool(const QUrl &)>;
+    using RootLocator = std::function<QStringList()>;
 
     explicit SteamProviderController(const QString &pythonPath, const QString &helperPath,
-                                     UrlOpener opener = {}, QObject *parent = nullptr);
+                                     UrlOpener opener = {}, QObject *parent = nullptr, RootLocator rootLocator = {});
     ~SteamProviderController() override;
 
     QString status() const { return m_status; }
@@ -35,6 +37,9 @@ public:
     QString errorCode() const { return m_errorCode; }
     QString error() const { return m_error; }
 
+    static QStringList discoverLocalRoots(const QString &homeBase, const QString &dataBase);
+
+    Q_INVOKABLE QStringList locateRoots() const;
     Q_INVOKABLE void scan(const QStringList &rootSpecs);
     Q_INVOKABLE void cancelAll();
     Q_INVOKABLE bool requestClose();
@@ -61,6 +66,7 @@ private:
     QString m_pythonPath;
     QString m_helperPath;
     UrlOpener m_opener;
+    RootLocator m_rootLocator;
     QProcess m_process;
     QTimer m_deadline;
     QTimer m_killGrace;
