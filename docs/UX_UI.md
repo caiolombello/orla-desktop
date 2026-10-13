@@ -93,8 +93,13 @@ serviço e recusa de contextos personalizados. KDE não oferece escrita condicio
 sobrescrita. A revisão local de 13/10 passou sete CTests e verificou Meta,
 consulta/↓/Enter de fixture própria, reabertura, Escape/foco, atalho alternativo,
 reinício do serviço e restauração do KRunner no Wayland, com DPR observado 1,45.
-Digitação antes de o foco chegar ainda precisa de qualificação: o probe sem pausa
-perdeu a primeira letra. A release
+O [baseline de 15 tentativas](validation/launcher-focus-baseline.md) localizou a
+perda sem intervalo na entrega à janela anterior durante a ativação. As
+reaberturas a 50/100/500 ms passaram três vezes por intervalo; isso não garante
+50 ms em todos os ambientes. Não se observou janela ativa com a busca sem foco,
+e a ativação atual foi preservada. A prontidão visual deve acompanhar atividade
+da janela e foco real do campo; digitação sem intervalo e outros ambientes
+continuam sem qualificação. A release
 pública 0.2.9 permanece sem launcher; não há nova API pública de extensões.
 
 IA é uma capacidade opt-in invocada para uma tarefa identificável, não uma tela de chat obrigatória nem dependência de dock. Em 0.3, spikes devem validar APIs e CLIs oficiais, elegibilidade, consentimento, custo, armazenamento de credenciais e limites de protocolo antes do desenho de integração. A integração MVP pode chegar a partir de 0.5 como módulo opcional e isolado; não depende da estabilização de um SDK de plugins de terceiros. Vias possíveis:
