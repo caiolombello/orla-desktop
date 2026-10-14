@@ -157,6 +157,214 @@ private Q_SLOTS:
         QTest::newRow("standard") << 660;
     }
 
+    void keyboardNavigationPreservesRootsAndRevealsEveryAction_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 440;
+        QTest::newRow("standard") << 660;
+    }
+
+    void keyboardNavigationPreservesRootsAndRevealsEveryAction()
+    {
+        QFETCH(int, width);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("explicit-scan"));
+        const QString helper = writeHelper(directory, QByteArray("import base64,pathlib,sys\n")
+            + "pathlib.Path(r'" + marker.toUtf8() + "').touch()\n"
+            + "sys.stdout.buffer.write(base64.b64decode('" + availableDocument().toBase64() + "'))\n");
+        int locates = 0;
+        QList<QUrl> opened;
+        SteamProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
+            [&] { ++locates; return QStringList{QStringLiteral("native=/synthetic/known-root")}; });
+        QQmlEngine engine;
+        const QUrl panelUrl = QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
+            .filePath(QStringLiteral("../launcher/SteamSettings.qml")));
+        QQmlComponent component(&engine, panelUrl);
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(width, 420);
+        std::unique_ptr<QObject> object(component.createWithInitialProperties(
+            {{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+        auto *panel = qobject_cast<QQuickItem *>(object.get());
+        QVERIFY(panel);
+        panel->setParentItem(window.contentItem());
+        panel->setSize(QSizeF(width, 420));
+        window.setColor(QColor(panel->property("ui").value<QJSValue>().property("canvas").toString()));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *input = panel->findChild<QQuickItem *>(QStringLiteral("steamRootInput"));
+        QVERIFY(input);
+        const QString roots = QStringLiteral("native=/synthetic/manual-root\nflatpak=/synthetic/other-root");
+        QVERIFY(input->setProperty("text", roots));
+        QSignalSpy backRequests(panel, SIGNAL(backRequested()));
+        QVERIFY(QMetaObject::invokeMethod(panel, "focusFirst"));
+        const auto verifyFocus = [&](const QString &name) {
+            auto *control = panel->findChild<QQuickItem *>(name);
+            QVERIFY(control);
+            QTRY_VERIFY_WITH_TIMEOUT(control->hasActiveFocus(), 1000);
+            QTest::qWait(20); // Observe bounds after the normal layout/frame update.
+            const QRectF bounds(control->mapToScene(QPointF()), control->size());
+            for (auto *parent = control->parentItem(); parent; parent = parent->parentItem()) {
+                if (!parent->clip()) continue;
+                const QRectF visible(parent->mapToScene(QPointF()), parent->size());
+                QVERIFY2(visible.adjusted(-1, -1, 1, 1).contains(bounds), qPrintable(name));
+            }
+            const QString capture = qEnvironmentVariable("ORLA_UI_CAPTURE_DIR");
+            if (!capture.isEmpty() && (name == QStringLiteral("steamLocateRootsButton")
+                    || name == QStringLiteral("steamDownloadsButton"))) {
+                const QImage image = window.grabWindow();
+                QVERIFY(!image.isNull());
+                QVERIFY(image.save(QDir(capture).filePath(QStringLiteral("steam-keyboard-%1-%2.png").arg(width).arg(name))));
+            }
+        };
+        verifyFocus(QStringLiteral("steamBackButton"));
+        for (const QString &name : {QStringLiteral("steamRootInput"), QStringLiteral("steamScanButton"),
+                QStringLiteral("steamLocateRootsButton"), QStringLiteral("steamDownloadsButton"),
+                QStringLiteral("steamBackButton")}) {
+            QTest::keyClick(&window, Qt::Key_Tab);
+            verifyFocus(name);
+            QCOMPARE(input->property("text").toString(), roots);
+        }
+        for (const QString &name : {QStringLiteral("steamDownloadsButton"), QStringLiteral("steamLocateRootsButton"),
+                QStringLiteral("steamScanButton"), QStringLiteral("steamRootInput"), QStringLiteral("steamBackButton")}) {
+            QTest::keyClick(&window, Qt::Key_Backtab);
+            verifyFocus(name);
+            QCOMPARE(input->property("text").toString(), roots);
+        }
+        QCOMPARE(locates, 0);
+        QVERIFY(opened.isEmpty());
+        QVERIFY(!QFile::exists(marker));
+        QCOMPARE(controller.status(), QStringLiteral("unconfigured"));
+        // Only keyboard activation may locate, dispatch downloads, or start the owned helper.
+        QTest::keyClick(&window, Qt::Key_Tab);
+        QTest::keyClick(&window, Qt::Key_Tab);
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(QStringLiteral("steamLocateRootsButton"));
+        QTest::keyClick(&window, Qt::Key_Space);
+        QCOMPARE(locates, 1);
+        QCOMPARE(input->property("text").toString(), QStringLiteral("native=/synthetic/known-root"));
+        QVERIFY(!QFile::exists(marker));
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(QStringLiteral("steamDownloadsButton"));
+        QTest::keyClick(&window, Qt::Key_Space);
+        QCOMPARE(opened, QList<QUrl>{QUrl(QStringLiteral("steam://open/downloads"))});
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(QStringLiteral("steamBackButton"));
+        QTest::keyClick(&window, Qt::Key_Space);
+        QCOMPARE(backRequests.count(), 1);
+        QTest::keyClick(&window, Qt::Key_Tab);
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(QStringLiteral("steamScanButton"));
+        QTest::keyClick(&window, Qt::Key_Space);
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        QVERIFY(QFile::exists(marker));
+        QCOMPARE(controller.status(), QStringLiteral("available"));
+        QCOMPARE(locates, 1);
+        QCOMPARE(opened.size(), 1);
+    }
+
+    void keyboardNavigationSkipsUnavailableActionsAndReachesCancel_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<bool>("busy");
+        QTest::newRow("narrow-blocked") << 440 << false;
+        QTest::newRow("standard-blocked") << 660 << false;
+        QTest::newRow("narrow-busy") << 440 << true;
+        QTest::newRow("standard-busy") << 660 << true;
+    }
+
+    void keyboardNavigationSkipsUnavailableActionsAndReachesCancel()
+    {
+        QFETCH(int, width);
+        QFETCH(bool, busy);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString marker = directory.filePath(QStringLiteral("owned-busy-scan"));
+        const QString helper = writeHelper(directory, QByteArray("import pathlib,time\n")
+            + "pathlib.Path(r'" + marker.toUtf8() + "').touch()\ntime.sleep(60)\n");
+        int locates = 0;
+        QList<QUrl> opened;
+        SteamProviderController controller(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), helper,
+            [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
+            [&] { ++locates; return QStringList{}; });
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
+            .filePath(QStringLiteral("../launcher/SteamSettings.qml"))));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QQuickWindow window;
+        window.resize(width, 420);
+        std::unique_ptr<QObject> object(component.createWithInitialProperties(
+            {{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+        auto *panel = qobject_cast<QQuickItem *>(object.get());
+        QVERIFY(panel);
+        panel->setParentItem(window.contentItem());
+        panel->setSize(QSizeF(width, 420));
+        window.setColor(QColor(panel->property("ui").value<QJSValue>().property("canvas").toString()));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *input = panel->findChild<QQuickItem *>(QStringLiteral("steamRootInput"));
+        auto *cancel = panel->findChild<QQuickItem *>(QStringLiteral("steamCancelButton"));
+        QVERIFY(input && cancel);
+        const QString roots = QStringLiteral("native=/synthetic/manual-root");
+        QVERIFY(input->setProperty("text", roots));
+        if (busy) {
+            controller.scan({roots}); // Explicit owned fixture setup, never panel entry.
+            QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(marker), 1500);
+            QVERIFY(controller.busy());
+        } else {
+            QVERIFY(panel->setProperty("operationStartBlocked", true));
+            QVERIFY(!QFile::exists(marker));
+        }
+        const quint64 revisionBeforeNavigation = controller.inventoryRevision();
+        QVERIFY(QMetaObject::invokeMethod(panel, "focusFirst"));
+        const auto verifyFocus = [&](const QString &name) {
+            auto *control = panel->findChild<QQuickItem *>(name);
+            QVERIFY(control);
+            QTRY_VERIFY_WITH_TIMEOUT(control->hasActiveFocus(), 1000);
+            QTest::qWait(20);
+            const QRectF bounds(control->mapToScene(QPointF()), control->size());
+            for (auto *parent = control->parentItem(); parent; parent = parent->parentItem()) {
+                if (!parent->clip()) continue;
+                const QRectF visible(parent->mapToScene(QPointF()), parent->size());
+                QVERIFY2(visible.adjusted(-1, -1, 1, 1).contains(bounds), qPrintable(name));
+            }
+            QCOMPARE(input->property("text").toString(), roots);
+        };
+        verifyFocus(QStringLiteral("steamBackButton"));
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(QStringLiteral("steamRootInput"));
+        QTest::keyClick(&window, Qt::Key_Tab);
+        verifyFocus(busy ? QStringLiteral("steamCancelButton") : QStringLiteral("steamBackButton"));
+        if (busy) {
+            const QString capture = qEnvironmentVariable("ORLA_UI_CAPTURE_DIR");
+            if (!capture.isEmpty()) {
+                const QImage image = window.grabWindow();
+                QVERIFY(!image.isNull());
+                QVERIFY(image.save(QDir(capture).filePath(QStringLiteral("steam-keyboard-%1-cancel.png").arg(width))));
+            }
+            QTest::keyClick(&window, Qt::Key_Tab);
+            verifyFocus(QStringLiteral("steamBackButton"));
+            QTest::keyClick(&window, Qt::Key_Backtab);
+            verifyFocus(QStringLiteral("steamCancelButton"));
+        }
+        QTest::keyClick(&window, Qt::Key_Backtab);
+        verifyFocus(QStringLiteral("steamRootInput"));
+        QTest::keyClick(&window, Qt::Key_Backtab);
+        verifyFocus(QStringLiteral("steamBackButton"));
+        QCOMPARE(locates, 0);
+        QVERIFY(opened.isEmpty());
+        QCOMPARE(controller.inventoryRevision(), revisionBeforeNavigation);
+        if (busy) {
+            QTest::keyClick(&window, Qt::Key_Tab);
+            QTest::keyClick(&window, Qt::Key_Tab);
+            verifyFocus(QStringLiteral("steamCancelButton"));
+            QTest::keyClick(&window, Qt::Key_Space);
+            QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 3000);
+        }
+    }
+
     void locatingRootsFillsThePanelWithoutScanning()
     {
         QFETCH(int, width);

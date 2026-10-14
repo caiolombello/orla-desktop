@@ -50,3 +50,37 @@ Próximo gate: instalar um build com helpers versionados, exercitar o gesto de
 localizar/carregar na sessão KDE e conferir seleção por teclado sem executar
 jogos. Depois, qualificar separadamente dois jogos e a matriz de bibliotecas.
 S1 continua parcial; este incremento não modifica os assets públicos 0.2.9.
+
+## Navegação por teclado — incremento de 13/10
+
+O candidato permanente de `45beecf` foi instalado com helpers versionados.
+Meta abriu o launcher e a entrada Steam abriu seu painel na sessão Wayland.
+O gesto de Tab encontrou um defeito real: o campo de raízes inseriu tabulações
+em vez de transferir o foco. A tentativa foi encerrada sem descobrir pastas,
+ler a biblioteca ou encaminhar uma URI Steam; o texto temporário foi removido.
+
+A correção intercepta Tab antes do editor e define uma sequência de ida e volta
+entre Busca, raízes, Carregar, Cancelar, Localizar e Downloads. Controles
+indisponíveis são pulados; Cancelar continua acessível durante uma leitura.
+O controle focado é revelado no viewport, inclusive quando a mensagem da
+descoberta muda a altura do conteúdo. Busca e raízes têm contorno de 2 px.
+
+As regressões reproduziram primeiro a inserção de Tab e, depois, Downloads
+parcialmente oculto após Localizar. Os dois defeitos foram corrigidos.
+Os testes direcionados passaram nos estilos Fusion e KDE: dez entradas por
+estilo, nas larguras de 440 e 660 px e altura de 420 px. Navegam com Tab e
+Shift+Tab, sem forçar foco intermediário ou rolagem; verificam o texto intacto,
+limites de cada ancestral com clip e ausência de ações implícitas.
+Space aciona somente callbacks e helpers próprios nas fixtures.
+A suíte Steam completa passou nos dois estilos: 30 entradas por estilo,
+sem falhas ou skips, em aproximadamente 17,4 s Qt por execução.
+Design check passou sem issues e os sete design guards passaram.
+
+| Downloads focado — Fusion | Localizar focado — KDE |
+|---|---|
+| ![Downloads acessível](../screenshots/steam-keyboard/downloads-fusion-440.png) | ![Localizar acessível](../screenshots/steam-keyboard/locate-kde-440.png) |
+
+Capturas sintéticas offscreen. O launcher usa a mesma scheme escura sob
+ambas as schemes do sistema. As demais superfícies não mudaram neste lote.
+Instalação desta correção e descoberta/leitura real continuam pendentes;
+os testes offscreen não qualificam foco Plasma/Wayland nem execução de jogos.
