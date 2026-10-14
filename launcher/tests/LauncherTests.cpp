@@ -10,12 +10,25 @@
 #include <QThreadStorage>
 #include <atomic>
 #include <thread>
+#include <cstdarg>
+#include <fcntl.h>
+#include <unistd.h>
 #include "LauncherController.h"
 #include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
 
 namespace {
+// The second exact favorite-file read is the Store's own reload, after the
+// controller preflight. No runner, production callback or personal path is mocked.
+struct FavoriteReloadBoundary {
+    QByteArray name;
+    QString path;
+    QByteArray replacement;
+    int reads = 0;
+    bool injected = false, written = false;
+} favoriteReloadBoundary;
+struct ResetFavoriteReloadBoundary { ~ResetFavoriteReloadBoundary() { favoriteReloadBoundary = {}; } };
 struct RunnerTlsTail {
     QSemaphore &entered;
     QSemaphore &release;
@@ -39,6 +52,25 @@ QString writeSteamHelper(QTemporaryDir &directory)
     file.close();
     return helper;
 }
+}
+
+extern "C" int __real_openat(int, const char *, int, ...);
+extern "C" int __wrap_openat(int directory, const char *name, int flags, ...)
+{
+    mode_t permissions = 0;
+    if (flags & O_CREAT) {
+        va_list args; va_start(args, flags); permissions = va_arg(args, int); va_end(args);
+    }
+    auto &boundary = favoriteReloadBoundary;
+    if (!boundary.name.isEmpty() && QByteArray(name) == boundary.name
+        && !(flags & O_CREAT) && (flags & O_ACCMODE) == O_RDONLY && ++boundary.reads == 2) {
+        boundary.injected = true;
+        QFile writer(boundary.path);
+        boundary.written = writer.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            && writer.write(boundary.replacement) == boundary.replacement.size();
+        writer.close();
+    }
+    return flags & O_CREAT ? __real_openat(directory, name, flags, permissions) : __real_openat(directory, name, flags);
 }
 
 class LauncherTests final : public QObject
@@ -438,6 +470,258 @@ private Q_SLOTS:
         }
         QFile::remove(applications+"/"+appB);
     }
+    void favoritesMissingReadsStayPassiveAndClearRejectsLateNativeResults()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString aliases = root.filePath("absent/aliases.json");
+        const QString favorites = root.filePath("absent/favorites.json");
+        LauncherControllerTestOwner owner(nullptr, aliases, favorites);
+        auto &launcher = owner.controller();
+        QCOMPARE(launcher.favoriteRevision(), QStringLiteral("missing"));
+        QVERIFY(launcher.favoritesWritable());
+        for (int n = 0; n < 100; ++n) QVERIFY(launcher.favorites().isEmpty());
+        launcher.reloadFavorites();
+        launcher.setQuery("");
+        QCOMPARE(launcher.status(), QStringLiteral("idle"));
+        QVERIFY(!QFileInfo(root.filePath("absent")).exists());
+        launcher.setQuery("2+2");
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        const auto ticket = launcher.rows().first().toMap();
+        QVERIFY(!launcher.pinFavorite(0, launcher.generation(), ticket.value("id").toString(), launcher.favoriteRevision()));
+        launcher.setQuery("9*9");
+        QTest::qWait(65); // Cancel an actual launched context, not only its debounce.
+        launcher.setQuery("");
+        QTest::qWait(300);
+        QVERIFY(launcher.rows().isEmpty());
+        QCOMPARE(launcher.status(), QStringLiteral("idle"));
+        QVERIFY(!launcher.execute(0, ticket.value("generation").toULongLong(), ticket.value("id").toString()));
+        QVERIFY(!QFileInfo(root.filePath("absent")).exists());
+    }
+    void favoritesRestartReorderAndEnterRunOnlyTheExactSavedHomonym()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString applications = qEnvironmentVariable("XDG_DATA_HOME") + "/applications";
+        QVERIFY(QDir().mkpath(applications));
+        const QString script = root.filePath("favorite-counter.py");
+        QFile helper(script);
+        QVERIFY(helper.open(QIODevice::WriteOnly));
+        helper.write("from pathlib import Path\nimport sys\nwith Path(sys.argv[1]).open('a') as receipt: receipt.write(sys.argv[2])\n");
+        helper.close();
+        const QString appA = "org.orla.FavoriteCoreA.desktop", appB = "org.orla.FavoriteCoreB.desktop";
+        // Remove only these owned descriptors even if a test assertion returns early.
+        struct Descriptors {
+            QStringList paths;
+            ~Descriptors() { for (const auto &path : paths) QFile::remove(path); }
+        } descriptors{{applications + "/" + appA, applications + "/" + appB}};
+        for (const auto &entry : QList<QPair<QString, QString>>{{appA,"A"},{appB,"B"}}) {
+            QFile desktop(applications + "/" + entry.first);
+            QVERIFY(desktop.open(QIODevice::WriteOnly));
+            desktop.write(("[Desktop Entry]\nType=Application\nName=OrlaFavoriteCoreCollision\nIcon=org.orla.OwnedFavoriteIcon\nExec=\""
+                + QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE) + "\" \"" + script + "\" \""
+                + root.filePath("receipt-" + entry.second) + "\" " + entry.second + "\nTerminal=false\n").toUtf8());
+        }
+        QProcess cache;
+        cache.start("/usr/bin/kbuildsycoca6", {"--noincremental"});
+        QVERIFY(cache.waitForFinished(5000));
+        QCOMPARE(cache.exitCode(),0);
+        auto appsReady = [&] { KSycoca::self()->ensureCacheValid(); return KService::serviceByStorageId(appA) && KService::serviceByStorageId(appB); };
+        QTRY_VERIFY_WITH_TIMEOUT(appsReady(),3000);
+        const QString aliases = root.filePath("aliases.json"), favorites = root.filePath("favorites.json");
+        AliasStore aliasStore(aliases);
+        QVERIFY(aliasStore.save("ownfavoritealias",appA,aliasStore.revision()));
+        QFile aliasFile(aliases);
+        QVERIFY(aliasFile.open(QIODevice::ReadOnly));
+        const QByteArray aliasBytes = aliasFile.readAll(); aliasFile.close();
+        const auto aliasMode = QFileInfo(aliases).permissions();
+        const auto aliasRevision = aliasStore.revision();
+        auto aliasUnchanged = [&] {
+            QFile current(aliases);
+            if (!current.open(QIODevice::ReadOnly)) return false;
+            AliasStore observed(aliases);
+            return current.readAll()==aliasBytes && QFileInfo(aliases).permissions()==aliasMode && observed.revision()==aliasRevision;
+        };
+        {
+            LauncherControllerTestOwner owner(nullptr,aliases,favorites);
+            auto &launcher = owner.controller();
+            launcher.setQuery("OrlaFavoriteCoreCollision");
+            auto appRow = [&](const QString &id) { for (int row=0;row<launcher.rows().size();++row) if (launcher.rows()[row].toMap().value("appId").toString()==id) return row; return -1; };
+            QTRY_VERIFY_WITH_TIMEOUT(launcher.status()=="ready" && appRow(appA)>=0 && appRow(appB)>=0,5000);
+            launcher.select(appRow(appA));
+            const auto initialA = launcher.rows()[launcher.selectedIndex()].toMap();
+            QFile descriptor(applications+"/"+appA);
+            QVERIFY(descriptor.open(QIODevice::ReadOnly)); const auto original=descriptor.readAll(); descriptor.close();
+            QVERIFY(descriptor.open(QIODevice::WriteOnly|QIODevice::Truncate)); descriptor.write(original+"NoDisplay=true\n"); descriptor.close();
+            QVERIFY(!launcher.pinFavorite(launcher.selectedIndex(),launcher.generation(),initialA.value("id").toString(),launcher.favoriteRevision()));
+            QVERIFY(descriptor.open(QIODevice::WriteOnly|QIODevice::Truncate)); descriptor.write(original); descriptor.close();
+            launcher.reloadAliases();
+            launcher.select(appRow(appA));
+            const auto a = launcher.rows()[launcher.selectedIndex()].toMap();
+            QVERIFY(!launcher.pinFavorite(appRow(appB),launcher.generation(),launcher.rows()[appRow(appB)].toMap().value("id").toString(),launcher.favoriteRevision()));
+            QVERIFY(!launcher.pinFavorite(launcher.selectedIndex(),launcher.generation(),"wrong-id",launcher.favoriteRevision()));
+            QVERIFY(!QFile::exists(favorites));
+            QVERIFY(launcher.pinFavorite(launcher.selectedIndex(),launcher.generation(),a.value("id").toString(),launcher.favoriteRevision()));
+            QVERIFY(!launcher.pinFavorite(launcher.selectedIndex(),a.value("generation").toULongLong(),a.value("id").toString(),launcher.favoriteRevision()));
+            launcher.select(appRow(appB));
+            const auto b = launcher.rows()[launcher.selectedIndex()].toMap();
+            QVERIFY(launcher.pinFavorite(launcher.selectedIndex(),launcher.generation(),b.value("id").toString(),launcher.favoriteRevision()));
+            {
+                ResetFavoriteReloadBoundary reset;
+                const auto generation=launcher.generation();
+                const auto revision=launcher.favoriteRevision();
+                const auto id=launcher.rows()[launcher.selectedIndex()].toMap().value("id").toString();
+                const QByteArray external=("{ \"formatVersion\": \"0.1-experimental\", \"favorites\": [\""+appA+"\",\""+appB+"\"] }\n").toUtf8();
+                favoriteReloadBoundary={QFile::encodeName(QFileInfo(favorites).fileName()),favorites,external};
+                QVERIFY(!launcher.pinFavorite(launcher.selectedIndex(),generation,id,revision));
+                QVERIFY(favoriteReloadBoundary.injected && favoriteReloadBoundary.written);
+                QFile readback(favorites); QVERIFY(readback.open(QIODevice::ReadOnly)); QCOMPARE(readback.readAll(),external);
+                QVERIFY(launcher.generation()>generation);
+                QVERIFY(launcher.favoriteRevision()!=revision);
+                QVERIFY(!launcher.favoriteError().isEmpty()); QVERIFY(launcher.favoritesWritable());
+                QCOMPARE(launcher.rows()[launcher.selectedIndex()].toMap().value("id").toString(),id);
+                QVERIFY(!launcher.pinFavorite(launcher.selectedIndex(),generation,id,revision));
+                launcher.setQuery("");
+                for (const auto &row : launcher.rows()) QCOMPARE(row.toMap().value("favoriteRevision").toString(),launcher.favoriteRevision());
+            }
+            QVERIFY(aliasUnchanged());
+            QVERIFY(!QFile::exists(root.filePath("receipt-A")) && !QFile::exists(root.filePath("receipt-B")));
+        }
+        {
+            LauncherControllerTestOwner owner(nullptr,aliases,favorites);
+            auto &launcher = owner.controller();
+            QCOMPARE(launcher.status(),QStringLiteral("ready"));
+            QCOMPARE(launcher.rows().size(),2);
+            QCOMPARE(launcher.rows()[0].toMap().value("appId").toString(),appA);
+            const auto a = launcher.rows()[0].toMap();
+            QCOMPARE(a.value("kind").toString(),QStringLiteral("favorite"));
+            QCOMPARE(a.value("categoryLabel").toString(),QStringLiteral("FAVORITOS"));
+            QCOMPARE(a.value("source").toString(),QStringLiteral("Favorito salvo por você"));
+            QCOMPARE(a.value("iconName").toString(),QStringLiteral("org.orla.OwnedFavoriteIcon"));
+            QCOMPARE(a.value("favoriteRevision").toString(),launcher.favoriteRevision());
+            for (int n=0;n<100;++n) QCOMPARE(launcher.favorites().first().toMap().value("title").toString(),QStringLiteral("OrlaFavoriteCoreCollision"));
+            launcher.select(1);
+            const auto oldB = launcher.rows()[1].toMap();
+            QVERIFY(!launcher.execute(0,launcher.generation(),a.value("id").toString()));
+            QVERIFY(!launcher.execute(1,launcher.generation(),oldB.value("id").toString(),"foreign-action"));
+            FavoritesStore external(favorites);
+            QVERIFY(external.unpin(appA,external.revision()));
+            QVERIFY(external.pin(appA,external.revision())); // Exact order is now B,A.
+            QVERIFY(!launcher.execute(1,oldB.value("generation").toULongLong(),oldB.value("id").toString()));
+            QCOMPARE(launcher.rows()[0].toMap().value("appId").toString(),appB);
+            QCOMPARE(launcher.selectedIndex(),0); // Identity B survives moving from index1.
+            QVERIFY(!launcher.removeFavorite(appB,oldB.value("generation").toULongLong(),oldB.value("favoriteRevision").toString()));
+            launcher.setQuery("2+2");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            launcher.setQuery("");
+            QTest::qWait(300);
+            QCOMPARE(launcher.rows().size(),2);
+            for (const auto &row : launcher.rows()) QCOMPARE(row.toMap().value("kind").toString(),QStringLiteral("favorite"));
+            launcher.select(1);
+            const auto selected = launcher.rows()[1].toMap();
+            QVERIFY(!launcher.execute(1,a.value("generation").toULongLong(),selected.value("id").toString()));
+            QFile descriptor(applications+"/"+appA);
+            QVERIFY(descriptor.open(QIODevice::ReadOnly));
+            const auto installed = descriptor.readAll(); descriptor.close();
+            for (const auto &changed : QList<QByteArray>{installed+"NoDisplay=true\n",installed+"Hidden=true\n",installed+"Terminal=true\n",installed+"Path=/orla-owned-missing-directory\n",installed+"DBusActivatable=true\n",QByteArray(installed).replace(" A\n"," changed\n")}) {
+                QVERIFY(descriptor.open(QIODevice::WriteOnly|QIODevice::Truncate));
+                QCOMPARE(descriptor.write(changed),qint64(changed.size())); descriptor.close();
+                QVERIFY(!launcher.executeSelected());
+                QVERIFY(descriptor.open(QIODevice::WriteOnly|QIODevice::Truncate));
+                QCOMPARE(descriptor.write(installed),qint64(installed.size())); descriptor.close();
+            }
+            QVERIFY(!QFile::exists(root.filePath("receipt-A")) && !QFile::exists(root.filePath("receipt-B")));
+            QVERIFY(launcher.executeSelected()); // The same public Enter path used by the window.
+            QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(root.filePath("receipt-A")),5000);
+            QFile observed(root.filePath("receipt-A"));
+            QVERIFY(observed.open(QIODevice::ReadOnly)); QCOMPARE(observed.readAll(),QByteArray("A"));
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+            QTest::qWait(100);
+            QVERIFY(launcher.rows().isEmpty()); // Late model notifications do not reopen a dismissed surface.
+            launcher.setQuery(""); // Reopening refreshes empty-query favorites, without a dummy search.
+            QVERIFY(QFile::remove(applications+"/"+appA));
+            launcher.reloadFavorites();
+            QCOMPARE(launcher.rows()[1].toMap().value("appId").toString(),appA);
+            QVERIFY(!launcher.rows()[1].toMap().value("enabled").toBool());
+            QVERIFY(!launcher.favorites()[1].toMap().value("available").toBool());
+            QVERIFY(launcher.removeFavorite(appA,launcher.generation(),launcher.favoriteRevision()));
+            QCOMPARE(launcher.favorites().size(),1);
+            QVERIFY(aliasUnchanged());
+            QFile corrupt(favorites);
+            QVERIFY(corrupt.open(QIODevice::WriteOnly|QIODevice::Truncate)); corrupt.write("{invalid"); corrupt.close();
+            launcher.reloadFavorites();
+            QVERIFY(!launcher.favoritesWritable()); QVERIFY(!launcher.favoriteError().isEmpty());
+            QVERIFY(launcher.aliasesWritable());
+            launcher.setQuery("ownfavoritealias");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            QCOMPARE(launcher.rows().first().toMap().value("kind").toString(),QStringLiteral("alias"));
+            QVERIFY(aliasUnchanged());
+            // A valid native favorite is independent from a corrupt alias file.
+            QVERIFY(corrupt.open(QIODevice::WriteOnly|QIODevice::Truncate));
+            corrupt.write(("{\"formatVersion\":\"0.1-experimental\",\"favorites\":[\""+appB+"\"]}").toUtf8()); corrupt.close();
+            QVERIFY(aliasFile.open(QIODevice::WriteOnly|QIODevice::Truncate)); aliasFile.write("{broken"); aliasFile.close();
+            launcher.reloadAliases(); launcher.reloadFavorites(); launcher.setQuery("");
+            QVERIFY(!launcher.aliasesWritable()); QVERIFY(launcher.favoritesWritable());
+            QCOMPARE(launcher.rows().size(),1); QVERIFY(launcher.rows().first().toMap().value("enabled").toBool());
+            launcher.setQuery("OrlaFavoriteCoreCollision");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            int b=-1; for(int row=0;row<launcher.rows().size();++row) if(launcher.rows()[row].toMap().value("appId").toString()==appB)b=row;
+            QVERIFY(b>=0); launcher.select(b);
+            QVERIFY(launcher.pinFavorite(b,launcher.generation(),launcher.rows()[b].toMap().value("id").toString(),launcher.favoriteRevision()));
+            QVERIFY(aliasFile.open(QIODevice::ReadOnly)); QCOMPARE(aliasFile.readAll(),QByteArray("{broken")); aliasFile.close();
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+        }
+    }
+    void favoritesRemainUsableWithCorruptAliasesAndRemoveMissingWithFreshTickets()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString aliases=root.filePath("aliases.json"), favorites=root.filePath("favorites.json");
+        QFile bad(aliases);
+        QVERIFY(bad.open(QIODevice::WriteOnly)); bad.write("{broken"); bad.close();
+        FavoritesStore saved(favorites);
+        const QString appId="org.orla.FavoriteMissing.desktop";
+        QVERIFY(saved.pin(appId,saved.revision()));
+        LauncherControllerTestOwner owner(nullptr,aliases,favorites);
+        auto &launcher=owner.controller();
+        QVERIFY(!launcher.aliasesWritable()); QVERIFY(launcher.favoritesWritable());
+        QCOMPARE(launcher.rows().size(),1);
+        QVERIFY(!launcher.rows().first().toMap().value("enabled").toBool());
+        QVERIFY(!launcher.executeSelected());
+        {
+            ResetFavoriteReloadBoundary reset;
+            const auto generation=launcher.generation();
+            const auto revision=launcher.favoriteRevision();
+            const auto oldRows=launcher.rows();
+            const QByteArray external=("{ \"formatVersion\": \"0.1-experimental\", \"favorites\": [\""+appId+"\"] }\n").toUtf8();
+            favoriteReloadBoundary={QFile::encodeName(QFileInfo(favorites).fileName()),favorites,external};
+            QVERIFY(!launcher.removeFavorite(appId,generation,revision));
+            QVERIFY(favoriteReloadBoundary.injected && favoriteReloadBoundary.written);
+            QFile readback(favorites); QVERIFY(readback.open(QIODevice::ReadOnly)); QCOMPARE(readback.readAll(),external);
+            QVERIFY(launcher.generation()>generation);
+            QVERIFY(launcher.favoriteRevision()!=revision);
+            QVERIFY(!launcher.favoriteError().isEmpty()); QVERIFY(launcher.favoritesWritable());
+            QCOMPARE(launcher.rows().size(),oldRows.size());
+            for (const auto &row : launcher.rows()) {
+                QCOMPARE(row.toMap().value("favoriteRevision").toString(),launcher.favoriteRevision());
+                QCOMPARE(row.toMap().value("generation").toULongLong(),launcher.generation());
+            }
+            const auto fresh=launcher.generation();
+            launcher.reloadFavorites(); launcher.setQuery("");
+            QCOMPARE(launcher.generation(),fresh);
+            QCOMPARE(launcher.rows().first().toMap().value("favoriteRevision").toString(),launcher.favoriteRevision());
+        }
+        const auto oldGeneration=launcher.generation();
+        const auto oldRevision=launcher.favoriteRevision();
+        saved.reload();
+        QVERIFY(saved.pin("org.orla.OtherMissing.desktop",saved.revision()));
+        QVERIFY(!launcher.removeFavorite(appId,oldGeneration,oldRevision));
+        QCOMPARE(launcher.favorites().size(),2);
+        QVERIFY(launcher.removeFavorite(appId,launcher.generation(),launcher.favoriteRevision()));
+        QVERIFY(!launcher.removeFavorite(appId,oldGeneration,oldRevision));
+        QVERIFY(launcher.favoriteError().isEmpty());
+        QFile observed(aliases); QVERIFY(observed.open(QIODevice::ReadOnly)); QCOMPARE(observed.readAll(),QByteArray("{broken"));
+    }
     void savedAppAliasFindsTheInstalledFixtureAfterAnotherQuery()
     {
         const auto receipt = qEnvironmentVariable("ORLA_TEST_RECEIPT");
@@ -523,6 +807,11 @@ private Q_SLOTS:
             break;
         }
         QCOMPARE(opened, QList<QUrl>{QUrl(QStringLiteral("steam://rungameid/42"))});
+        launcher.setQuery("");
+        QTest::qWait(100);
+        QVERIFY(launcher.rows().isEmpty());
+        QCOMPARE(launcher.status(),QStringLiteral("idle"));
+        QCOMPARE(opened.size(),1);
     }
 };
 QTEST_MAIN(LauncherTests)

@@ -2,6 +2,72 @@
 
 Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
+## Favoritos de aplicativos — experimental
+
+Selecione um aplicativo e abra **Ações/Ctrl+K → Fixar nos favoritos**.
+Os aplicativos salvos aparecem na seção **FAVORITOS** ao limpar a busca ou
+reabrir o launcher, inclusive após reiniciar. Enter ou **Abrir** executa apenas
+o aplicativo selecionado; fixar ou remover mantém a janela aberta e devolve
+o foco à busca.
+
+**Ações → Apps e aliases…** reúne os favoritos e aliases. **Remover dos
+favoritos** também está nas ações do aplicativo salvo. Um alvo indisponível
+continua podendo ser removido, sem abrir outro aplicativo com o mesmo nome.
+Tab/Shift+Tab revela os controles nas listas longas; Escape fecha primeiro
+o popover. Os erros dos dois grupos são independentes.
+
+São até 16 aplicativos, em ordem de inclusão. O arquivo local
+`$XDG_CONFIG_HOME/orla/launcher-favorites.json` (normalmente
+`~/.config/orla/launcher-favorites.json`) guarda somente IDs estáveis no formato
+`0.1-experimental`. Não altera o arquivo de aliases. Leituras não criam nem
+reparam arquivos; dados inválidos, versões desconhecidas, locks existentes e
+alterações externas são preservados. O formato ainda não é uma API pública.
+Histórico, sincronização, reordenação manual e favoritos de jogos ficam fora
+deste incremento.
+
+Os nove CTests passaram com Qt 6.11.2/KF6 6.30: Fusion em **106,643 s** e
+KDE em **110,889 s**. O teste de revisão externa falhou nos dois caminhos
+do candidato anterior e passou após a correção. A galeria sintética foi
+renderizada nos dois esquemas do sistema; o launcher mantém seu esquema
+escuro. A build permanente também passou os nove testes nos dois estilos
+e foi instalada, preservando Meta/defaults e 1.467 arquivos/240 diretórios
+protegidos.
+
+Em KDE/Wayland, tela única e DPR 1,45, foram observados por gestos reais:
+selecionar A com o homônimo B primeiro na lista, fixar A, reiniciar, abrir
+somente A por Enter (A=1/B=0), recusar o alvo ausente e removê-lo pelo mouse.
+O manager precisou ser reaberto depois que a atualização de disponibilidade
+invalidou o primeiro menu. Dois ensaios permanecem parciais: os limites de
+tempo encerraram a etapa final, preservando seus erros e a limpeza. Uma
+sessão nova recebeu exclusivamente os dados vazios removidos pela UI e
+confirmou reabertura vazia, preferências, dois Escapes, saída zero e retorno
+de foco à sua própria janela KWrite, com um marcador salvo uma vez. Essa
+união delimitada não é uma execução completa única. Perfil pessoal,
+atalho global nesta revisão, outras escalas e monitores continuam abertos.
+
+O ensaio revelou que **Abrir** ainda parecia disponível para um alvo ausente.
+A correção exige uma seleção disponível; clique, Enter e substituição no mesmo
+índice foram verificados em 440/660 px com favoritos e aliases. Os nove CTests
+passaram novamente com Fusion em **107,377 s** e KDE em **111,985 s**, e a
+galeria dos dois esquemas foi revisada. Essa correção ainda não recebeu um
+novo ensaio Wayland neste registro.
+
+| Estado sintético | Captura |
+|---|---|
+| Busca vazia com favoritos | [Lista](../docs/screenshots/launcher-favorites/launcher-favorites-empty-query.png) |
+| Ações e foco | [Remover dos favoritos](../docs/screenshots/launcher-favorites/launcher-favorites-actions.png) |
+| Preferências em janela estreita | [Apps e aliases](../docs/screenshots/launcher-favorites/launcher-favorites-manager-narrow.png) |
+| Lista longa e foco visível | [Rolagem](../docs/screenshots/launcher-favorites/launcher-favorites-list-focus-narrow.png) |
+| Aplicativo indisponível | [Remoção acessível](../docs/screenshots/launcher-favorites/launcher-favorites-missing-narrow.png) |
+| Favoritos inválidos, aliases disponíveis | [Erros independentes](../docs/screenshots/launcher-favorites/launcher-favorites-unavailable-aliases-enabled-narrow.png) |
+
+Capturas nativas dos estados observados: [favorito após reinício](../docs/screenshots/launcher-favorites/native-restart.png),
+[alvo ausente removível](../docs/screenshots/launcher-favorites/native-missing-manager.png) e
+[lista vazia reaberta](../docs/screenshots/launcher-favorites/native-empty-reopen.png).
+Elas contêm somente fixtures próprias; os pixels foram preservados ao retirar
+metadados. O compositor teve owner/PID/UID/época verificados, com executável/ABI
+opacos; os guards das capturas são observações antes/depois, sem prova contínua.
+
 ## Aliases de aplicativos — experimental
 
 Selecione um aplicativo e abra **Ações → Adicionar alias…** para guardar um
@@ -10,7 +76,7 @@ esse aplicativo com a origem **Alias salvo por você**. Só Enter ou clique em
 **Abrir** encaminha a execução; pesquisar e abrir preferências não executa nada.
 Aliases não guardam comandos, argumentos ou consultas do runner.
 
-**Ações → Gerenciar aliases…** funciona também com a busca vazia. A lista mostra
+**Ações → Apps e aliases…** funciona também com a busca vazia. A lista mostra
 nome e ícone; alvos indisponíveis ou nomes ambíguos mostram também o identificador.
 **Editar** renomeia o alias; **Remover**
 exclui somente o par escolhido. Um aplicativo indisponível continua permitindo

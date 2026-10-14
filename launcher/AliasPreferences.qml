@@ -17,8 +17,11 @@ Popup {
     // Early eligibility refusals must not display an older command error.
     property bool commitNotified: false
     property string localError: ""
+    property string localFavoriteError: ""
     readonly property int aliasLength: codepointLength(aliasInput.text)
-    readonly property bool writable: visible && ticket !== null && !host.executionBlocked && controller.aliasesWritable === true
+    readonly property bool writable: visible && ticket !== null && !host.executionBlocked && controller.aliasesWritable === true && current()
+    readonly property bool favoritesWritable: visible && mode === "manager" && ticket !== null
+        && !host.executionBlocked && controller.favoritesWritable === true && favoriteCurrent()
     signal closedByUser()
     popupType: Popup.Item
     modal: true
@@ -50,10 +53,14 @@ Popup {
         else if (bottom > view.contentY + view.height)
             view.contentY = Math.max(0, Math.min(view.contentHeight - view.height, bottom - view.height))
     }
+    function currentSelectedId() {
+        const row = controller.selectedIndex >= 0 ? controller.rows[controller.selectedIndex] : null
+        return row ? row.id : ""
+    }
     function snapshot(extra) {
-        return { generation: controller.generation, revision: controller.aliasRevision,
+        return { generation: controller.generation, revision: controller.aliasRevision, favoriteRevision: controller.favoriteRevision,
             query: controller.query, selection: controller.selectedIndex,
-            selectedId: host.selectedRow ? host.selectedRow.id : "",
+            selectedId: currentSelectedId(),
             row: extra ? extra.row : -1, id: extra ? extra.id : "",
             alias: extra ? extra.alias || "" : "", appId: extra ? extra.appId || "" : "" }
     }
@@ -63,21 +70,39 @@ Popup {
         if (host.executionBlocked || host.activePanel !== "search") { close(); return }
         if (modeValue !== "manager" && extra && extra.generation !== undefined
             && (extra.generation !== controller.generation || extra.revision !== controller.aliasRevision)) { close(); return }
-        if (modeValue === "manager") controller.reloadAliases()
+        if (modeValue === "manager") { controller.reloadAliases(); if (controller.reloadFavorites) controller.reloadFavorites() }
         if (host.executionBlocked || host.activePanel !== "search") { close(); return }
         mode = modeValue
         ticket = snapshot(extra)
         localError = ""
+        localFavoriteError = ""
         aliasInput.text = extra ? extra.alias || "" : ""
         if (!visible) open()
         if (mode !== "manager") aliasInput.forceActiveFocus(Qt.PopupFocusReason)
         else body.forceActiveFocus(Qt.PopupFocusReason)
     }
     function invalidate() { episode++; ticket = null; close() }
-    function current() {
-        return ticket && ticket.generation === controller.generation && ticket.revision === controller.aliasRevision
+    function currentContext() {
+        return ticket && ticket.generation === controller.generation
             && ticket.query === controller.query && ticket.selection === controller.selectedIndex
-            && ticket.selectedId === (host.selectedRow ? host.selectedRow.id : "")
+            && ticket.selectedId === currentSelectedId()
+    }
+    function current() { return currentContext() && ticket.revision === controller.aliasRevision }
+    function favoriteCurrent() { return currentContext() && ticket.favoriteRevision === controller.favoriteRevision }
+    function removeFavorite(pair, pressedEpisode) {
+        if (pressedEpisode !== episode || !pair || !favoritesWritable || !favoriteCurrent()
+            || pair.generation !== ticket.generation || pair.revision !== ticket.favoriteRevision) return
+        const captured = ticket
+        const capturedEpisode = episode
+        committing = true
+        let ok = false
+        try { ok = controller.removeFavorite(pair.appId, pair.generation, pair.revision) }
+        finally { committing = false }
+        // Do not revive a closed or newly opened manager after a synchronous callback.
+        if (episode !== capturedEpisode || ticket !== captured || !visible || host.executionBlocked
+            || host.activePanel !== "search" || !host.active || !host.visible) return
+        if (ok) { ticket = snapshot(null); episode++; localFavoriteError = ""; body.forceActiveFocus(Qt.PopupFocusReason) }
+        else localFavoriteError = String(controller.favoriteError || qsTr("Não foi possível remover o favorito. Abra a lista novamente.")).slice(0, 256)
     }
     function commit(kind, pair, pressedEpisode) {
         if (pressedEpisode !== episode || !writable || !current()) return
@@ -106,7 +131,7 @@ Popup {
         target: panel.controller
         function onChanged() {
             if (panel.committing) panel.commitNotified = true
-            else if (panel.visible && !panel.current()) panel.invalidate()
+            else if (panel.visible && !(panel.mode === "manager" ? panel.currentContext() : panel.current())) panel.invalidate()
         }
     }
     Connections {
@@ -131,14 +156,15 @@ Popup {
             Layout.fillWidth: true
             Text {
                 Layout.fillWidth: true
-                text: panel.mode === "manager" ? qsTr("Aliases salvos") : panel.mode === "add" ? qsTr("Adicionar alias") : qsTr("Editar alias")
+                objectName: "preferencesTitle"
+                text: panel.mode === "manager" ? qsTr("Apps e aliases") : panel.mode === "add" ? qsTr("Adicionar alias") : qsTr("Editar alias")
                 font.pixelSize: Style.type.title; font.weight: Style.weight.demiBold
                 color: panel.ui.text; textFormat: Text.PlainText
             }
         }
         Text {
             Layout.fillWidth: true
-            text: panel.mode === "manager" ? qsTr("Nomes curtos para abrir seus aplicativos.") : qsTr("Use de 1 a 32 caracteres. Outros aliases deste aplicativo serão mantidos.")
+            text: panel.mode === "manager" ? qsTr("Seus favoritos e nomes curtos para abrir aplicativos.") : qsTr("Use de 1 a 32 caracteres. Outros aliases deste aplicativo serão mantidos.")
             color: panel.ui.textMuted; font.pixelSize: Style.type.label
             wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
@@ -156,6 +182,83 @@ Popup {
                 id: aliasList
                 width: aliasScroll.availableWidth
                 spacing: Style.space.sm
+                Text {
+                    objectName: "favoritesSectionLabel"
+                    visible: (panel.controller.favorites || []).length > 0 || panel.controller.favoritesWritable === false || (panel.controller.aliases || []).length === 0
+                    Layout.fillWidth: true; text: qsTr("FAVORITOS")
+                    font.pixelSize: Style.type.overline; font.weight: Style.weight.bold; font.letterSpacing: Style.letterSpacing.overline
+                    color: panel.ui.textMuted; textFormat: Text.PlainText
+                }
+                Repeater {
+                    model: (panel.controller.favorites || []).slice(0, 16)
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        implicitHeight: favoriteRow.implicitHeight + 2 * Style.space.sm
+                        radius: Style.radius.control; color: panel.ui.surface
+                        RowLayout {
+                            id: favoriteRow
+                            anchors.fill: parent; anchors.margins: Style.space.sm; spacing: Style.space.sm
+                            ControlsImpl.IconImage {
+                                Layout.preferredWidth: Style.size.iconMd; Layout.preferredHeight: Style.size.iconMd
+                                name: modelData.iconName || ""; visible: name.length > 0 && status === Image.Ready
+                                sourceSize.width: width * 2; sourceSize.height: height * 2
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: Style.space.xxs
+                                Text {
+                                    objectName: "favoriteTarget" + index
+                                    Layout.fillWidth: true; text: modelData.available === false ? qsTr("Aplicativo indisponível") : String(modelData.title || modelData.appId).slice(0, 128)
+                                    elide: Text.ElideRight; font.pixelSize: Style.type.body; color: panel.ui.text; textFormat: Text.PlainText
+                                }
+                                Text {
+                                    objectName: "favoriteAppId" + index
+                                    visible: modelData.available === false || (!!modelData.title
+                                        && (panel.controller.favorites || []).slice(0, 16).some(other => other.appId !== modelData.appId && other.title === modelData.title))
+                                    Layout.fillWidth: true; text: String(modelData.appId).slice(0, 128); elide: Text.ElideMiddle
+                                    font.pixelSize: Style.type.caption; color: panel.ui.textMuted; textFormat: Text.PlainText
+                                }
+                            }
+                            Button {
+                                id: favoriteRemoveButton
+                                objectName: "favoriteRemove" + index
+                                property int pressedEpisode: -1
+                                property var pairTicket: null
+                                text: qsTr("Remover"); enabled: panel.favoritesWritable
+                                Accessible.name: qsTr("Remover %1 dos favoritos").arg(String(modelData.title || modelData.appId).slice(0, 128))
+                                implicitHeight: Style.size.target
+                                Layout.minimumHeight: Style.size.target; Layout.minimumWidth: Style.size.target
+                                onActiveFocusChanged: if (activeFocus) panel.reveal(favoriteRemoveButton)
+                                onPressed: {
+                                    pressedEpisode = panel.episode
+                                    pairTicket = panel.ticket ? {appId: String(modelData.appId), generation: panel.ticket.generation, revision: panel.ticket.favoriteRevision} : null
+                                }
+                                onClicked: panel.removeFavorite(pairTicket, pressedEpisode)
+                                contentItem: Text { text: parent.text; color: parent.enabled ? panel.ui.danger : panel.ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText; verticalAlignment: Text.AlignVCenter }
+                                background: Rectangle { radius: Style.radius.control; color: panel.ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: panel.ui.focus }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    objectName: "favoriteEmptyState"
+                    visible: (panel.controller.favorites || []).length === 0 && (panel.controller.favoritesWritable === false || (panel.controller.aliases || []).length === 0); Layout.fillWidth: true
+                    text: panel.controller.favoritesWritable === false ? qsTr("Favoritos indisponíveis. Seus dados foram preservados.") : qsTr("Nenhum favorito salvo. Fixe um nas ações de um aplicativo.")
+                    wrapMode: Text.Wrap; font.pixelSize: Style.type.body; color: panel.ui.textMuted; textFormat: Text.PlainText
+                }
+                Text {
+                    objectName: "favoriteErrorLabel"
+                    Layout.fillWidth: true; visible: panel.localFavoriteError.length > 0 || String(panel.controller.favoriteError || "").length > 0
+                    text: panel.localFavoriteError || String(panel.controller.favoriteError || "").slice(0, 256)
+                    color: panel.ui.warning; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight; textFormat: Text.PlainText
+                }
+                Text {
+                    objectName: "aliasesSectionLabel"
+                    Layout.fillWidth: true; text: qsTr("ALIASES")
+                    font.pixelSize: Style.type.overline; font.weight: Style.weight.bold; font.letterSpacing: Style.letterSpacing.overline
+                    color: panel.ui.textMuted; textFormat: Text.PlainText
+                }
                 Repeater {
                     model: (panel.controller.aliases || []).slice(0, 16)
                     delegate: Rectangle {

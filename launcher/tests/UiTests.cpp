@@ -2082,6 +2082,13 @@ QtObject {
         property string aliasError: ""
         property bool aliasesWritable: true
         property var aliases: [{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Dolphin",available:true}, {alias:"indisponível",appId:"org.orla.missing.desktop",title:"Aplicativo indisponível",available:false}]
+        property string favoriteRevision: "favorite-1"
+        property string favoriteError: ""
+        property bool favoritesWritable: true
+        property var favorites: []
+        property var favoriteCalls: []
+        property int favoriteReloadCount: 0
+        property string favoriteFailureMode: ""
         property var aliasCalls: []
         property string aliasFailureMode: ""
         property var pendingAliasRead: null
@@ -2107,7 +2114,10 @@ QtObject {
         ]
         function select(row) { selectedIndex = row; }
         function moveSelection(delta) {}
-        function execute(row, generation, id, actionId) { executed = executed.concat([{id:id,actionId:actionId}]) }
+        function execute(row, generation, id, actionId) {
+            if (!rows[row] || rows[row].enabled !== true) return
+            executed = executed.concat([{id:id,actionId:actionId}])
+        }
         function dismiss() { dismissed++ }
         function advance() { generation++; aliasRevision = "revision-" + generation; changed() }
         function rejected(name) { aliasError = name; changed(); return false }
@@ -2134,6 +2144,26 @@ QtObject {
             if (!aliasesWritable || gen !== generation || rev !== aliasRevision) return false
             aliases = aliases.filter(entry => entry.alias !== alias || entry.appId !== appId); advance(); return true
         }
+        function pinFavorite(row, gen, id, rev) {
+            favoriteCalls = favoriteCalls.concat([{kind:"pin",row:row,generation:gen,id:id,revision:rev}])
+            if (!favoritesWritable || gen !== generation || rev !== favoriteRevision
+                || row !== selectedIndex || rows[row].id !== id) return false
+            if (favoriteFailureMode === "silent") return false
+            favorites = favorites.concat([{appId:rows[row].appId,title:rows[row].title,iconName:rows[row].iconName,available:true}])
+            favoriteRevision += "-next"; generation++; changed(); return true
+        }
+        function removeFavorite(appId, gen, rev) {
+            favoriteCalls = favoriteCalls.concat([{kind:"remove",appId:appId,generation:gen,revision:rev}])
+            if (!favoritesWritable || gen !== generation || rev !== favoriteRevision) return false
+            favorites = favorites.filter(entry => entry.appId !== appId)
+            favoriteRevision += "-next"; generation++
+            if (query === "") {
+                rows = favorites.map(entry => ({id:"favorite:"+entry.appId,kind:"favorite",appId:entry.appId,title:entry.title,source:"Favorito salvo por você",categoryLabel:"FAVORITOS",generation:generation,enabled:entry.available,actions:[]}))
+                selectedIndex = rows.findIndex(entry => entry.enabled)
+            }
+            changed(); return true
+        }
+        function reloadFavorites() { favoriteReloadCount++ }
         function reloadAliases() {
             reloadCount++
             if (!pendingAliasRead) return
@@ -2398,10 +2428,191 @@ QtObject {
         QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissed + 1);
         QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
         QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
-        evaluate(QStringLiteral("launcher.rows=[{id:'alias:arquivos',kind:'alias',title:'Dolphin',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
+
+        evaluate(QStringLiteral("launcher.rows=[{id:'alias:arquivos',kind:'alias',title:'Dolphin',description:'',source:'Alias salvo por você',categoryLabel:'ALIASES',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
         QVERIFY(item("executeButton") && item("executeButton")->isEnabled());
         QCOMPARE(item("executeButton")->property("text").toString(), QStringLiteral("Abrir ↵"));
         QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+
+        // Favorites use their own revision and never execute or dismiss on mutation.
+        evaluate(QStringLiteral("launcher.rows=[{id:'native-a',kind:'app',appId:'org.orla.favorite.desktop',title:'App sintético',iconName:'system-file-manager',source:'Aplicativos',categoryLabel:'APLICATIVOS',generation:launcher.generation,enabled:true,aliasEligible:true,actions:[]}];launcher.selectedIndex=0;launcher.query='app';launcher.status='ready';launcher.favorites=[];launcher.changed()"));
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        auto *pin = item("favoritePinAction");
+        QVERIFY(pin && pin->isVisible() && pin->isEnabled()); // RED: absent before this slice.
+        QSignalSpy pinTriggered(pin, SIGNAL(triggered()));
+        QVERIFY(pinTriggered.isValid());
+        QVERIFY(pin->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_Space);
+        QCOMPARE(pinTriggered.count(), 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls[0].id")).toString(), QStringLiteral("native-a"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        QVERIFY(!evaluate(QStringLiteral("resultActions.visible")).toBool());
+        QVERIFY(item("searchInput")->hasActiveFocus());
+        QVERIFY(window->isVisible());
+        QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissed + 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+        // A press from a closed/reopened menu cannot remove the newly saved favorite.
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QPointer<QQuickItem> unpin(item("favoriteRemoveAction"));
+        QVERIFY(unpin);
+        const QPoint unpinPoint = unpin->mapToScene(QPointF(unpin->width()/2, unpin->height()/2)).toPoint();
+        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, unpinPoint);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTest::mouseRelease(window, Qt::LeftButton);
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        if (unpin) QVERIFY(QMetaObject::invokeMethod(unpin, "triggered"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), 1);
+        // Qt may close a Menu on triggered even when our stale ticket is refused.
+        if (!evaluate(QStringLiteral("resultActions.visible")).toBool())
+            QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QVERIFY(click("favoriteRemoveAction"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), 2);
+        QVERIFY(item("searchInput")->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), 3);
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), 4);
+        // Capture exact row identity, generation and revision on the real mouse press.
+        const int favoriteCalls = evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt();
+        for (const QString &change : {QStringLiteral("launcher.rows=[Object.assign({},launcher.rows[0],{id:'replacement',appId:'org.orla.other.desktop'})];launcher.changed()"),
+                QStringLiteral("launcher.favoriteRevision+='-external';launcher.changed()"), QStringLiteral("launcher.generation++;launcher.changed()"),
+                QStringLiteral("aiProviders.busy=true"), QStringLiteral("aiText.busy=true"), QStringLiteral("steamProvider.busy=true"),
+                QStringLiteral("window.pendingDismiss=true")}) {
+            evaluate(QStringLiteral("launcher.rows[0]=Object.assign({},launcher.rows[0],{generation:launcher.generation});launcher.changed()"));
+            QVERIFY(click("actionsButton"));
+            QPointer<QQuickItem> target(item("favoritePinAction"));
+            QVERIFY(target);
+            const QPoint point = target->mapToScene(QPointF(target->width()/2,target->height()/2)).toPoint();
+            QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, point);
+            evaluate(change);
+            QTest::mouseRelease(window, Qt::LeftButton);
+            if (target) QVERIFY(QMetaObject::invokeMethod(target, "triggered"));
+            QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), favoriteCalls);
+            evaluate(QStringLiteral("window.pendingDismiss=false;aiProviders.busy=false;aiText.busy=false;steamProvider.busy=false"));
+        }
+        // Corrupt aliases do not disable the independent favorite manager, including missing apps.
+        evaluate(QStringLiteral("launcher.aliasesWritable=false;launcher.aliasError='Arquivo de aliases inválido.';launcher.aliases=[{alias:'app',appId:'org.orla.synthetic.desktop',title:'App sintético',available:true}];launcher.favorites=[{appId:'org.orla.missing-favorite.desktop',title:'Aplicativo indisponível',iconName:'application-x-executable',available:false}];launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        QCOMPARE(item("preferencesTitle")->property("text").toString(), QStringLiteral("Apps e aliases"));
+        QVERIFY(item("favoriteRemove0") && item("favoriteRemove0")->isEnabled());
+        QVERIFY(!item("aliasEdit0")->isEnabled());
+        QCOMPARE(item("favoriteTarget0")->property("text").toString(), QStringLiteral("Aplicativo indisponível"));
+        QVERIFY(click("favoriteRemove0"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), favoriteCalls + 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls[launcher.favoriteCalls.length-1].appId")).toString(), QStringLiteral("org.orla.missing-favorite.desktop"));
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        // Both 16-row groups remain keyboard reachable within the fixed viewport.
+        evaluate(QStringLiteral("launcher.aliasesWritable=true;launcher.aliasError='';launcher.aliases=Array.from({length:16},(_,i)=>({alias:'alias '+i,appId:'org.orla.synthetic'+i+'.desktop',title:'App sintético '+i,iconName:'system-file-manager',available:true}));launcher.favorites=Array.from({length:16},(_,i)=>({appId:'org.orla.favorite'+i+'.desktop',title:'Favorito sintético '+i,iconName:'system-file-manager',available:true}));launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        auto *firstFavorite = item("favoriteRemove0");
+        QVERIFY(firstFavorite);
+        firstFavorite->forceActiveFocus(Qt::TabFocusReason);
+        for (int index=0; index<15; ++index) QTest::keyClick(window, Qt::Key_Tab);
+        auto *lastFavorite = item("favoriteRemove15");
+        QVERIFY(lastFavorite);
+        QTRY_VERIFY_WITH_TIMEOUT(lastFavorite->hasActiveFocus(), 1000);
+        const auto favoriteBounds = [&] { return lastFavorite->mapRectToItem(viewport,QRectF(0,0,lastFavorite->width(),lastFavorite->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0,0,viewport->width(),viewport->height()).contains(favoriteBounds()), 1000);
+        QTest::keyClick(window, Qt::Key_Tab);
+        QVERIFY(item("aliasEdit0")->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_Backtab);
+        QVERIFY(lastFavorite->hasActiveFocus());
+        for (int index=0; index<32; ++index) QTest::keyClick(window, Qt::Key_Tab);
+        QTRY_VERIFY_WITH_TIMEOUT(item("aliasRemove15")->hasActiveFocus(), 1000);
+        auto *finalAlias = item("aliasRemove15");
+        QVERIFY(finalAlias);
+        const auto finalAliasBounds = [&] { return finalAlias->mapRectToItem(viewport,QRectF(0,0,finalAlias->width(),finalAlias->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0,0,viewport->width(),viewport->height()).contains(finalAliasBounds()), 1000);
+        // Busy/dismiss invalidates a held manager press without writing either store.
+        auto *removeFavorite = item("favoriteRemove15");
+        begin(QStringLiteral("manager"));
+        removeFavorite->forceActiveFocus(Qt::TabFocusReason);
+        QTest::keyPress(window, Qt::Key_Space);
+        evaluate(QStringLiteral("window.pendingDismiss=true"));
+        QTest::keyRelease(window, Qt::Key_Space);
+        QVERIFY(QMetaObject::invokeMethod(removeFavorite,"clicked"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.favoriteCalls.length")).toInt(), favoriteCalls + 1);
+        evaluate(QStringLiteral("window.pendingDismiss=false;launcher.favoritesWritable=false;launcher.favoriteError='Favoritos indisponíveis.';launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        QVERIFY(!item("favoriteRemove0")->isEnabled());
+        QVERIFY(item("aliasEdit0")->isEnabled());
+        QCOMPARE(item("favoriteErrorLabel")->property("text").toString(), QStringLiteral("Favoritos indisponíveis."));
+        evaluate(QStringLiteral("aliasPreferences.invalidate();launcher.favoritesWritable=true;launcher.favoriteError='';launcher.query='';launcher.rows=[{id:'favorite:org.orla.favorite.desktop',kind:'favorite',appId:'org.orla.favorite.desktop',title:'App sintético',source:'Favorito salvo por você',categoryLabel:'FAVORITOS',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
+        QCOMPARE(item("executeButton")->property("text").toString(), QStringLiteral("Abrir ↵"));
+        QVERIFY(item("searchInput")->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed[0].id")).toString(), QStringLiteral("favorite:org.orla.favorite.desktop"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        // Empty-query removal refreshes rows synchronously; the next manager ticket stays usable.
+        evaluate(QStringLiteral("launcher.favorites=[{appId:'org.orla.a.desktop',title:'App A sintético',available:true},{appId:'org.orla.b.desktop',title:'App B sintético',available:true}];launcher.rows=[{id:'favorite:org.orla.a.desktop',kind:'favorite',appId:'org.orla.a.desktop',title:'App A sintético',source:'Favorito salvo por você',categoryLabel:'FAVORITOS',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        QTest::keyClick(window, Qt::Key_Tab);
+        QVERIFY(item("favoriteRemove0")->hasActiveFocus());
+        QVERIFY(click("favoriteRemove0"));
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.favoritesWritable")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("aliasPreferences.ticket.selectedId")).toString(), QStringLiteral("favorite:org.orla.b.desktop"));
+        QTest::keyClick(window, Qt::Key_Tab);
+        QVERIFY(click("favoriteRemove0"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.favorites.length")).toInt(), 0);
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 1);
+
+        // Ready describes the search, not whether the selected saved app is available.
+        evaluate(QStringLiteral("aliasPreferences.invalidate()"));
+        auto *openButton = item("executeButton");
+        QVERIFY(openButton);
+        QSignalSpy openClicked(openButton, SIGNAL(clicked()));
+        QVERIFY(openClicked.isValid());
+        const int dismissesBeforeDisabled = evaluate(QStringLiteral("launcher.dismissed")).toInt();
+        const auto footerClick = [&] {
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                openButton->mapToScene(QPointF(openButton->width()/2, openButton->height()/2)).toPoint());
+        };
+        const auto enterFromSearch = [&] {
+            auto *searchInput = item("searchInput");
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                searchInput->mapToScene(QPointF(searchInput->width()/2, searchInput->height()/2)).toPoint());
+            QVERIFY(searchInput->hasActiveFocus());
+            QTest::keyClick(window, Qt::Key_Return);
+        };
+        for (const QString &kind : {QStringLiteral("favorite"), QStringLiteral("alias")}) {
+            const int executedBeforeDisabled = evaluate(QStringLiteral("launcher.executed.length")).toInt();
+            const int clicksBeforeDisabled = openClicked.count();
+            const auto selectedSavedRow = [&](bool available, const QString &id) {
+                evaluate(QStringLiteral("launcher.query='';launcher.rows=[{id:'%1',kind:'%2',appId:'org.orla.synthetic.desktop',title:'App sintético',description:'',source:'App salvo por você',categoryLabel:'SALVOS',generation:launcher.generation,enabled:%3,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()")
+                    .arg(id, kind, available ? QStringLiteral("true") : QStringLiteral("false")));
+            };
+            selectedSavedRow(false, kind + QStringLiteral(":missing"));
+            QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000); // RED: ready+index used to enable it.
+            QCOMPARE(openButton->property("text").toString(), QStringLiteral("Abrir ↵"));
+            footerClick();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled);
+            enterFromSearch();
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled);
+            QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissesBeforeDisabled);
+            // A replacement at the same index becomes actionable without changing the search status.
+            selectedSavedRow(true, kind + QStringLiteral(":available"));
+            QTRY_VERIFY_WITH_TIMEOUT(openButton->isEnabled(), 1000);
+            enterFromSearch();
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed[launcher.executed.length-1].id")).toString(), kind + QStringLiteral(":available"));
+            footerClick();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 2);
+            selectedSavedRow(false, kind + QStringLiteral(":removed"));
+            QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000);
+            footerClick();
+            enterFromSearch();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 2);
+            QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissesBeforeDisabled);
+        }
+        evaluate(QStringLiteral("launcher.rows=[];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
+        QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000);
+
     }
 };
 QTEST_MAIN(UiTests)

@@ -38,9 +38,9 @@ QString appForMatch(const KRunner::QueryMatch &match)
 }
 
 
-LauncherController::LauncherController(SteamProviderController *steam, QObject *parent, const QString &aliasPath)
+LauncherController::LauncherController(SteamProviderController *steam, QObject *parent, const QString &aliasPath, const QString &favoritePath)
     : QObject(parent), m_config(QString(), KConfig::SimpleConfig), m_state(QString(), KConfig::SimpleConfig),
-      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_aliases(aliasPath), m_steam(steam)
+      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_aliases(aliasPath), m_favorites(favoritePath), m_steam(steam)
 {
     // Supply anonymous groups to ResultsModel as well: its default constructor opens KRunner's user state.
     m_model.runnerManager()->setHistoryEnabled(false);
@@ -66,24 +66,26 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
     });
     if (m_steam) connect(m_steam, &SteamProviderController::changed, this, &LauncherController::steamChanged);
     connect(KSycoca::self(), &KSycoca::databaseChanged, this, [this] {
-        if (m_aliases.entries().isEmpty()) return;
-        if (!m_collectingAliasPresentation) { aliasesChanged(); return; }
+        if (m_aliases.entries().isEmpty() && m_favorites.entries().isEmpty()) return;
+        if (!m_collectingSavedPresentation) { savedAppsChanged(); return; }
         // Sycoca may notify synchronously while collecting the view snapshot.
         // Keep notification outside collection; a property read never resolves services.
-        if (m_aliasRefreshPending) return;
-        m_aliasRefreshPending = true;
+        if (m_savedRefreshPending) return;
+        m_savedRefreshPending = true;
         QMetaObject::invokeMethod(this, [this] {
-            m_aliasRefreshPending = false;
-            aliasesChanged();
+            m_savedRefreshPending = false;
+            savedAppsChanged();
         }, Qt::QueuedConnection);
     });
-    refreshAliasPresentation();
+    ++m_generation;
+    m_launchedGeneration = m_generation;
+    refresh();
 }
 
 QString LauncherController::status() const
 {
     if (!m_error.isEmpty()) return QStringLiteral("error");
-    if (m_query.trimmed().isEmpty()) return QStringLiteral("idle");
+    if (m_query.trimmed().isEmpty()) return m_rows.isEmpty() ? QStringLiteral("idle") : QStringLiteral("ready");
     if (m_debounce.isActive() || m_model.querying()) return QStringLiteral("loading");
     return m_rows.isEmpty() ? QStringLiteral("empty") : QStringLiteral("ready");
 }
@@ -96,10 +98,35 @@ QString LauncherController::resultId(const QModelIndex &index) const
 
 void LauncherController::refresh()
 {
-    refreshAliasPresentation();
+    refreshSavedPresentation();
     m_rows.clear();
     m_backendRows.clear();
-    if (m_launchedGeneration != m_generation || m_model.queryString() != m_query.trimmed()) {
+    if (m_launchedGeneration != m_generation) {
+        emit changed();
+        return;
+    }
+    if (m_query.trimmed().isEmpty()) {
+        // The empty surface is preferences, never a synthetic KRunner/Steam query.
+        const bool runnerReady = !m_favoritePresentation.isEmpty()
+            && m_model.runnerManager()->runner(QStringLiteral("krunner_services")) != nullptr;
+        for (const auto &entry : m_favoritePresentation) {
+            const auto item = entry.toMap();
+            const QString appId = item.value("appId").toString();
+            m_rows.append(QVariantMap{{"id", QStringLiteral("favorite:") + appId}, {"generation", m_generation},
+                {"title", item.value("title")}, {"iconName", item.value("iconName")},
+                {"description", !runnerReady ? tr("O provedor de aplicativos está indisponível.")
+                    : !item.value("available").toBool() ? tr("Aplicativo indisponível") : QString()},
+                {"enabled", m_favorites.writable() && item.value("available").toBool() && runnerReady},
+                {"kind", QStringLiteral("favorite")}, {"category", QStringLiteral("favorite")},
+                {"categoryLabel", tr("FAVORITOS")}, {"source", tr("Favorito salvo por você")},
+                {"appId", appId}, {"favoriteRevision", m_favorites.revision()}, {"actions", QVariantList{}}});
+            m_backendRows.append(-1);
+        }
+        restoreSelection();
+        emit changed();
+        return;
+    }
+    if (m_model.queryString() != m_query.trimmed()) {
         emit changed();
         return;
     }
@@ -185,6 +212,12 @@ void LauncherController::refresh()
         result[QStringLiteral("actions")] = actions;
         m_rows[row] = result;
     }
+    restoreSelection();
+    emit changed();
+}
+
+void LauncherController::restoreSelection()
+{
     // Sorting/batches may move rows. Preserve the selected identity, never its old index.
     m_selected = -1;
     for (int row = 0; row < m_rows.size(); ++row) {
@@ -200,28 +233,29 @@ void LauncherController::refresh()
             }
         }
     }
-    emit changed();
 }
 
 void LauncherController::steamChanged()
 {
+    const bool emptyReady = m_query.trimmed().isEmpty() && m_launchedGeneration == m_generation;
     ++m_generation;
-    if (!m_query.trimmed().isEmpty() && !m_debounce.isActive()
-        && m_model.queryString() == m_query.trimmed()) m_launchedGeneration = m_generation;
+    if (emptyReady || (!m_query.trimmed().isEmpty() && !m_debounce.isActive()
+        && m_model.queryString() == m_query.trimmed())) m_launchedGeneration = m_generation;
     refresh();
 }
 
-void LauncherController::aliasesChanged()
+void LauncherController::savedAppsChanged()
 {
+    const bool emptyReady = m_query.trimmed().isEmpty() && m_launchedGeneration == m_generation;
     ++m_generation;
-    if (!m_query.trimmed().isEmpty() && !m_debounce.isActive()
-        && m_model.queryString() == m_query.trimmed()) m_launchedGeneration = m_generation;
+    if (emptyReady || (!m_query.trimmed().isEmpty() && !m_debounce.isActive()
+        && m_model.queryString() == m_query.trimmed())) m_launchedGeneration = m_generation;
     refresh();
 }
 
-bool LauncherController::refreshAliasPresentation()
+bool LauncherController::refreshSavedPresentation()
 {
-    QScopedValueRollback<bool> collecting(m_collectingAliasPresentation, true);
+    QScopedValueRollback<bool> collecting(m_collectingSavedPresentation, true);
     QVariantList snapshot;
     for (const auto &entry : m_aliases.entries()) {
         auto item = entry.toMap();
@@ -231,16 +265,25 @@ bool LauncherController::refreshAliasPresentation()
         item.insert("available", bool(service));
         snapshot.append(item);
     }
-    if (snapshot == m_aliasPresentation) return false;
+    QVariantList favorites;
+    for (const auto &appId : m_favorites.entries()) {
+        const auto service = aliasService(appId);
+        favorites.append(QVariantMap{{"appId", appId},
+            {"title", service ? service->name() : tr("Aplicativo indisponível")},
+            {"iconName", service && !service->icon().isEmpty() ? service->icon() : QStringLiteral("application-x-executable")},
+            {"available", bool(service)}});
+    }
+    if (snapshot == m_aliasPresentation && favorites == m_favoritePresentation) return false;
     m_aliasPresentation = snapshot;
+    m_favoritePresentation = favorites;
     return true;
 }
 
 void LauncherController::reloadAliases()
 {
     const bool preferencesChanged = m_aliases.reload();
-    const bool presentationChanged = refreshAliasPresentation();
-    if (preferencesChanged || presentationChanged) aliasesChanged();
+    const bool presentationChanged = refreshSavedPresentation();
+    if (preferencesChanged || presentationChanged) savedAppsChanged();
 }
 
 bool LauncherController::saveAlias(int row, quint64 generation, const QString &id, const QString &alias, const QString &revision)
@@ -254,7 +297,7 @@ bool LauncherController::saveAlias(int row, quint64 generation, const QString &i
     const QString appId = appForMatch(m_model.getQueryMatch(index));
     if (appId.isEmpty() || generation != m_generation || id != m_selectedId) return false;
     const bool saved = m_aliases.save(alias, appId, revision);
-    if (saved) aliasesChanged();
+    if (saved) savedAppsChanged();
     else { reloadAliases(); emit changed(); }
     return saved;
 }
@@ -264,7 +307,7 @@ bool LauncherController::renameAlias(const QString &oldAlias, const QString &app
     reloadAliases();
     if (generation != m_generation) return false;
     const bool renamed = m_aliases.rename(oldAlias, appId, newAlias, revision);
-    if (renamed) aliasesChanged();
+    if (renamed) savedAppsChanged();
     else { reloadAliases(); emit changed(); }
     return renamed;
 }
@@ -274,15 +317,58 @@ bool LauncherController::removeAlias(const QString &alias, const QString &appId,
     reloadAliases();
     if (generation != m_generation) return false;
     const bool removed = m_aliases.remove(alias, appId, revision);
-    if (removed) aliasesChanged();
+    if (removed) savedAppsChanged();
     else { reloadAliases(); emit changed(); }
+    return removed;
+}
+
+void LauncherController::reloadFavorites()
+{
+    const bool preferencesChanged = m_favorites.reload();
+    const bool presentationChanged = refreshSavedPresentation();
+    if (preferencesChanged || presentationChanged) savedAppsChanged();
+}
+
+bool LauncherController::pinFavorite(int row, quint64 generation, const QString &id, const QString &revision)
+{
+    reloadFavorites();
+    if (generation != m_generation || m_launchedGeneration != m_generation || status() != QStringLiteral("ready")
+        || row != m_selected || row < 0 || row >= m_rows.size() || id != m_selectedId
+        || !m_rows[row].toMap().value("enabled").toBool() || m_backendRows.value(row, -1) < 0) return false;
+    const auto index = m_model.index(m_backendRows[row], 0);
+    if (!index.isValid() || resultId(index) != id) return false;
+    const QString appId = appForMatch(m_model.getQueryMatch(index));
+    if (appId.isEmpty() || generation != m_generation || id != m_selectedId) return false;
+    const QString beforeRevision = m_favorites.revision();
+    const bool saved = m_favorites.pin(appId, revision);
+    if (saved || m_favorites.revision() != beforeRevision) savedAppsChanged();
+    else { reloadFavorites(); emit changed(); }
+    return saved;
+}
+
+bool LauncherController::removeFavorite(const QString &appId, quint64 generation, const QString &revision)
+{
+    reloadFavorites();
+    if (generation != m_generation) return false;
+    const QString beforeRevision = m_favorites.revision();
+    const bool removed = m_favorites.unpin(appId, revision);
+    if (removed || m_favorites.revision() != beforeRevision) savedAppsChanged();
+    else { reloadFavorites(); emit changed(); }
     return removed;
 }
 
 void LauncherController::setQuery(const QString &query)
 {
     reloadAliases();
-    if (query == m_query) return;
+    reloadFavorites();
+    if (query == m_query) {
+        // A fresh empty opening after dismiss must build its own current ticket.
+        if (query.trimmed().isEmpty() && m_launchedGeneration != m_generation) {
+            m_launchedGeneration = m_generation;
+            refresh();
+        }
+        return;
+    }
     m_debounce.stop();
     m_query = query;
     ++m_generation;
@@ -295,6 +381,11 @@ void LauncherController::setQuery(const QString &query)
     m_model.clear(); // Cancel the native context before starting another query.
     if (query.size() > 512) m_error = tr("Use uma busca com até 512 caracteres.");
     else if (!query.trimmed().isEmpty()) m_debounce.start();
+    else {
+        m_launchedGeneration = m_generation;
+        refresh();
+        return;
+    }
     emit changed();
 }
 
@@ -323,9 +414,29 @@ bool LauncherController::execute(int row, quint64 generation, const QString &id,
     if (generation != m_generation || m_launchedGeneration != m_generation || status() != QStringLiteral("ready")
         || row < 0 || row >= m_rows.size() || row != m_selected || id.isEmpty() || id != m_selectedId) return false;
     const QVariantMap selected = m_rows[row].toMap();
+    if (selected.value("kind").toString() == QStringLiteral("favorite")) {
+        if (!actionId.isEmpty()) return false;
+        if (m_favorites.reload()) { savedAppsChanged(); return false; }
+        const QString appId = selected.value("appId").toString();
+        if (!m_favorites.writable() || selected.value("favoriteRevision").toString() != m_favorites.revision()
+            || !m_favorites.entries().contains(appId)) return false;
+        const auto service = aliasService(appId);
+        auto *runner = m_model.runnerManager()->runner(QStringLiteral("krunner_services"));
+        if (!service || !runner || runner->id() != QStringLiteral("krunner_services")
+            || generation != m_generation || row != m_selected || id != m_selectedId) return false;
+        KRunner::QueryMatch match(runner);
+        QUrl data;
+        data.setScheme(QStringLiteral("applications"));
+        data.setPath(appId);
+        match.setData(data);
+        match.setText(service->name());
+        const bool close = m_model.runnerManager()->run(match);
+        if (close && generation == m_generation) dismiss();
+        return close;
+    }
     if (selected.value("kind").toString() == QStringLiteral("alias")) {
         if (!actionId.isEmpty()) return false;
-        if (m_aliases.reload()) { aliasesChanged(); return false; }
+        if (m_aliases.reload()) { savedAppsChanged(); return false; }
         if (!m_aliases.writable() || selected.value("aliasRevision").toString() != m_aliases.revision()) return false;
         const QString appId = selected.value("appId").toString();
         const auto service = aliasService(appId);
