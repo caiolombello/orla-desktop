@@ -386,6 +386,53 @@ simuladas. Regressões causais reproduziram redirecionamento por troca de pasta
 e classificação incorreta de arquivo removido no código anterior. Essa prova
 é estática e não encerra instalação em usuário limpo ou qualificação nativa.
 
+### Política de grafo sobre catálogo fornecido — experimental
+
+`launcher/inventory_policy.py` prepara a resolução transitiva através de uma
+função pura `resolve_catalog(roots, objects, paths, *, limits=None)`. Ela recebe
+raízes identificadas, objetos com as tags dinâmicas do inventário direto e um
+catálogo explícito de caminhos. Não consulta o host e não acrescenta um comando
+ao `package.py`; o coletor real será uma etapa separada.
+
+A política `fedora44-usr-lib64-catalog-0.1` projeta cada nome NEEDED em
+`/usr/lib64/<nome>`. O catálogo distingue `object` com caminho canônico,
+`alias` com destino declarado, `absent_in_catalog` e `unknown`. Um caminho não
+fornecido permanece desconhecido. Aliases declarados podem ter até 16 saltos,
+com destino lexical dentro de `/usr/lib64`; ciclos, escapes, cadeia incompleta
+e declarações contraditórias ficam desconhecidos. Essa normalização é do
+catálogo: não comprova resolução de symlinks no filesystem.
+
+O grafo mantém cada ocorrência de NEEDED em ordem, inclusive repetições, e
+deduplica objetos. Raízes necessárias são percorridas antes das opcionais;
+o resultado de raízes mantém a ordem de entrada. Cada ligação apresenta sua
+identidade no catálogo e o estado efetivo por raiz. Incerteza de RPATH chega
+aos descendentes compartilhados mesmo após uma primeira visita conhecida;
+RUNPATH não é emprestado aos filhos. Caminhos de busca e flags não suportados
+mantêm a conclusão desconhecida. A política é uma projeção conservadora, sem
+reproduzir a [seleção do loader](https://man7.org/linux/man-pages/man8/ld.so.8.html).
+
+São admitidas até 16 raízes, 256 objetos e 4.096 registros de caminhos. O grafo
+tem limites de 256 nós/4.096 ligações; `limits` permite reduzir esses limites.
+Truncamento aparece em `incomplete`, com raiz, motivo e fronteira; diagnósticos
+por raiz explicam dados ausentes, bloqueios e contradições. Incerteza opcional
+não invalida uma raiz necessária já concluída. Entradas e resultados não
+compartilham estruturas mutáveis.
+
+O relatório `orla-launcher-catalog-graph-0.1` pode concluir somente
+`complete_for_supplied_catalog_policy`. Ausência significa ausência declarada
+no catálogo; host, loader, ABI e lifecycle continuam `UNRUN`. As 22 provas
+offline cobrem esses casos, limites exatos, ausência de acesso a arquivos ou
+processos durante a chamada e isolamento de mutações:
+
+```sh
+python3 -B -m unittest discover -s launcher/tests -p 'test_inventory_policy.py' -v
+```
+
+A próxima etapa liga essa política a observações delimitadas das bibliotecas
+reais, com evidência de cada caminho e salto. O inventário direto 0.1 e os
+arquivos de pacote 0.2/0.3 mantêm seus contratos, incluindo
+`caller_assertion_unverified`.
+
 ## Compilar e testar
 
 Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
