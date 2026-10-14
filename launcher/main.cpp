@@ -10,6 +10,7 @@
 #include "AiProviderController.h"
 #include "AiTextController.h"
 #include "LauncherController.h"
+#include "HelperPaths.h"
 #include "SteamProviderController.h"
 #include "WindowSession.h"
 
@@ -34,9 +35,9 @@ int main(int argc, char **argv)
                       QStringLiteral("combinação"), QStringLiteral("Ctrl+Alt+Meta+O")});
     parser.addOption({QStringLiteral("ai-python"), QStringLiteral("Interpretador Python absoluto para o helper limitado de IA."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_PYTHON_PATH)});
-    parser.addOption({QStringLiteral("ai-helper"), QStringLiteral("Helper limitado de IA absoluto; ausente significa indisponível."),
+    parser.addOption({QStringLiteral("ai-helper"), QStringLiteral("Helper limitado de IA absoluto; padrão integrado relativo ao executável."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_HELPER_PATH)});
-    parser.addOption({QStringLiteral("ai-text-helper"), QStringLiteral("Helper operacional de texto local absoluto."),
+    parser.addOption({QStringLiteral("ai-text-helper"), QStringLiteral("Helper operacional de texto local absoluto; padrão integrado relativo ao executável."),
                       QStringLiteral("caminho"), QStringLiteral(ORLA_AI_TEXT_HELPER_PATH)});
     parser.process(app);
     const bool managedShortcuts = parser.isSet(QStringLiteral("managed-shortcuts"));
@@ -59,12 +60,18 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    AiProviderController aiController(parser.value(QStringLiteral("ai-python")),
-                                      parser.value(QStringLiteral("ai-helper")));
-    AiTextController aiTextController(parser.value(QStringLiteral("ai-python")),
-                                      parser.value(QStringLiteral("ai-text-helper")));
+    const QString applicationDirectory = QCoreApplication::applicationDirPath();
+    // isSet preserves an explicitly empty CLI helper as unavailable.
+    const QString aiHelper = parser.isSet(QStringLiteral("ai-helper"))
+        ? parser.value(QStringLiteral("ai-helper"))
+        : OrlaHelpers::resolve(OrlaHelpers::Kind::Ai, applicationDirectory, QStringLiteral(ORLA_AI_HELPER_PATH));
+    const QString textHelper = parser.isSet(QStringLiteral("ai-text-helper"))
+        ? parser.value(QStringLiteral("ai-text-helper"))
+        : OrlaHelpers::resolve(OrlaHelpers::Kind::AiText, applicationDirectory, QStringLiteral(ORLA_AI_TEXT_HELPER_PATH));
+    AiProviderController aiController(parser.value(QStringLiteral("ai-python")), aiHelper);
+    AiTextController aiTextController(parser.value(QStringLiteral("ai-python")), textHelper);
     SteamProviderController steamController(QStringLiteral(ORLA_STEAM_PYTHON_PATH),
-                                            QStringLiteral(ORLA_STEAM_HELPER_PATH));
+        OrlaHelpers::resolve(OrlaHelpers::Kind::Steam, applicationDirectory, QStringLiteral(ORLA_STEAM_HELPER_PATH)));
     LauncherController controller(&steamController);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("launcher"), &controller);

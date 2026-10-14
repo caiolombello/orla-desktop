@@ -260,31 +260,60 @@ código. CI/merge desta combinação e os testes do layout compacto no KDE perma
 pendentes; a instalação local ainda está no canary `5aaf518`, e as causas dos
 crashes históricos continuam UNKNOWN.
 
-## Fundação do pacote de dados — somente no fonte
+## Staging e pacote de dados — experimental
 
-`launcher/package.py` contém um builder determinístico e um verificador externo
-para um ZIP de dados com cinco arquivos allowlisted: ELF, helpers de IA/Steam,
-licença e manifesto. O verificador compara o SHA-256 externo antes de interpretar o conteúdo.
-Depois da decodificação limitada, confere o commit esperado no manifesto, além
-de nomes, modos, hashes, CRC e limites reais de descompactação. Ele não extrai nem executa o payload.
+Uma build nova guarda o executável em `bin/orla-launcher` e os cinco helpers
+Python em `libexec/`: `ai.py`, `steam.py`, `ai_text_ollama.py`,
+`ai_text_transport.py` e `ai_text.py`. Os módulos de texto permanecem irmãos;
+a instalação CMake inclui essa estrutura e a licença, com modos 0755 para o
+ELF e 0644 para os scripts/licença:
 
-O inventário de dependências ainda é uma declaração fornecida pelo chamador
-(`caller_assertion_unverified`); não foi coletado do ambiente. A consulta de
-metadados descrita abaixo não produz esse inventário. Staging CMake, resolução
-relocável dos helpers, coleta transitiva, qualificação em usuário limpo e
-artifact hospedado continuam pendentes. Essa fatia
-não instala o launcher e não altera dados do usuário. O ZIP Source gerado pela
-CI continua excluindo `launcher/`, inclusive este empacotador. Ele inclui os
-helpers-fonte de texto da IA em `scripts/` e seus testes em `tests/`; isso não
-os transforma em recursos instalados.
+```sh
+cmake --install build/launcher --prefix /caminho/para/orla
+```
+
+Sem override explícito, o launcher resolve nomes fixos em `bin/../libexec`,
+sem buscar helpers no checkout, cwd ou PATH. `--ai-helper` e
+`--ai-text-helper` continuam aceitando caminhos absolutos; informar um valor
+vazio ou relativo mantém a recusa por helper indisponível. Caches CMake
+existentes preservam **todos** os overrides não vazios, inclusive o antigo
+padrão no checkout. Para usar os novos defaults, escolha uma build nova ou
+limpe explicitamente `ORLA_AI_HELPER_PATH`, `ORLA_AI_TEXT_HELPER_PATH` e
+`ORLA_STEAM_HELPER_PATH` com `-D<opção>=`. O Python continua sendo o
+interpretador absoluto configurado; Qt/KF e suas dependências vêm do host.
+
+`launcher/package.py` constrói um ZIP determinístico de dados, schema 0.3,
+com oito membros exatos: ELF, cinco scripts, licença e manifesto. A verificação
+externa também aceita o schema 0.2 histórico com seus cinco membros exatos,
+somente para leitura; formatos ou payloads misturados são recusados.
+Antes de interpretar o ZIP, compara o SHA-256 externo; depois confere commit,
+nomes, modos, hashes, CRC e limites reais de descompactação. Não extrai nem
+executa o payload.
 
 ```sh
 python3 -B -m unittest discover -s launcher/tests -p 'test_package.py' -v
 ```
 
-Os 24 testes usam ELF e inventários sintéticos, com ZIPs adversariais e
-verificação de determinismo. O checksum precisa vir de um canal confiável;
-um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
+Os 28 testes usam ELF e inventários sintéticos, ZIPs adversariais, fechamento
+dos cinco scripts, relocação e um arquivo legado independente. O inventário
+continua sendo uma declaração do chamador (`caller_assertion_unverified`),
+sem coleta transitiva. O checksum precisa vir de um canal confiável;
+`SHA256SUMS` junto do arquivo não autentica a origem por si só.
+
+A prova do `main` real usou apenas helpers próprios sintéticos e D-Bus/XDG
+privados. Passaram relocação, opções explícitas vazias/relativas/absolutas e
+recusa dos helpers ausentes, com o caminho original de compilação indisponível,
+nos estilos Fusion e KDE. Os nove CTests passaram nos dois estilos, sem mudar
+partições ou watchdogs. Staging em um prefixo próprio conferiu sete arquivos,
+bytes e modos; Ninja Multi-Config confirmou `bin` sem sufixo de configuração,
+e uma reconfiguração preservou os três overrides absolutos antigos.
+
+Essas provas não qualificam geração/provedores reais, ABI transitiva,
+instalação/atualização/remoção em usuário limpo ou confiança de artifact
+hospedado. O comando de staging não gerencia serviço, autostart ou configurações.
+O ZIP Source da CI continua excluindo `launcher/`; seus helpers-fonte em
+`scripts/` não tornam o launcher parte do `.plasmoid` publicado. R2 permanece
+parcial.
 
 ### Diagnóstico de arquivos e metadados — experimental
 
@@ -312,7 +341,7 @@ foram encontrados; 1.488 arquivos/241 diretórios protegidos e o banco RPM
 permaneceram iguais. O candidato inicial retornou `unknown` por mensagens de
 chaveiro/lock geradas pela configuração RPM isolada; o caso foi reproduzido
 com mocks antes da correção. Os 24 testes passaram, sem processos RPM reais
-nos testes. Build/verify, schema e payload existentes foram preservados.
+nos testes. Naquela revisão, build/verify, schema e payload existentes foram preservados.
 Este comando no fonte não instala nem atualiza o launcher ou os helpers.
 
 ## Compilar e testar
@@ -323,7 +352,7 @@ Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e 
 cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON
 cmake --build build/launcher
 ctest --test-dir build/launcher --output-on-failure
-build/launcher/orla-launcher --no-global-shortcut
+build/launcher/bin/orla-launcher --no-global-shortcut
 ```
 
 Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Meta+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro temporário próprio. Não há autostart, instalação automática, alteração de painel ou integração de menu nesta pasta.
@@ -342,7 +371,7 @@ ativo. Esse modo não aceita `--shortcut` nem `--no-global-shortcut`.
 Inicie o launcher em um terminal e mantenha-o ativo; execute a CLI em outro:
 
 ```sh
-build/launcher/orla-launcher --managed-shortcuts
+build/launcher/bin/orla-launcher --managed-shortcuts
 ```
 
 ```sh

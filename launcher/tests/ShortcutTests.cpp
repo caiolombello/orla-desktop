@@ -7,6 +7,14 @@
 #include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QProcess>
+#include <QTemporaryDir>
+#include <QFileInfo>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <cerrno>
+#include <csignal>
+#include <unistd.h>
 #include <QScopeGuard>
 #include <QThread>
 #include <KGlobalAccel>
@@ -561,6 +569,155 @@ private Q_SLOTS:
         const QDBusReply<bool> registered = QDBusConnection::sessionBus().interface()->isServiceRegistered(QStringLiteral("org.orla.Launcher"));
         QVERIFY(registered.isValid());
         QVERIFY(!registered.value());
+    }
+
+    void relocatedBuiltinsUseOnlyOwnedHelpers_data()
+    {
+        QTest::addColumn<QString>("mode");
+        for (const auto &mode : {"relocated", "empty", "relative", "override", "missing"})
+            QTest::newRow(mode) << QString::fromLatin1(mode);
+    }
+    void relocatedBuiltinsUseOnlyOwnedHelpers()
+    {
+        QFETCH(QString, mode);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString original = directory.filePath(QStringLiteral("original tree with spaces"));
+        const QString relocated = directory.filePath(QStringLiteral("relocated tree with spaces"));
+        const QString receipts = directory.filePath(QStringLiteral("receipts"));
+        const QString unrelated = directory.filePath(QStringLiteral("unrelated cwd"));
+        QVERIFY(QDir().mkpath(original + QStringLiteral("/bin")));
+        QVERIFY(QDir().mkpath(original + QStringLiteral("/libexec")));
+        QVERIFY(QDir().mkpath(original + QStringLiteral("/test-root")));
+        QVERIFY(QDir().mkpath(receipts));
+        QVERIFY(QDir().mkpath(unrelated));
+        const QString harness = original + QStringLiteral("/bin/owned-helper-harness");
+        QVERIFY(QFile::copy(QStringLiteral(ORLA_TEST_HELPER_HARNESS), harness));
+        const QByteArray prelude = QByteArray("import base64,json,os,pathlib,sys\nassert sys.flags.isolated and sys.flags.dont_write_bytecode\n")
+            + "receipt=pathlib.Path(base64.b64decode('" + receipts.toUtf8().toBase64() + "').decode())/pathlib.Path(__file__).name\n"
+              "receipt.write_text(json.dumps({'helper':str(pathlib.Path(__file__).resolve()),'cwd':os.getcwd(),'pid':os.getpid(),'args':sys.argv[1:]}))\n";
+        const QByteArray aiBody = R"PY(assert sys.argv[1]=='detect' and len(sys.argv)==6 and sys.argv[2]=='--runtime-root' and sys.argv[4]=='--runtime-root-id'
+record=json.loads(receipt.read_text())
+record['runtime_root']=sys.argv[3]
+receipt.write_text(json.dumps(record))
+caps={'installation':'absent','anonymous_protocol':'absent','authentication':'unknown','inference':'absent','cancellation':'absent','usage_reporting':'unknown'}
+items=[('codex','Codex','owned_app_server'),('claude','Claude Code','official_terminal_handoff'),('opencode','OpenCode','selected_local_server'),('ollama','Ollama','selected_local_server'),('lmstudio','LM Studio','selected_local_server')]
+print(json.dumps({'schemaVersion':1,'providers':[{'id':i,'displayName':n,'enabled':False,'clientVersion':None,'capabilities':caps,'route':r,'messageCode':'cli_not_found'} for i,n,r in items]}))
+)PY";
+        const QByteArray steamBody = R"PY(assert sys.argv[1]=='scan'
+print(json.dumps({'apps':[],'connection':'unknown','errors':[],'libraries':[],'ownership':'unknown','roots':[{'id':'root-0','kind':'native','status':'absent'}],'schema_version':'0.1-experimental','status':'absent'}))
+)PY";
+        const QByteArray textBody = R"PY(assert sys.argv[1:]==['run-ollama']
+import importlib.util
+spec=importlib.util.spec_from_file_location('owned_transport',pathlib.Path(__file__).resolve().with_name('ai_text_transport.py'))
+transport=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transport)
+r=json.loads(sys.stdin.buffer.read())
+b={'schemaVersion':1,'requestId':r['requestId']}
+def emit(seq,kind,**extra):
+ print(json.dumps(dict(b,sequence=seq,type=kind,**extra)),flush=True)
+emit(0,'started',provider='ollama_local',destination=r['endpoint'],model=r['model'])
+emit(1,'delta',text=transport.output)
+emit(2,'completed',finishReason='stop',usage={'status':'unknown','inputTokens':None,'outputTokens':None,'totalTokens':None},cost={'status':'unknown','currency':None,'amount':None})
+)PY";
+        const QByteArray transportBody = R"PY(import importlib.util,pathlib
+spec=importlib.util.spec_from_file_location('owned_contract',pathlib.Path(__file__).resolve().with_name('ai_text.py'))
+contract=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(contract)
+output=contract.output
+)PY";
+        QMap<QString, QByteArray> files{{QStringLiteral("ai.py"), prelude + aiBody},
+            {QStringLiteral("steam.py"), prelude + steamBody},
+            {QStringLiteral("ai_text_ollama.py"), prelude + textBody},
+            {QStringLiteral("ai_text_transport.py"), transportBody},
+            {QStringLiteral("ai_text.py"), QByteArray("output='owned closure'\n")}};
+        if (mode == QStringLiteral("override")) {
+            files.insert(QStringLiteral("ai-override.py"), prelude + aiBody);
+            files.insert(QStringLiteral("text-override.py"), prelude + textBody);
+        }
+        if (mode == QStringLiteral("missing")) files.clear();
+        for (auto it = files.cbegin(); it != files.cend(); ++it) {
+            QFile file(original + QStringLiteral("/libexec/") + it.key());
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(it.value()), it.value().size());
+            file.close();
+        }
+        QVERIFY(QDir().rename(original, relocated));
+        QVERIFY(!QFile::exists(original));
+        const auto cleanupPermissions = qScopeGuard([&] {
+            QFile::setPermissions(relocated, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            QFile::setPermissions(relocated + QStringLiteral("/libexec"), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        });
+        QMap<QString, QFileDevice::Permissions> stagedPermissions;
+        for (const auto &name : files.keys()) {
+            const QString path = relocated + QStringLiteral("/libexec/") + name;
+            QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner));
+            stagedPermissions.insert(name, QFileInfo(path).permissions());
+        }
+        QVERIFY(QFile::setPermissions(relocated + QStringLiteral("/libexec"), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QVERIFY(QFile::setPermissions(relocated, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QProcess process;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("ORLA_TEST_HELPER_ROOT"), relocated);
+        environment.insert(QStringLiteral("ORLA_TEST_HELPER_MODE"), mode);
+        process.setProcessEnvironment(environment);
+        process.setWorkingDirectory(unrelated);
+        process.setProcessChannelMode(QProcess::MergedChannels);
+        QStringList arguments{QStringLiteral("--no-global-shortcut")};
+        if (mode == QStringLiteral("empty")) arguments << QStringLiteral("--ai-helper=") << QStringLiteral("--ai-text-helper=");
+        if (mode == QStringLiteral("relative")) arguments << QStringLiteral("--ai-helper=libexec/ai.py") << QStringLiteral("--ai-text-helper=libexec/ai_text_ollama.py");
+        if (mode == QStringLiteral("override")) arguments << QStringLiteral("--ai-helper=") + relocated + QStringLiteral("/libexec/ai-override.py")
+                                                        << QStringLiteral("--ai-text-helper=") + relocated + QStringLiteral("/libexec/text-override.py");
+        QByteArray output;
+        const auto cleanupProcess = qScopeGuard([&] {
+            if (process.state() != QProcess::NotRunning) { process.kill(); process.waitForFinished(1000); }
+            if (QTest::currentTestFailed()) std::fprintf(stderr, "%s\n", output.constData());
+        });
+        process.start(relocated + QStringLiteral("/bin/owned-helper-harness"), arguments);
+        QTRY_VERIFY_WITH_TIMEOUT(([&] { output += process.readAll(); return process.state() == QProcess::NotRunning; })(), 2200);
+        output += process.readAll();
+        QVERIFY2(output.size() <= 65536, "Owned relocation harness exceeded output budget");
+        QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(process.exitCode() == 0, output.constData());
+        QVERIFY2(output.contains("ORLA_HELPER_RESULTS_SETTLED") && output.contains("ORLA_HELPER_EXIT settled=1"), output.constData());
+        QStringList expected;
+        if (mode != QStringLiteral("missing")) expected << QStringLiteral("steam.py");
+        if (mode == QStringLiteral("relocated")) expected << QStringLiteral("ai.py") << QStringLiteral("ai_text_ollama.py");
+        if (mode == QStringLiteral("override")) expected << QStringLiteral("ai-override.py") << QStringLiteral("text-override.py");
+        expected.sort();
+        QCOMPARE(QDir(receipts).entryList(QDir::Files, QDir::Name), expected);
+        for (const auto &name : expected) {
+            QFile receipt(receipts + QLatin1Char('/') + name);
+            QVERIFY(receipt.open(QIODevice::ReadOnly));
+            const QJsonObject record = QJsonDocument::fromJson(receipt.readAll()).object();
+            QCOMPARE(record.value(QStringLiteral("helper")).toString(), relocated + QStringLiteral("/libexec/") + name);
+            const qint64 pid = record.value(QStringLiteral("pid")).toInteger();
+            QVERIFY(pid > 1);
+            errno = 0;
+            QVERIFY(::kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH);
+            if (name == QStringLiteral("ai.py") || name == QStringLiteral("ai-override.py")) {
+                // Provider AI carries its private runtime by argument, not by cwd.
+                QCOMPARE(record.value(QStringLiteral("cwd")).toString(), unrelated);
+                const QString runtime = record.value(QStringLiteral("runtime_root")).toString();
+                QVERIFY(runtime.startsWith(qEnvironmentVariable("XDG_RUNTIME_DIR") + QLatin1Char('/')));
+                QVERIFY(!QFile::exists(runtime));
+            } else if (name == QStringLiteral("steam.py")) {
+                QCOMPARE(record.value(QStringLiteral("cwd")).toString(), unrelated);
+            } else {
+                const QString runtime = record.value(QStringLiteral("cwd")).toString();
+                QVERIFY(runtime.startsWith(qEnvironmentVariable("XDG_RUNTIME_DIR") + QLatin1Char('/')));
+                QVERIFY(!QFile::exists(runtime));
+            }
+        }
+        QStringList expectedFiles = files.keys();
+        expectedFiles.sort();
+        QCOMPARE(QDir(relocated + QStringLiteral("/libexec")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name), expectedFiles);
+        for (auto it = files.cbegin(); it != files.cend(); ++it) {
+            QFile file(relocated + QStringLiteral("/libexec/") + it.key());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), it.value());
+            QCOMPARE(QFileInfo(file).permissions(), stagedPermissions.value(it.key()));
+        }
     }
 
     void acceptedWorkSettlesBeforeProductionQuit_data()

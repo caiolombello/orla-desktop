@@ -661,10 +661,25 @@ distintos; opcionais não bloqueiam o núcleo. Os 24 testes passaram com mocks;
 a leitura real encontrou os dez itens e preservou os arquivos protegidos e o
 banco RPM. Esse resultado é de arquivos/metadados, sem carregar bibliotecas,
 verificar integridade/assinaturas ou produzir inventário transitivo. Build,
-verify, schema e payload permanecem iguais. R2 continua parcial: staging,
-helpers relocáveis, dependências em execução, instalação/atualização/remoção
-em usuário limpo e artifact hospedado mantêm seus aceites. Consulte o
+verify, schema e payload permaneceram iguais naquela revisão. O incremento
+seguinte acrescenta staging e helpers relocáveis; dependências em execução,
+instalação/atualização/remoção em usuário limpo e artifact hospedado mantêm
+seus aceites. Consulte o
 [comando e seus limites](launcher/README.md#diagnóstico-de-arquivos-e-metadados--experimental).
+
+**R2 — staging e helpers relocáveis no fonte (14/10):** build/instalação CMake
+usam `bin/../libexec` com os cinco scripts de IA/Steam e licença. Overrides
+explícitos continuam preservados, inclusive caches antigos. O builder passa
+a schema 0.3 com oito membros e mantém verificação estrita dos cinco membros
+legados de 0.2. Passaram 28 testes Python, relocação com o `main` real e helpers
+sintéticos nos dois estilos, nove CTests em Fusion/KDE, staging com bytes/modos
+conferidos e build Ninja Multi-Config. A falha inicial dos testes Steam por
+inferirem o caminho da UI pelo helper foi preservada e corrigida com recursos
+QRC, sem alterar a UI ou seus assertions/watchdogs. O caminho original de
+compilação ficou indisponível durante a prova dirigida de relocação.
+Isso fecha o staging desta fatia; inventário transitivo/ABI, usuário limpo,
+remoção e artifact hospedado seguem abertos. Não há release binário anunciado,
+e R2 não está concluído. Consulte os [comandos e limites](launcher/README.md#staging-e-pacote-de-dados--experimental).
 
 ## Prontidão e recomendação de execução
 
