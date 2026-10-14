@@ -86,3 +86,34 @@ Nesta etapa, o fix local e o fluxo gerenciado completo ainda aguardam validaçã
 A custódia de clipboard recusou o limite de dados e encontrou timeouts de
 formatos do provider; os helpers encerraram sem writes. Copiar/colar e
 restauração de clipboard não foram qualificados.
+
+
+## Canary gerenciado local — 2026-10-13
+
+O fix `6152eeb` foi instalado: 66 arquivos, somente `Profiles.js` alterado.
+A criação por gesto nativo passou com os sete pins preservados. Foi usado um
+único perfil temporário, sem inicialização automática ou alteração dos perfis
+anteriores. Valores e grafia dos pins pessoais ficam somente na evidência privada.
+
+No Plasma 6.7.5/Wayland, colar um preset sintético e usar a prévia alterou o dock
+sem mudar o documento salvo. Escape e Cancelar mantiveram o salvo. Aplicar
+persistiu aparência e widgets juntos, preservando os demais campos; Desfazer
+restaurou exatamente o documento anterior. Uma segunda aplicação sobreviveu
+a uma recarga controlada, com igualdade entre readback do applet e KConfig.
+O canary confirma persistência dos dados nesta sessão, sem inferir quantidade
+exata de setters ou undo entre processos.
+
+O perfil e sua chave foram removidos com Plasma parado e guardas do documento
+próprio; nenhum arquivo de configuração foi substituído. Todos os valores
+parseados de appletsrc/plasmashellrc voltaram ao baseline. Apps, atalhos, barra,
+launcher e bancos protegidos permaneceram iguais; a dock manteve o novo Source.
+Plasma terminou ativo, sem restart automático; a abertura do popup e a dock
+original foram conferidas visualmente depois da restauração.
+
+Limites: o export-copy em perfil gerenciado depois da recarga não foi
+qualificado, pois o gesto não confirmou o popup após mudar a largura do dock.
+A entrada digitada encontrou composição do teclado US internacional; sua
+recusa preservou o salvo. O fluxo positivo usou clipboard com JSON sintético;
+a custódia original dos formatos falhou e a restauração integral anterior não
+foi qualificada. Foco de retorno, tecnologia assistiva, outras telas/escalas e
+número de setters nativos continuam UNRUN. C1/X1 permanecem parciais.

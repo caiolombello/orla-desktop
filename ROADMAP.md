@@ -105,6 +105,8 @@ Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, o
 
 **Recibo histórico — launcher compacto e validação final da resposta de IA (PR 36, somente fonte):** o tamanho inicial passa a 660×420; entradas IA/Steam têm alvo mínimo de 40×40, e nomes/versões longos respeitam a largura do painel. O erro de um evento `failed` só é confirmado após EOF limpo e saída normal zero; eventos extras, bytes incompletos e saída não zero resultam em `invalid_helper_response`, preservando a intenção do primeiro cancelamento explícito. Três regressões falharam causalmente na base e passaram após a correção, com um controle válido. A combinação passou ALL40 e seis CTests uma vez em 84,38 s: UI 32/26,588 s Qt sob limite 30 s; controller 57/12,621 s Qt sob limite 40 s. Os 93 testes Python anteriores não foram repetidos: seus arquivos não mudaram. Revisões independentes aprovaram as mudanças de código. CI/merge e validação do layout compacto no KDE continuam pendentes; o instalado permanece `5aaf518`, os crashes históricos continuam UNKNOWN e os critérios completos do roadmap seguem abertos.
 
+**Canary C1 — 13/10/2026:** criação de perfil corrigida para os quatro atalhos de apps padrão do KDE, preservando seus vínculos. O teste local passou criação, prévia passiva, Escape/Cancelar, Aplicar conjunto, Desfazer exato e persistência KConfig após recarga. O temporário foi removido e os valores anteriores restaurados. Export-copy após recarga, clipboard completo e foco permanecem sem qualificação; C1/X1 continuam parciais. [Evidência e limites](docs/validation/appearance-presets-source.md).
+
 ## Arquitetura proposta
 
 | Componente | Responsabilidade | Configuração |
