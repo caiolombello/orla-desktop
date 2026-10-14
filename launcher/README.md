@@ -2,6 +2,28 @@
 
 Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
+## Aliases de aplicativos — experimental
+
+Selecione um aplicativo e abra **Ações → Adicionar alias…** para guardar um
+nome curto. A pesquisa pelo nome exato, sem distinguir maiúsculas, oferece
+esse aplicativo com a origem **Alias salvo por você**. Só Enter ou clique em
+**Abrir** encaminha a execução; pesquisar e abrir preferências não executa nada.
+Aliases não guardam comandos, argumentos ou consultas do runner.
+
+**Ações → Gerenciar aliases…** funciona também com a busca vazia. A lista mostra
+nome e ícone; alvos indisponíveis ou nomes ambíguos mostram também o identificador.
+**Editar** renomeia o alias; **Remover**
+exclui somente o par escolhido. Um aplicativo indisponível continua permitindo
+editar ou remover seu alias. Tab/Shift+Tab alcançam os controles; Escape fecha
+primeiro o editor ou a lista e devolve foco à busca.
+
+São até 16 aliases, cada um com 1–32 caracteres. O arquivo local
+`$XDG_CONFIG_HOME/orla/launcher-aliases.json` (normalmente
+`~/.config/orla/launcher-aliases.json`) armazena somente nome e ID de aplicativo
+no formato `0.1-experimental`. Arquivos inválidos ou de versões desconhecidas
+são preservados e deixam a edição indisponível. Não há importação, sincronização,
+histórico ou contrato público estável deste formato.
+
 ## Steam local — somente no fonte
 
 O painel **Steam** não lê nada ao abrir. Cada raiz precisa ser informada na sessão como `native=/caminho/absoluto` ou `flatpak=/caminho/absoluto`; **Carregar jogos** chama o helper limitado `scripts/steam.py` sem shell. O inventário validado entra na busca em categoria própria e some ao encerrar o processo. Não há raiz padrão, detecção por HOME, persistência, perfil, histórico, conta, autenticação ou rede.
@@ -199,7 +221,7 @@ um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
 
 ## Compilar e testar
 
-Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
+Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
 
 ```sh
 cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON

@@ -8,6 +8,7 @@ find_package(Qt6 6.11.2 REQUIRED COMPONENTS Core Gui Widgets Qml Quick DBus)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(KF6Runner 6.30 REQUIRED)
 find_package(KF6Config 6.30 REQUIRED)
+find_package(KF6Service 6.30 REQUIRED)
 find_package(KF6GlobalAccel 6.30 REQUIRED)
 find_package(KF6WindowSystem 6.30 REQUIRED)
 
@@ -27,12 +28,12 @@ if(NOT IS_ABSOLUTE "${ORLA_STEAM_HELPER_PATH}")
     message(FATAL_ERROR "ORLA_STEAM_HELPER_PATH must be absolute")
 endif()
 
-add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h
+add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h
     AiProviderController.cpp AiProviderController.h
     AiTextController.cpp AiTextController.h
     SteamProviderController.cpp SteamProviderController.h)
 target_include_directories(orla-launcher-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(orla-launcher-core PUBLIC Qt6::Core Qt6::Gui KF6::Runner KF6::ConfigCore)
+target_link_libraries(orla-launcher-core PUBLIC Qt6::Core Qt6::Gui KF6::Runner KF6::ConfigCore KF6::Service)
 
 add_executable(orla-launcher main.cpp WindowSession.cpp WindowSession.h)
 target_compile_definitions(orla-launcher PRIVATE
@@ -41,7 +42,7 @@ target_compile_definitions(orla-launcher PRIVATE
     ORLA_AI_TEXT_HELPER_PATH="${ORLA_AI_TEXT_HELPER_PATH}"
     ORLA_STEAM_PYTHON_PATH="${Python3_EXECUTABLE}"
     ORLA_STEAM_HELPER_PATH="${ORLA_STEAM_HELPER_PATH}")
-qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
+qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
 target_link_libraries(orla-launcher PRIVATE orla-launcher-core Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus
     KF6::GlobalAccel KF6::WindowSystem)
 
@@ -66,12 +67,13 @@ if(BUILD_TESTING)
     add_executable(orla-launcher-ui-tests tests/UiTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-ui-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
-    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     # Keep action/cleanup coverage complete without growing the UI watchdog.
     set(ORLA_UI_ACTION_TESTS allResultActionsAreReachableByKeyboard resultExecutionWaitsForOwnerCleanup
-        windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce pendingCloseBlocksIdleOwnerStarts)
+        windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce pendingCloseBlocksIdleOwnerStarts
+        aliasesOwnControlsAndInvalidateStaleIntents)
     set(ORLA_UI_EXCLUSIONS)
     foreach(test IN LISTS ORLA_UI_ACTION_TESTS)
         list(APPEND ORLA_UI_EXCLUSIONS --exclude-test ${test})
@@ -85,7 +87,7 @@ if(BUILD_TESTING)
     add_executable(orla-launcher-managed-dispatch-harness tests/ManagedDispatchHarness.cpp WindowSession.cpp WindowSession.h)
     get_target_property(ORLA_MAIN_DEFINITIONS orla-launcher COMPILE_DEFINITIONS)
     target_compile_definitions(orla-launcher-managed-dispatch-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
-    qt_add_resources(orla-launcher-managed-dispatch-harness ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-managed-dispatch-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-managed-dispatch-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-shortcut-tests tests/ShortcutTests.cpp WindowSession.cpp WindowSession.h)

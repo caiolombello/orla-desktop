@@ -210,12 +210,28 @@ class Gallery:
         QQmlExpression(context, window, "openResultActions()").evaluate()
         self.save("launcher-actions", window)
         QTest.keyClick(window, Qt.Key_Escape)
+        QQmlExpression(context, window, 'aliasPreferences.begin("manager", null)').evaluate()
+        self.save("launcher-aliases-manager", window)
+        QQmlExpression(context, window, 'aliasPreferences.begin("edit", {alias:"arquivos", appId:"org.orla.synthetic.desktop"})').evaluate()
+        self.save("launcher-aliases-editor", window)
+        QTest.keyClick(window, Qt.Key_Escape)
         window.setProperty("width", 440)
         window.setProperty("height", 380)
         QQmlExpression(context, window, "openResultActions()").evaluate()
         QTest.keyClick(window, Qt.Key_Down)
         QTest.keyClick(window, Qt.Key_Down)
         self.save("launcher-actions-narrow-focus", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        QQmlExpression(context, window, 'aliasPreferences.begin("manager", null)').evaluate()
+        self.save("launcher-aliases-manager-narrow", window)
+        QQmlExpression(context, window, 'aliasPreferences.begin("add", {row:0,id:"dolphin"}); aliasPreferences.localError="Este alias já existe."').evaluate()
+        self.save("launcher-aliases-error-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        launcher.setProperty("aliases", [])
+        launcher.setProperty("aliasesWritable", False)
+        launcher.setProperty("aliasError", "O arquivo de aliases não é válido.")
+        QQmlExpression(context, window, 'aliasPreferences.begin("manager", null)').evaluate()
+        self.save("launcher-aliases-unavailable-narrow", window)
         QTest.keyClick(window, Qt.Key_Escape)
         window.setProperty("width", 660)
         window.setProperty("height", 420)
@@ -273,13 +289,21 @@ import QtQuick
 QtObject {
     property QtObject launcher: QtObject {
         signal changed()
+        property int generation: 1
+        property string aliasRevision: "revision-1"
+        property string aliasError: ""
+        property bool aliasesWritable: true
+        property var aliases: [{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}, {alias:"indisponível",appId:"org.orla.missing.desktop",title:"",iconName:"",available:false}]
+        property var aliasCalls: []
+        property int dismissed: 0
+        property var executed: []
         property string query: "dol"
         property string status: "ready"
         property string error: ""
         property int selectedIndex: 0
         property var rows: [
             {id: "dolphin", kind: "app", iconName: "system-file-manager", title: "Dolphin", description: "Gerenciador de arquivos", source: "KRunner · Aplicativos",
-             categoryLabel: "APLICATIVOS", generation: 1, enabled: true,
+             categoryLabel: "APLICATIVOS", generation: 1, enabled: true, aliasEligible: true, appId: "org.orla.synthetic.desktop",
              actions: [{id: "new-window", text: "Nova janela", row: 0, generation: 1, resultId: "dolphin"},
                        {id: "other", text: "Outra ação sintética", row: 0, generation: 1, resultId: "dolphin"},
                        {id: "long", text: "Ação sintética com nome longo para conferir os limites", row: 0, generation: 1, resultId: "dolphin"}]},
@@ -292,8 +316,32 @@ QtObject {
         ]
         function select(row) { selectedIndex = row; }
         function moveSelection(delta) {}
-        function execute(row, generation, id, actionId) {}
-        function dismiss() {}
+        function execute(row, generation, id, actionId) { executed = executed.concat([{id:id,actionId:actionId}]) }
+        function dismiss() { dismissed++ }
+        function advance() { generation++; aliasRevision = "revision-" + generation; changed() }
+        function rejected(name) { aliasError = name; changed(); return false }
+        function check(alias, rev) {
+            if (!aliasesWritable || rev !== aliasRevision) return rejected("A lista mudou. Abra o editor novamente.")
+            if (aliases.some(entry => entry.alias === alias)) return rejected("Este alias já existe.")
+            return true
+        }
+        function saveAlias(row, gen, id, alias, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"save",row:row,generation:gen,id:id,alias:alias,revision:rev}])
+            if (gen !== generation || row !== selectedIndex || id !== rows[row].id || !check(alias, rev)) return false
+            aliases = aliases.concat([{alias:alias,appId:rows[row].appId}]); aliasError = ""; advance(); return true
+        }
+        function renameAlias(oldAlias, appId, newAlias, gen, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"rename",oldAlias:oldAlias,appId:appId,alias:newAlias,generation:gen,revision:rev}])
+            if (gen !== generation || !check(newAlias, rev)) return false
+            aliases = aliases.map(entry => entry.alias === oldAlias && entry.appId === appId ? {alias:newAlias,appId:appId} : entry)
+            aliasError = ""; advance(); return true
+        }
+        function removeAlias(alias, appId, gen, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"remove",alias:alias,appId:appId,generation:gen,revision:rev}])
+            if (!aliasesWritable || gen !== generation || rev !== aliasRevision) return false
+            aliases = aliases.filter(entry => entry.alias !== alias || entry.appId !== appId); advance(); return true
+        }
+        function reloadAliases() {}
     }
     property QtObject aiProviders: QtObject {
         signal closeReady()

@@ -32,22 +32,26 @@ Window {
     readonly property bool executionBlocked: pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy
     property var selectedRow: launcher.selectedIndex >= 0 ? launcher.rows[launcher.selectedIndex] : null
     function executeTicket(ticket, selectRow) {
-        if (!ticket || pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
+        if (!ticket || aliasPreferences.visible || pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
         if (selectRow) launcher.select(ticket.row)
         launcher.execute(ticket.row, ticket.generation, ticket.id, ticket.actionId || "")
     }
-    readonly property bool canOpenActions: activePanel === "search" && launcher.status === "ready"
-        && !executionBlocked && selectedRow && selectedRow.enabled && selectedRow.actions.length > 0
+    readonly property bool canOpenActions: activePanel === "search" && !executionBlocked && !aliasPreferences.visible
+    readonly property bool canAddAlias: canOpenActions && launcher.aliasesWritable === true
+        && launcher.status === "ready" && !!selectedRow && selectedRow.enabled && selectedRow.aliasEligible === true
     property var actionsRow: null
     property int actionsEpisode: 0
     function openResultActions() {
         if (!canOpenActions) return
         const row = selectedRow
         actionsEpisode++
-        actionsRow = {title: row.title, source: row.source, actions: row.actions.slice()}
+        actionsRow = {title: row ? row.title : qsTr("Busca local"), source: row ? row.source : qsTr("Orla"),
+            actions: row && row.enabled ? row.actions.slice() : []}
         resultActions.open()
         resultActions.currentIndex = 2
-        if (resultActions.itemAt(2)) resultActions.itemAt(2).forceActiveFocus(Qt.PopupFocusReason)
+        const first = canAddAlias || actionsRow.actions.length > 0 ? 2 : resultActions.count - 1
+        resultActions.currentIndex = first
+        if (resultActions.itemAt(first)) resultActions.itemAt(first).forceActiveFocus(Qt.PopupFocusReason)
     }
     onExecutionBlockedChanged: if (executionBlocked) resultActions.close()
     onActivePanelChanged: if (activePanel !== "search") resultActions.close()
@@ -85,13 +89,13 @@ Window {
     }
     onActiveChanged: {
         if (!active) resultActions.close()
-        else if (activePanel === "search" && !resultActions.visible) search.forceActiveFocus()
+        else if (activePanel === "search" && !resultActions.visible && !aliasPreferences.visible) search.forceActiveFocus()
     }
     onClosing: function(close) {
         close.accepted = requestDismiss(true)
     }
     Shortcut {
-        sequence: "Escape"; context: Qt.WindowShortcut; enabled: !resultActions.visible
+        sequence: "Escape"; context: Qt.WindowShortcut; enabled: !resultActions.visible && !aliasPreferences.visible
         onActivated: {
             if (window.activePanel === "ai") window.closeAiPanel()
             else if (window.activePanel === "steam") window.closeSteamPanel()
@@ -131,7 +135,7 @@ Window {
         exit: Transition { }
         onClosed: {
             window.actionsEpisode++
-            if (window.active && window.activePanel === "search" && !window.pendingDismiss) search.forceActiveFocus()
+            if (window.active && window.activePanel === "search" && !window.pendingDismiss && !aliasPreferences.visible) search.forceActiveFocus()
         }
         background: Rectangle {
             radius: Style.radius.module
@@ -182,12 +186,14 @@ Window {
             background: Item { }
         }
         Instantiator {
-            model: window.actionsRow ? window.actionsRow.actions : []
+            model: window.actionsRow ? window.actionsRow.actions.concat(window.canAddAlias
+                ? [{preference: "add", text: qsTr("Adicionar alias…")}, {preference: "manage", text: qsTr("Gerenciar aliases…")}]
+                : [{preference: "manage", text: qsTr("Gerenciar aliases…")}]) : []
             delegate: Templates.MenuItem {
                 id: actionItem
                 required property var modelData
                 required property int index
-                objectName: "launcherAction" + index
+                objectName: modelData.preference === "add" ? "aliasAddAction" : modelData.preference === "manage" ? "aliasManageAction" : "launcherAction" + index
                 property var executionTicket: null
                 property int pressedEpisode: -1
                 text: String(modelData.text).slice(0, 512)
@@ -199,13 +205,22 @@ Window {
                 rightPadding: Style.space.sm
                 onPressed: {
                     pressedEpisode = window.actionsEpisode
-                    executionTicket = {row: modelData.row, generation: modelData.generation,
-                        id: modelData.resultId, actionId: modelData.id}
+                    executionTicket = modelData.preference === "add"
+                        ? {row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id, revision: launcher.aliasRevision}
+                        : {row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id}
                 }
                 // A closed or reopened menu cannot revive an earlier press.
                 onTriggered: {
-                    if (resultActions.visible && window.canOpenActions && pressedEpisode === window.actionsEpisode)
-                        window.executeTicket(executionTicket, false)
+                    if (!resultActions.visible || !window.canOpenActions || pressedEpisode !== window.actionsEpisode) return
+                    const ticket = executionTicket
+                    if (modelData.preference === "add") {
+                        if (!window.canAddAlias || ticket.generation !== launcher.generation || ticket.revision !== launcher.aliasRevision) return
+                        resultActions.close()
+                        aliasPreferences.begin("add", ticket)
+                    } else if (modelData.preference === "manage") {
+                        resultActions.close()
+                        aliasPreferences.begin("manager", null)
+                    } else window.executeTicket(ticket, false)
                 }
                 contentItem: Text {
                     text: actionItem.text; color: ui.text
@@ -222,6 +237,13 @@ Window {
             onObjectAdded: (index, object) => resultActions.insertItem(index + 2, object)
             onObjectRemoved: (index, object) => resultActions.removeItem(object)
         }
+    }
+    AliasPreferences {
+        id: aliasPreferences
+        parent: glass
+        controller: launcher
+        host: window
+        onClosedByUser: if (window.active && window.activePanel === "search" && !window.executionBlocked && !resultActions.visible) search.forceActiveFocus()
     }
     Shortcut { sequence: "Ctrl+Q"; context: Qt.WindowShortcut; onActivated: window.requestDismiss(true) }
     Connections {
@@ -433,7 +455,7 @@ Window {
                     readonly property bool selected: launcher.selectedIndex === result.index
                     readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink" : "sea"]
                     height: Style.size.target + Style.space.md
-                    enabled: rowData.enabled && !window.executionBlocked
+                    enabled: rowData.enabled && !window.executionBlocked && !aliasPreferences.visible
                     hoverEnabled: true
                     leftPadding: Style.space.sm
                     rightPadding: Style.space.md
@@ -529,9 +551,10 @@ Window {
                 Layout.maximumWidth: window.width < 560 ? 118 : 150
             }
             Button {
+                objectName: "executeButton"
                 property var executionTicket: null
-                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
-                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked
+                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked && !aliasPreferences.visible
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
                 onClicked: window.executeTicket(executionTicket, false)
                 leftPadding: Style.space.md
