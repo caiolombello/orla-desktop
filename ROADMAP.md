@@ -297,6 +297,8 @@ U1/U2 dependem de R2/R4 e de uma fonte de releases definida. Para updates de jog
 
 **Incremento experimental no código:** `launcher/` oferece janela Qt Quick própria, busca por apps/cálculos, navegação e proteção contra seleção antiga. Build/CTest e revisão Source não encerram o aceite nativo. A verificação atual de `43905da` descrita no início comprova atalho, busca e Escape em uma tela; Enter/dispatch, outros monitores e integração completa continuam abertos. Meta é configurável pela CLI `search-shortcut`; a prova local de 13/10 está descrita abaixo. As releases 0.2.5–0.2.9 não incluem o launcher. Consulte o [guia do componente](launcher/README.md); L0/L2 continuam abertos.
 
+**L2/UX2 — painel de ações completo (14/10):** Ações/Ctrl+K agora apresenta todas as ações anunciadas, sua origem, rolagem e foco visível. Doze ações sintéticas passaram por teclado/clique e callbacks antigos são recusados; oito CTests passaram nos estilos Fusion/KDE, com toda a cobertura preservada em duas suítes de interface. A atualização local do launcher preservou Meta, painéis e configurações. A prova Wayland delimitada confirmou busca do Dolphin, menu real da calculadora, primeiro Escape preservando consulta/seleção e segundo Escape retornando à mesma fixture viva. Não encerra L0/L2/UX2, dispatch real, fullscreen ou múltiplos monitores. Consulte as [capturas, verificação e próximos aceites](docs/validation/launcher-actions-source.md).
+
 **Avaliação: faz sentido.** O dock e a barra oferecem acesso visual; o launcher oferece acesso rápido por teclado às mesmas funções. O maior valor específico é reunir os projetos e contextos do Caio: consultar quotas, abrir projetos, ver a agenda, controlar mídia e entrar no perfil Jogos. O Raycast serve de referência para busca, listas, atalhos e painel de ações, além de recursos posteriores como clipboard e snippets. [Raycast](https://www.raycast.com/), [interface List](https://developers.raycast.com/api-reference/user-interface/list)
 
 | Opção | Benefício | Custo/limitação | Decisão proposta |
@@ -588,11 +590,13 @@ UNRUN. A transferência da Central e a retirada de sua entrada direita passaram
 no aceite delimitado acima. O encaixe dos dois controles na altura útil da barra
 também passou. A contagem de uma solicitação W1 e Escape após reabertura em B
 agora têm prova delimitada; retorno automático após a troca e outros monitores
-continuam abertos. A próxima fatia de produto é o painel **Ações** do launcher
-(L2/UX2): expor todas as ações já fornecidas pelo resultado e sua origem,
-abrir por botão/Ctrl+K, funcionar em 440/660 pontos e permitir Escape de volta
-à busca preservando consulta e seleção. A execução deve reutilizar os tickets
-e a barreira de fechamento existentes. Seleção de saída e os demais controles
+continuam abertos. O painel **Ações** do launcher (L2/UX2) foi instalado com
+todas as ações anunciadas, origem e navegação em 440/660 pontos; reutiliza os
+tickets e a barreira de fechamento. Meta, menu real e dois níveis de Escape
+receberam a [prova delimitada](docs/validation/launcher-actions-source.md).
+A próxima prova verifica continuidade Meta → busca/Ações → Escape com
+aplicativo anterior comum e fullscreen; depois, autohide e popups do dock no
+mesmo cenário. Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.
 

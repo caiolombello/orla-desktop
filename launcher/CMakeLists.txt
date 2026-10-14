@@ -69,10 +69,19 @@ if(BUILD_TESTING)
     qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
+    # Keep action/cleanup coverage complete without growing the UI watchdog.
+    set(ORLA_UI_ACTION_TESTS allResultActionsAreReachableByKeyboard resultExecutionWaitsForOwnerCleanup
+        windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce pendingCloseBlocksIdleOwnerStarts)
+    set(ORLA_UI_EXCLUSIONS)
+    foreach(test IN LISTS ORLA_UI_ACTION_TESTS)
+        list(APPEND ORLA_UI_EXCLUSIONS --exclude-test ${test})
+    endforeach()
     add_test(NAME launcher-ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
-        --private-path
+        --private-path ${ORLA_UI_EXCLUSIONS}
         $<TARGET_FILE:orla-launcher-ui-tests>)
-    set_tests_properties(launcher-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 30)
+    add_test(NAME launcher-ui-actions COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
+        --private-path $<TARGET_FILE:orla-launcher-ui-tests> ${ORLA_UI_ACTION_TESTS})
+    set_tests_properties(launcher-ui launcher-ui-actions PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 30)
     add_executable(orla-launcher-managed-dispatch-harness tests/ManagedDispatchHarness.cpp WindowSession.cpp WindowSession.h)
     get_target_property(ORLA_MAIN_DEFINITIONS orla-launcher COMPILE_DEFINITIONS)
     target_compile_definitions(orla-launcher-managed-dispatch-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
@@ -113,6 +122,6 @@ if(BUILD_TESTING)
         --private-path
         $<TARGET_FILE:orla-ai-text-tests>)
     set_tests_properties(launcher-ai-text PROPERTIES TIMEOUT 40)
-    set_tests_properties(launcher-behavior launcher-ui launcher-shortcuts launcher-owned-app launcher-ai-provider launcher-ai-text launcher-steam-provider
+    set_tests_properties(launcher-behavior launcher-ui launcher-ui-actions launcher-shortcuts launcher-owned-app launcher-ai-provider launcher-ai-text launcher-steam-provider
         PROPERTIES ENVIRONMENT_MODIFICATION "LD_LIBRARY_PATH=unset:")
 endif()

@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import ast
 import os
+import re
 import selectors
 import shutil
 import subprocess
@@ -44,10 +45,34 @@ def verify_isolation(env, root, inherited_address):
     print('ORLA_ISOLATION_PASS inherited_session_bus_excluded=true runtime_owned=true service_activation_disabled=true', flush=True)
 
 
+
+def selected_test_command(command, excluded, env, runtime):
+    if not excluded:
+        return command
+    if len(command) != 1 or len(set(excluded)) != len(excluded):
+        raise ValueError("Exclusions require one executable and distinct test names")
+    listed = subprocess.run([command[0], '-functions'], env=env, cwd=runtime,
+                            capture_output=True, text=True, timeout=3)
+    lines = listed.stdout.splitlines()
+    if listed.returncode != 0 or not lines or len(listed.stdout) > 65536:
+        raise ValueError("Qt Test function enumeration failed")
+    if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*\(\)', line) for line in lines):
+        raise ValueError("Invalid Qt Test function inventory")
+    functions = [line[:-2] for line in lines]
+    if len(set(functions)) != len(functions) or not set(excluded).issubset(functions):
+        raise ValueError("Duplicate inventory or unknown excluded test")
+    selected = [name for name in functions if name not in excluded]
+    if not selected:
+        raise ValueError("The test partition cannot exclude every function")
+    print(f'ORLA_TEST_PARTITION available={len(functions)} selected={len(selected)} excluded={len(excluded)}', flush=True)
+    return [command[0], *selected]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixture', type=Path)
     parser.add_argument('--private-path', action='store_true')
+    parser.add_argument('--exclude-test', action='append', default=[])
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if not args.command:
@@ -108,7 +133,11 @@ def main():
                     owned_bin = root / 'bin'
                     owned_bin.mkdir()
                     env['PATH'] = str(owned_bin)
-                result = subprocess.run(args.command, env=env, cwd=runtime, timeout=35)
+                try:
+                    command = selected_test_command(args.command, args.exclude_test, env, runtime)
+                except ValueError as error:
+                    parser.error(str(error))
+                result = subprocess.run(command, env=env, cwd=runtime, timeout=35)
                 print(f'ORLA_TEST_RESULT returncode={result.returncode}', flush=True)
                 return result.returncode
             finally:

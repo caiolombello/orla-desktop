@@ -206,6 +206,19 @@ class Gallery:
         window = engine.rootObjects()[0]
         launcher = holder.property("launcher")
         self.save("launcher-results", window)
+        context = QQmlEngine.contextForObject(window)
+        QQmlExpression(context, window, "openResultActions()").evaluate()
+        self.save("launcher-actions", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        window.setProperty("width", 440)
+        window.setProperty("height", 380)
+        QQmlExpression(context, window, "openResultActions()").evaluate()
+        QTest.keyClick(window, Qt.Key_Down)
+        QTest.keyClick(window, Qt.Key_Down)
+        self.save("launcher-actions-narrow-focus", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        window.setProperty("width", 660)
+        window.setProperty("height", 420)
         launcher.setProperty("rows", [])
         launcher.setProperty("status", "idle")
         launcher.setProperty("selectedIndex", -1)
@@ -265,9 +278,11 @@ QtObject {
         property string error: ""
         property int selectedIndex: 0
         property var rows: [
-            {id: "dolphin", kind: "app", iconName: "system-file-manager", title: "Dolphin", description: "Gerenciador de arquivos", source: "Aplicativos",
+            {id: "dolphin", kind: "app", iconName: "system-file-manager", title: "Dolphin", description: "Gerenciador de arquivos", source: "KRunner · Aplicativos",
              categoryLabel: "APLICATIVOS", generation: 1, enabled: true,
-             actions: [{id: "new-window", text: "Nova janela", row: 0, generation: 1, resultId: "dolphin"}]},
+             actions: [{id: "new-window", text: "Nova janela", row: 0, generation: 1, resultId: "dolphin"},
+                       {id: "other", text: "Outra ação sintética", row: 0, generation: 1, resultId: "dolphin"},
+                       {id: "long", text: "Ação sintética com nome longo para conferir os limites", row: 0, generation: 1, resultId: "dolphin"}]},
             {id: "dolphin-root", kind: "app", iconName: "utilities-terminal", title: "Konsole", description: "Terminal",
              source: "Aplicativos", categoryLabel: "APLICATIVOS", generation: 1, enabled: true, actions: []},
             {id: "calc", kind: "calculator", iconName: "accessories-calculator", title: "= 168", description: "24 * 7", source: "Calculadora",
