@@ -681,6 +681,23 @@ Isso fecha o staging desta fatia; inventário transitivo/ABI, usuário limpo,
 remoção e artifact hospedado seguem abertos. Não há release binário anunciado,
 e R2 não está concluído. Consulte os [comandos e limites](launcher/README.md#staging-e-pacote-de-dados--experimental).
 
+**R2 — inventário direto de staging e host no fonte (14/10):**
+`launcher/package.py inventory --stage <prefixo-absoluto>` valida os sete
+arquivos relocáveis antes de consultar os caminhos fixos do host. O relatório
+experimental separado apresenta hashes, modos, metadados RPM e tags dinâmicas
+diretas de ELF, sem resolver ou executar dependências. Leitura ancorada em
+descritores e conferências finais recusam troca de pasta/arquivo; ausência
+inicial e observação inconclusiva mantêm estados distintos. Passaram 56 testes
+do pacote e regressões causais, com revisão independente. A coleta real encontrou
+14 itens necessários e três opcionais em 0,214 s e preservou 1.518 arquivos/247
+diretórios protegidos e o banco RPM. Não houve recarga da sessão ou geração IA.
+O próximo incremento define resolução transitiva e política de caminhos/ABI;
+imports QML, proveniência do Python, instalação/atualização/remoção em usuário
+limpo e artifact hospedado mantêm gates próprios. O inventário exigido pelo
+builder continua `caller_assertion_unverified`, R2 permanece parcial e os assets
+públicos permanecem inalterados. Consulte o
+[comando e cobertura](launcher/README.md#inventário-direto-de-staging-e-arquivos-do-host--experimental).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.

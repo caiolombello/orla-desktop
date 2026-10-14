@@ -344,6 +344,48 @@ com mocks antes da correção. Os 24 testes passaram, sem processos RPM reais
 nos testes. Naquela revisão, build/verify, schema e payload existentes foram preservados.
 Este comando no fonte não instala nem atualiza o launcher ou os helpers.
 
+### Inventário direto de staging e arquivos do host — experimental
+
+Depois de instalar a build em um prefixo próprio, consulte esse staging:
+
+```sh
+python3 -B launcher/package.py inventory --stage /caminho/absoluto/para/orla
+```
+
+O relatório separado `orla-launcher-inventory-0.1` exige os sete arquivos exatos
+do staging, com os modos de instalação, antes de consultar os caminhos fixos
+do host usados pelo doctor. Apresenta hashes, modos e tamanhos; nos ELF,
+interpreta `PT_INTERP`, os nomes `DT_NEEDED` na ordem codificada, RPATH/RUNPATH
+e os valores brutos de FLAGS/FLAGS_1. Bibliotecas compartilhadas podem não ter
+interpretador nem entradas NEEDED. Os nomes e caminhos são observações diretas,
+sem resolver bibliotecas ou carregar plugins. Mecanismos de dependência não
+suportados, dados ambíguos e mudanças durante a leitura geram `unknown`.
+
+Cada leitura usa descritores de diretórios conferidos, recusa links simbólicos
+e verifica identidade antes/depois, inclusive após os metadados RPM e no final
+da coleta. A consulta limita arquivos, tabelas, nomes e bytes totais; o orçamento
+de 20 segundos é cooperativo e não interrompe uma chamada de filesystem bloqueada.
+Recursos opcionais reservam tempo para a conferência final, mas um bloqueio pode
+invalidar também essa conferência. O RPM usa a consulta isolada existente; não
+há execução do ELF, dos scripts ou de ferramentas como `ldd`.
+
+Saídas: 0 para observações diretas necessárias encontradas, 1 para ausência
+conhecida e 2 para informação inconclusiva ou staging inválido. Os três recursos
+opcionais têm estados próprios. Metadados RPM indicam proprietário, sem provar
+integridade; arquivos do staging ficam `NOT_QUERIED`. Travessia transitiva,
+resolução do loader, seleção de ABI, imports QML, proveniência do Python e saúde
+de execução ficam explicitamente `UNRUN`. O relatório não substitui nem promove
+a declaração `caller_assertion_unverified` exigida pelo builder. Os contratos
+de doctor e dos arquivos 0.2/0.3 permanecem preservados.
+
+Na coleta local de 14/10, os 14 itens necessários e três opcionais foram
+encontrados em 0,214 s, com 1.949.764 bytes admitidos; 1.518 arquivos e 247
+diretórios protegidos, incluindo instalação, configurações e banco RPM,
+permaneceram iguais. Os 56 testes do pacote passaram com consultas de host/RPM
+simuladas. Regressões causais reproduziram redirecionamento por troca de pasta
+e classificação incorreta de arquivo removido no código anterior. Essa prova
+é estática e não encerra instalação em usuário limpo ou qualificação nativa.
+
 ## Compilar e testar
 
 Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
