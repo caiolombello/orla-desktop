@@ -319,6 +319,15 @@ def parser() -> argparse.ArgumentParser:
     preview_parser = subparsers.add_parser("preview", help="run plasmawindowed with temporary XDG user directories")
     preview_parser.add_argument("--project-root")
     preview_parser.add_argument("--timeout", type=float, help="stop the preview after this many seconds")
+    launcher_parser = subparsers.add_parser("launcher", help="install and manage the optional Orla Launcher")
+    launcher_commands = launcher_parser.add_subparsers(dest="launcher_action", required=True)
+    launcher_install = launcher_commands.add_parser("install", help="install a verified launcher archive for this user")
+    launcher_install.add_argument("archive", type=Path)
+    launcher_install.add_argument("--sha256", required=True)
+    launcher_install.add_argument("--commit", required=True)
+    launcher_commands.add_parser("status", help="read launcher installation status without changing it")
+    launcher_commands.add_parser("launch", help="open the independently installed launcher")
+    launcher_commands.add_parser("uninstall", help="remove owned launcher files and preserve user configuration")
     if __package__:
         from . import panel_layout
     else:
@@ -345,6 +354,18 @@ def main(argv: list[str] | None = None) -> int:
             print("Orla Dock desinstalado; configurações e caches dos projetos foram preservados" if removed else "Serviço próprio removido; pacote não estava instalado")
         elif args.command == "doctor":
             return doctor()
+        elif args.command == "launcher":
+            installer_path = Path(__file__).resolve().parents[1] / "launcher" / "install.py"
+            spec = importlib.util.spec_from_file_location("orla_launcher_install_bootstrap", installer_path)
+            if spec is None or spec.loader is None:
+                raise PackageError("launcher installer could not be loaded")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            arguments = [args.launcher_action]
+            if args.launcher_action == "install":
+                arguments.extend([str(args.archive), "--sha256", args.sha256, "--commit", args.commit])
+            return module.main(arguments)
         elif args.command == "layout":
             if __package__:
                 from . import panel_layout
