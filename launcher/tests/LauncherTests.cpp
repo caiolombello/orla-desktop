@@ -1,4 +1,10 @@
 #include <QtTest>
+#include <QStandardPaths>
+#include <QDir>
+#include <QLockFile>
+#include <KService>
+#include <KSycoca>
+#include <QJsonDocument>
 #include <QSemaphore>
 #include <QThread>
 #include <QThreadStorage>
@@ -148,6 +154,309 @@ private Q_SLOTS:
         QCOMPARE(closed.count(), 2);
         QVERIFY(launcher.rows().isEmpty());
         QVERIFY(!launcher.executeSelected());
+    }
+    void aliasPresentationIsPassiveFriendlyAndRefusesHiddenCurrentDescriptors()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString absent = root.filePath("no-preferences/aliases.json");
+        {
+            LauncherControllerTestOwner owner(nullptr, absent);
+            auto &launcher = owner.controller();
+            for (int n = 0; n < 100; ++n) QVERIFY(launcher.aliases().isEmpty());
+            launcher.reloadAliases();
+            QVERIFY(!QFile::exists(root.filePath("no-preferences")));
+        }
+        const QString appId = "org.orla.AliasPresentation.desktop";
+        const QString desktopPath = qEnvironmentVariable("XDG_DATA_HOME") + "/applications/" + appId;
+        QVERIFY(QDir().mkpath(QFileInfo(desktopPath).absolutePath()));
+        QFile script(root.filePath("counter.py"));
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text('unexpected execution')\n"); script.close();
+        const QString receipt = root.filePath("receipt");
+        const QByteArray installed = ("[Desktop Entry]\nType=Application\nName=Orla Friendly Alias App\nIcon=org.orla.OwnedAliasIcon\nExec=\""
+            + QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE) + "\" \"" + script.fileName() + "\" \"" + receipt + "\"\nTerminal=false\n").toUtf8();
+        QFile desktop(desktopPath);
+        QVERIFY(desktop.open(QIODevice::WriteOnly)); QCOMPARE(desktop.write(installed), qint64(installed.size())); desktop.close();
+        QProcess cache; cache.start("/usr/bin/kbuildsycoca6", {"--noincremental"});
+        QVERIFY(cache.waitForFinished(5000)); QCOMPARE(cache.exitCode(),0);
+        auto ready = [&] { KSycoca::self()->ensureCacheValid(); return bool(KService::serviceByStorageId(appId)); };
+        QTRY_VERIFY_WITH_TIMEOUT(ready(),3000);
+        const QString preferences = root.filePath("preferences/aliases.json");
+        AliasStore store(preferences);
+        QVERIFY(store.save("editor", appId, store.revision()));
+        auto bytes = [&] { QFile file(preferences); if (!file.open(QIODevice::ReadOnly)) return QByteArray(); return file.readAll(); };
+        const auto persisted = bytes();
+        {
+            LauncherControllerTestOwner owner(nullptr, preferences);
+            auto &launcher = owner.controller();
+            const auto entry = launcher.aliases().first().toMap();
+            QCOMPARE(entry.value("alias").toString(),QStringLiteral("editor"));
+            QCOMPARE(entry.value("appId").toString(),appId);
+            QCOMPARE(entry.value("title").toString(),QStringLiteral("Orla Friendly Alias App"));
+            QCOMPARE(entry.value("iconName").toString(),QStringLiteral("org.orla.OwnedAliasIcon"));
+            QVERIFY(entry.value("available").toBool());
+            QSignalSpy notifications(&launcher,&LauncherController::changed);
+            const auto generation = launcher.generation();
+            for (int n = 0; n < 100; ++n) QCOMPARE(launcher.aliases().first().toMap(),entry);
+            QCOMPARE(notifications.count(),0); QCOMPARE(launcher.generation(),generation);
+            QCOMPARE(bytes(),persisted); QVERIFY(!QFile::exists(receipt));
+            launcher.setQuery("editor");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            for (const auto &flag : {QByteArray("Hidden=true\n"),QByteArray("NoDisplay=true\n"),QByteArray("OnlyShowIn=OrlaMissingDesktop;\n")}) {
+                const auto changed = installed + flag;
+                QVERIFY(desktop.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                QCOMPARE(desktop.write(changed),qint64(changed.size())); desktop.close();
+                QVERIFY2(!launcher.executeSelected(),flag.constData()); // Same cache owner; no invalidation wait.
+                launcher.reloadAliases();
+                QVERIFY(!launcher.aliases().first().toMap().value("available").toBool());
+                QCOMPARE(launcher.aliases().first().toMap().value("title").toString(),QStringLiteral("Aplicativo indisponível"));
+                QVERIFY(desktop.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                QCOMPARE(desktop.write(installed),qint64(installed.size())); desktop.close();
+                launcher.reloadAliases();
+                QVERIFY(launcher.aliases().first().toMap().value("available").toBool());
+            }
+            QVERIFY(QFile::remove(desktopPath)); launcher.reloadAliases();
+            const auto missing = launcher.aliases().first().toMap();
+            QCOMPARE(missing.value("appId").toString(),appId);
+            QCOMPARE(missing.value("title").toString(),QStringLiteral("Aplicativo indisponível"));
+            QVERIFY(!missing.value("available").toBool());
+            QVERIFY(!QFile::exists(receipt)); QCOMPARE(bytes(),persisted);
+            QVERIFY(!persisted.contains("title") && !persisted.contains("iconName") && !persisted.contains("available"));
+        }
+    }
+    void aliasStoreWritesOnlyExplicitValidPreferencesAndPersistsRestart()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString path = root.filePath("new/aliases.json");
+        AliasStore store(path);
+        QVERIFY(store.entries().isEmpty());
+        QVERIFY(!QFile::exists(root.filePath("new")));
+        QVERIFY(!store.save(QString(33, 'x'), "org.orla.App.desktop", store.revision()));
+        QVERIFY(!QFile::exists(root.filePath("new")));
+        QVERIFY(store.save("  Texto  ", "org.orla.App.desktop", store.revision()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto original = file.readAll();
+        file.close();
+        QVERIFY(!original.contains("exec") && !original.contains("query") && !original.contains("generation"));
+        AliasStore restart(path);
+        QCOMPARE(restart.entries().first().toMap().value("alias").toString(), QStringLiteral("Texto"));
+        QCOMPARE(restart.entries().first().toMap().value("appId").toString(), QStringLiteral("org.orla.App.desktop"));
+        QVERIFY(!restart.save("TEXTO", "org.orla.Other.desktop", restart.revision()));
+        QVERIFY(!restart.error().isEmpty());
+        QVERIFY(!restart.save("bad", "../other.desktop", restart.revision()));
+        for (int n = 1; n < 16; ++n) QVERIFY(restart.save("alias" + QString::number(n), "org.orla.App.desktop", restart.revision()));
+        QCOMPARE(restart.entries().size(), 16);
+        const QString fullRevision = restart.revision();
+        QVERIFY(!restart.save("seventeenth", "org.orla.App.desktop", fullRevision));
+        QCOMPARE(restart.revision(), fullRevision);
+        QVERIFY(restart.remove("TEXTO", "org.orla.App.desktop", restart.revision()));
+        const QString beforeExternal = restart.revision();
+        AliasStore external(path);
+        QVERIFY(external.save("outside-change", "org.orla.App.desktop", external.revision()));
+        QVERIFY(!restart.save("stale", "org.orla.App.desktop", beforeExternal));
+        QVERIFY(restart.reload() == false); // Refusal already adopted the current disk snapshot.
+        QCOMPARE(restart.entries(), external.entries());
+    }
+    void aliasRenameIsAtomicExactAndRecoverableAtCapacity()
+    {
+        QTemporaryDir root;
+        const QString path = root.filePath("aliases.json");
+        AliasStore store(path);
+        for (int n = 0; n < 16; ++n) QVERIFY(store.save("alias" + QString::number(n), "org.orla.App.desktop", store.revision()));
+        auto bytes = [&] { QFile file(path); if (!file.open(QIODevice::ReadOnly)) return QByteArray(); return file.readAll(); };
+        const auto full = bytes();
+        const auto revision = store.revision();
+        QVERIFY(!store.rename("alias0", "org.orla.Other.desktop", "new", revision));
+        QVERIFY(!store.rename("alias0", "org.orla.App.desktop", "ALIAS1", revision));
+        QVERIFY(!store.rename("alias0", "org.orla.App.desktop", QString(33, 'x'), revision));
+        QCOMPARE(bytes(), full);
+        QVERIFY(store.writable()); // A correctable command error does not make preferences read-only.
+        QVERIFY(store.rename("ALIAS0", "org.orla.App.desktop", "  Novo  ", revision));
+        QCOMPARE(store.entries().size(), 16);
+        QCOMPARE(store.entries().first().toMap().value("alias").toString(), QStringLiteral("Novo"));
+        QVERIFY(store.error().isEmpty());
+        const auto renamed = bytes();
+        QVERIFY(!store.rename("Novo", "org.orla.App.desktop", "stale", revision));
+        QCOMPARE(bytes(), renamed);
+        AliasStore restart(path);
+        QCOMPARE(restart.entries(), store.entries());
+    }
+    void aliasStoreRefusesLockedCorruptOversizedAndSymlinkTargets()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString path = root.filePath("aliases.json");
+        AliasStore store(path);
+        QVERIFY(store.save("texto", "org.orla.App.desktop", store.revision()));
+        auto bytes = [](const QString &name) { QFile file(name); if (!file.open(QIODevice::ReadOnly)) return QByteArray(); return file.readAll(); };
+        const QByteArray original = bytes(path);
+        {
+            QLockFile competing(path + ".lock");
+            QVERIFY(competing.tryLock(0));
+            QVERIFY(!store.save("blocked", "org.orla.App.desktop", store.revision()));
+            QCOMPARE(bytes(path), original);
+        }
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("{\"formatVersion\":\"future\",\"aliases\":[]}");
+        file.close();
+        const auto future = bytes(path);
+        AliasStore corrupt(path);
+        QVERIFY(!corrupt.writable());
+        QVERIFY(!corrupt.save("repair", "org.orla.App.desktop", corrupt.revision()));
+        QCOMPARE(bytes(path), future);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(QByteArray(16385, 'x'));
+        file.close();
+        AliasStore oversized(path);
+        QVERIFY(!oversized.writable());
+        QVERIFY(!oversized.remove("texto", "org.orla.App.desktop", oversized.revision()));
+        QCOMPARE(bytes(path).size(), 16385);
+        const QString outside = root.filePath("outside.json");
+        QVERIFY(QFile::rename(path, outside));
+        QVERIFY(QFile::link(outside, path));
+        AliasStore linked(path);
+        QVERIFY(!linked.writable());
+        QVERIFY(!linked.save("linked", "org.orla.App.desktop", linked.revision()));
+        QCOMPARE(bytes(outside), QByteArray(16385, 'x'));
+        QVERIFY(QFileInfo(path).isSymLink());
+        QVERIFY(QDir(root.path()).entryList({".aliases-*"}, QDir::Files | QDir::Hidden).isEmpty());
+    }
+    void explicitAliasSaveRestartsAndOnlyDispatchesChosenAppDespiteSameName()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString applications = qEnvironmentVariable("XDG_DATA_HOME") + "/applications";
+        QVERIFY(QDir().mkpath(applications));
+        const QString script = root.filePath("counter.py");
+        QFile helper(script);
+        QVERIFY(helper.open(QIODevice::WriteOnly));
+        helper.write("from pathlib import Path\nimport sys\nwith Path(sys.argv[1]).open('a') as receipt: receipt.write(sys.argv[2])\n");
+        helper.close();
+        const QString appA = "org.orla.AliasCoreA.desktop", appB = "org.orla.AliasCoreB.desktop";
+        for (const auto &entry : QList<QPair<QString, QString>>{{appA,"A"},{appB,"B"}}) {
+            QFile desktop(applications + "/" + entry.first);
+            QVERIFY(desktop.open(QIODevice::WriteOnly));
+            desktop.write(("[Desktop Entry]\nType=Application\nName=OrlaAliasCoreCollision\nExec=\""
+                + QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE) + "\" \"" + script + "\" \""
+                + root.filePath("receipt-" + entry.second) + "\" " + entry.second + "\nTerminal=false\n").toUtf8());
+        }
+        QProcess cache;
+        cache.start("/usr/bin/kbuildsycoca6", {"--noincremental"});
+        QVERIFY(cache.waitForFinished(5000));
+        QCOMPARE(cache.exitCode(),0);
+        auto appsReady = [&] { KSycoca::self()->ensureCacheValid(); return KService::serviceByStorageId(appA) && KService::serviceByStorageId(appB); };
+        QTRY_VERIFY_WITH_TIMEOUT(appsReady(),3000);
+        const QString storage = root.filePath("preferences/aliases.json");
+        {
+            LauncherControllerTestOwner owner(nullptr,storage);
+            auto &launcher = owner.controller();
+            launcher.setQuery("OrlaAliasCoreCollision");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            auto appRow = [&](const QString &id) { for (int row=0;row<launcher.rows().size();++row) if (launcher.rows()[row].toMap().value("appId").toString()==id) return row; return -1; };
+            QTRY_VERIFY_WITH_TIMEOUT(appRow(appA)>=0 && appRow(appB)>=0,5000);
+            const int a = appRow(appA), b = appRow(appB);
+            launcher.select(a);
+            const auto selected = launcher.rows()[a].toMap();
+            QVERIFY(!launcher.saveAlias(b,launcher.generation(),launcher.rows()[b].toMap().value("id").toString(),"texto",launcher.aliasRevision()));
+            QVERIFY(!QFile::exists(storage));
+            QVERIFY(launcher.saveAlias(a,launcher.generation(),selected.value("id").toString(),"Texto",launcher.aliasRevision()));
+            QVERIFY(!launcher.saveAlias(a,selected.value("generation").toULongLong(),selected.value("id").toString(),"late",launcher.aliasRevision()));
+            QCOMPARE(launcher.aliases().size(),1);
+            QVERIFY(!QFile::exists(root.filePath("receipt-A")) && !QFile::exists(root.filePath("receipt-B")));
+        }
+        {
+            LauncherControllerTestOwner owner(nullptr,storage);
+            auto &launcher = owner.controller();
+            QCOMPARE(launcher.aliases().first().toMap().value("appId").toString(),appA);
+            launcher.setQuery("TEXTO");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            auto ticket=launcher.rows().first().toMap();
+            QCOMPARE(ticket.value("kind").toString(),QStringLiteral("alias"));
+            QCOMPARE(ticket.value("appId").toString(),appA);
+            launcher.setQuery("2+2");
+            QVERIFY(!launcher.execute(0,ticket.value("generation").toULongLong(),ticket.value("id").toString()));
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            launcher.setQuery("texto");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            QVERIFY(launcher.executeSelected());
+            QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(root.filePath("receipt-A")),5000);
+            QFile observed(root.filePath("receipt-A"));
+            QVERIFY(observed.open(QIODevice::ReadOnly));
+            QCOMPARE(observed.readAll(),QByteArray("A"));
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+            launcher.setQuery("texto");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            ticket=launcher.rows().first().toMap();
+            const QString staleRevision=launcher.aliasRevision();
+            AliasStore other(storage);
+            QVERIFY(other.remove("Texto",appA,other.revision()));
+            QVERIFY(other.save("Texto",appB,other.revision()));
+            QVERIFY(!launcher.execute(0,ticket.value("generation").toULongLong(),ticket.value("id").toString()));
+            QVERIFY(!launcher.removeAlias("Texto",appA,ticket.value("generation").toULongLong(),staleRevision));
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+            launcher.setQuery("texto");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            QCOMPARE(launcher.rows().first().toMap().value("appId").toString(),appB);
+            QVERIFY(launcher.removeAlias("texto",appB,launcher.generation(),launcher.aliasRevision()));
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+            launcher.setQuery("OrlaAliasCoreCollision");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            int a=-1;for(int row=0;row<launcher.rows().size();++row)if(launcher.rows()[row].toMap().value("appId").toString()==appA)a=row;
+            QVERIFY(a>=0);launcher.select(a);
+            QVERIFY(launcher.saveAlias(a,launcher.generation(),launcher.rows()[a].toMap().value("id").toString(),"texto",launcher.aliasRevision()));
+            launcher.setQuery("texto");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            QFile descriptor(applications+"/"+appA);
+            QVERIFY(descriptor.open(QIODevice::ReadOnly));
+            const auto installed = descriptor.readAll(); descriptor.close();
+            for (const auto &changed : QList<QByteArray>{installed + "Terminal=true\n", installed + "Path=/orla-owned-missing-directory\n", installed + "DBusActivatable=true\n", QByteArray(installed).replace(" A\n", " changed\n")}) {
+                QVERIFY(descriptor.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                QCOMPARE(descriptor.write(changed), qint64(changed.size())); descriptor.close();
+                QVERIFY(!launcher.executeSelected());
+                QVERIFY(descriptor.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                QCOMPARE(descriptor.write(installed), qint64(installed.size())); descriptor.close();
+            }
+            QVERIFY(QFile::remove(applications+"/"+appA));
+            QVERIFY(!launcher.executeSelected()); // No same-name fallback and no stale cached desktop launch.
+            QVERIFY(!QFile::exists(root.filePath("receipt-B")));
+            launcher.setQuery("2+2");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            launcher.setQuery("texto");
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(),QStringLiteral("ready"),5000);
+            QVERIFY(!launcher.rows().first().toMap().value("enabled").toBool());
+            const auto missingGeneration = launcher.generation();
+            const auto missingRevision = launcher.aliasRevision();
+            QVERIFY(launcher.renameAlias("texto",appA,"Editor",missingGeneration,missingRevision));
+            QVERIFY(!launcher.renameAlias("texto",appA,"late",missingGeneration,missingRevision));
+            QCOMPARE(launcher.aliases().first().toMap().value("alias").toString(),QStringLiteral("Editor"));
+            QVERIFY(launcher.removeAlias("Editor",appA,launcher.generation(),launcher.aliasRevision()));
+            QVERIFY(launcher.aliases().isEmpty());
+        }
+        QFile::remove(applications+"/"+appB);
+    }
+    void savedAppAliasFindsTheInstalledFixtureAfterAnotherQuery()
+    {
+        const auto receipt = qEnvironmentVariable("ORLA_TEST_RECEIPT");
+        if (receipt.isEmpty()) QSKIP("Owned desktop fixture is required");
+        const auto directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/orla";
+        QVERIFY(QDir().mkpath(directory));
+        QFile aliases(directory + "/launcher-aliases.json");
+        QVERIFY(aliases.open(QIODevice::WriteOnly));
+        aliases.write(R"({"formatVersion":"0.1-experimental","aliases":[{"alias":"ownalias","appId":"org.orla.OwnedLauncherFixture.desktop"}]})");
+        aliases.close();
+        LauncherControllerTestOwner owner;
+        auto &launcher = owner.controller();
+        launcher.setQuery("2+2");
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        launcher.setQuery("ownalias");
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        QVERIFY(!QFile::exists(receipt));
+        QCOMPARE(launcher.rows().first().toMap().value("kind").toString(), QStringLiteral("alias"));
+        QCOMPARE(launcher.rows().first().toMap().value("appId").toString(), QStringLiteral("org.orla.OwnedLauncherFixture.desktop"));
     }
     void appResultsOnlyRunOwnedFixtureAfterExplicitSelection()
     {

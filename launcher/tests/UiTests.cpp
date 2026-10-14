@@ -267,6 +267,12 @@ private Q_SLOTS:
         const auto lastBounds = [&] { return last->mapRectToItem(viewport, QRectF(0, 0, last->width(), last->height())); };
         QTRY_VERIFY_WITH_TIMEOUT(QRectF(0, 0, viewport->width(), viewport->height()).contains(lastBounds()), 1000);
         QCOMPARE(calls().size(), 1);
+        QTest::keyClick(window, Qt::Key_Down);
+        auto *manager = window->findChild<QQuickItem *>(QStringLiteral("aliasManageAction"));
+        QVERIFY(manager);
+        QTRY_VERIFY(manager->property("highlighted").toBool());
+        QTest::keyClick(window, Qt::Key_Up);
+        QVERIFY(last->property("highlighted").toBool());
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, last->mapToScene(QPointF(last->width() / 2, last->height() / 2)).toPoint());
         QCOMPARE(calls().size(), 2);
         QCOMPARE(calls().last().toMap().value("actionId").toString(), QStringLiteral("many-11"));
@@ -1991,6 +1997,351 @@ private Q_SLOTS:
         QCOMPARE(aiText.output(), QStringLiteral("parcial-pendente"));
         QVERIFY(discover->isEnabled() && probe->isEnabled() && generate->isEnabled() && scan->isEnabled() && downloads->isEnabled());
         qInfo() << "ORLA_PENDING_CLOSE_PASS idle_starts_blocked=true queued_handlers_guarded=true quit_once=true helpers_reaped=true";
+    }
+
+    void aliasesOwnControlsAndInvalidateStaleIntents_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 440;
+        QTest::newRow("standard") << 660;
+    }
+    void aliasesOwnControlsAndInvalidateStaleIntents()
+    {
+        QFETCH(int, width);
+        // Only synthetic controllers; Core store/eligibility has its own tests.
+        std::unique_ptr<QObject> holder;
+        QQmlApplicationEngine engine;
+        QQmlComponent fixture(&engine);
+        fixture.setData(R"ALIASFIXTURE(
+import QtQuick
+QtObject {
+    property QtObject launcher: QtObject {
+        signal changed()
+        property int generation: 1
+        property string aliasRevision: "revision-1"
+        property string aliasError: ""
+        property bool aliasesWritable: true
+        property var aliases: [{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Dolphin",available:true}, {alias:"indisponível",appId:"org.orla.missing.desktop",title:"Aplicativo indisponível",available:false}]
+        property var aliasCalls: []
+        property string aliasFailureMode: ""
+        property var pendingAliasRead: null
+        property int reloadCount: 0
+        property int dismissed: 0
+        property var executed: []
+        property string query: "dol"
+        property string status: "ready"
+        property string error: ""
+        property int selectedIndex: 0
+        property var rows: [
+            {id: "dolphin", kind: "app", iconName: "system-file-manager", title: "Dolphin", description: "Gerenciador de arquivos", source: "KRunner · Aplicativos",
+             categoryLabel: "APLICATIVOS", generation: 1, enabled: true, aliasEligible: true, appId: "org.orla.synthetic.desktop",
+             actions: [{id: "new-window", text: "Nova janela", row: 0, generation: 1, resultId: "dolphin"},
+                       {id: "other", text: "Outra ação sintética", row: 0, generation: 1, resultId: "dolphin"},
+                       {id: "long", text: "Ação sintética com nome longo para conferir os limites", row: 0, generation: 1, resultId: "dolphin"}]},
+            {id: "dolphin-root", kind: "app", iconName: "utilities-terminal", title: "Konsole", description: "Terminal",
+             source: "Aplicativos", categoryLabel: "APLICATIVOS", generation: 1, enabled: true, actions: []},
+            {id: "calc", kind: "calculator", iconName: "accessories-calculator", title: "= 168", description: "24 * 7", source: "Calculadora",
+             categoryLabel: "CALCULADORA", generation: 1, enabled: true, actions: []},
+            {id: "steam-1", kind: "steam", title: "Jogo sintético", description: "Biblioteca Steam local", source: "Steam",
+             categoryLabel: "STEAM", generation: 1, enabled: true, actions: []}
+        ]
+        function select(row) { selectedIndex = row; }
+        function moveSelection(delta) {}
+        function execute(row, generation, id, actionId) { executed = executed.concat([{id:id,actionId:actionId}]) }
+        function dismiss() { dismissed++ }
+        function advance() { generation++; aliasRevision = "revision-" + generation; changed() }
+        function rejected(name) { aliasError = name; changed(); return false }
+        function check(alias, rev) {
+            if (!aliasesWritable || rev !== aliasRevision) return rejected("A lista mudou. Abra o editor novamente.")
+            if (aliases.some(entry => entry.alias === alias)) return rejected("Este alias já existe.")
+            return true
+        }
+        function saveAlias(row, gen, id, alias, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"save",row:row,generation:gen,id:id,alias:alias,revision:rev}])
+            if (aliasFailureMode === "silent") return false
+            if (aliasFailureMode === "drift") { advance(); return false }
+            if (gen !== generation || row !== selectedIndex || id !== rows[row].id || !check(alias, rev)) return false
+            aliases = aliases.concat([{alias:alias,appId:rows[row].appId}]); aliasError = ""; advance(); return true
+        }
+        function renameAlias(oldAlias, appId, newAlias, gen, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"rename",oldAlias:oldAlias,appId:appId,alias:newAlias,generation:gen,revision:rev}])
+            if (gen !== generation || !check(newAlias, rev)) return false
+            aliases = aliases.map(entry => entry.alias === oldAlias && entry.appId === appId ? {alias:newAlias,appId:appId} : entry)
+            aliasError = ""; advance(); return true
+        }
+        function removeAlias(alias, appId, gen, rev) {
+            aliasCalls = aliasCalls.concat([{kind:"remove",alias:alias,appId:appId,generation:gen,revision:rev}])
+            if (!aliasesWritable || gen !== generation || rev !== aliasRevision) return false
+            aliases = aliases.filter(entry => entry.alias !== alias || entry.appId !== appId); advance(); return true
+        }
+        function reloadAliases() {
+            reloadCount++
+            if (!pendingAliasRead) return
+            const next = pendingAliasRead
+            pendingAliasRead = null
+            aliases = next.aliases
+            aliasesWritable = next.writable
+            aliasError = next.error || ""
+            generation++
+            if (!next.preserveRevision) aliasRevision = "revision-" + generation
+            changed()
+        }
+    }
+    property QtObject aiProviders: QtObject {
+        signal closeReady()
+        property bool busy: false
+        property string status: "idle"
+        property string operation: ""
+        property string error: ""
+        property string requestId: ""
+        property var providers: [
+            {id: "codex", name: "Codex", displayName: "Codex", clientVersion: "", capabilities: {installation: "absent", anonymous_protocol: "unknown"},
+             messageCode: "cli_present_version_not_queried"}
+        ]
+        function cancelAll() {}
+        function cancel() {}
+        function requestClose() { return true; }
+        function discover() {}
+        function probeCodex() {}
+    }
+    property QtObject aiText: QtObject {
+        signal closeReady()
+        property bool busy: false
+        property string status: "idle"
+        property string error: ""
+        property string output: ""
+        property string finishReason: ""
+        property string requestId: ""
+        property var usage: ({})
+        function cancelAll() {}
+        function cancel() {}
+        function requestClose() { return true; }
+        function generate() { return false; }
+    }
+    property QtObject steamProvider: QtObject {
+        signal closeReady()
+        property bool busy: false
+        property string status: "ready"
+        property string error: ""
+        property int rootsCount: 1
+        property int issueCount: 0
+        property var apps: [{appId: "1", name: "Jogo sintético", installState: "installed"}]
+        function cancelAll() {}
+        function requestClose() { return true; }
+        function scan() {}
+        function openDownloads() {}
+    }
+    property QtObject windowSession: QtObject {
+        property string notice: ""
+        property string shortcutText: "Meta+Espaço"
+    }
+}
+)ALIASFIXTURE", QUrl());
+        holder.reset(fixture.create());
+        QVERIFY2(holder, qPrintable(fixture.errorString()));
+        for (const char *name : {"launcher", "aiProviders", "aiText", "steamProvider", "windowSession"})
+            engine.rootContext()->setContextProperty(QString::fromLatin1(name), holder->property(name).value<QObject *>());
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        window->resize(width, 420);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *context = QQmlEngine::contextForObject(window);
+        const auto evaluate = [&](const QString &source) {
+            QQmlExpression expression(context, window, source);
+            const QVariant value = expression.evaluate();
+            if (expression.hasError()) qFatal("Alias fixture expression failed: %s", qPrintable(expression.error().toString()));
+            return value;
+        };
+        const auto item = [&](const char *name) {
+            QList<QQuickItem *> pending{window->contentItem()};
+            while (!pending.isEmpty()) {
+                auto *current = pending.takeLast();
+                if (current->objectName() == QString::fromLatin1(name)) return current;
+                pending.append(current->childItems());
+            }
+            return static_cast<QQuickItem *>(nullptr);
+        };
+        const auto click = [&](const char *name) {
+            auto *target = item(name);
+            if (!target || !target->isVisible() || !target->isEnabled()) return false;
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                target->mapToScene(QPointF(target->width() / 2, target->height() / 2)).toPoint());
+            QTest::qWait(10);
+            return true;
+        };
+        const auto begin = [&](const QString &mode, const QString &extra = QStringLiteral("null")) {
+            evaluate(QStringLiteral("aliasPreferences.begin('%1', %2)").arg(mode, extra));
+            QTest::qWait(10);
+        };
+        QVERIFY(click("actionsButton"));
+        QVERIFY(click("aliasAddAction"));
+        QCOMPARE(evaluate(QStringLiteral("aliasPreferences.mode")).toString(), QStringLiteral("add"));
+        auto *input = item("aliasInput");
+        QVERIFY(input && input->hasActiveFocus());
+        QTRY_COMPARE_WITH_TIMEOUT(input->height(), 40.0, 1000);
+        QVERIFY(input->setProperty("text", QString(33, QLatin1Char('x'))));
+        QVERIFY(!item("aliasSaveButton")->isEnabled());
+        QVERIFY(input->setProperty("text", QString::fromUtf8("🚀").repeated(32)));
+        QCOMPARE(evaluate(QStringLiteral("aliasPreferences.aliasLength")).toInt(), 32);
+        QVERIFY(item("aliasSaveButton")->isEnabled());
+        evaluate(QStringLiteral("launcher.changed()"));
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(QQmlProperty(input->property("background").value<QObject *>(), QStringLiteral("border.width")).read().toInt(), 2);
+        const auto popupBounds = evaluate(QStringLiteral("({x:aliasPreferences.x,y:aliasPreferences.y,width:aliasPreferences.width,height:aliasPreferences.height})")).value<QJSValue>().toVariant().toMap();
+        QVERIFY(popupBounds.value("width").toReal() < width);
+        QVERIFY(input->setProperty("text", QStringLiteral("novo")));
+        QVERIFY(click("aliasSaveButton"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QVERIFY(evaluate(QStringLiteral("launcher.aliases.some(x=>x.alias==='novo')")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls[0].id")).toString(), QStringLiteral("dolphin"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+        begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+        QVERIFY(click("aliasCancelButton"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), 1);
+        begin(QStringLiteral("manager"));
+        QVERIFY(item("aliasAppId0") && item("aliasAppId1"));
+        QVERIFY(!item("aliasAppId0")->isVisible());
+        QVERIFY(item("aliasAppId1")->isVisible());
+        evaluate(QStringLiteral("launcher.aliases=launcher.aliases.concat([{alias:'outro',appId:'org.orla.other.desktop',title:'Dolphin',available:true}]);launcher.advance()"));
+        begin(QStringLiteral("manager"));
+        QVERIFY(item("aliasAppId0")->isVisible());
+        QCOMPARE(item("aliasAppId0")->property("text").toString(), QStringLiteral("org.orla.synthetic.desktop"));
+        evaluate(QStringLiteral("launcher.aliases=launcher.aliases.slice(0,3);launcher.advance()"));
+        begin(QStringLiteral("manager"));
+        QVERIFY(!item("aliasAppId0")->isVisible());
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+        QVERIFY(click("aliasEdit1")); // Missing application remains editable/removable.
+        QVERIFY(input->setProperty("text", QStringLiteral("renomeado")));
+        QVERIFY(click("aliasSaveButton"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliases[1].alias")).toString(), QStringLiteral("renomeado"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls[1].kind")).toString(), QStringLiteral("rename"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls[1].appId")).toString(), QStringLiteral("org.orla.missing.desktop"));
+        begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+        QVERIFY(input->setProperty("text", QStringLiteral("arquivos")));
+        QVERIFY(click("aliasSaveButton"));
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("aliasPreferences.localError")).toString(), QStringLiteral("Este alias já existe."));
+        QVERIFY(item("aliasSaveButton")->isEnabled());
+        QVERIFY(input->setProperty("text", QStringLiteral("corrigido")));
+        QVERIFY(click("aliasSaveButton"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        begin(QStringLiteral("manager"));
+        QVERIFY(click("aliasRemove1"));
+        QVERIFY(!evaluate(QStringLiteral("launcher.aliases.some(x=>x.appId==='org.orla.missing.desktop')")).toBool());
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls[4].kind")).toString(), QStringLiteral("remove"));
+        for (const QString &failure : {QStringLiteral("silent"), QStringLiteral("drift")}) {
+            evaluate(QStringLiteral("launcher.aliasError='Este alias já existe.';launcher.aliasFailureMode='%1'").arg(failure));
+            begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+            QVERIFY(input->setProperty("text", QStringLiteral("nova intenção")));
+            QVERIFY(click("aliasSaveButton"));
+            QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+            QCOMPARE(evaluate(QStringLiteral("aliasPreferences.localError")).toString(), QStringLiteral("A lista ou a seleção mudou. Abra o editor novamente."));
+            QVERIFY(!item("aliasSaveButton")->isEnabled());
+            QVERIFY(!evaluate(QStringLiteral("launcher.aliases.some(x=>x.alias==='nova intenção')")).toBool());
+        }
+        evaluate(QStringLiteral("launcher.aliasFailureMode='';launcher.aliasError=''"));
+        const int calls = evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt();
+        // Same index/generation/revision can still denote a different native app.
+        begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+        QVERIFY(input->setProperty("text", QStringLiteral("intenção original")));
+        auto *save = item("aliasSaveButton");
+        QVERIFY(save && save->isEnabled());
+        const QPoint savePoint = save->mapToScene(QPointF(save->width() / 2, save->height() / 2)).toPoint();
+        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, savePoint);
+        evaluate(QStringLiteral("launcher.rows=launcher.rows.slice().reverse();launcher.changed()"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QTest::mouseRelease(window, Qt::LeftButton);
+        begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'steam-1'}"));
+        QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        evaluate(QStringLiteral("launcher.rows=launcher.rows.slice().reverse();launcher.changed()"));
+        for (const QString &change : {QStringLiteral("launcher.advance()"), QStringLiteral("launcher.query='outra';launcher.changed()"),
+                QStringLiteral("launcher.selectedIndex=1;launcher.changed()"), QStringLiteral("window.activePanel='ai'"),
+                QStringLiteral("aiProviders.busy=true"), QStringLiteral("aiText.busy=true"), QStringLiteral("steamProvider.busy=true"),
+                QStringLiteral("window.pendingDismiss=true")}) {
+            begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+            evaluate(change);
+            QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+            evaluate(QStringLiteral("aliasPreferences.commit('save',null,aliasPreferences.episode-1)"));
+            QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+            evaluate(QStringLiteral("window.activePanel='search';window.pendingDismiss=false;aiProviders.busy=false;aiText.busy=false;steamProvider.busy=false"));
+        }
+        evaluate(QStringLiteral("launcher.aliases=Array.from({length:16},(_,i)=>({alias:'alias '+i,appId:'org.orla.synthetic'+i+'.desktop',title:'Aplicativo sintético '+i,iconName:'system-file-manager',available:true}));launcher.advance()"));
+        begin(QStringLiteral("manager"));
+        auto *firstEdit = item("aliasEdit0");
+        auto *lastRemove = item("aliasRemove15");
+        auto *scroll = item("aliasScroll");
+        QVERIFY(firstEdit && lastRemove && scroll);
+        firstEdit->forceActiveFocus(Qt::TabFocusReason);
+        for (int index = 0; index < 30; ++index) QTest::keyClick(window, Qt::Key_Tab);
+        auto *lastEdit = item("aliasEdit15");
+        QVERIFY(lastEdit);
+        QTRY_VERIFY_WITH_TIMEOUT(lastEdit->hasActiveFocus(), 1000);
+        auto *viewport = scroll->property("contentItem").value<QQuickItem *>();
+        QVERIFY(viewport);
+        const auto editBounds = [&] { return lastEdit->mapRectToItem(viewport, QRectF(0, 0, lastEdit->width(), lastEdit->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0, 0, viewport->width(), viewport->height()).contains(editBounds()), 1000);
+        QTest::keyClick(window, Qt::Key_Tab);
+        QTRY_VERIFY_WITH_TIMEOUT(lastRemove->hasActiveFocus(), 1000);
+        const auto lastBounds = [&] { return lastRemove->mapRectToItem(viewport, QRectF(0, 0, lastRemove->width(), lastRemove->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0, 0, viewport->width(), viewport->height()).contains(lastBounds()), 1000);
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        const int reads = evaluate(QStringLiteral("launcher.reloadCount")).toInt();
+        evaluate(QStringLiteral("aliasPreferences.begin('add',{row:0,id:'dolphin',generation:launcher.generation-1,revision:launcher.aliasRevision})"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        evaluate(QStringLiteral("aliasPreferences.begin('edit',{alias:'alias 0',appId:'org.orla.synthetic0.desktop',generation:launcher.generation-1,revision:launcher.aliasRevision})"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("launcher.reloadCount")).toInt(), reads);
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        const QString revision = evaluate(QStringLiteral("launcher.aliasRevision")).toString();
+        evaluate(QStringLiteral("launcher.pendingAliasRead={aliases:[{alias:'externo',appId:'org.orla.missing.desktop',title:'Aplicativo indisponível',iconName:'application-x-executable',available:false}],writable:true,preserveRevision:true}"));
+        begin(QStringLiteral("manager"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.reloadCount")).toInt(), reads + 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasRevision")).toString(), revision);
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.ticket.generation===launcher.generation")).toBool());
+        QCOMPARE(item("aliasTarget0")->property("text").toString(), QStringLiteral("Aplicativo indisponível"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+        evaluate(QStringLiteral("launcher.pendingAliasRead={aliases:[],writable:false,error:'Arquivo de aliases inválido.'}"));
+        const int readsBeforeEdit = evaluate(QStringLiteral("launcher.reloadCount")).toInt();
+        begin(QStringLiteral("edit"), QStringLiteral("{alias:'externo',appId:'org.orla.missing.desktop'}"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.reloadCount")).toInt(), readsBeforeEdit);
+        begin(QStringLiteral("add"), QStringLiteral("{row:0,id:'dolphin'}"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.reloadCount")).toInt(), readsBeforeEdit);
+        begin(QStringLiteral("manager"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.reloadCount")).toInt(), readsBeforeEdit + 1);
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.writable")).toBool());
+        QCOMPARE(item("aliasEmptyState")->property("text").toString(), QStringLiteral("Aliases indisponíveis. Seus dados foram preservados."));
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        evaluate(QStringLiteral("launcher.aliasesWritable=false;launcher.aliasError='Arquivo de aliases inválido.';launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.writable")).toBool());
+        QCOMPARE(item("aliasErrorLabel")->property("text").toString(), QStringLiteral("Arquivo de aliases inválido."));
+        evaluate(QStringLiteral("launcher.aliases=[];launcher.changed()"));
+        begin(QStringLiteral("manager"));
+        QCOMPARE(item("aliasEmptyState")->property("text").toString(), QStringLiteral("Aliases indisponíveis. Seus dados foram preservados."));
+        evaluate(QStringLiteral("launcher.aliasesWritable=true;launcher.aliasError='';launcher.rows=[];launcher.selectedIndex=-1;launcher.query='';launcher.status='idle';launcher.changed()"));
+        // Generic manager is reachable from the actual Ações control with an empty query.
+        evaluate(QStringLiteral("aliasPreferences.invalidate()"));
+        QVERIFY(click("actionsButton"));
+        QTest::keyClick(window, Qt::Key_Return);
+        QVERIFY(evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("aliasPreferences.mode")).toString(), QStringLiteral("manager"));
+        const int dismissed = evaluate(QStringLiteral("launcher.dismissed")).toInt();
+        QTest::keyClick(window, Qt::Key_Escape);
+        QVERIFY(!evaluate(QStringLiteral("aliasPreferences.visible")).toBool());
+        QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissed);
+        QVERIFY(item("searchInput")->hasActiveFocus());
+        QTest::keyClick(window, Qt::Key_Escape);
+        QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissed + 1);
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
+        QCOMPARE(evaluate(QStringLiteral("launcher.aliasCalls.length")).toInt(), calls);
+        evaluate(QStringLiteral("launcher.rows=[{id:'alias:arquivos',kind:'alias',title:'Dolphin',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
+        QVERIFY(item("executeButton") && item("executeButton")->isEnabled());
+        QCOMPARE(item("executeButton")->property("text").toString(), QStringLiteral("Abrir ↵"));
+        QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
     }
 };
 QTEST_MAIN(UiTests)
