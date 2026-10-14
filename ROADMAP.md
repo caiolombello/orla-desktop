@@ -228,7 +228,7 @@ C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incr
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 
-P1 está parcialmente implementado no dock; falta escolher barra/launcher/eventos e qualificar os fluxos completos. A prova privada de seleção preservou o Pomodoro, mas resetou o timer antes do restart: retomada entre processos é UNRUN. P1 depende de C1. A primeira fatia de P2 foi publicada em 0.2.8, mas permanece parcial até prova nativa; W1 ainda não está implementado. O filtro de janelas por Activity continua separado do filtro de área virtual existente.
+P1 está parcialmente implementado no dock; falta escolher barra/launcher/eventos e qualificar os fluxos completos. A prova privada de seleção preservou o Pomodoro, mas resetou o timer antes do restart: retomada entre processos é UNRUN. P1 depende de C1. A primeira fatia de P2 foi publicada em 0.2.8, mas permanece parcial até prova nativa; W1 oferece seleção e troca de área com os aceites delimitados abaixo, ainda parcial. O filtro de janelas por Activity continua separado do filtro de área virtual existente.
 
 ### 0.6 — Barra superior modular inspirada no macOS
 
@@ -533,6 +533,23 @@ applets, barra, launcher e bancos preservados. O segundo ensaio teve cópia
 integral antes da criação e restauração exata depois. Foco completo, exact-once
 e monitores mantêm seus gates próprios.
 
+**W1 — uma solicitação por ação e Escape em B:** em 2026-10-14, Tab a partir
+da aba Contextos chegou ao seletor; Down/Enter manteve A e um Tab chegou ao
+botão, com envelopes dos anéis dentro do viewport. Space gerou exatamente um
+Set validado pelo monitor D-Bus restrito; KWin/TaskManager convergiram para B,
+sem mudança de owner ou mensagem inválida. Após um clique na janela própria
+em B e a reabertura de Configurações, Escape devolveu o foco à mesma janela.
+A troca havia deixado o desktop do Plasma ativo: retorno automático após a
+troca e reentrada no dock por teclado continuam abertos. O observer QML
+expirou antes do Space, portanto callbacks e estado QML posteriores são
+UNKNOWN neste corpus; a contagem e os modelos foram observados separadamente.
+A área temporária foi removida, os bytes/modo de `kwinrc` restaurados pela
+remoção de um único bloco de tiling próprio e os probes retirados. Configurações,
+pacotes de produção, layout, launcher e recuperação foram preservados.
+O [registro de validação](docs/validation/desktop-switch-source.md) mantém as
+primeiras falhas e distingue esses aceites de monitores, Activity,
+indisponibilidade e atalho global Orla, ainda sem qualificação. W1 segue parcial.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 **Aparência portátil C1/X1 — incremento Source:** exportação do estado salvo por
@@ -569,10 +586,15 @@ alterar o produto para contornar o teste. Conferir fullscreen, teclado/foco nas
 demais superfícies e as telas/escalas disponíveis; as indisponíveis permanecem
 UNRUN. A transferência da Central e a retirada de sua entrada direita passaram
 no aceite delimitado acima. O encaixe dos dois controles na altura útil da barra
-também passou; o próximo lote deve ampliar W1 com foco e contagem de uma única
-solicitação de troca de área, usando destinos já existentes. Seleção de saída e os demais
-controles de hardware continuam provas próprias; o dono do estado de áudio
-permanece na dock.
+também passou. A contagem de uma solicitação W1 e Escape após reabertura em B
+agora têm prova delimitada; retorno automático após a troca e outros monitores
+continuam abertos. A próxima fatia de produto é o painel **Ações** do launcher
+(L2/UX2): expor todas as ações já fornecidas pelo resultado e sua origem,
+abrir por botão/Ctrl+K, funcionar em 440/660 pontos e permitir Escape de volta
+à busca preservando consulta e seleção. A execução deve reutilizar os tickets
+e a barreira de fechamento existentes. Seleção de saída e os demais controles
+de hardware continuam provas próprias; o dono do estado de áudio permanece
+na dock.
 
 ## Prontidão e recomendação de execução
 

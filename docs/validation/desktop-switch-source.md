@@ -39,3 +39,21 @@ O retorno pelo atalho existente Ctrl+F1 e a remoção da área temporária foram
 ![Área atual após o fluxo de teclado](../screenshots/desktop-switch/desktop-switch-native-keyboard.png)
 
 Recorte nativo limitado ao módulo, com nome sintético da área temporária. Essa prova qualifica a troca pelo fluxo exercitado; foco de retorno, contagem exata de escritas D-Bus, outros monitores e um novo atalho global Orla permanecem UNRUN. W1 continua parcial.
+
+## Uma solicitação por ação e foco em B — 2026-10-14
+
+O ensaio usou a dock instalada e uma janela própria em todas as áreas, na sessão Plasma 6.7.5/Wayland. Como havia somente uma área, foi criada uma segunda temporária. A instrumentação acrescentou observação a dois arquivos da dock e foi retirada ao final; nenhuma mudança de produto ficou instalada neste ensaio.
+
+Depois de abrir Configurações e Contextos por mouse, Tab levou o foco ao seletor. Abrir a lista, Down/Enter e aguardar manteve a área original, sem escrita no intervalo monitorado. Um Tab levou ao botão habilitado, com `activeFocus` e `visualFocus`. Os envelopes dos anéis, incluindo suas margens, ficaram dentro do viewport: folga mínima de 10 pontos no seletor e 9 no botão. Isso verifica estado e geometria; a pintura raster do anel não foi conferida neste episódio.
+
+Um Space produziu exatamente um `Properties.Set`, com o destino escolhido. A contagem veio de `BecomeMonitor` com regras restritas ao sender real do Plasma, owner único do KWin, propriedade `current` e sinais de mudança/owner; ambos os PIDs foram conferidos. O recibo final registrou uma escrita, uma transição A→B, zero mensagens inválidas e zero mudanças de owner, com as identidades preservadas. KWin e `TaskManager::VirtualDesktopInfo` reais convergiram para B. O retorno de limpeza ocorreu depois de encerrar esse monitor e pertence a outro intervalo.
+
+Após a troca, o KWin mostrou a janela do desktop do Plasma como ativa. Em um fluxo separado, um clique na janela própria em B, a reabertura de Configurações e um Escape devolveram o foco à mesma janela própria. Esse resultado qualifica Escape após reabertura; não qualifica retorno automático à janela anterior durante a troca de área nem reentrada no dock apenas por teclado.
+
+O observer QML atingiu seu limite de dez minutos antes do Space. Seu último registro permaneceu igual ao estado anterior à ação; portanto o contador de callbacks de clique, o estado QML após a troca e o fechamento lógico da intenção ficaram **UNKNOWN neste corpus**. A contagem D-Bus e a observação independente de KWin/TaskManager continuam válidas. Não houve repetição da ação para obter outro registro.
+
+A primeira preparação recusou a assinatura signed esperada pelo helper antes de criar qualquer área. O Get real retornou `a(uss)`; a candidata seguinte corrigiu somente as três assinaturas correspondentes, com 19 testes puros dos helpers privados e revisão independente. A estrutura unsigned também corresponde ao [marshaller do KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/virtualdesktopsdbustypes.cpp).
+
+O helper de limpeza retornou à área original e removeu a temporária, mas recusou o resíduo de tiling: o formato observado era `[Tiling][desktop][output]`, conforme o [TileManager do KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/tiles/tilemanager.cpp). Uma recuperação nova removeu apenas o bloco completo observado, de 189 bytes, reconstruindo os 506 bytes originais e o modo de `kwinrc`. A revisão identificou e corrigiu a falta de rechecagem após a última leitura assíncrona; 13 testes puros do helper privado passaram antes da execução. A primeira falha, o banco inicial e os recibos anteriores foram preservados.
+
+A conferência final confirmou a área e o inventário originais, pacotes de produção da dock/barra, configurações, valores dos applets, layout, launcher, CLI e bancos de recuperação preservados. Plasma terminou ativo, sem restart automático. Os dez episódios de input liberaram seus dispositivos; fixture, observers e plugins próprios foram encerrados ou descarregados. Outros monitores, Activity, indisponibilidade induzida e um atalho global novo do Orla continuam sem qualificação. **W1 permanece parcial.**
