@@ -179,8 +179,7 @@ private Q_SLOTS:
             [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
             [&] { ++locates; return QStringList{QStringLiteral("native=/synthetic/known-root")}; });
         QQmlEngine engine;
-        const QUrl panelUrl = QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
-            .filePath(QStringLiteral("../launcher/SteamSettings.qml")));
+        const QUrl panelUrl = QUrl(QStringLiteral("qrc:/orla/SteamSettings.qml"));
         QQmlComponent component(&engine, panelUrl);
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QQuickWindow window;
@@ -290,8 +289,7 @@ private Q_SLOTS:
             [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
             [&] { ++locates; return QStringList{}; });
         QQmlEngine engine;
-        QQmlComponent component(&engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
-            .filePath(QStringLiteral("../launcher/SteamSettings.qml"))));
+        QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/orla/SteamSettings.qml")));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QQuickWindow window;
         window.resize(width, 420);
@@ -385,8 +383,7 @@ private Q_SLOTS:
             [&opened](const QUrl &url) { opened.append(url); return true; }, nullptr,
             [&] { ++locates; return SteamProviderController::discoverLocalRoots(home, data); });
         QQmlEngine engine;
-        const QUrl panelUrl = QUrl::fromLocalFile(QFileInfo(QStringLiteral(ORLA_TEST_STEAM_HELPER)).dir()
-            .filePath(QStringLiteral("../launcher/SteamSettings.qml")));
+        const QUrl panelUrl = QUrl(QStringLiteral("qrc:/orla/SteamSettings.qml"));
         QQmlComponent component(&engine, panelUrl);
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QQuickWindow window;

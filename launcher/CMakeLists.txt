@@ -12,23 +12,41 @@ find_package(KF6Service 6.30 REQUIRED)
 find_package(KF6GlobalAccel 6.30 REQUIRED)
 find_package(KF6WindowSystem 6.30 REQUIRED)
 
-set(ORLA_AI_HELPER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/ai.py" CACHE FILEPATH
-    "Absolute path to the bounded Orla AI provider helper")
-if(NOT IS_ABSOLUTE "${ORLA_AI_HELPER_PATH}")
-    message(FATAL_ERROR "ORLA_AI_HELPER_PATH must be absolute")
+# Empty fresh defaults select the executable-relative built-ins. Never infer cache provenance.
+set(ORLA_AI_HELPER_PATH "" CACHE FILEPATH "Optional absolute AI provider helper override; empty uses staged built-in")
+set(ORLA_AI_TEXT_HELPER_PATH "" CACHE FILEPATH "Optional absolute local text helper override; empty uses staged built-in")
+set(ORLA_STEAM_HELPER_PATH "" CACHE FILEPATH "Optional absolute Steam helper override; empty uses staged built-in")
+foreach(ORLA_HELPER_OPTION ORLA_AI_HELPER_PATH ORLA_AI_TEXT_HELPER_PATH ORLA_STEAM_HELPER_PATH)
+    if(NOT "${${ORLA_HELPER_OPTION}}" STREQUAL "")
+        if(NOT IS_ABSOLUTE "${${ORLA_HELPER_OPTION}}")
+            message(FATAL_ERROR "${ORLA_HELPER_OPTION} must be absolute when nonempty")
+        endif()
+        message(STATUS "Preserving ${ORLA_HELPER_OPTION} override; use a fresh build or -D${ORLA_HELPER_OPTION}= for relocatable defaults")
+    endif()
+endforeach()
+
+set(ORLA_BUILTIN_HELPERS ai.py steam.py ai_text_ollama.py ai_text_transport.py ai_text.py)
+set(ORLA_BUILTIN_HELPER_DIR "${CMAKE_CURRENT_BINARY_DIR}/libexec")
+file(MAKE_DIRECTORY "${ORLA_BUILTIN_HELPER_DIR}")
+foreach(ORLA_HELPER IN LISTS ORLA_BUILTIN_HELPERS)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/../scripts/${ORLA_HELPER}"
+        "${ORLA_BUILTIN_HELPER_DIR}/${ORLA_HELPER}" COPYONLY)
+    install(FILES "${ORLA_BUILTIN_HELPER_DIR}/${ORLA_HELPER}" DESTINATION libexec
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+endforeach()
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" DESTINATION .
+    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+
+set(ORLA_TEST_STEAM_HELPER_PATH "${ORLA_STEAM_HELPER_PATH}")
+if(ORLA_TEST_STEAM_HELPER_PATH STREQUAL "")
+    set(ORLA_TEST_STEAM_HELPER_PATH "${ORLA_BUILTIN_HELPER_DIR}/steam.py")
 endif()
-set(ORLA_AI_TEXT_HELPER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/ai_text_ollama.py" CACHE FILEPATH
-    "Absolute path to the operational Orla local text helper")
-if(NOT IS_ABSOLUTE "${ORLA_AI_TEXT_HELPER_PATH}")
-    message(FATAL_ERROR "ORLA_AI_TEXT_HELPER_PATH must be absolute")
-endif()
-set(ORLA_STEAM_HELPER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/steam.py" CACHE FILEPATH
-    "Absolute path to the bounded Orla Steam metadata helper")
-if(NOT IS_ABSOLUTE "${ORLA_STEAM_HELPER_PATH}")
-    message(FATAL_ERROR "ORLA_STEAM_HELPER_PATH must be absolute")
+set(ORLA_TEST_AI_TEXT_HELPER_PATH "${ORLA_AI_TEXT_HELPER_PATH}")
+if(ORLA_TEST_AI_TEXT_HELPER_PATH STREQUAL "")
+    set(ORLA_TEST_AI_TEXT_HELPER_PATH "${ORLA_BUILTIN_HELPER_DIR}/ai_text_ollama.py")
 endif()
 
-add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h FavoritesStore.cpp FavoritesStore.h
+add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h FavoritesStore.cpp FavoritesStore.h HelperPaths.cpp HelperPaths.h
     AiProviderController.cpp AiProviderController.h
     AiTextController.cpp AiTextController.h
     SteamProviderController.cpp SteamProviderController.h)
@@ -36,6 +54,9 @@ target_include_directories(orla-launcher-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(orla-launcher-core PUBLIC Qt6::Core Qt6::Gui KF6::Runner KF6::ConfigCore KF6::Service)
 
 add_executable(orla-launcher main.cpp WindowSession.cpp WindowSession.h)
+set_target_properties(orla-launcher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/bin>")
+install(TARGETS orla-launcher RUNTIME DESTINATION bin
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 target_compile_definitions(orla-launcher PRIVATE
     ORLA_AI_PYTHON_PATH="${Python3_EXECUTABLE}"
     ORLA_AI_HELPER_PATH="${ORLA_AI_HELPER_PATH}"
@@ -105,10 +126,16 @@ if(BUILD_TESTING)
     qt_add_resources(orla-launcher-quit-lifecycle-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-quit-lifecycle-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
+    add_executable(orla-launcher-helper-relocation-harness tests/HelperRelocationHarness.cpp WindowSession.cpp WindowSession.h)
+    target_compile_definitions(orla-launcher-helper-relocation-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
+    qt_add_resources(orla-launcher-helper-relocation-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    target_link_libraries(orla-launcher-helper-relocation-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::DBus
+        KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-shortcut-tests tests/ShortcutTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-shortcut-tests PRIVATE ORLA_TEST_LAUNCHER="$<TARGET_FILE:orla-launcher>"
         ORLA_TEST_DISPATCH_HARNESS="$<TARGET_FILE:orla-launcher-managed-dispatch-harness>"
-        ORLA_TEST_QUIT_HARNESS="$<TARGET_FILE:orla-launcher-quit-lifecycle-harness>")
+        ORLA_TEST_QUIT_HARNESS="$<TARGET_FILE:orla-launcher-quit-lifecycle-harness>"
+        ORLA_TEST_HELPER_HARNESS="$<TARGET_FILE:orla-launcher-helper-relocation-harness>")
     target_link_libraries(orla-launcher-shortcut-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_test(NAME launcher-shortcuts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
@@ -123,9 +150,10 @@ if(BUILD_TESTING)
         $<TARGET_FILE:orla-ai-provider-tests>)
     set_tests_properties(launcher-ai-provider PROPERTIES TIMEOUT 40)
     add_executable(orla-steam-provider-tests tests/SteamProviderTests.cpp)
+    qt_add_resources(orla-steam-provider-tests steam-ui PREFIX "/orla" FILES SteamSettings.qml Style.js)
     target_compile_definitions(orla-steam-provider-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
-        ORLA_TEST_STEAM_HELPER="${ORLA_STEAM_HELPER_PATH}")
+        ORLA_TEST_STEAM_HELPER="${ORLA_TEST_STEAM_HELPER_PATH}")
     target_link_libraries(orla-steam-provider-tests PRIVATE orla-launcher-core Qt6::Test Qt6::Qml Qt6::Quick)
     add_test(NAME launcher-steam-provider COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
         --private-path
@@ -134,7 +162,7 @@ if(BUILD_TESTING)
     add_executable(orla-ai-text-tests tests/AiTextControllerTests.cpp)
     target_compile_definitions(orla-ai-text-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
-        ORLA_TEST_AI_TEXT_HELPER="${ORLA_AI_TEXT_HELPER_PATH}")
+        ORLA_TEST_AI_TEXT_HELPER="${ORLA_TEST_AI_TEXT_HELPER_PATH}")
     target_link_libraries(orla-ai-text-tests PRIVATE orla-launcher-core Qt6::Test Qt6::Network)
     add_test(NAME launcher-ai-text COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
         --private-path

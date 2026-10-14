@@ -20,16 +20,29 @@ import zipfile
 import zlib
 
 
-SCHEMA = "orla-launcher-package-0.2"
+SCHEMA = "orla-launcher-package-0.3"
+LEGACY_SCHEMA = "orla-launcher-package-0.2"
 TARGET = "fedora44-x86_64"
 CHANNEL = "experimental"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
-PAYLOAD = (
+# Two exact protocols: new builds include the complete sibling helper closure;
+# legacy archives remain verification-only and retain their original contract.
+LEGACY_PAYLOAD = (
     ("bin/orla-launcher", 0o755),
     ("libexec/ai.py", 0o644),
     ("libexec/steam.py", 0o644),
     ("LICENSE", 0o644),
 )
+PAYLOAD = (
+    ("bin/orla-launcher", 0o755),
+    ("libexec/ai.py", 0o644),
+    ("libexec/steam.py", 0o644),
+    ("libexec/ai_text_ollama.py", 0o644),
+    ("libexec/ai_text_transport.py", 0o644),
+    ("libexec/ai_text.py", 0o644),
+    ("LICENSE", 0o644),
+)
+LEGACY_MEMBERS = tuple(path for path, _mode in LEGACY_PAYLOAD) + ("manifest.json",)
 MEMBERS = tuple(path for path, _mode in PAYLOAD) + ("manifest.json",)
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
@@ -305,7 +318,7 @@ def _canonical_stage(stage: Path) -> Path:
     expected = {
         ".": {"bin", "libexec", "LICENSE"},
         "bin": {"orla-launcher"},
-        "libexec": {"ai.py", "steam.py"},
+        "libexec": {"ai.py", "steam.py", "ai_text_ollama.py", "ai_text_transport.py", "ai_text.py"},
     }
     for relative, names in expected.items():
         directory = stage if relative == "." else stage / relative
@@ -543,7 +556,7 @@ def _archive_records(data: bytes) -> list[dict]:
         _reject("zip_metadata")
     if disk or central_disk or disk_entries != total_entries:
         _reject("zip_metadata")
-    if total_entries != len(MEMBERS):
+    if total_entries not in (len(MEMBERS), len(LEGACY_MEMBERS)):
         _reject("zip_members")
     if central_offset > len(data) or central_size > len(data) - central_offset \
             or central_offset + central_size != eocd_offset:
@@ -596,10 +609,14 @@ def _archive_records(data: bytes) -> list[dict]:
     names = [record["name"] for record in records]
     if len(names) != len(set(names)):
         _reject("zip_duplicate")
-    if names != list(MEMBERS):
+    if names == list(MEMBERS):
+        payload_definition = PAYLOAD
+    elif names == list(LEGACY_MEMBERS):
+        payload_definition = LEGACY_PAYLOAD
+    else:
         _reject("zip_members")
 
-    expected_modes = dict(PAYLOAD)
+    expected_modes = dict(payload_definition)
     expected_modes["manifest.json"] = 0o644
     for record in records:
         (extract_version, flags, compression, modified_time, modified_date, _crc,
@@ -720,11 +737,13 @@ def _strict_json(data: bytes) -> object:
         _reject("manifest_json")
 
 
-def _validate_manifest(value: object, expected_commit: str) -> dict:
+def _validate_manifest(value: object, expected_commit: str, *, archive_schema: str = SCHEMA) -> dict:
     manifest = _exact_keys(value, {"schema", "target", "version", "channel", "commit",
                                    "ci_image_digest", "files", "runtime_inventory"}, "manifest_schema")
-    if manifest["schema"] != SCHEMA or manifest["target"] != TARGET or manifest["channel"] != CHANNEL:
+    if archive_schema not in (SCHEMA, LEGACY_SCHEMA) or manifest["schema"] != archive_schema \
+            or manifest["target"] != TARGET or manifest["channel"] != CHANNEL:
         _reject("manifest_identity")
+    payload_definition = LEGACY_PAYLOAD if archive_schema == LEGACY_SCHEMA else PAYLOAD
     _bounded_string(manifest["version"], _VERSION, "manifest_version")
     commit = _bounded_string(manifest["commit"], _COMMIT, "manifest_commit")
     if commit != expected_commit:
@@ -734,9 +753,9 @@ def _validate_manifest(value: object, expected_commit: str) -> dict:
             or _SHA256.fullmatch(image_digest[7:]) is None:
         _reject("manifest_image")
     files = manifest["files"]
-    if type(files) is not list or len(files) != len(PAYLOAD):
+    if type(files) is not list or len(files) != len(payload_definition):
         _reject("manifest_files")
-    for record, (expected_path, expected_mode) in zip(files, PAYLOAD, strict=True):
+    for record, (expected_path, expected_mode) in zip(files, payload_definition, strict=True):
         item = _exact_keys(record, {"path", "size", "mode", "sha256"}, "manifest_file")
         if item["path"] != expected_path or item["mode"] != f"{expected_mode:04o}":
             _reject("manifest_file")
@@ -753,10 +772,16 @@ def _verify_archive_data(archive_data: bytes, *, expected_commit: str) -> dict:
         if sum(record["size"] for record in archive_records) > MAX_TOTAL_BYTES:
             _reject("total_limit")
         decoded = {record["name"]: _decode_member(record) for record in archive_records}
-        manifest = _validate_manifest(_strict_json(decoded["manifest.json"]), expected_commit)
+        # Membership is validated before decoding; the manifest cannot select a
+        # different protocol merely by changing its schema string.
+        is_legacy = tuple(record["name"] for record in archive_records) == LEGACY_MEMBERS
+        archive_schema = LEGACY_SCHEMA if is_legacy else SCHEMA
+        payload_definition = LEGACY_PAYLOAD if is_legacy else PAYLOAD
+        manifest = _validate_manifest(_strict_json(decoded["manifest.json"]), expected_commit,
+                                      archive_schema=archive_schema)
         manifest_records = {item["path"]: item for item in manifest["files"]}
         payload = {}
-        for relative, _mode in PAYLOAD:
+        for relative, _mode in payload_definition:
             data = decoded[relative]
             record = manifest_records[relative]
             if len(data) != record["size"] or hashlib.sha256(data).hexdigest() != record["sha256"]:
