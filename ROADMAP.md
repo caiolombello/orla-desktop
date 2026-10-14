@@ -297,7 +297,7 @@ U1/U2 dependem de R2/R4 e de uma fonte de releases definida. Para updates de jog
 
 **Incremento experimental no código:** `launcher/` oferece janela Qt Quick própria, busca por apps/cálculos, navegação e proteção contra seleção antiga. Build/CTest e revisão Source não encerram o aceite nativo. A verificação atual de `43905da` descrita no início comprova atalho, busca e Escape em uma tela; Enter/dispatch, outros monitores e integração completa continuam abertos. Meta é configurável pela CLI `search-shortcut`; a prova local de 13/10 está descrita abaixo. As releases 0.2.5–0.2.9 não incluem o launcher. Consulte o [guia do componente](launcher/README.md); L0/L2 continuam abertos.
 
-**L2/UX2 — painel de ações completo (14/10):** Ações/Ctrl+K agora apresenta todas as ações anunciadas, sua origem, rolagem e foco visível. Doze ações sintéticas passaram por teclado/clique e callbacks antigos são recusados; oito CTests passaram nos estilos Fusion/KDE, com toda a cobertura preservada em duas suítes de interface. A atualização local do launcher preservou Meta, painéis e configurações. A prova Wayland delimitada confirmou busca do Dolphin, menu real da calculadora, primeiro Escape preservando consulta/seleção e segundo Escape retornando à mesma fixture viva. Não encerra L0/L2/UX2, dispatch real, fullscreen ou múltiplos monitores. Consulte as [capturas, verificação e próximos aceites](docs/validation/launcher-actions-source.md).
+**L2/UX2 — painel de ações completo (14/10):** Ações/Ctrl+K agora apresenta todas as ações anunciadas, sua origem, rolagem e foco visível. Doze ações sintéticas passaram por teclado/clique e callbacks antigos são recusados; oito CTests passaram nos estilos Fusion/KDE, com toda a cobertura preservada em duas suítes de interface. A atualização local do launcher preservou Meta, painéis e configurações. A prova Wayland inicial confirmou busca do Dolphin, menu real da calculadora e os dois Escapes com retorno à fixture própria. Uma nova prova com KWrite real, perfil XDG e D-Bus privados confirmou Meta → `1-1` → Ctrl+K/↓ → Escape do menu → Escape do launcher, retornando ao mesmo UUID em janela comum e fullscreen; dois marcadores distintos foram salvos uma vez no arquivo sintético após os retornos. Limpeza e guards protegidos ficaram exatos. Não encerra L0/L2/UX2, dispatch real, clipboard, perfil normal, T3 ou múltiplos monitores; avisos do KWrite são UNKNOWN. Autohide/popups do dock têm aceite separado, e R1/W1 permanecem parciais. Consulte as [capturas, verificação e próximos aceites](docs/validation/launcher-actions-source.md).
 
 **Avaliação: faz sentido.** O dock e a barra oferecem acesso visual; o launcher oferece acesso rápido por teclado às mesmas funções. O maior valor específico é reunir os projetos e contextos do Caio: consultar quotas, abrir projetos, ver a agenda, controlar mídia e entrar no perfil Jogos. O Raycast serve de referência para busca, listas, atalhos e painel de ações, além de recursos posteriores como clipboard e snippets. [Raycast](https://www.raycast.com/), [interface List](https://developers.raycast.com/api-reference/user-interface/list)
 
@@ -594,9 +594,22 @@ continuam abertos. O painel **Ações** do launcher (L2/UX2) foi instalado com
 todas as ações anunciadas, origem e navegação em 440/660 pontos; reutiliza os
 tickets e a barreira de fechamento. Meta, menu real e dois níveis de Escape
 receberam a [prova delimitada](docs/validation/launcher-actions-source.md).
-A próxima prova verifica continuidade Meta → busca/Ações → Escape com
-aplicativo anterior comum e fullscreen; depois, autohide e popups do dock no
-mesmo cenário. Seleção de saída e os demais controles
+A continuidade Meta → busca/Ações → Escape passou com KWrite próprio comum
+e fullscreen, incluindo input salvo exatamente uma vez após cada retorno.
+Os dois probes seguintes confirmaram autohide configurado e conservação do
+estado, mas não qualificaram a revelação; suas causas permanecem UNKNOWN.
+Uma nova prova, após diagnóstico Source da borda, confirmou a dock revelada
+sobre KWrite maximizado, clique na Central, Escape com retorno ao mesmo UUID,
+marcador salvo uma vez e ocultação ao afastar o ponteiro. `hidden` no KWin e
+capturas concordaram, sem mudança de configuração ou produto. Em fullscreen
+o painel permaneceu oculto, compatível com a política de bordas de clientes
+do KWin; revelar nesse cenário como desejado ainda está aberto. Os demais
+popups, esquema claro, escalas e monitores mantêm seus aceites separados.
+Consulte a [prova da dock e Central](docs/validation/shared-control-center-source.md).
+Em paralelo, a próxima fatia de L2 é salvar/remover aliases de aplicativos com
+identificador estável, resolução exata e zero execução durante a pesquisa; a
+compatibilidade KService/KRunner está em preparação isolada, ainda não entregue.
+Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.
 

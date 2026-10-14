@@ -35,3 +35,22 @@ Uma fixture anterior expirou antes da medição final de foco; essa medição fi
 | Primeiro Escape preserva consulta e resultado | [Busca novamente focada](../screenshots/launcher-actions/native-menu-closed.png) |
 
 Enter/clique sobre uma ação real, janela anterior de terceiro, fullscreen, dois monitores, mudança assíncrona durante o menu e todas as rotas nativas de fechamento continuam UNRUN nesta prova. Não houve lançamento de aplicativo, cópia para clipboard, chamada de IA ou alteração de contexto. L0/L2/UX2 permanecem parciais; favoritos, aliases, comandos internos e o setup completo seguem no roadmap. A próxima prova verifica continuidade com aplicativo anterior comum/fullscreen; depois, autohide e popups do dock no mesmo cenário.
+
+## Retorno a aplicativo real comum e fullscreen — 14/10/2026
+
+Uma nova prova delimitada usou KWrite 26.08.1 real na sessão Wayland, com arquivo sintético próprio, perfil XDG e D-Bus privados. O mesmo PID e UUID permaneceram nas treze observações do KWin. A conferência de Source correspondeu a `a9336dc2a0cdf398895b2edd29086750cd5a0bcb`; esta prova não instalou uma nova versão do launcher.
+
+Na janela comum, Meta abriu o launcher; a consulta `1-1` mostrou o resultado da calculadora. Ctrl+K abriu o menu e ↓ manteve foco na única ação real disponível. O primeiro Escape fechou o menu, preservando visualmente consulta e resultado, com foco novamente na busca. O segundo Escape ocultou o launcher e devolveu o foco ao mesmo UUID do KWrite, ainda comum. O ciclo foi repetido após F11, com o mesmo UUID em fullscreen; o retorno preservou `fullScreen=true`. Ao terminar, F11 restaurou `fullScreen=false` antes de encerrar o aplicativo próprio.
+
+O destino do input também foi verificado. Após cada retorno, uma leitura fresca confirmou o KWrite próprio ativo; Ctrl+End, um marcador ASCII único, Enter e Ctrl+S acrescentaram exatamente marcador + LF ao arquivo sintético. O primeiro recibo confirmou 45→65 bytes; o segundo partiu desses mesmos 65 bytes e confirmou 65→85. Cada marcador apareceu uma vez, sem repetir digitação ou salvamento. Enter e Ctrl+S foram usados no editor: não exercitaram dispatch de ação do launcher nem clipboard.
+
+Os quatorze episódios de input confirmaram liberação dos dispositivos temporários, sem falha de limpeza. Os treze observadores próprios do KWin foram descarregados. A limpeza supervisionada encerrou somente KWrite e seu D-Bus privado, ambos com exit 0, sem erros ou sinais enviados a processos alheios; não foi expiração espontânea. AFTER e BEFORE ficaram exatamente iguais para os 1.361 guards de arquivos e 232 de diretórios conferidos, incluindo Source, launcher, Plasma e os roots protegidos conhecidos. Isso não representa uma auditoria de todos os arquivos da máquina. A revisão independente não encontrou bloqueadores de overclaim nesse escopo.
+
+| Recorte da versão instalada, comum e fullscreen | Captura |
+|---|---|
+| Menu da calculadora | [Ação e foco](../screenshots/launcher-actions/native-kwrite-menu.png) |
+| Primeiro Escape | [Consulta e resultado preservados](../screenshots/launcher-actions/native-kwrite-menu-closed.png) |
+
+Os recortes do launcher são idênticos nos dois casos; o estado comum/fullscreen do aplicativo anterior foi confirmado pelos observadores, não pela imagem do launcher.
+
+O aceite é `PASS_BOUNDED`: continuidade do foco e input salvo na instância própria do KWrite, comum/fullscreen, com perfil e bus privados. O menu nativo tinha uma ação; navegação entre várias ações reais, Enter/clique para dispatch, clipboard, perfil normal do usuário, instância preexistente, menus do T3, vários monitores, isolamento de rede e provedores externos permanecem UNRUN. O stderr do KWrite foi descartado, portanto seus avisos nativos permanecem UNKNOWN. L0/L2/UX2 continuam parciais; esta prova não fecha R1 nem W1. Autohide e popups do dock no mesmo cenário têm episódio e aceite separados.
