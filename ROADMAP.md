@@ -615,9 +615,20 @@ aliases por gestos reais no Wayland já passou consulta de nomes iguais,
 editor centralizado, Escape sem gravação e Salvar pelo mouse com A=0/B=0.
 A nova rodada confirmou consulta após reinício em um perfil temporário com
 os dados próprios copiados e retorno de foco com dois marcadores salvos.
-Um único Enter fechou o launcher, mas A=0/B=0: dispatch precisa de diagnóstico
-antes da fase de edição/remoção, que não começou. Favoritos e comandos internos
-continuam abertos. Consulte a [validação Source](docs/validation/launcher-aliases-source.md)
+Nessa rodada, um único Enter fechou o launcher, mas A=0/B=0; o resultado foi
+preservado. O Source `dd02b7b` corrigiu a saída durante trabalho assíncrono e foi
+instalado, preservando configurações, layout e Meta/atalhos. Sete casos de
+regressão no `main` real e os oito CTests passaram em Fusion e KDE. A prova
+posterior com perfil privado confirmou um Enter com A=1/B=0 apesar do nome
+igual de B, edição/renomeação, alvo ausente sem fallback, remoção e três saídas
+zero com retorno de foco ao mesmo KWrite e marcadores salvos. A limpeza e os
+guards protegidos ficaram exatos. A rodada intermediária com falha de
+acompanhamento permanece parcial; o supervisor foi corrigido e verificado
+antes de começar a nova prova, sem replay. Perfil pessoal, esquema claro,
+acessibilidade, outras escalas e monitores mantêm seus aceites separados.
+Favoritos e comandos internos continuam abertos. O próximo incremento usa um
+arquivo próprio para favoritos, sem migração ou escrita no arquivo de aliases.
+Consulte a [validação Source](docs/validation/launcher-aliases-source.md)
 e a [primeira prova nativa](docs/validation/launcher-aliases-native.md).
 Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece

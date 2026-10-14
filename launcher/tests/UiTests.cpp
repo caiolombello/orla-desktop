@@ -10,6 +10,7 @@
 #include <QClipboard>
 #include <QPointer>
 #include <QScopeGuard>
+#include <QEventLoopLocker>
 #include <QElapsedTimer>
 #include <QDir>
 #include <QFile>
@@ -46,6 +47,62 @@ class UiTests final : public QObject
     }
 private Q_SLOTS:
     void initTestCase() { verifyPrivateTestBus(); }
+    void committedQuitPreservesOwnedReturnAndCannotReopen()
+    {
+        const bool quitLock = QCoreApplication::isQuitLockEnabled();
+        const bool lastWindow = QGuiApplication::quitOnLastWindowClosed();
+        const auto restorePolicy = qScopeGuard([&] {
+            QCoreApplication::setQuitLockEnabled(quitLock);
+            QGuiApplication::setQuitOnLastWindowClosed(lastWindow);
+        });
+        QCoreApplication::setQuitLockEnabled(false);
+        QGuiApplication::setQuitOnLastWindowClosed(false);
+        {
+            LauncherControllerTestOwner owner;
+            QQuickWindow window, origin;
+            window.show(); origin.show();
+            WindowSession session(&owner.controller(), &window, false, QString());
+            session.m_returnWindow = &origin;
+            const quint64 generation = session.m_activationGeneration;
+            const QEventLoopLocker acceptedWork;
+            session.requestQuit();
+            QVERIFY(session.m_quitRequested);
+            QVERIFY(!window.isVisible());
+            QVERIFY(origin.isVisible());
+            QVERIFY(!session.m_action.isEnabled());
+            QVERIFY(QCoreApplication::isQuitLockEnabled());
+            QVERIFY(QGuiApplication::quitOnLastWindowClosed());
+            const QString notice = session.notice();
+            session.requestQuit();
+            session.showFromShortcut();
+            session.shortcutUnavailable(QStringLiteral("owned fixture unavailable"));
+            session.refreshShortcut();
+            QVERIFY(!window.isVisible());
+            QVERIFY(origin.isVisible());
+            QCOMPARE(session.m_activationGeneration, generation);
+            QCOMPARE(session.m_returnWindow.data(), static_cast<QWindow *>(&origin));
+            QCOMPARE(session.notice(), notice);
+        }
+        QCoreApplication::setQuitLockEnabled(false);
+        QGuiApplication::setQuitOnLastWindowClosed(false);
+        {
+            LauncherControllerTestOwner owner;
+            QQuickWindow window;
+            window.show();
+            WindowSession session(&owner.controller(), &window, false, QString());
+            // Model the resident lifecycle without registering a desktop shortcut.
+            session.m_registered = true;
+            const auto unregisterFixture = qScopeGuard([&] { session.m_registered = false; });
+            session.dismiss();
+            QVERIFY(!window.isVisible());
+            QVERIFY(!session.m_quitRequested);
+            QVERIFY(!QCoreApplication::isQuitLockEnabled());
+            QVERIFY(!QGuiApplication::quitOnLastWindowClosed());
+            session.showFromShortcut();
+            QVERIFY(window.isVisible());
+        }
+    }
+
     void ownedControllerRunnersDieBeforeTheNextCalculatorFixture()
     {
         QList<QPointer<KRunner::AbstractRunner>> previousRunners;
@@ -1787,13 +1844,16 @@ private Q_SLOTS:
         QCOMPARE(quitRequested.count(), 1);
         QCOMPARE(visibility.count(), 1);
 
-        // A later independent idle close must not inherit the committed quit intent.
+        // A committed quit ends this session. Model a later lifecycle with a
+        // fresh session while retaining QML's cleared close-intent state.
+        disconnect(&controller, &LauncherController::closeRequested, &session, nullptr);
+        WindowSession freshSession(&controller, window, false, QString());
         window->show();
         QVERIFY(QTest::qWaitForWindowExposed(window));
         window->requestActivate();
         QTRY_VERIFY_WITH_TIMEOUT(window->isActive(), 1000);
         QVERIFY(window->isVisible());
-        session.showFromShortcut();
+        freshSession.showFromShortcut();
         QCOMPARE(dismissed.count(), 2);
         QCOMPARE(quitRequested.count(), 1);
         QCOMPARE(visibility.count(), 3);
