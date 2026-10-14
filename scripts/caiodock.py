@@ -310,6 +310,8 @@ def parser() -> argparse.ArgumentParser:
     subparsers.add_parser("uninstall", help="remove the dock and its owned D-Bus service; keep settings and project caches")
     build_parser = subparsers.add_parser("build", help="create dist/orla-dock-VERSION.plasmoid")
     build_parser.add_argument("--project-root")
+    build_parser.add_argument("--output-dir", type=Path, metavar="DIR",
+                              help="write the package to DIR (default: PROJECT_ROOT/dist); does not change the project source")
     install_parser = subparsers.add_parser("install", help="install or upgrade this widget for the current user")
     install_parser.add_argument("package", type=Path)
     install_parser.add_argument("--with-integrations", action="store_true", help="opt in to the bundled local integration bridge")
@@ -334,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         if args.command == "build":
-            print(build(project_root(args.project_root)))
+            print(build(project_root(args.project_root), args.output_dir.expanduser() if args.output_dir is not None else None))
         elif args.command == "install":
             action = install(args.package, args.data_home, with_integrations=args.with_integrations)
             print(f"Orla Dock {'atualizado' if action == '--upgrade' else 'instalado'} para este usuário")

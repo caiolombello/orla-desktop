@@ -93,6 +93,16 @@ python3 scripts/orla.py build
 python3 scripts/orla.py install dist/orla-dock-0.2.9.plasmoid
 ```
 
+The current-source CLI also accepts `build --output-dir DIR`. This changes only
+the package destination; the default remains `PROJECT_ROOT/dist`. When the
+installed CLI points to a protected source version, choose a writable directory:
+
+```bash
+orla build --output-dir "$HOME/.cache/orla/build"
+```
+
+The earlier helper in the published 0.2.9 ZIP does not have this option.
+
 To check the local setup or remove Orla's managed files:
 
 ```bash
