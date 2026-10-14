@@ -90,9 +90,15 @@ if(BUILD_TESTING)
     qt_add_resources(orla-launcher-managed-dispatch-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
     target_link_libraries(orla-launcher-managed-dispatch-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
+    add_executable(orla-launcher-quit-lifecycle-harness tests/QuitLifecycleHarness.cpp WindowSession.cpp WindowSession.h)
+    target_compile_definitions(orla-launcher-quit-lifecycle-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
+    qt_add_resources(orla-launcher-quit-lifecycle-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    target_link_libraries(orla-launcher-quit-lifecycle-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
+        KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-shortcut-tests tests/ShortcutTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-shortcut-tests PRIVATE ORLA_TEST_LAUNCHER="$<TARGET_FILE:orla-launcher>"
-        ORLA_TEST_DISPATCH_HARNESS="$<TARGET_FILE:orla-launcher-managed-dispatch-harness>")
+        ORLA_TEST_DISPATCH_HARNESS="$<TARGET_FILE:orla-launcher-managed-dispatch-harness>"
+        ORLA_TEST_QUIT_HARNESS="$<TARGET_FILE:orla-launcher-quit-lifecycle-harness>")
     target_link_libraries(orla-launcher-shortcut-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_test(NAME launcher-shortcuts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py

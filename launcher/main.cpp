@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setDesktopFileName(QStringLiteral("org.orla.Launcher"));
     app.setQuitOnLastWindowClosed(false);
-    // KIO launch jobs release a quit lock after the search window has hidden.
+    // Managed hide stays resident; only a committed quit enables automatic exit.
     app.setQuitLockEnabled(false);
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Orla Launcher opcional: aplicativos, calculadora e inventário Steam local explícito."));
@@ -67,7 +67,6 @@ int main(int argc, char **argv)
                                             QStringLiteral(ORLA_STEAM_HELPER_PATH));
     LauncherController controller(&steamController);
     QQmlApplicationEngine engine;
-    QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);
     engine.rootContext()->setContextProperty(QStringLiteral("launcher"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("aiProviders"), &aiController);
     engine.rootContext()->setContextProperty(QStringLiteral("aiText"), &aiTextController);
@@ -81,6 +80,10 @@ int main(int argc, char **argv)
     WindowSession session(&controller, window, !parser.isSet(QStringLiteral("no-global-shortcut")),
                           parser.value(QStringLiteral("shortcut")), nullptr,
                           managedShortcuts ? WindowSession::ShortcutMode::Managed : WindowSession::ShortcutMode::Temporary);
+    // load() also installs Qt's queued quit callback. Replace only engine quit
+    // connections to this application, including its static-function callback.
+    QObject::disconnect(&engine, &QQmlApplicationEngine::quit, &app, nullptr);
+    QObject::connect(&engine, &QQmlApplicationEngine::quit, &session, &WindowSession::requestQuit);
     QObject::connect(&controller, &LauncherController::closeRequested, &aiController,
                      &AiProviderController::cancelAll);
     QObject::connect(&controller, &LauncherController::closeRequested, &aiTextController,

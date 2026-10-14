@@ -1,6 +1,7 @@
 #include "WindowSession.h"
 #include "LauncherController.h"
 #include <QGuiApplication>
+#include <QEventLoopLocker>
 #include <QKeySequence>
 #include <QVariant>
 #include <QPainterPath>
@@ -177,6 +178,7 @@ void WindowSession::deactivateShortcut()
 
 void WindowSession::shortcutUnavailable(const QString &notice)
 {
+    if (m_quitRequested) return;
     m_registered = false;
     m_action.setEnabled(false);
     deactivateShortcut();
@@ -193,6 +195,7 @@ void WindowSession::shortcutUnavailable(const QString &notice)
 
 void WindowSession::refreshShortcut()
 {
+    if (m_quitRequested) return;
     if (!QDBusConnection::sessionBus().isConnected() || (m_mode == ShortcutMode::Managed && !ownsManagedLease())) {
         shortcutUnavailable(tr("O D-Bus ou a identidade gerenciada está indisponível. A janela continua disponível."));
         return;
@@ -250,7 +253,7 @@ void WindowSession::setNotice(const QString &notice)
 
 void WindowSession::showFromShortcut()
 {
-    if (!m_window) return;
+    if (m_quitRequested || !m_window) return;
     if (m_window->isVisible() && m_window->isActive()) {
         ++m_activationGeneration; // A pending compositor token must not reactivate a closing window.
         // Reuse the QML three-owner close barrier. A missing method leaves the window visible.
@@ -270,7 +273,7 @@ void WindowSession::showFromShortcut()
     setNotice(tr("Se o desktop não der foco, clique na busca."));
     KWaylandExtras::xdgActivationToken(origin ? origin : m_window.data(), QStringLiteral("org.orla.Launcher"))
         .then(this, [this, request](const QString &token) {
-            if (!m_window || request != m_activationGeneration || !m_window->isVisible()) return;
+            if (m_quitRequested || !m_window || request != m_activationGeneration || !m_window->isVisible()) return;
             if (!token.isEmpty()) {
                 KWindowSystem::setCurrentXdgActivationToken(token);
                 KWindowSystem::activateWindow(m_window);
@@ -278,6 +281,19 @@ void WindowSession::showFromShortcut()
             // Token delivery alone does not establish focus. The compositor decides.
             if (m_window->isActive()) setNotice(QString());
         });
+}
+
+void WindowSession::requestQuit()
+{
+    if (m_quitRequested) return;
+    m_quitRequested = true;
+    m_action.setEnabled(false);
+    // Keep the first dismiss/focus request intact. Automatic quit waits for
+    // existing KJob lockers; the temporary locker also covers the no-job case.
+    const QEventLoopLocker locker;
+    QCoreApplication::setQuitLockEnabled(true);
+    QGuiApplication::setQuitOnLastWindowClosed(true);
+    if (m_window) m_window->hide();
 }
 
 void WindowSession::dismiss()
@@ -289,8 +305,8 @@ void WindowSession::dismiss()
     m_returnWindow.clear();
     const auto hide = [this, request] {
         if (!m_window || request != m_activationGeneration) return;
-        m_window->hide();
-        if (!m_registered) QCoreApplication::quit();
+        if (!m_registered) requestQuit();
+        else m_window->hide();
     };
     if (ownedReturn && QGuiApplication::platformName() == QStringLiteral("wayland")) {
         KWaylandExtras::xdgActivationToken(m_window, QStringLiteral("org.orla.Launcher"))

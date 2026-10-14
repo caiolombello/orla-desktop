@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <cstdio>
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -560,6 +561,44 @@ private Q_SLOTS:
         const QDBusReply<bool> registered = QDBusConnection::sessionBus().interface()->isServiceRegistered(QStringLiteral("org.orla.Launcher"));
         QVERIFY(registered.isValid());
         QVERIFY(!registered.value());
+    }
+
+    void acceptedWorkSettlesBeforeProductionQuit_data()
+    {
+        QTest::addColumn<QString>("mode");
+        for (const auto &mode : {"idle", "escape", "ctrlq", "close", "escape-secondary-before", "ctrlq-secondary-after", "close-secondary-after"})
+            QTest::newRow(mode) << QString::fromLatin1(mode);
+    }
+    void acceptedWorkSettlesBeforeProductionQuit()
+    {
+        QFETCH(QString, mode);
+        QProcess process;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("ORLA_TEST_QUIT_MODE"), mode);
+        process.setProcessEnvironment(environment);
+        process.setProcessChannelMode(QProcess::MergedChannels);
+        QByteArray output;
+        const auto cleanup = qScopeGuard([&] {
+            if (process.state() != QProcess::NotRunning) {
+                process.terminate();
+                if (!process.waitForFinished(1000)) { process.kill(); process.waitForFinished(1000); }
+            }
+            if (QTest::currentTestFailed()) std::fprintf(stderr, "%s\n", output.constData());
+        });
+        process.start(QStringLiteral(ORLA_TEST_QUIT_HARNESS), {QStringLiteral("--no-global-shortcut")});
+        QTRY_VERIFY_WITH_TIMEOUT(([&] { output += process.readAll(); return process.state() == QProcess::NotRunning; })(), 3000);
+        output += process.readAll();
+        QVERIFY2(output.size() <= 65536, "Owned harness exceeded the output budget");
+        QVERIFY2(!output.contains("ORLA_QUIT_LIFECYCLE_WATCHDOG"), output.constData());
+        QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+        QCOMPARE(process.exitCode(), 0);
+        QVERIFY2(output.contains("ORLA_QUIT_LIFECYCLE_TRIGGERED"), output.constData());
+        QVERIFY2(output.contains("ORLA_QUIT_LIFECYCLE_EXIT mode=" + mode.toUtf8()), output.constData());
+        QVERIFY2(output.contains("visible=0 secondaryVisible=0 unexpectedHidden=0"), output.constData());
+        if (mode != QStringLiteral("idle")) {
+            QVERIFY2(output.contains("ORLA_QUIT_LIFECYCLE_SETTLED"), output.constData());
+            QVERIFY2(output.contains("settled=1 quitLock=1 lastWindowQuit=1"), output.constData());
+        }
     }
 
     void managedOwnedAppDispatchStaysAliveReopensAndStillQuitsExplicitly()
