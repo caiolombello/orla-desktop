@@ -141,7 +141,81 @@ após recarga confirmou os seis itens da barra, dock, launcher, atalhos,
 configuração e banco de recuperação preservados. Essa recarga verifica pacote
 e composição instalada; não repete a prova de interação sem instrumentação.
 
-Ainda qualificar transferência com popup aberto, retirada da entrada da barra,
-seleção de saída, microfone, brilho, rede, Não perturbe, múltiplos docks/monitores
-e os demais critérios CC0/CC1/T1. Um install ou PASS offscreen não encerra
-esses gates.
+Após a prova de 13/10, ainda faltavam transferência com popup aberto, retirada
+da entrada da barra, seleção de saída, microfone, brilho, rede, Não perturbe,
+múltiplos docks/monitores e os demais critérios CC0/CC1/T1. Um install ou PASS
+offscreen não encerra esses gates.
+
+### Transferência e entrada opcional — correção e prova em 14/10
+
+O primeiro episódio encontrou uma falha: um pedido pela barra chegou com o
+popup da dock ainda visível, fechou-o, mudou o host e reabriu no topo, mas a nova
+abertura logo se encerrou. O backend anterior ainda tinha uma referência Qt
+válida quando o seguinte terminou de ser criado. O resultado foi preservado;
+o caminho inverso e a desativação ficaram UNRUN nesse episódio. Os pacotes e
+configurações foram restaurados antes de corrigir o Source.
+
+A reprodução com o `Loader` real no Qt 6.11.2 mostrou que `item` fica null e
+`Component.onDestruction` ocorre antes da destruição efetiva do QObject. Assim,
+contar apenas esses callbacks pode ocultar sobreposição. A sessão agora captura
+uma referência tipada ao backend nativo antes de fechar e espera sua liberação.
+Também espera o diálogo anterior ficar invisível e inativo antes de mudar o host.
+As retomadas são enfileiradas por sinais; não foi acrescentado um delay em ms.
+O backend pode ser recriado, enquanto popup, view e estado de áudio permanecem
+os mesmos. Backends injetados persistentes não participam dessa barreira opcional.
+
+| Verificação da correção `38e2b6c` | Resultado |
+|---|---|
+| Registry + Session + composição, Qt 6.11.2/Fusion | 61 PASS, zero skips/warnings |
+| Mesma bateria, `org.kde.desktop` | 61 PASS, zero skips/warnings |
+| Regressões novas | Backend ainda vivo; cancelamento; destruição do dono; janela oculta ainda ativa |
+| Revisão independente | Pedido sucessor durante destruição e diálogo sem API `active`: PASS |
+| Design e pacote | Check, sete guards, build e galeria claro/escuro revisada: PASS |
+
+As regressões de backend vivo e janela oculta/ativa falharam antes das respectivas
+guardas. Testes sintéticos não certificam comportamento do compositor.
+
+Galeria da correção, com dados sintéticos e sem mudança de composição visual:
+
+| Escuro | Claro |
+|---|---|
+| ![Central escura](../screenshots/shared-control-center/transfer-dark.png) | ![Central clara](../screenshots/shared-control-center/transfer-light.png) |
+
+O episódio nativo seguinte, com a correção, passou em Plasma 6.7.5/Wayland e
+Qt 6.11.2, numa tela de 2648 × 1490 DIP; os itens observados reportaram DPR 2.
+O intervalo entre o início do input e o fechamento final foi de 269,55 s:
+
+- Dock → barra → dock: os dois pedidos chegaram com popup e diálogo ainda
+  visíveis. Cada mudança de host ocorreu após `closed`, invisibilidade,
+  inatividade e liberação do backend anterior. A referência foi liberada enquanto
+  o diálogo ainda estava ativo nas duas transferências; a segunda guarda impediu
+  reabrir nesse intervalo. Ambas as novas aberturas permaneceram visíveis, com
+  âncora/transient parent corretos e as mesmas referências de popup/view/áudio.
+- Cinco criações e cinco inícios de destruição de backend, máximo de um span
+  `completed` → início de destruição. Nenhuma referência ao backend anterior
+  estava presente no `completed` seguinte; ao final ela estava null e o áudio
+  inativo. Isso qualifica os QObjects observados, não todas as conexões, threads
+  ou recursos globais de áudio.
+- Desativar apenas `showControlCenter` do applet direito por `writeConfig` e
+  `reloadConfig` do Plasma preservou a abertura originada pela dock, fechou a
+  abertura da barra e permitiu reabrir pela dock enquanto a entrada estava
+  desligada. A preferência foi restaurada ao valor original; todas as demais
+  configurações e os bancos permaneceram iguais. O checkbox na janela de
+  configuração não foi exercitado neste episódio.
+- Tab focou o volume; Escape fechou sem escritas. O item de foco do painel ficou
+  no botão da dock e o KWin voltou à janela própria de teste. Não se afirma que
+  o painel foi reativado nem que houve nova reabertura pelo teclado.
+- Zero setters/retries; leitura real confirmou default, alvo, mudo e valores
+  brutos dos canais inalterados. Não houve seleção de saída ou outra operação
+  de hardware, acesso ao clipboard ou captura de dados pessoais.
+
+A instrumentação foi removida e somente os três arquivos da correção ficaram
+instalados: dock com 67 arquivos e barra com 14. Launcher, CLI, atalhos,
+configurações e recuperação permaneceram preservados; o Plasma terminou ativo,
+com resultado success e zero restarts. Os helpers e dispositivos próprios foram
+encerrados. Essa recarga confirma o pacote final, sem repetir a interação após
+remover o probe.
+
+Transferência e desativação têm esse aceite delimitado. Permanecem abertos o
+checkbox nativo, seleção de saída, transferência durante operação de áudio
+pendente, outros monitores/ambientes e os demais critérios CC0/CC1/T1.

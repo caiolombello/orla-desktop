@@ -483,8 +483,16 @@ escala 2, com âncora/transient parent corretos e zero escritas de áudio. O tes
 da dock incluiu pressão na borda antes do hover confirmado. Uma prova separada
 confirmou mudo e volume pela interface com readback real, restauração exata e
 Escape/foco de retorno. A instrumentação temporária foi removida; os pacotes
-finais mantêm o fix e a composição atual. Transferência com popup aberto,
-seleção de saída e outros ambientes continuam gates separados.
+finais mantêm o fix e a composição atual. Em 14/10 a transferência expôs
+sobreposição de QObjects e fechamento da nova abertura. A correção passou 61
+testes em cada estilo e foi instalada: a sessão espera a destruição efetiva do
+backend e a inatividade do diálogo, além do fechamento/invisibilidade, antes
+de mudar host. A nova prova passou dock → barra → dock com popup aberto,
+preservou a dock ao desativar a entrada direita e confirmou release da abertura
+da barra. Zero setters/retries e áudio real inalterado; configuração e recuperação
+preservadas. O [registro](docs/validation/shared-control-center-source.md)
+distingue essas provas da retirada do probe. Checkbox nativo, seleção de saída,
+transferência com áudio pendente e outros ambientes mantêm gates separados.
 
 **Seletor de áreas W1 — incremento Source:** a aba Contextos permite selecionar
 um ID observado e acionar Trocar área. Seleção e navegação são passivas; uma
@@ -548,8 +556,12 @@ precisam ser medidos novamente. O contraste de cadência qualificou o roteiro,
 sem atribuir retrospectivamente uma causa aos cliques do primeiro canary nem
 alterar o produto para contornar o teste. Conferir fullscreen, teclado/foco nas
 demais superfícies e as telas/escalas disponíveis; as indisponíveis permanecem
-UNRUN. Em paralelo de escopo, o próximo incremento funcional continua sendo
-a Central de Controle opcional na barra, com o mesmo dono do estado de áudio.
+UNRUN. A transferência da Central e a retirada de sua entrada direita passaram
+no aceite delimitado acima. O próximo lote deve medir o encaixe dos controles na
+altura útil da barra e ampliar W1 com foco e contagem de uma única solicitação
+de troca de área, usando destinos já existentes. Seleção de saída e os demais
+controles de hardware continuam provas próprias; o dono do estado de áudio
+permanece na dock.
 
 ## Prontidão e recomendação de execução
 
