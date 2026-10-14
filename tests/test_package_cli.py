@@ -3,6 +3,9 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -76,6 +79,83 @@ class PackageCliTests(unittest.TestCase):
         os.utime(source, (timestamp, timestamp))
         second = caiodock.build(self.root, self.root).read_bytes()
         self.assertEqual(first, second)
+
+    def test_cli_build_output_directory_preserves_readonly_source_and_user_state(self):
+        source = Path(__file__).resolve().parents[1]
+        for name in ("orla.py", "caiodock.py", "panel_layout.py", "search_shortcut.py"):
+            shutil.copyfile(source / "scripts" / name, self.root / "scripts" / name)
+
+        def snapshot(root):
+            return {str(path.relative_to(root)): (path.stat().st_mode, path.stat().st_mtime_ns,
+                    path.read_bytes() if path.is_file() else None)
+                    for path in [root, *root.rglob("*")]}
+
+        paths = [self.root, *self.root.rglob("*")]
+        for path in paths:
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        before_source = snapshot(self.root)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary)
+                env = os.environ.copy()
+                for key in ("DISPLAY", "WAYLAND_DISPLAY", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE"):
+                    env.pop(key, None)
+                xdg_keys = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR")
+                for key in xdg_keys:
+                    directory = workspace / key
+                    directory.mkdir(mode=0o700)
+                    (directory / "preserved").write_text("synthetic saved state")
+                    env[key] = str(directory)
+                env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + str(workspace / "absent-bus")
+                env["PYTHONDONTWRITEBYTECODE"] = "1"
+                before_state = {key: snapshot(Path(env[key])) for key in xdg_keys}
+                expected = caiodock.build(self.root, workspace / "api").read_bytes()
+                for name, output in (("orla.py", Path("relative output")),
+                                     ("caiodock.py", workspace / "absolute output")):
+                    with self.subTest(entry=name):
+                        result = subprocess.run([sys.executable, "-B", str(self.root / "scripts" / name),
+                                                 "build", "--output-dir", str(output)], cwd=workspace,
+                                                env=env, capture_output=True, text=True, timeout=10)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        archive = workspace / output / "orla-dock-1.2.3.plasmoid"
+                        self.assertEqual(Path(result.stdout.strip()), output / archive.name)
+                        self.assertEqual(archive.read_bytes(), expected)
+                self.assertEqual(snapshot(self.root), before_source)
+                self.assertFalse((self.root / "dist").exists())
+                for key, before in before_state.items():
+                    self.assertEqual(snapshot(Path(env[key])), before)
+        finally:
+            for path in paths:
+                path.chmod(0o755 if path.is_dir() else 0o644)
+
+    def test_cli_build_default_output_remains_source_dist(self):
+        source = Path(__file__).resolve().parents[1]
+        for name in ("orla.py", "caiodock.py"):
+            with self.subTest(entry=name):
+                result = subprocess.run([sys.executable, "-B", str(source / "scripts" / name),
+                                         "build", "--project-root", str(self.root)],
+                                        cwd=self.root / "scripts", capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                archive = self.root / "dist/orla-dock-1.2.3.plasmoid"
+                self.assertEqual(Path(result.stdout.strip()), archive)
+                self.assertTrue(archive.is_file())
+
+    def test_cli_build_output_directory_reports_argument_and_filesystem_errors(self):
+        source = Path(__file__).resolve().parents[1]
+        entry = [sys.executable, "-B", str(source / "scripts/orla.py"),
+                 "build", "--project-root", str(self.root), "--output-dir"]
+        result = subprocess.run(entry, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--output-dir: expected one argument", result.stderr)
+        output = self.root / "existing file"
+        output.write_text("preserved")
+        result = subprocess.run(entry + [str(output)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("orla:", result.stderr)
+        self.assertIn(str(output), result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(output.read_text(), "preserved")
+        self.assertFalse((self.root / "dist").exists())
 
     def test_integrations_activation_handles_spaces_and_preserves_foreign_service(self):
         import shlex
