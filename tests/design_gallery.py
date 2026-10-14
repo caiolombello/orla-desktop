@@ -239,6 +239,66 @@ class Gallery:
         launcher.setProperty("status", "idle")
         launcher.setProperty("selectedIndex", -1)
         self.save("launcher-empty", window)
+        # Explicit synthetic favorites; the launcher keeps its fixed dark scheme.
+        def favorite_scene(source: str) -> None:
+            expression = QQmlExpression(context, window, source)
+            expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+
+        def favorite_control(name: str) -> QQuickItem:
+            pending = [window.contentItem()]
+            while pending:
+                control = pending.pop()
+                if control.objectName() == name:
+                    return control
+                pending.extend(control.childItems())
+            raise RuntimeError(f"Missing synthetic favorite control: {name}")
+
+        favorite_scene('launcher.aliasesWritable=true; launcher.aliasError=""; '
+                       'launcher.aliases=[{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}]; '
+                       'launcher.favorites=[{appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}, '
+                       '{appId:"org.orla.notes.desktop",title:"Notas sintéticas",iconName:"accessories-text-editor",available:true}]; launcher.showFavorites()')
+        self.save("launcher-favorites-empty-query", window)
+        QTest.keyClick(window, Qt.Key_K, Qt.ControlModifier)
+        self.save("launcher-favorites-actions", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        favorite_scene('aliasPreferences.begin("manager", null)')
+        self.save("launcher-favorites-manager", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        window.setProperty("width", 440)
+        self.save("launcher-favorites-empty-query-narrow", window)
+        favorite_scene('aliasPreferences.begin("manager", null)')
+        self.save("launcher-favorites-manager-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        favorite_scene('launcher.favorites=[{appId:"org.orla.missing.desktop",title:"",iconName:"",available:false}]; '
+                       'launcher.showFavorites(); aliasPreferences.begin("manager", null)')
+        QTest.qWait(50)
+        favorite_control("favoriteRemove0").forceActiveFocus(Qt.TabFocusReason)
+        self.save("launcher-favorites-missing-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        favorite_scene('launcher.aliases=[]; launcher.aliasesWritable=false; launcher.aliasError="O arquivo de aliases não é válido."; '
+                       'launcher.favorites=[{appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}]; '
+                       'launcher.showFavorites(); aliasPreferences.begin("manager", null)')
+        self.save("launcher-favorites-aliases-unavailable-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        favorite_scene('launcher.aliasesWritable=true; launcher.aliasError=""; '
+                       'launcher.aliases=[{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}]; '
+                       'launcher.favorites=[]; launcher.favoritesWritable=false; launcher.favoriteError="O arquivo de favoritos não é válido."; '
+                       'launcher.showFavorites(); aliasPreferences.begin("manager", null)')
+        self.save("launcher-favorites-unavailable-aliases-enabled-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        favorite_scene('launcher.favoritesWritable=true; launcher.favoriteError=""; '
+                       'launcher.favorites=Array.from({length:16},(_,i)=>({appId:"org.orla.favorite"+i+".desktop",title:"Favorito sintético "+i,iconName:"system-file-manager",available:true})); '
+                       'launcher.aliases=Array.from({length:16},(_,i)=>({alias:"alias "+i,appId:"org.orla.alias"+i+".desktop",title:"App sintético "+i,iconName:"system-file-manager",available:true})); '
+                       'launcher.showFavorites(); aliasPreferences.begin("manager", null)')
+        QTest.qWait(50)
+        favorite_control("favoriteRemove0").forceActiveFocus(Qt.TabFocusReason)
+        for _ in range(15):
+            QTest.keyClick(window, Qt.Key_Tab)
+        self.save("launcher-favorites-list-focus-narrow", window)
+        QTest.keyClick(window, Qt.Key_Escape)
+        window.setProperty("width", 660)
         window.setProperty("height", 640)
         window.setProperty("activePanel", "ai")
         self.save("launcher-ai", window)
@@ -294,6 +354,10 @@ QtObject {
         property string aliasError: ""
         property bool aliasesWritable: true
         property var aliases: [{alias:"arquivos",appId:"org.orla.synthetic.desktop",title:"Arquivos sintéticos",iconName:"system-file-manager",available:true}, {alias:"indisponível",appId:"org.orla.missing.desktop",title:"",iconName:"",available:false}]
+        property string favoriteRevision: "favorite-1"
+        property string favoriteError: ""
+        property bool favoritesWritable: true
+        property var favorites: []
         property var aliasCalls: []
         property int dismissed: 0
         property var executed: []
@@ -342,6 +406,33 @@ QtObject {
             aliases = aliases.filter(entry => entry.alias !== alias || entry.appId !== appId); advance(); return true
         }
         function reloadAliases() {}
+        function showFavorites() {
+            query = ""
+            rows = favorites.map(entry => ({id:"favorite:"+entry.appId,kind:"favorite",category:"favorite",
+                categoryLabel:"FAVORITOS",source:"Favorito salvo por você",appId:entry.appId,title:entry.title || "Aplicativo indisponível",
+                iconName:entry.iconName || "",favoriteRevision:favoriteRevision,generation:generation,
+                enabled:favoritesWritable && entry.available !== false,actions:[]}))
+            selectedIndex = rows.findIndex(entry => entry.enabled)
+            status = rows.length ? "ready" : "idle"
+            changed()
+        }
+        function pinFavorite(row, gen, id, rev) {
+            if (!favoritesWritable || gen !== generation || rev !== favoriteRevision || row !== selectedIndex
+                || !rows[row] || rows[row].id !== id || rows[row].kind !== "app" || rows[row].aliasEligible !== true) return false
+            const item = rows[row]
+            if (!favorites.some(entry => entry.appId === item.appId))
+                favorites = favorites.concat([{appId:item.appId,title:item.title,iconName:item.iconName,available:true}])
+            favoriteRevision += "-next"; generation++; changed(); return true
+        }
+        function removeFavorite(appId, gen, rev) {
+            if (!favoritesWritable || gen !== generation || rev !== favoriteRevision) return false
+            favorites = favorites.filter(entry => entry.appId !== appId)
+            favoriteRevision += "-next"; generation++
+            if (query === "") showFavorites()
+            else changed()
+            return true
+        }
+        function reloadFavorites() {}
     }
     property QtObject aiProviders: QtObject {
         signal closeReady()

@@ -5,6 +5,7 @@
 #include <QVariantList>
 #include <KConfig>
 #include "AliasStore.h"
+#include "FavoritesStore.h"
 #include <KRunner/ResultsModel>
 #include <KRunner/RunnerManager>
 
@@ -24,8 +25,12 @@ class LauncherController final : public QObject
     Q_PROPERTY(bool aliasesWritable READ aliasesWritable NOTIFY changed)
     Q_PROPERTY(QString aliasError READ aliasError NOTIFY changed)
     Q_PROPERTY(QVariantList aliases READ aliases NOTIFY changed)
+    Q_PROPERTY(QString favoriteRevision READ favoriteRevision NOTIFY changed)
+    Q_PROPERTY(bool favoritesWritable READ favoritesWritable NOTIFY changed)
+    Q_PROPERTY(QString favoriteError READ favoriteError NOTIFY changed)
+    Q_PROPERTY(QVariantList favorites READ favorites NOTIFY changed)
 public:
-    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr, const QString &aliasPath = QString());
+    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr, const QString &aliasPath = QString(), const QString &favoritePath = QString());
     QString query() const { return m_query; }
     quint64 generation() const { return m_generation; }
     QVariantList rows() const { return m_rows; }
@@ -40,6 +45,13 @@ public:
     Q_INVOKABLE bool renameAlias(const QString &oldAlias, const QString &appId, const QString &newAlias, quint64 generation, const QString &revision);
     Q_INVOKABLE bool removeAlias(const QString &alias, const QString &appId, quint64 generation, const QString &revision);
     Q_INVOKABLE void reloadAliases();
+    QString favoriteRevision() const { return m_favorites.revision(); }
+    bool favoritesWritable() const { return m_favorites.writable(); }
+    QString favoriteError() const { return m_favorites.error(); }
+    QVariantList favorites() const { return m_favoritePresentation; }
+    Q_INVOKABLE bool pinFavorite(int row, quint64 generation, const QString &id, const QString &revision);
+    Q_INVOKABLE bool removeFavorite(const QString &appId, quint64 generation, const QString &revision);
+    Q_INVOKABLE void reloadFavorites();
     void setQuery(const QString &query);
     Q_INVOKABLE void select(int row);
     Q_INVOKABLE void moveSelection(int delta);
@@ -52,22 +64,25 @@ Q_SIGNALS:
 private:
     friend class LauncherControllerTestOwner;
     void refresh();
+    void restoreSelection();
     void steamChanged();
-    void aliasesChanged();
-    bool refreshAliasPresentation();
+    void savedAppsChanged();
+    bool refreshSavedPresentation();
     QString resultId(const QModelIndex &index) const;
     KConfig m_config;
     KConfig m_state;
     KRunner::ResultsModel m_model;
     AliasStore m_aliases;
+    FavoritesStore m_favorites;
     QTimer m_debounce;
     QString m_query;
     QString m_error;
     QString m_selectedId;
     QVariantList m_rows;
     QVariantList m_aliasPresentation;
-    bool m_collectingAliasPresentation = false;
-    bool m_aliasRefreshPending = false;
+    QVariantList m_favoritePresentation;
+    bool m_collectingSavedPresentation = false;
+    bool m_savedRefreshPending = false;
     QList<int> m_backendRows;
     SteamProviderController *m_steam;
     quint64 m_generation = 0;

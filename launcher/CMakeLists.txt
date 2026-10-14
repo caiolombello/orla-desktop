@@ -28,7 +28,7 @@ if(NOT IS_ABSOLUTE "${ORLA_STEAM_HELPER_PATH}")
     message(FATAL_ERROR "ORLA_STEAM_HELPER_PATH must be absolute")
 endif()
 
-add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h
+add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h FavoritesStore.cpp FavoritesStore.h
     AiProviderController.cpp AiProviderController.h
     AiTextController.cpp AiTextController.h
     SteamProviderController.cpp SteamProviderController.h)
@@ -55,9 +55,19 @@ if(BUILD_TESTING)
     target_compile_definitions(orla-launcher-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
     target_link_libraries(orla-launcher-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Test Qt6::DBus)
+    target_link_options(orla-launcher-tests PRIVATE "LINKER:--wrap=openat")
     add_test(NAME launcher-behavior COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
         $<TARGET_FILE:orla-launcher-tests>)
     set_tests_properties(launcher-behavior PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    add_executable(orla-launcher-favorites-store-tests tests/FavoritesStoreTests.cpp
+        FavoritesStore.cpp FavoritesStore.h AliasStore.cpp AliasStore.h)
+    target_include_directories(orla-launcher-favorites-store-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(orla-launcher-favorites-store-tests PRIVATE Qt6::Core Qt6::Test)
+    target_link_options(orla-launcher-favorites-store-tests PRIVATE
+        "LINKER:--wrap=fstat" "LINKER:--wrap=openat" "LINKER:--wrap=renameat")
+    add_test(NAME launcher-favorites-store COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py
+        --private-path $<TARGET_FILE:orla-launcher-favorites-store-tests>)
+    set_tests_properties(launcher-favorites-store PROPERTIES TIMEOUT 30 ENVIRONMENT_MODIFICATION "LD_LIBRARY_PATH=unset:")
     add_executable(orla-launcher-test-fixture tests/Fixture.cpp)
     target_link_libraries(orla-launcher-test-fixture PRIVATE Qt6::Core)
     add_test(NAME launcher-owned-app COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_isolated.py

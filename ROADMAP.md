@@ -626,8 +626,16 @@ guards protegidos ficaram exatos. A rodada intermediária com falha de
 acompanhamento permanece parcial; o supervisor foi corrigido e verificado
 antes de começar a nova prova, sem replay. Perfil pessoal, esquema claro,
 acessibilidade, outras escalas e monitores mantêm seus aceites separados.
-Favoritos e comandos internos continuam abertos. O próximo incremento usa um
-arquivo próprio para favoritos, sem migração ou escrita no arquivo de aliases.
+Favoritos de aplicativos agora estão implementados no Source experimental:
+Ações/Ctrl+K permite fixar ou remover; a busca vazia oferece os IDs salvos
+após reinício e o manager **Apps e aliases** mantém os dois grupos
+independentes. O arquivo próprio guarda até 16 IDs, sem migração ou escrita
+no arquivo de aliases. Os nove CTests passaram com Fusion em 106,643 s e KDE
+em 110,889 s; revisões externas, homônimos, alvos ausentes, intents antigos,
+persistência e foco/rolagem em 440/660 px receberam testes delimitados.
+A galeria sintética dos dois esquemas foi revisada. Instalação e gestos
+Wayland deste incremento ainda estão UNRUN; isso não encerra L2/UX2 nem os
+comandos internos. Consulte o [uso e as capturas](launcher/README.md).
 Consulte a [validação Source](docs/validation/launcher-aliases-source.md)
 e a [primeira prova nativa](docs/validation/launcher-aliases-native.md).
 Seleção de saída e os demais controles

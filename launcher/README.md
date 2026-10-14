@@ -2,6 +2,46 @@
 
 Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
+## Favoritos de aplicativos — experimental
+
+Selecione um aplicativo e abra **Ações/Ctrl+K → Fixar nos favoritos**.
+Os aplicativos salvos aparecem na seção **FAVORITOS** ao limpar a busca ou
+reabrir o launcher, inclusive após reiniciar. Enter ou **Abrir** executa apenas
+o aplicativo selecionado; fixar ou remover mantém a janela aberta e devolve
+o foco à busca.
+
+**Ações → Apps e aliases…** reúne os favoritos e aliases. **Remover dos
+favoritos** também está nas ações do aplicativo salvo. Um alvo indisponível
+continua podendo ser removido, sem abrir outro aplicativo com o mesmo nome.
+Tab/Shift+Tab revela os controles nas listas longas; Escape fecha primeiro
+o popover. Os erros dos dois grupos são independentes.
+
+São até 16 aplicativos, em ordem de inclusão. O arquivo local
+`$XDG_CONFIG_HOME/orla/launcher-favorites.json` (normalmente
+`~/.config/orla/launcher-favorites.json`) guarda somente IDs estáveis no formato
+`0.1-experimental`. Não altera o arquivo de aliases. Leituras não criam nem
+reparam arquivos; dados inválidos, versões desconhecidas, locks existentes e
+alterações externas são preservados. O formato ainda não é uma API pública.
+Histórico, sincronização, reordenação manual e favoritos de jogos ficam fora
+deste incremento.
+
+Os nove CTests passaram com Qt 6.11.2/KF6 6.30: Fusion em **106,643 s** e
+KDE em **110,889 s**. O teste de revisão externa falhou nos dois caminhos
+do candidato anterior e passou após a correção. A galeria sintética foi
+renderizada nos dois esquemas do sistema; o launcher mantém seu esquema
+escuro. Estas verificações offscreen não qualificam gestos Wayland, perfil
+pessoal, outras escalas ou monitores; a instalação deste incremento ainda
+não foi executada neste registro.
+
+| Estado sintético | Captura |
+|---|---|
+| Busca vazia com favoritos | [Lista](../docs/screenshots/launcher-favorites/launcher-favorites-empty-query.png) |
+| Ações e foco | [Remover dos favoritos](../docs/screenshots/launcher-favorites/launcher-favorites-actions.png) |
+| Preferências em janela estreita | [Apps e aliases](../docs/screenshots/launcher-favorites/launcher-favorites-manager-narrow.png) |
+| Lista longa e foco visível | [Rolagem](../docs/screenshots/launcher-favorites/launcher-favorites-list-focus-narrow.png) |
+| Aplicativo indisponível | [Remoção acessível](../docs/screenshots/launcher-favorites/launcher-favorites-missing-narrow.png) |
+| Favoritos inválidos, aliases disponíveis | [Erros independentes](../docs/screenshots/launcher-favorites/launcher-favorites-unavailable-aliases-enabled-narrow.png) |
+
 ## Aliases de aplicativos — experimental
 
 Selecione um aplicativo e abra **Ações → Adicionar alias…** para guardar um
@@ -10,7 +50,7 @@ esse aplicativo com a origem **Alias salvo por você**. Só Enter ou clique em
 **Abrir** encaminha a execução; pesquisar e abrir preferências não executa nada.
 Aliases não guardam comandos, argumentos ou consultas do runner.
 
-**Ações → Gerenciar aliases…** funciona também com a busca vazia. A lista mostra
+**Ações → Apps e aliases…** funciona também com a busca vazia. A lista mostra
 nome e ícone; alvos indisponíveis ou nomes ambíguos mostram também o identificador.
 **Editar** renomeia o alias; **Remover**
 exclui somente o par escolhido. Um aplicativo indisponível continua permitindo
