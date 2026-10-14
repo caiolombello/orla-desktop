@@ -145,6 +145,10 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   selected row is filled with the accent. The header drags the window.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
+  Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the
+  buttons, glyphs and focus rings to the allocated height; keep the preferred
+  28/32 px sizes and the 20 px menu mark. Adapt vertical padding within the panel
+  budget while preserving the system font. Review the short-host gallery in both schemes.
 
 ## Icons
 

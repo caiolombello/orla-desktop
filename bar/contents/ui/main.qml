@@ -13,7 +13,7 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     Layout.minimumWidth: 48
-    Layout.minimumHeight: bar.implicitHeight
+    Layout.minimumHeight: bar.minimumControlHeight
     Layout.preferredWidth: bar.implicitWidth
     Layout.preferredHeight: bar.implicitHeight
     // Canonical client remains in the dock package; disabling never loads it.
