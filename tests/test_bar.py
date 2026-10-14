@@ -662,6 +662,70 @@ class BarTests(unittest.TestCase):
         self.wait_restored_focus(button)
         self.assertEqual(self.session.calls, [])
 
+    def test_panel_controls_and_artwork_fit_the_allocated_height(self):
+        self.evaluate("showControlCenter = true; showApplicationName = false")
+        menu = self.item("orlaMenuButton")
+        center = self.item("barControlCenterButton")
+        for compact in (False, True):
+            self.bar.setProperty("compactHeight", compact)
+            for height in (24, 28, 32, 64):
+                with self.subTest(compact=compact, height=height):
+                    self.window.setHeight(height)
+                    QTest.qWait(30)
+                    for button, icon_name in ((menu, "orlaMenuIcon"),
+                                              (center, "barControlCenterIcon")):
+                        self.assertGreaterEqual(button.y(), 0)
+                        self.assertLessEqual(button.y() + button.height(), self.bar.height())
+                        icon = self.item(icon_name)
+                        top = icon.mapToItem(button, QPointF(0, 0))
+                        bottom = icon.mapToItem(button, QPointF(icon.width(), icon.height()))
+                        self.assertGreaterEqual(top.x(), 0)
+                        self.assertGreaterEqual(top.y(), 0)
+                        self.assertLessEqual(bottom.x(), button.width())
+                        self.assertLessEqual(bottom.y(), button.height())
+                    # A short host keeps the mark square; it does not crop its bottom.
+                    icon = self.item("orlaMenuIcon")
+                    self.assertEqual(icon.width(), 20)
+                    self.assertEqual(icon.height(), 20)
+                    label = self.item("orlaMenuLabel")
+                    self.assertLessEqual(label.property("implicitHeight"), menu.property("availableHeight"))
+
+    def test_short_panel_keeps_the_action_error_control_inside(self):
+        self.window.setHeight(24)
+        self.evaluate("sessionBackend = ({status: 'ready', canShutdown: true, requestShutdown: function() { throw new Error('fixture failure'); }})")
+        self.assertFalse(self.evaluate("requestSession('shutdown')"))
+        QTest.qWait(30)
+        button = self.item("sessionActionError")
+        self.assertTrue(button.property("visible"))
+        self.assertGreaterEqual(button.y(), 0)
+        self.assertLessEqual(button.y() + button.height(), self.bar.height())
+        self.assertLessEqual(button.property("implicitContentHeight"), button.property("availableHeight"))
+
+    def test_short_panel_keeps_keyboard_focus_and_bottom_edge_clicks(self):
+        self.window.setHeight(24)
+        self.evaluate("showControlCenter = true; showApplicationName = false")
+        QTest.qWait(30)
+        menu_button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus(Qt.TabFocusReason)", menu_button)
+        self.assertTrue(menu_button.property("visualFocus"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        menu = self.window.findChild(QObject, "orlaMenu")
+        self.wait_property(menu, "opened", True)
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.wait_restored_focus(menu_button)
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        center = self.item("barControlCenterButton")
+        self.assertTrue(center.property("activeFocus"))
+        self.assertTrue(center.property("visualFocus"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.control_center.calls, [("open", self.bar, center)])
+        # The visible bottom edge belongs to the control, rather than blank panel space.
+        point = center.mapToScene(QPointF(center.width() / 2, center.height() - 1)).toPoint()
+        QTest.mouseClick(self.window, Qt.LeftButton, pos=point)
+        self.assertEqual(self.control_center.calls[-1], ("release",))
+        self.assertEqual(self.session.calls, [])
+
 
     def test_menu_items_dispatch_their_own_action_and_revoked_actions_stay_passive(self):
         for name, action, capability in (("sessionLock", "lock", "canLock"),
