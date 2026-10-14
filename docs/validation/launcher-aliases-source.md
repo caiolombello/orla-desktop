@@ -66,8 +66,10 @@ CLI e a ausência do arquivo pessoal de aliases. Teclas, defaults, owners de
 Meta e owner do daemon de atalhos foram iguais antes/depois. A recuperação
 não foi provocada na sessão real.
 
-Criar, reiniciar, executar, editar/remover aliases por gestos reais no Wayland,
-foco nesses popovers, esquema claro nativo, acessibilidade, outras escalas e
-monitores permanecem **UNRUN**. Os testes e a instalação saudável não os
-qualificam. L2/UX2 continuam parciais; favoritos, comandos internos e o setup
-completo seguem no roadmap. Assets públicos 0.2.9 permanecem inalterados.
+A [primeira prova nativa](launcher-aliases-native.md), de 14/10, passou consulta
+de nomes iguais, abertura centralizada do editor, cancelamento e Salvar pelo
+mouse sem executar os aplicativos. O acompanhamento da saída foi interrompido;
+reinício, execução, edição/remoção, retorno de foco, esquema claro nativo,
+acessibilidade, outras escalas e monitores continuam sem qualificação. L2/UX2
+permanecem parciais; favoritos, comandos internos e o setup completo seguem
+no roadmap. Assets públicos 0.2.9 permanecem inalterados.
