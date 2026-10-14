@@ -8,6 +8,7 @@ Item {
     required property Item owner
     property var popup: null
     property var audio: null
+    property QtObject backendLifetime: null
     property var performOpen: null
     property var validateClient: function(candidate) { return false; }
     property Item host: owner
@@ -31,6 +32,7 @@ Item {
     property bool _closed: true
     property bool _closing: false
     property bool _stopped: false
+    property QtObject _retiringBackend: null
     property Item _restoreTarget: null
     property Item _closingFocus: null
     property int _restoreGeneration: -1
@@ -83,8 +85,16 @@ Item {
         _pendingGeneration = -1;
         return _generation === generation;
     }
+    function captureBackendLifetime(generation = _generation) {
+        if (_generation !== generation) return false;
+        // Loader.item clears before deleteLater destroys the backend QObject.
+        if (popup && popup.visible && !_retiringBackend && backendLifetime)
+            _retiringBackend = backendLifetime;
+        return _generation === generation;
+    }
     function beginClose(generation = _generation) {
         if (_generation !== generation || !clearRestore(generation)) return;
+        if (!captureBackendLifetime(generation)) return;
         invalidateAudio();
         if (_generation !== generation) return;
         if (popup && popup.visible) {
@@ -181,6 +191,7 @@ Item {
     on_PendingClientChanged: checkPending()
     onOwnerChanged: if (!owner) shutdown()
     on_NativeDialogChanged: commitQueue.restart()
+    on_RetiringBackendChanged: if (!_retiringBackend && !_stopped) commitQueue.restart()
 
     function pendingMatches(request) {
         return !_stopped && owner && popup && _pending && _generation === request.generation
@@ -189,8 +200,8 @@ Item {
             && _pendingExternal === request.external;
     }
     function drain() {
-        if (_stopped || !owner || !popup || !_closed || popup.visible
-                || (_nativeDialog && _nativeDialog.visible)) return;
+        if (_stopped || !owner || !popup || !_closed || popup.visible || _retiringBackend
+                || (_nativeDialog && (_nativeDialog.visible || _nativeDialog.active === true))) return;
         // Signals can accept another request at every assignment below.
         const request = {generation: _generation, client: _pendingClient, host: _pendingHost,
             anchor: _pendingAnchor, external: _pendingExternal};
@@ -260,6 +271,7 @@ Item {
             const generation = root._generation + 1;
             root._generation = generation;
             if (!root.clearPending(generation)) return;
+            if (!root.captureBackendLifetime(generation)) return;
             root.invalidateAudio();
             if (root._generation !== generation) return;
             root._restoreTarget = target;
@@ -280,6 +292,10 @@ Item {
     Connections {
         target: root._nativeDialog
         function onVisibleChanged() { if (!target.visible) commitQueue.restart(); }
+    }
+    Connections {
+        target: root._nativeDialog && root._nativeDialog.active !== undefined ? root._nativeDialog : null
+        function onActiveChanged() { if (!target.active) commitQueue.restart(); }
     }
     Connections {
         target: root.host
