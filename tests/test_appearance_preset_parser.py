@@ -59,6 +59,52 @@ class AppearancePresetParserTests(unittest.TestCase):
         self.assertEqual(serialized, json.dumps(expected, separators=(",", ":")))
         self.assertEqual(self.call("parseResult", serialized), captured)
 
+    def catalog(self, expression):
+        component = QQmlComponent(self.engine)
+        component.setData(b'import QtQuick\nimport "../package/contents/code/AppearancePresetCatalog.js" as Catalog\nQtObject {}',
+                          QUrl.fromLocalFile(str(ROOT / 'tests/CatalogInline.qml')))
+        owner = component.create()
+        self.assertIsNotNone(owner, component.errorString())
+        try:
+            call = QQmlExpression(QQmlEngine.contextForObject(owner), owner, expression)
+            value, _ = call.evaluate()
+            self.assertFalse(call.hasError(), call.error().toString())
+            return json.loads(value)
+        finally:
+            owner.deleteLater()
+            component.deleteLater()
+
+    def test_builtin_catalog_payloads_match_the_four_reviewed_choices_and_roundtrip(self):
+        entries = self.catalog('JSON.stringify(Catalog.entries())')
+        self.assertEqual([entry['id'] for entry in entries], ['essencial', 'mare', 'estudio', 'jogo'])
+        essentials = json.loads((ROOT / 'themes/examples/essential.json').read_text())['tokens']
+        jogo = json.loads((ROOT / 'themes/examples/mare.json').read_text())['tokens']
+        jogo['reducedMotion'] = False
+        dark = {'foreground': '#edf1f9', 'muted': '#9da9bf', 'accent': '#69d7c2', 'surface': '#111923',
+                'border': '#3c4b65', 'radius': 18, 'spacing': 8, 'opacity': 1, 'iconSize': 42, 'reducedMotion': True}
+        mare = dict(dark, surface='#283542', radius=20, spacing=5, opacity=219 / 255, reducedMotion=False)
+        expected = [('paper', essentials, ['clock', 'systemBattery', 'music', 'pomodoro'], 2),
+                    ('glass', mare, ['clock', 'music', 'systemBattery', 'pomodoro'], 3),
+                    ('midnight', dark, ['pomodoro', 'music', 'clock', 'systemBattery'], 4),
+                    ('midnight', jogo, ['music', 'clock', 'systemBattery', 'pomodoro'], 3)]
+        for entry, (base, tokens, order, visible) in zip(entries, expected):
+            with self.subTest(id=entry['id']):
+                payload = {'formatVersion': '0.1-experimental', 'kind': 'orla-appearance-preset',
+                           'appearance': {'formatVersion': '0.1-experimental', 'baseTheme': base, 'tokens': tokens},
+                           'widgets': [{'id': widget, 'visible': index < visible}
+                                       for index, widget in enumerate(order + ['quota', 'peripherals', 'recording'])]}
+                self.assertEqual(set(entry), {'id', 'payload'})
+                self.assertEqual(entry['payload'], payload)
+                serialized = self.call('serialized', payload)
+                self.assertEqual(self.call('parseResult', serialized)['value'], payload)
+                self.assertEqual(set(json.loads(serialized)), {'formatVersion', 'kind', 'appearance', 'widgets'})
+
+    def test_catalog_returns_independent_copies_without_metadata_or_profile_dependency(self):
+        value = self.catalog('var a=Catalog.entries(); a[0].payload.widgets[0].visible=false; a[0].payload.appearance.tokens.radius=0; a[0].id="changed";'
+                             'var b=Catalog.payload("essencial"); b.widgets.pop(); JSON.stringify(Catalog.entries())')
+        self.assertEqual(value, self.catalog('JSON.stringify(Catalog.entries())'))
+        self.assertIsNone(self.catalog('JSON.stringify(Catalog.payload("unknown"))'))
+
     def test_unknown_metadata_and_invalid_widgets_never_export(self):
         for key in ("profile", "paths", "launchers", "calendar", "context", "timer", "audio", "author", "__proto__"):
             value = preset()

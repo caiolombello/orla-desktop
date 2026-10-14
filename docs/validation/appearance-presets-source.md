@@ -117,3 +117,45 @@ recusa preservou o salvo. O fluxo positivo usou clipboard com JSON sintético;
 a custódia original dos formatos falhou e a restauração integral anterior não
 foi qualificada. Foco de retorno, tecnologia assistiva, outras telas/escalas e
 número de setters nativos continuam UNRUN. C1/X1 permanecem parciais.
+## Catálogo interno — incremento de 13/10/2026
+
+Aparência oferece quatro escolhas optativas antes da seção avançada de JSON.
+Selecionar uma usa a transação de prévia existente; Aplicar salva aparência e
+widgets juntos, Cancelar descarta e Desfazer restaura os valores anteriores.
+Não há criação automática de perfil: preferências anteriores mostram a
+orientação e o link para Perfis. Nomes e descrições não entram na exportação.
+
+| Preset | Aparência | Widgets visíveis | Movimento |
+|---|---|---|---|
+| Essencial | Claro opaco | Relógio, bateria | Reduzido |
+| Maré | Vidro translúcido | Relógio, música, bateria | Normal |
+| Estúdio | Escuro opaco | Pomodoro, música, relógio, bateria | Reduzido |
+| Jogo | Escuro opaco | Música, relógio, bateria | Normal |
+
+Quota, periféricos e gravações continuam ocultos nesses pontos de partida.
+Jogo não abre Steam; Maré não promete blur nativo. Os sete IDs de widgets
+permanecem no payload. Cópias são independentes e os dados passam pelo parser
+existente, sem novo schema, State ou writer.
+
+As regressões falharam antes da implementação, depois reproduziram a seleção
+antiga retomando após mudança de perfil e após cancelar/reabrir com o mesmo JSON.
+A correção guarda identidade, scope, revisão e draft públicos durante a escolha.
+O estado “Em prévia” aparece no próprio botão, com altura constante para não
+deslocar o foco. Tab/Shift+Tab, Space/Return e o caminho JSON expandido foram
+exercitados no orçamento de 420 px, incluindo prévia inválida e retorno por Tab.
+
+Foram aprovados 69 testes relevantes por estilo Fusion/KDE. Após acrescentar
+a assertion da rota expandida, a suíte de presets foi repetida no Source exato:
+25 testes por estilo, sem falhas ou skips. Parser teve oito testes aprovados;
+design check sem issues, sete design guards e build do applet passaram.
+Falhas de lookup/contexto das fixtures e da expectativa de navegação foram
+preservadas; não foram qualificadas como defeitos de produto.
+A falha Fusion histórica da suíte completa de perfis não foi repetida.
+
+| Escuro — Maré | Claro — Jogo |
+|---|---|
+| ![Prévia Maré](../screenshots/preset-catalog/preset-catalog-dark-mare-420.png) | ![Prévia Jogo](../screenshots/preset-catalog/preset-catalog-light-jogo-420.png) |
+
+Capturas do popup real em harness offscreen, com dados sintéticos. Instalação
+deste catálogo e gestos Plasma/Wayland permanecem UNRUN. C1/UX1/X1 continuam
+parciais; não há leitura de arquivo, catálogo externo ou marketplace nesta fatia.
