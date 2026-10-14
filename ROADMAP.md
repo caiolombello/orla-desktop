@@ -713,6 +713,22 @@ e retomar os fluxos visíveis de busca/mídia. Inventário direto 0.1 e arquivos
 0.2/0.3 permanecem iguais; R2 continua parcial. Consulte a
 [política e seus limites](launcher/README.md#política-de-grafo-sobre-catálogo-fornecido--experimental).
 
+**R2 — catálogo transitivo observado no host (14/10):** o comando
+`launcher/package.py inventory-transitive --stage <prefixo-absoluto>` agora
+coleta dependências por caminhos e descritores delimitados, preserva aliases
+brutos/cadeias, confere staging antes do host e revê identidades/ausências no
+final. Passaram 30 testes novos, 22 de política e os 56 do pacote, com revisão
+independente. A coleta real registrou 126 nós e 533 ligações em 4,573 s,
+preservando 1.524 arquivos e 247 diretórios protegidos. O resultado permaneceu
+`unknown`: um candidato ausente no catálogo restrito, dois arquivos recusados
+pelo parser e quatro consultas RPM inconclusivas, além de contexto de busca e
+flags conservadoramente não interpretados. Isso não é falha nativa comprovada.
+Loader, ABI, imports QML, Python e runtime continuam `UNRUN`; o relatório não
+promove o inventário declarado do builder. A instalação e sessão atuais não
+mudaram. R2 segue parcial. A próxima entrega é o fluxo utilizável de
+instalar/atualizar/reverter/remover em perfil limpo, depois Meta e mídia.
+Consulte o [comando e limites](launcher/README.md#catálogo-observado-de-dependências-transitivas--experimental).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
