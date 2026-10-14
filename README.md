@@ -102,6 +102,9 @@ orla build --output-dir "$HOME/.cache/orla/build"
 ```
 
 The earlier helper in the published 0.2.9 ZIP does not have this option.
+The local CLI check on 14 October 2026 used the installed wrapper against a
+protected source version and produced the expected 67-file applet in a writable
+directory, preserving source files, desktop configuration and launcher process.
 
 To check the local setup or remove Orla's managed files:
 

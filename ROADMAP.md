@@ -46,7 +46,12 @@ uma Source protegida em destino gravável, sem mudar origem ou permissões.
 O default continua `PROJECT_ROOT/dist`. A recusa anterior da opção foi
 reproduzida nos dois entrypoints; passaram 23 testes da CLI e um de release,
 incluindo fixture readonly, determinismo e preservação de estado. A publicação
-0.2.9 mantém seu helper anterior; o incremento está na Source atual.
+0.2.9 mantém seu helper anterior. A CLI local foi atualizada para `93e897a` e o
+wrapper instalado empacotou os 67 arquivos em destino gravável, com hash igual
+ao candidato. Source, configuração do desktop, dock, barra e launcher foram
+preservados; não houve recarga do Plasma. A primeira tentativa recusou o
+preflight por comparação de tipos no helper, antes de qualquer alteração;
+a correção comparou o identificador textual exato do processo.
 
 ## Resultado esperado
 
