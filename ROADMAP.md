@@ -611,9 +611,14 @@ instalados localmente: adicionar, renomear/remover, alvos indisponíveis, leitur
 passiva e resolução exata. A interface mantém o sistema visual e recusa intents
 antigos. Os oito CTests da versão final passaram nos dois estilos; KF6 6.31 tem
 composição privada qualificada com a ressalva do contexto `--init`. O fluxo de
-aliases por gestos reais no Wayland é a próxima prova de L2/UX2, ainda UNRUN;
-favoritos e comandos internos continuam abertos. Consulte a
-[validação](docs/validation/launcher-aliases-source.md).
+aliases por gestos reais no Wayland já passou consulta de nomes iguais,
+editor centralizado, Escape sem gravação e Salvar pelo mouse com A=0/B=0.
+A nova rodada confirmou consulta após reinício em um perfil temporário com
+os dados próprios copiados e retorno de foco com dois marcadores salvos.
+Um único Enter fechou o launcher, mas A=0/B=0: dispatch precisa de diagnóstico
+antes da fase de edição/remoção, que não começou. Favoritos e comandos internos
+continuam abertos. Consulte a [validação Source](docs/validation/launcher-aliases-source.md)
+e a [primeira prova nativa](docs/validation/launcher-aliases-native.md).
 Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.
