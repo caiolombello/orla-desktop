@@ -596,14 +596,20 @@ tickets e a barreira de fechamento. Meta, menu real e dois níveis de Escape
 receberam a [prova delimitada](docs/validation/launcher-actions-source.md).
 A continuidade Meta → busca/Ações → Escape passou com KWrite próprio comum
 e fullscreen, incluindo input salvo exatamente uma vez após cada retorno.
-Os probes seguintes confirmaram autohide configurado e conservação do estado,
-mas não qualificaram a revelação: apareceu somente o indicador de aproximação
-ou a região vazia, inclusive com input temporário mantido ativo. A posição foi
-medida no KWin; a causa segue UNKNOWN e os popups desse episódio seguem UNRUN.
-Diagnosticar a ativação da borda antes de alterar configuração ou produto.
+Os dois probes seguintes confirmaram autohide configurado e conservação do
+estado, mas não qualificaram a revelação; suas causas permanecem UNKNOWN.
+Uma nova prova, após diagnóstico Source da borda, confirmou a dock revelada
+sobre KWrite maximizado, clique na Central, Escape com retorno ao mesmo UUID,
+marcador salvo uma vez e ocultação ao afastar o ponteiro. `hidden` no KWin e
+capturas concordaram, sem mudança de configuração ou produto. Em fullscreen
+o painel permaneceu oculto, compatível com a política de bordas de clientes
+do KWin; revelar nesse cenário como desejado ainda está aberto. Os demais
+popups, esquema claro, escalas e monitores mantêm seus aceites separados.
+Consulte a [prova da dock e Central](docs/validation/shared-control-center-source.md).
 Em paralelo, a próxima fatia de L2 é salvar/remover aliases de aplicativos com
 identificador estável, resolução exata e zero execução durante a pesquisa; a
-compatibilidade KService/KRunner está em preparação isolada, ainda não entregue. Seleção de saída e os demais controles
+compatibilidade KService/KRunner está em preparação isolada, ainda não entregue.
+Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.
 

@@ -280,3 +280,61 @@ Preferência compacta na UI nativa, entrada por teclado/anel de foco na barra,
 fontes ampliadas, esquema claro nativo, outras telas/escalas e os demais gates
 de T1/UX0 permanecem UNRUN. O conteúdo do indicador de erro não foi exercitado
 na sessão real.
+
+### Dock retrátil e retorno ao aplicativo — 14/10
+
+Uma nova prova com o Source `8f730b8`, sem instalar ou alterar código de UI,
+usou KWrite 26.08.1 real com perfil XDG, D-Bus e arquivo sintético próprios.
+A tela observada mediu 2648 × 1490 DIP; as capturas mediram 3840 × 2160 pixels.
+O painel gerenciado continuou em `autohide`. Um observador temporário do KWin
+leu apenas os PIDs conhecidos, UUIDs, frames, foco, ponteiro e o getter público
+`hidden`; não alterou janelas, painéis ou preferências.
+
+Com o KWrite maximizado, o mesmo painel passou de `hidden=true` para
+`hidden=false` após um gesto contínuo na borda inferior. A captura confirmou
+vidro e ícones. O dispositivo temporário permaneceu ativo durante essa parte;
+o bridge contém pausas de 120 ms entre movimentos relativos, mas o log desta
+sessão não mede a cadência recebida pelo KWin.
+
+Um clique no ícone da Central abriu uma janela de aproximadamente 378 × 542
+DIP, centralizada sobre esse botão. O recorte confirmou o título estático
+“Central de Controle”, sem registrar mídia ou nomes de dispositivos. Escape
+ocultou essa superfície e devolveu foco ao mesmo UUID do KWrite. Após uma
+leitura fresca do aplicativo ativo, Ctrl+End, um marcador próprio, Enter e
+Ctrl+S produziram exatamente marcador + LF uma vez: 45→67 bytes. Afastar o
+ponteiro voltou a ocultar o painel; `hidden=true` e o recorte vazio concordaram.
+
+| Recorte da sessão real | Captura |
+|---|---|
+| Dock revelada sobre aplicativo próprio maximizado | [Vidro e ícones](../screenshots/shared-control-center/native-dock-reveal.png) |
+| Dock oculta após afastar o ponteiro | [Região novamente livre](../screenshots/shared-control-center/native-dock-hidden.png) |
+| Popup aberto pelo botão da dock | [Título da Central](../screenshots/shared-control-center/native-dock-cc-heading.png) |
+
+Em fullscreen, F11 manteve o mesmo aplicativo ativo e o gesto na borda deixou
+o painel em `hidden=true`, com região vazia. Isso é compatível com
+[a política de bordas de clientes do KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/screenedge.cpp),
+que bloqueia esse caso. A configuração em disco foi lida sem alterações:
+delay 75 ms, cooldown 350 ms e pushback 1; seu estado carregado no compositor
+não foi lido. Revelar a dock sobre fullscreen, como desejado para o Orla,
+continua sem implementação qualificada. O teste não habilitou preferências
+para contornar essa limitação.
+
+Os dois probes anteriores ficaram inconclusivos: região vazia ou indicador
+de aproximação não comprovavam revelação. Artefatos e erros iniciais foram
+preservados; o contraste posterior não atribui retrospectivamente uma causa
+às tentativas anteriores. A leitura do código de borda justificou o novo gesto,
+sem alterar configuração nem produto.
+
+O bridge contínuo encerrou pelo TTL antes do envio do marcador: seu log tem
+dez comandos executados, nenhum de digitação e liberação confirmada. O arquivo
+permanecia igual ao preimage; a prova do marcador usou um novo bridge e leitura
+fresca de foco. Sete episódios de input confirmaram liberação; os dezesseis
+observadores próprios foram descarregados. KWrite voltou ao frame original
+antes da limpeza supervisionada; ele e seu D-Bus privado terminaram com exit 0.
+BEFORE e AFTER ficaram exatos nos 1.363 arquivos e 232 diretórios protegidos
+verificados, incluindo Source, instalação, configurações e bancos de layout.
+A revisão independente não encontrou bloqueadores neste aceite delimitado.
+
+R1/CC0/CC1-A/T1/UX0 permanecem parciais. Esta prova não exercitou hardware,
+transferência pela barra, os demais popups, foco por Tab nos controles, esquema
+claro nativo, outra escala/tela, perfil normal do usuário ou menus do T3.
