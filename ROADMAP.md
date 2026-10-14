@@ -494,6 +494,17 @@ preservadas. O [registro](docs/validation/shared-control-center-source.md)
 distingue essas provas da retirada do probe. Checkbox nativo, seleção de saída,
 transferência com áudio pendente e outros ambientes mantêm gates separados.
 
+**Barra — encaixe instalado em 14/10:** o painel de 32 pontos aloca 24 aos
+applets. O Source `800a9c8` limita os controles à altura disponível e adapta o
+padding, mantendo preferência de 28/32 e o ícone do menu de 20. Passaram 33
+testes da barra e sete de composição em cada estilo, com galeria claro/escuro.
+Na sessão Wayland, os dois botões mediram 32 × 24; o clique na borda inferior
+abriu cada popup e Escape fechou ambos. Após ↓/Escape no menu, o KWin voltou à
+janela própria. Só os dois arquivos da barra ficaram atualizados, com
+configurações, dock, launcher e recuperação preservados. Preferência compacta,
+entrada por teclado/anel de foco nativos, fontes ampliadas e outras telas
+continuam sem qualificação nativa. Veja o mesmo registro de validação.
+
 **Seletor de áreas W1 — incremento Source:** a aba Contextos permite selecionar
 um ID observado e acionar Trocar área. Seleção e navegação são passivas; uma
 resposta aceita só confirma após readback no owner capturado e convergência do
@@ -557,9 +568,9 @@ sem atribuir retrospectivamente uma causa aos cliques do primeiro canary nem
 alterar o produto para contornar o teste. Conferir fullscreen, teclado/foco nas
 demais superfícies e as telas/escalas disponíveis; as indisponíveis permanecem
 UNRUN. A transferência da Central e a retirada de sua entrada direita passaram
-no aceite delimitado acima. O próximo lote deve medir o encaixe dos controles na
-altura útil da barra e ampliar W1 com foco e contagem de uma única solicitação
-de troca de área, usando destinos já existentes. Seleção de saída e os demais
+no aceite delimitado acima. O encaixe dos dois controles na altura útil da barra
+também passou; o próximo lote deve ampliar W1 com foco e contagem de uma única
+solicitação de troca de área, usando destinos já existentes. Seleção de saída e os demais
 controles de hardware continuam provas próprias; o dono do estado de áudio
 permanece na dock.
 
