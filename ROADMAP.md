@@ -39,12 +39,15 @@ relevantes por estilo, suíte final de presets 25/25, design e build. O dock
 foram observadas em Wayland, sem mudar configuração, barra, bancos ou launcher.
 O canary gerenciado passou prévia, aplicação e reversão dos quatro conjuntos
 por gestos reais, preservando apps e demais campos. Essencial, Maré e Jogo
-completaram os ciclos com auto-hide; Estúdio confirmou Desfazer com o painel
-temporariamente visível, após duas emissões de clique sem alteração do salvo.
-O auto-hide e os valores anteriores foram restaurados; o perfil temporário e
-sua chave foram removidos. A reabertura retrátil após mudar a largura, foco
-completo e quantidade de setters continuam sem qualificação; C1/UX1/X1 seguem
-parciais.
+completaram os ciclos com auto-hide. O primeiro lote de Estúdio exigiu um
+painel temporariamente visível; o canary seguinte confirmou Aplicar, recolher,
+revelar, reabrir e Desfazer com o auto-hide original. A largura mudou de 743
+para 901 e voltou; Escape devolveu foco à janela própria. Um contraste com
+movimentos idênticos isolou a cadência inadequada do helper de input, sem
+alterar preferências do KWin. Configurações, bancos e pacotes foram preservados
+e o perfil temporário foi removido. A regressão de fechar/reabrir/Desfazer
+integra a suíte portátil; outras telas, fullscreen, acessibilidade e quantidade
+de setters nativos continuam sem qualificação. C1/UX1/X1 seguem parciais.
 Veja o [registro](docs/validation/appearance-presets-source.md).
 
 **DX — saída de build explícita:** `build --output-dir DIR` permite empacotar
@@ -538,14 +541,15 @@ em perfil gerenciado, clipboard e foco nativos mantêm qualificação separada.
 
 Cada incremento registra resultado, evidência, limitação e decisão de continuidade. UX0/UX1/DX2 continuam parciais até seus critérios completos. Provas de provedores/hardware ausentes permanecem UNRUN. Não iniciar checkout, SDK estável ou código de terceiros apenas para completar uma lista de recursos.
 
-**Próximo lote — R1/UX0 antes de ampliar o catálogo:** qualificar a dock retrátil
-e o popup após uma mudança de largura por preset, incluindo Estúdio. O canary
-de 14/10 confirmou os dados dos quatro conjuntos, mas não confirmou dois
-cliques de Desfazer de Estúdio no modo retrátil. O controle funcionou com o
-painel visível; isso não identifica a causa das emissões anteriores. Reproduzir
-com posição/visibilidade e foco observados, validar reabertura e recuperação e
-preservar os valores originais. Só anunciar correção após regressão causal e
-novo gesto no KDE; os demais itens do roadmap permanecem na sequência acima.
+**Próximo lote — ampliar R1/UX0 e seguir a integração da barra:** o fluxo de
+Estúdio após mudança de largura passou no painel retrátil em uma tela. A
+reabertura reposicionou o popup 79 pontos para a esquerda; os alvos de input
+precisam ser medidos novamente. O contraste de cadência qualificou o roteiro,
+sem atribuir retrospectivamente uma causa aos cliques do primeiro canary nem
+alterar o produto para contornar o teste. Conferir fullscreen, teclado/foco nas
+demais superfícies e as telas/escalas disponíveis; as indisponíveis permanecem
+UNRUN. Em paralelo de escopo, o próximo incremento funcional continua sendo
+a Central de Controle opcional na barra, com o mesmo dono do estado de áudio.
 
 ## Prontidão e recomendação de execução
 

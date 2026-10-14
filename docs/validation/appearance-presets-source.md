@@ -217,7 +217,63 @@ dispositivos e janela de teste próprios foram removidos.
 
 ![Prévia Essencial no KDE, perfil sintético](../screenshots/preset-catalog/native-essential-preview.png)
 
-Captura limitada ao popup próprio. Foco de retorno, número exato de setters,
+Captura limitada ao popup próprio. Nesse lote, foco de retorno, número exato de setters,
 tecnologia assistiva, outras telas/escalas e o fluxo retrátil completo de
 Estúdio continuam sem qualificação. Não houve alteração de QML/JS neste lote;
 as suítes Source anteriores não foram repetidas. C1/UX1/X1 permanecem parciais.
+
+## Reabertura de Estúdio com auto-hide — 2026-10-14
+
+Novo canary na dock instalada `944c0e7`, Plasma 6.7.5/Wayland, uma tela,
+janela própria maximizada. Geometria lógica 2648 × 1490; captura 3840 × 2160.
+Uma consulta Qt separada reportou DPR 2, enquanto a conversão entre coordenadas
+e a imagem usa aproximadamente 1,45; esses valores não qualificam uma matriz
+de escala ou o DPR de todas as janelas.
+
+Primeiro, um contraste usou os mesmos movimentos, a mesma janela e as mesmas
+preferências, mudando somente a pausa do helper. Intervalos observados entre
+ACKs de movimento contra a borda foram 420,49/421,03 ms no caso sem revelação
+e 140,72/140,96 ms no caso que revelou a dock. ACK mede emissão, sem provar
+hit-test; a exposição foi conferida nas capturas e o cursor/geometrias no
+KWin. A Source [KWin 6.7.5](https://github.com/KDE/kwin/blob/v6.7.5/src/screenedge.cpp)
+usa delay/cooldown e recuo na borda. Os valores salvos ou defaults consultados
+foram 75/350 ms e 1 px; não foram alterados. O contraste confirma a influência
+da cadência neste roteiro, sem comprovar os valores internos carregados pelo
+compositor nem reinterpretar as falhas anteriores.
+
+| Etapa no perfil sintético | Resultado observado |
+| --- | --- |
+| Escolher Estúdio | “Em prévia”; largura 743 → 901, documento salvo intacto |
+| Aplicar | Somente JSON de aparência e widgets receberam o payload esperado |
+| Escape e afastar cursor | Popup fechado, dock recolhida, aplicação preservada |
+| Revelar e reabrir | Dock exposta, popup ativo no KWin, Desfazer habilitado |
+| Desfazer por clique no alvo observado | Documento original byte por byte; largura 901 → 743 |
+| Escape sem mover o cursor | Foco voltou à janela própria |
+
+O popup mudou de x=805 para x=726 ao reabrir. Os alvos foram medidos novamente;
+a posição de um popup anterior não serve de testemunha para outro gesto.
+Não houve alteração de QML/JS ou configuração do auto-hide para obter o PASS.
+Um probe portátil do mesmo ciclo também passou em Fusion/KDE, com sinais dos
+cliques e duas escritas. A suíte agora guarda seleção de Estúdio, Aplicar,
+Escape, reabertura e Desfazer pelos controles reais do harness. Esse teste
+portátil não simula retenção ou pressão de borda do Plasma. Os 26 casos da
+suíte passaram em Fusion (4,410 s) e `org.kde.desktop` (8,122 s), sem skips;
+o caso novo também passou isoladamente em cada estilo. Não houve mudança de
+QML/JS/C++; build e suítes não afetadas não foram repetidos.
+
+As primeiras falhas do observador e a expiração da primeira janela própria
+foram preservadas. A resposta vazia do método D-Bus `run` ganhou tratamento
+no helper temporário; a captura após expiração foi recusada. Scripts e
+endpoints do observador foram descarregados a cada snapshot, sem registrar
+títulos de outras janelas. O perfil próprio voltou a Preferências anteriores
+pela UI; cleanup removeu somente sua chave, com um stop/start do Plasma.
+Mapas e modos das configurações, dock/barra, launcher/CLI e bancos voltaram
+ao baseline. Plasma terminou ativo, `Result=success`, `NRestarts=0`; janela e
+dispositivos de input próprios foram encerrados.
+
+![Desfazer habilitado após reabrir Estúdio no KDE, perfil sintético](../screenshots/preset-catalog/native-studio-reopened.png)
+
+Captura apenas do popup próprio. O fluxo de Estúdio com auto-hide está
+qualificado neste cenário; fullscreen, demais superfícies/monitores, esquema
+claro nativo, tecnologia assistiva e contagem exata de setters nativos continuam
+UNRUN. C1/X1 e R1/UX0 continuam parciais.
