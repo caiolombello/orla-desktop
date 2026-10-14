@@ -23,8 +23,12 @@ Nova CI e os gates de personalização continuam separados. Veja o
 encontrou Tab sendo inserido no campo de raízes. A correção Source define
 Tab/Shift+Tab, pula ações indisponíveis e revela o controle focado após mudanças
 do conteúdo. Regressões causais e capturas em 440/660 px passaram nos estilos
-Fusion/KDE. Descoberta e leitura nativas ainda aguardam essa correção instalada;
-S1 permanece parcial. Veja o [registro](docs/validation/steam-root-discovery-source.md).
+Fusion/KDE. O canary `c71ab6d` foi instalado e validado em Wayland: Localizar
+encontrou uma raiz sem ler jogos; Carregar mostrou 12 jogos e zero avisos,
+com Downloads inteiramente visível ao receber foco. Configuração Plasma,
+dock e barra permaneceram iguais. Seleção de jogo, execução, cliente e matriz
+de bibliotecas ainda estão abertos; S1 permanece parcial. Veja o
+[registro](docs/validation/steam-root-discovery-source.md).
 
 ## Resultado esperado
 

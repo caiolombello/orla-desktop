@@ -82,5 +82,41 @@ Design check passou sem issues e os sete design guards passaram.
 
 Capturas sintéticas offscreen. O launcher usa a mesma scheme escura sob
 ambas as schemes do sistema. As demais superfícies não mudaram neste lote.
-Instalação desta correção e descoberta/leitura real continuam pendentes;
-os testes offscreen não qualificam foco Plasma/Wayland nem execução de jogos.
+Os testes offscreen não qualificam foco Plasma/Wayland nem execução de jogos.
+
+## Instalação e descoberta nativas — canary delimitado
+
+O commit `c71ab6d` foi compilado em versão permanente completa, com 277 arquivos
+Source congelados e os três helpers nessa versão. Build passou; CTests de
+comportamento e Steam passaram 2/2. O primeiro possui um skip intencional da
+fixture de aplicativo; Steam teve 30 entradas aprovadas. UI compilada passou
+nos dois estilos e os novos casos de teclado também passaram em KDE.
+Uma invocação de teste com nome de executável errado falhou antes de iniciar
+Qt; foi preservada e somente essa etapa pendente foi executada com o nome certo.
+Não houve repetição da preparação, build ou CTests já aprovados.
+
+Após revisão independente dos guards e rollback, somente os dois wrappers
+foram atualizados atomicamente; o serviço foi preservado. O processo ativo
+correspondeu ao ELF `03bea97d9a91db1ba097719e31e6c9a89dbc925a27d3b3bef07dc11dff63136f`,
+com owner D-Bus e atalho gerenciado corretos. Plasma não foi reiniciado.
+
+Na sessão Plasma 6.7.5/Wayland, Meta abriu Orla e a entrada Steam abriu o painel.
+Tab transferiu foco do campo vazio até Localizar sem inserir texto, mantendo o
+controle inteiro visível. Space localizou **uma raiz**; ao focar Downloads,
+a mensagem ainda indicava que nenhuma leitura havia sido feita.
+Shift+Tab retornou a Carregar; Space leu os metadados. A UI mostrou
+**12 jogos, 0 avisos e 1 raiz**. Downloads voltou a ficar inteiramente visível
+ao receber foco depois da atualização. As capturas privadas dessa leitura
+excluem caminhos, títulos e nomes dos jogos.
+
+O launcher permaneceu ativo e saudável, sem reinícios. Os 66 arquivos do dock,
+14 da barra e todos os valores parseados dos dois arquivos de configuração
+Plasma permaneceram iguais. O perfil temporário anterior continuou ausente;
+dispositivos de input foram liberados e não restaram processos desses helpers.
+Escape foi enviado para voltar à busca e ocultar o launcher; não houve uma
+testemunha separada de retorno de foco nesta fatia.
+
+Seleção visual de um jogo por setas, execução, handler de Downloads, conta,
+Flatpak, disco externo e outros monitores permanecem UNRUN. Os números acima
+são o inventário de metadados mostrado pela UI, sem comprovar acesso pela conta.
+S1 continua parcial; assets públicos 0.2.9 permanecem inalterados.
