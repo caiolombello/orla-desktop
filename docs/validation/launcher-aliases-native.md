@@ -6,7 +6,8 @@ com o mesmo nome; cancelar preservou a ausência do arquivo e Salvar pelo
 mouse gravou somente o ID do aplicativo selecionado. Uma rodada posterior
 confirmou consulta após reinício e retorno de foco, com dois marcadores salvos.
 **Enter fechou o launcher, mas o aplicativo próprio não executou: A=0/B=0.**
-Execução e renomeação/remoção continuam abertas; L2/UX2 permanecem parciais.
+Naquela rodada, execução e renomeação/remoção ficaram abertas. A seção final
+registra a prova após a correção; L2/UX2 permanecem parciais.
 
 O ambiente tinha pacotes Plasma/KWin 6.7.5, Qt 6.11.2 e KF6 6.30 instalados,
 Wayland, uma saída de 3840×2160 e escala observada 1,45. O ELF instalado tinha
@@ -113,9 +114,68 @@ término forçado, sinais externos ou erros; os dois bridges de input liberaram
 os dispositivos e saíram zero. Os 1.405 guards de arquivos e 233 de diretórios
 ficaram exatos. A configuração pessoal de aliases permaneceu ausente.
 
-O próximo passo é isolar a ausência de dispatch, incluindo o término do modo
+Naquela etapa, o próximo passo era isolar a ausência de dispatch, incluindo o término do modo
 `--no-global-shortcut` e o lançamento assíncrono no bus sem ativação. Esse
 resultado não prova falha no modo gerenciado que permanece vivo após ocultar.
 Execução A=1/B=0, edição/remoção com alvo disponível e ausente, esquema claro,
-outras escalas e monitores seguem abertos. As rodadas não mudaram código
+outras escalas e monitores ficaram abertos naquela etapa. As rodadas não mudaram código
 funcional, instalação nem assets públicos 0.2.9.
+
+## Lançamento, edição e fechamento após a correção
+
+O Source `dd02b7b` corrigiu a saída do modo sem atalho global: o encerramento
+agora respeita o quit lock do Qt e não permite reabrir uma sessão que já pediu
+saída definitiva. Seis casos no `main` real falharam antes da correção; os sete
+casos da regressão e os oito CTests completos passaram em Fusion e KDE depois.
+O build permanente foi instalado, com serviço ativo e ELF conferido. Apenas o
+caminho do executável no wrapper mudou; configurações, bancos de layout,
+preferências pessoais e semântica de Meta/atalhos ficaram exatos.
+
+Uma primeira rodada com esse build confirmou A=1/B=0 e edição/remoção, mas o
+supervisor perdeu a confirmação do último fechamento com `FileNotFoundError`.
+Ela permanece parcial: ausência posterior do PID não foi convertida em saída
+zero nem em retorno de foco. A corrida foi reproduzida com handles falsos e
+corrigida na rotina privada de acompanhamento; 41 testes puros e revisão
+independente passaram. A rotina só aceita o resultado do mesmo handle próprio,
+com espera limitada; uma identidade ausente não autoriza sinal por PID.
+
+A rodada seguinte começou com novos pins, nonce, perfil, bus, cache e KWrite,
+sem reaproveitar processos ou recibos. Os dados próprios criados pela UI foram
+copiados novamente como preparação, com bytes e modo conferidos. Os dois apps
+tinham o mesmo nome, IDs e comandos distintos, e descritores físicos/cache
+conferidos antes dos gestos.
+
+- O primeiro launcher mostrou o alias e fechou com Escape, saída zero e retorno
+  ao KWrite. O primeiro marcador foi salvo uma vez no documento sintético.
+- Após reiniciar no mesmo perfil desta rodada, um único Enter abriu A, com
+  A=1/B=0. O launcher saiu zero; o segundo marcador confirmou o retorno de foco.
+- No terceiro processo, Ctrl+K abriu o gerenciador. Editar e Salvar pelo mouse
+  persistiram o novo nome com o mesmo ID de A. Os cliques foram medidos na
+  captura própria e conferidos pela posição real do cursor.
+- Após retirar o descritor próprio de A, o alias apareceu indisponível. Enter
+  manteve a janela aberta e A=1/B=0, sem escolher B pelo nome. Remover pelo
+  gerenciador publicou a lista vazia; dois Escapes fecharam popup e launcher.
+  A saída foi zero e o terceiro marcador foi salvo uma vez no mesmo KWrite.
+
+Os três retornos chegaram ao mesmo UUID da janela anterior, em fullscreen.
+A limpeza terminou zero, sem término forçado, sinais externos ou erros;
+os dispositivos temporários foram liberados. Os 1.430 guards de arquivos e
+236 de diretórios ficaram exatos ao encerrar. O serviço instalado continuou
+com o mesmo PID/ELF, sem reinícios, e o arquivo pessoal de aliases permaneceu
+ausente.
+
+As capturas publicadas contêm somente a janela própria do launcher. Os chunks
+de imagem foram preservados; metadados textuais e de horário foram retirados.
+A verificação da cena aconteceu antes/depois da captura, sem prova contínua.
+
+| Fluxo real, esquema escuro | Captura |
+| --- | --- |
+| Editor antes de Salvar | [Editar no KDE](../screenshots/launcher-aliases/native-r5-edit.png) |
+| Alias ausente antes de Remover | [Indisponível no KDE](../screenshots/launcher-aliases/native-r5-missing.png) |
+
+Esse aceite é limitado ao build instalado e ao perfil privado nesta máquina,
+em uma saída de escala 1,45. Não qualifica o fluxo de aliases no perfil pessoal,
+atalho global nesta rodada, esquema claro nativo, acessibilidade, outras
+escalas/monitores ou todos os lançadores do KRunner. Favoritos, comandos internos
+e a conclusão de L2/UX2 permanecem abertos. As rodadas anteriores e os assets
+públicos 0.2.9 foram preservados.
