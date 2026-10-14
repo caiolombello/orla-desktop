@@ -156,6 +156,26 @@ A falha Fusion histórica da suíte completa de perfis não foi repetida.
 |---|---|
 | ![Prévia Maré](../screenshots/preset-catalog/preset-catalog-dark-mare-420.png) | ![Prévia Jogo](../screenshots/preset-catalog/preset-catalog-light-jogo-420.png) |
 
-Capturas do popup real em harness offscreen, com dados sintéticos. Instalação
-deste catálogo e gestos Plasma/Wayland permanecem UNRUN. C1/UX1/X1 continuam
-parciais; não há leitura de arquivo, catálogo externo ou marketplace nesta fatia.
+Capturas do popup real em harness offscreen, com dados sintéticos. C1/UX1/X1
+continuam parciais; não há leitura de arquivo, catálogo externo ou marketplace
+nesta fatia.
+
+### Instalação local e abertura passiva
+
+O commit `944c0e7` foi empacotado a partir de Source completa congelada
+(280 arquivos) para um diretório de saída privado gravável. O dock instalado
+passou de 66 a 67 arquivos: somente AppearancePresetControls mudou e
+AppearancePresetCatalog foi acrescentado. O upgrade foi realizado com uma
+recarga do Plasma, sem fallback de uninstall ou reset-failed, depois de revisão
+independente dos guards e rollback. O processo voltou ativo e saudável.
+
+Na sessão Plasma/Wayland, a abertura real de Aparência mostrou o catálogo e a
+orientação para criar/escolher um perfil, mantendo as escolhas desabilitadas nas
+preferências anteriores. Os valores parseados dos dois arquivos de configuração
+Plasma, barra, bancos/layout, launcher e seus três bindings permaneceram iguais,
+inclusive após a observação da UI. Nenhum perfil foi criado automaticamente.
+
+Escolher/Aplicar/Cancelar/Desfazer deste novo catálogo em perfil gerenciado
+continuam UNRUN no KDE real. Os testes e a prova nativa anterior da transação
+não substituem esse gesto novo. A captura nativa é privada e limitada à área
+de conteúdo; a galeria pública acima permanece sintética.

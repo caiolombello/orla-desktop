@@ -30,12 +30,15 @@ dock e barra permaneceram iguais. Seleção de jogo, execução, cliente e matri
 de bibliotecas ainda estão abertos; S1 permanece parcial. Veja o
 [registro](docs/validation/steam-root-discovery-source.md).
 
-**Quatro presets de aparência — Source:** Essencial, Maré, Estúdio e Jogo
+**Quatro presets de aparência — instalados com prova delimitada:** Essencial, Maré, Estúdio e Jogo
 oferecem prévia optativa de aparência e widgets, com Aplicar/Cancelar/Desfazer
 existentes. O estado aparece no botão, sem deslocar sua altura; a seleção antiga
 é recusada após mudança de perfil ou cancelamento reentrante. Passaram 69 testes
-relevantes por estilo, suíte final de presets 25/25, design e build. Instalação e
-gestos Wayland deste catálogo permanecem pendentes; C1/UX1/X1 seguem parciais.
+relevantes por estilo, suíte final de presets 25/25, design e build. O dock
+`944c0e7` foi instalado (67 arquivos); abertura passiva e orientação de perfil
+foram observadas em Wayland, sem mudar configuração, barra, bancos ou launcher.
+Escolher/Aplicar/Desfazer por esse novo controle em perfil gerenciado permanecem
+pendentes no KDE real; C1/UX1/X1 seguem parciais.
 Veja o [registro](docs/validation/appearance-presets-source.md).
 
 ## Resultado esperado
