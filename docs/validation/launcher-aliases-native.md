@@ -3,9 +3,10 @@
 Em 14/10/2026, o launcher de produção do código `4cf638f` passou a primeira
 parte do fluxo real de aliases. A consulta mostrou dois aplicativos próprios
 com o mesmo nome; cancelar preservou a ausência do arquivo e Salvar pelo
-mouse gravou somente o ID do aplicativo selecionado. **Reinício, execução,
-renomeação/remoção e retorno de foco continuam sem qualificação nesta prova.**
-L2/UX2 permanecem parciais.
+mouse gravou somente o ID do aplicativo selecionado. Uma rodada posterior
+confirmou consulta após reinício e retorno de foco, com dois marcadores salvos.
+**Enter fechou o launcher, mas o aplicativo próprio não executou: A=0/B=0.**
+Execução e renomeação/remoção continuam abertas; L2/UX2 permanecem parciais.
 
 O ambiente tinha pacotes Plasma/KWin 6.7.5, Qt 6.11.2 e KF6 6.30 instalados,
 Wayland, uma saída de 3840×2160 e escala observada 1,45. O ELF instalado tinha
@@ -82,8 +83,39 @@ lookup inadvertido de existência em `/proc` para PIDs de fixture. Esses logs
 não provam recusa de permissão; foram substituídos por contrastes com `os.stat`
 interceptado. Não se usa esses primeiros resultados como aceite nativo.
 
-O próximo teste deve registrar saída normal antes de retirar o fundo próprio,
-provar foco com digitação salva no mesmo documento, pesquisar o alias depois
-de reiniciar e confirmar A=1/B=0 somente após Enter. Edição/remoção com alvo
-disponível e ausente, esquema claro, outras escalas e monitores seguem abertos.
-Esta prova não mudou código funcional, instalação nem assets públicos 0.2.9.
+## Reinício e foco: rodada posterior
+
+Uma nova rodada usou Source `f448ac3`, o mesmo ELF funcional `4cf638f`, a rotina
+de acompanhamento corrigida e um novo perfil, nonce, bus, cache e KWrite.
+Os bytes 0600 do alias criado pelo mouse na rodada anterior foram copiados
+exclusivamente para esse novo perfil, com origem, destino e hashes registrados.
+Isso foi preparação de dados próprios; não representa nova criação pela UI
+nem continuação dos processos ou recibos anteriores. Nenhuma API do controlador
+foi usada para salvar ou executar.
+
+O preflight voltou a conferir os dois descritores físicos e o cache nos
+caminhos exatos. O primeiro processo novo mostrou `ornativea` como alias do
+aplicativo A. Escape produziu recibo normal de saída zero, retirou a janela do
+launcher e devolveu o foco ao mesmo UUID do KWrite. Digitação e Ctrl+S gravaram
+uma vez o primeiro marcador no documento sintético.
+
+O segundo processo novo, usando o mesmo perfil desta rodada, voltou a mostrar
+o alias. Antes de executar, A=0/B=0. Um único Enter fechou o launcher com saída
+zero e devolveu o foco; um segundo marcador distinto foi salvo uma vez no mesmo
+documento. Porém, não surgiu nenhum recibo de execução dos aplicativos próprios:
+A e B continuaram zero até a limpeza. O fechamento não comprova abertura do app.
+O log registra indisponibilidade do portal e fallback de lançamento do KIO no
+bus privado; a causa da ausência de execução ainda não foi isolada.
+
+A terceira fase, de editar/remover, não começou: seu gate exigia A=1/B=0 e foi
+mantido. A limpeza encerrou os quatro filhos próprios com saída zero, sem
+término forçado, sinais externos ou erros; os dois bridges de input liberaram
+os dispositivos e saíram zero. Os 1.405 guards de arquivos e 233 de diretórios
+ficaram exatos. A configuração pessoal de aliases permaneceu ausente.
+
+O próximo passo é isolar a ausência de dispatch, incluindo o término do modo
+`--no-global-shortcut` e o lançamento assíncrono no bus sem ativação. Esse
+resultado não prova falha no modo gerenciado que permanece vivo após ocultar.
+Execução A=1/B=0, edição/remoção com alvo disponível e ausente, esquema claro,
+outras escalas e monitores seguem abertos. As rodadas não mudaram código
+funcional, instalação nem assets públicos 0.2.9.

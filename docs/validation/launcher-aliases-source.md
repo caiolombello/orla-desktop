@@ -68,8 +68,11 @@ não foi provocada na sessão real.
 
 A [primeira prova nativa](launcher-aliases-native.md), de 14/10, passou consulta
 de nomes iguais, abertura centralizada do editor, cancelamento e Salvar pelo
-mouse sem executar os aplicativos. O acompanhamento da saída foi interrompido;
-reinício, execução, edição/remoção, retorno de foco, esquema claro nativo,
-acessibilidade, outras escalas e monitores continuam sem qualificação. L2/UX2
+mouse sem executar os aplicativos. Uma nova rodada com os dados próprios
+copiados para outro perfil confirmou consulta após reinício e retorno de foco
+com dois marcadores salvos. Um único Enter fechou o launcher, mas não produziu
+execução dos aplicativos de teste (A=0/B=0); a causa continua em investigação.
+Execução, edição/remoção, esquema claro nativo, acessibilidade, outras escalas
+e monitores continuam sem qualificação. L2/UX2
 permanecem parciais; favoritos, comandos internos e o setup completo seguem
 no roadmap. Assets públicos 0.2.9 permanecem inalterados.
