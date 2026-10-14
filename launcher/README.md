@@ -29,9 +29,28 @@ Os nove CTests passaram com Qt 6.11.2/KF6 6.30: Fusion em **106,643 s** e
 KDE em **110,889 s**. O teste de revisão externa falhou nos dois caminhos
 do candidato anterior e passou após a correção. A galeria sintética foi
 renderizada nos dois esquemas do sistema; o launcher mantém seu esquema
-escuro. Estas verificações offscreen não qualificam gestos Wayland, perfil
-pessoal, outras escalas ou monitores; a instalação deste incremento ainda
-não foi executada neste registro.
+escuro. A build permanente também passou os nove testes nos dois estilos
+e foi instalada, preservando Meta/defaults e 1.467 arquivos/240 diretórios
+protegidos.
+
+Em KDE/Wayland, tela única e DPR 1,45, foram observados por gestos reais:
+selecionar A com o homônimo B primeiro na lista, fixar A, reiniciar, abrir
+somente A por Enter (A=1/B=0), recusar o alvo ausente e removê-lo pelo mouse.
+O manager precisou ser reaberto depois que a atualização de disponibilidade
+invalidou o primeiro menu. Dois ensaios permanecem parciais: os limites de
+tempo encerraram a etapa final, preservando seus erros e a limpeza. Uma
+sessão nova recebeu exclusivamente os dados vazios removidos pela UI e
+confirmou reabertura vazia, preferências, dois Escapes, saída zero e retorno
+de foco à sua própria janela KWrite, com um marcador salvo uma vez. Essa
+união delimitada não é uma execução completa única. Perfil pessoal,
+atalho global nesta revisão, outras escalas e monitores continuam abertos.
+
+O ensaio revelou que **Abrir** ainda parecia disponível para um alvo ausente.
+A correção exige uma seleção disponível; clique, Enter e substituição no mesmo
+índice foram verificados em 440/660 px com favoritos e aliases. Os nove CTests
+passaram novamente com Fusion em **107,377 s** e KDE em **111,985 s**, e a
+galeria dos dois esquemas foi revisada. Essa correção ainda não recebeu um
+novo ensaio Wayland neste registro.
 
 | Estado sintético | Captura |
 |---|---|
@@ -41,6 +60,13 @@ não foi executada neste registro.
 | Lista longa e foco visível | [Rolagem](../docs/screenshots/launcher-favorites/launcher-favorites-list-focus-narrow.png) |
 | Aplicativo indisponível | [Remoção acessível](../docs/screenshots/launcher-favorites/launcher-favorites-missing-narrow.png) |
 | Favoritos inválidos, aliases disponíveis | [Erros independentes](../docs/screenshots/launcher-favorites/launcher-favorites-unavailable-aliases-enabled-narrow.png) |
+
+Capturas nativas dos estados observados: [favorito após reinício](../docs/screenshots/launcher-favorites/native-restart.png),
+[alvo ausente removível](../docs/screenshots/launcher-favorites/native-missing-manager.png) e
+[lista vazia reaberta](../docs/screenshots/launcher-favorites/native-empty-reopen.png).
+Elas contêm somente fixtures próprias; os pixels foram preservados ao retirar
+metadados. O compositor teve owner/PID/UID/época verificados, com executável/ABI
+opacos; os guards das capturas são observações antes/depois, sem prova contínua.
 
 ## Aliases de aplicativos — experimental
 

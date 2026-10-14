@@ -581,7 +581,8 @@ Window {
                 objectName: "executeButton"
                 property var executionTicket: null
                 text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias" || window.selectedRow.kind === "favorite") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
-                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked && !aliasPreferences.visible
+                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
+                    && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
                 onClicked: window.executeTicket(executionTicket, false)
                 leftPadding: Style.space.md

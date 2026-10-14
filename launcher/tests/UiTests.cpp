@@ -2114,7 +2114,10 @@ QtObject {
         ]
         function select(row) { selectedIndex = row; }
         function moveSelection(delta) {}
-        function execute(row, generation, id, actionId) { executed = executed.concat([{id:id,actionId:actionId}]) }
+        function execute(row, generation, id, actionId) {
+            if (!rows[row] || rows[row].enabled !== true) return
+            executed = executed.concat([{id:id,actionId:actionId}])
+        }
         function dismiss() { dismissed++ }
         function advance() { generation++; aliasRevision = "revision-" + generation; changed() }
         function rejected(name) { aliasError = name; changed(); return false }
@@ -2556,6 +2559,59 @@ QtObject {
         QVERIFY(click("favoriteRemove0"));
         QCOMPARE(evaluate(QStringLiteral("launcher.favorites.length")).toInt(), 0);
         QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 1);
+
+        // Ready describes the search, not whether the selected saved app is available.
+        evaluate(QStringLiteral("aliasPreferences.invalidate()"));
+        auto *openButton = item("executeButton");
+        QVERIFY(openButton);
+        QSignalSpy openClicked(openButton, SIGNAL(clicked()));
+        QVERIFY(openClicked.isValid());
+        const int dismissesBeforeDisabled = evaluate(QStringLiteral("launcher.dismissed")).toInt();
+        const auto footerClick = [&] {
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                openButton->mapToScene(QPointF(openButton->width()/2, openButton->height()/2)).toPoint());
+        };
+        const auto enterFromSearch = [&] {
+            auto *searchInput = item("searchInput");
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                searchInput->mapToScene(QPointF(searchInput->width()/2, searchInput->height()/2)).toPoint());
+            QVERIFY(searchInput->hasActiveFocus());
+            QTest::keyClick(window, Qt::Key_Return);
+        };
+        for (const QString &kind : {QStringLiteral("favorite"), QStringLiteral("alias")}) {
+            const int executedBeforeDisabled = evaluate(QStringLiteral("launcher.executed.length")).toInt();
+            const int clicksBeforeDisabled = openClicked.count();
+            const auto selectedSavedRow = [&](bool available, const QString &id) {
+                evaluate(QStringLiteral("launcher.query='';launcher.rows=[{id:'%1',kind:'%2',appId:'org.orla.synthetic.desktop',title:'App sintético',description:'',source:'App salvo por você',categoryLabel:'SALVOS',generation:launcher.generation,enabled:%3,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()")
+                    .arg(id, kind, available ? QStringLiteral("true") : QStringLiteral("false")));
+            };
+            selectedSavedRow(false, kind + QStringLiteral(":missing"));
+            QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000); // RED: ready+index used to enable it.
+            QCOMPARE(openButton->property("text").toString(), QStringLiteral("Abrir ↵"));
+            footerClick();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled);
+            enterFromSearch();
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled);
+            QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissesBeforeDisabled);
+            // A replacement at the same index becomes actionable without changing the search status.
+            selectedSavedRow(true, kind + QStringLiteral(":available"));
+            QTRY_VERIFY_WITH_TIMEOUT(openButton->isEnabled(), 1000);
+            enterFromSearch();
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed[launcher.executed.length-1].id")).toString(), kind + QStringLiteral(":available"));
+            footerClick();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 2);
+            selectedSavedRow(false, kind + QStringLiteral(":removed"));
+            QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000);
+            footerClick();
+            enterFromSearch();
+            QCOMPARE(openClicked.count(), clicksBeforeDisabled + 1);
+            QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), executedBeforeDisabled + 2);
+            QCOMPARE(evaluate(QStringLiteral("launcher.dismissed")).toInt(), dismissesBeforeDisabled);
+        }
+        evaluate(QStringLiteral("launcher.rows=[];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
+        QTRY_VERIFY_WITH_TIMEOUT(!openButton->isEnabled(), 1000);
 
     }
 };
