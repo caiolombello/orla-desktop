@@ -1,6 +1,6 @@
 # Orla Launcher — componente opcional experimental
 
-Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
+Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
 ## Steam local — somente no fonte
 
