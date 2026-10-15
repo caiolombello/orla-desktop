@@ -838,11 +838,17 @@ explícita, com controlador independente do checkout, readback do systemd e
 preservação da primeira falha. A instalação continua inerte; versões antigas de
 ferramentas e serviço legado não são adotados. Uma barreira bloqueia mutações de
 payload também no bootstrap anterior, até a retirada confirmada do serviço.
-Passaram 141 testes portáteis, incluindo 12 de serviço, e a prova de compatibilidade
+Passaram 143 testes portáteis, incluindo 14 de serviço, e a prova de compatibilidade
 com o bootstrap anterior. Em unidade inerte própria no systemd 259, argumentos
 especiais e limpeza de `failed` foram observados; o registro preserva o erro da
 primeira prova e um erro auxiliar de limpeza da segunda, que terminou sem unidade
-residual e sem alterar launcher/configurações anteriores. Serviço público com
+residual e sem alterar launcher/configurações anteriores. A primeira tentativa
+pública com o bundle do CI instalou e recusou a ativação antes de iniciar o ELF;
+o serviço foi retirado e o legado restaurado. O diagnóstico real confirmou que a
+enumeração de links do systemd não inclui esse diretório de dados. A correção
+revalida o link próprio após reload, com regressões de recusa indevida e drift;
+a falha inicial e o erro separado do roteiro de input permanecem registrados.
+Serviço público com
 ELF/atalho e novo login continuam sem qualificação nativa. Meta standalone,
 migração, outros ambientes e os demais gates R2/L0 seguem abertos. Veja o
 [fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).

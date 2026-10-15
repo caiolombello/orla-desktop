@@ -1,5 +1,6 @@
 """Owned causal service preflight/lock race; Root alone executes."""
 import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -49,6 +50,64 @@ class ManagedServiceLockRaceTests(unittest.TestCase):
 
 
 class ManagedServicePartialEnableTests(unittest.TestCase):
+    def test_public_cycle_accepts_owned_data_link_omitted_by_manager_enumeration(self):
+        fixture = fixtures.InstallGuardTests.fixture(self)
+        manager, paths = fixture[5], fixture[1]
+        fixtures.InstallGuardTests.install(self, fixture)
+
+        class DataLinkBackend(service_fixtures.FakeServiceBackend):
+            def snapshot(self):
+                value = super().snapshot()
+                # systemd 259 enumerates disable's config links, while the
+                # loaded unit's Wants dependency also uses the data directory.
+                value["links"] = []
+                return value
+
+        backend = DataLinkBackend(paths, fixture[3])
+        with contextlib.ExitStack() as guards:
+            guards.enter_context(mock.patch.object(manager, "NativeServiceBackend", return_value=backend))
+            for name in ("subprocess.Popen", "subprocess.run", "os.execv", "os.execve", "os.system"):
+                guards.enter_context(mock.patch(name, side_effect=AssertionError("no real native/process: " + name)))
+            for action, status in (("enable", "active"), ("status", "active"), ("disable", "disabled")):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = manager.main(["--home", str(paths.home), "--data-home", str(paths.data_home),
+                                         "--state-home", str(paths.state_home), "service", action])
+                self.assertEqual(code, 0, output.getvalue())
+                self.assertEqual(json.loads(output.getvalue())["status"], status)
+        self.assertEqual(backend.events.count("start"), 1)
+        self.assertEqual(backend.events.count("stop"), 1)
+        self.assertFalse(backend.unit.exists())
+        self.assertFalse(backend.link.is_symlink())
+        fixtures.InstallGuardTests.assert_userdata(self, fixture)
+
+    def test_unenumerated_link_is_revalidated_after_reload_before_start(self):
+        for change in ("remove", "retarget"):
+            with self.subTest(change=change):
+                fixture = fixtures.InstallGuardTests.fixture(self)
+                manager, paths = fixture[5], fixture[1]
+                fixtures.InstallGuardTests.install(self, fixture)
+
+                class ChangedLinkBackend(service_fixtures.FakeServiceBackend):
+                    def snapshot(self):
+                        value = super().snapshot()
+                        value["links"] = []
+                        return value
+
+                    def reload(self):
+                        super().reload()
+                        self.link.unlink()
+                        if change == "retarget":
+                            self.link.symlink_to(self.unit.parent / "foreign.service")
+
+                backend = ChangedLinkBackend(paths, fixture[3])
+                with self.assertRaises(manager.InstallError) as raised:
+                    manager.service(paths, "enable", backend=backend)
+                self.assertEqual(raised.exception.code, "service_drift")
+                self.assertNotIn("start", backend.events)
+                self.assertFalse(backend.running)
+                fixtures.InstallGuardTests.assert_userdata(self, fixture)
+
     def test_failed_start_with_no_pid_is_stopped_before_removing_its_unit(self):
         fixture = fixtures.InstallGuardTests.fixture(self)
         manager, paths = fixture[5], fixture[1]

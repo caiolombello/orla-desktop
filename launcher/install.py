@@ -1387,8 +1387,10 @@ def service(paths: InstallPaths, action: str, *, backend=None) -> dict:
                 backend.reload()
                 value = backend.snapshot()
                 _service_effective(paths, receipt, value)
-                _service_need(value["pid"] == 0 and value["links"] == [str(link)]
-                              and backend.owner_pid() is None, "service_singleton_busy")
+                # GetUnitFileLinks enumerates disable's config links, not our
+                # data-directory Wants link. Recheck its exact filesystem owner.
+                _service_need(_service_files(paths, record) == (True, True), "service_drift")
+                _service_need(value["pid"] == 0 and backend.owner_pid() is None, "service_singleton_busy")
                 backend.start()
                 result = _service_status(paths, backend)
                 _service_need(result["status"] == "active", "service_start_unknown")

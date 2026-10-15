@@ -625,8 +625,8 @@ esse limite. Falhas retêm a primeira causa e a barreira; a retirada explícita
 pode continuar quando os recursos próprios restantes forem verificáveis.
 Arquivos temporários inertes de uma publicação interrompida ficam preservados.
 
-Passaram 70 testes de instalação/CLI, 56 do pacote e 15 do bundle, incluindo
-12 casos de serviço com backend finito. O bootstrap anterior real recusou
+Passaram 72 testes de instalação/CLI, 56 do pacote e 15 do bundle, incluindo
+14 casos de serviço com backend finito. O bootstrap anterior real recusou
 alterações com a barreira e voltou a consultar a instalação após a retirada.
 Essas provas usam payloads sintéticos e não iniciam o launcher ou D-Bus.
 
@@ -637,7 +637,21 @@ A primeira prova revelou que parar não limpa `failed`; a correção foi repetid
 em perfil novo. A limpeza auxiliar da segunda prova acusou erro num reset
 adicional, preservado no registro; a unidade terminou ausente, e o launcher
 anterior e nove configurações protegidas ficaram exatos. Isso qualifica somente
-esses mecanismos do backend. Ativar o serviço público com o ELF instalado,
+esses mecanismos do backend.
+
+A tentativa pública com o [bundle do CI 38675652867](https://github.com/caiolombello/orla-desktop/actions/runs/38675652867)
+instalou os arquivos e recusou a ativação com `service_singleton_busy`, antes de
+iniciar o ELF. A retirada pública e a restauração do legado passaram; um erro do
+roteiro ao reconhecer o fechamento do input ficou preservado, e a ausência dos
+dispositivos temporários foi conferida depois. Um diagnóstico inerte no manager
+real confirmou o vínculo com `graphical-session.target`, embora
+[`GetUnitFileLinks`](https://github.com/systemd/systemd/blob/v259/src/core/dbus-manager.c)
+retorne uma lista vazia para esse diretório de dados. A correção revalida o link
+próprio no disco depois do reload e mantém as recusas de dono, identidade e links
+estranhos. A regressão reproduziu a recusa antes da correção e passou depois,
+incluindo remoção/troca do link durante o reload sem iniciar o serviço.
+
+Ativar o serviço público com o ELF instalado,
 abrir/ocultar pelo atalho, desativar e iniciar após novo login seguem pendentes.
 R2/L0 continuam parciais; a instalação principal permanece no launcher anterior.
 O contrato usa as referências do
