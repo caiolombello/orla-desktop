@@ -121,8 +121,16 @@ QtObject {
         if (validated.error) return fail(validated.error);
         if (!check(expectedScope, expectedRevision, false)) return false;
         if (activeProfileId === "legacy") {
-            // Guarded batches require the one-setter managed-profile path.
-            if (continuationGuard !== undefined) return false;
+            // A guarded legacy launcher patch still has exactly one setter.
+            if (continuationGuard !== undefined) {
+                const keys = Object.keys(validated.value);
+                if (keys.length !== 1 || keys[0] !== "launchers") return false;
+                try { if (continuationGuard() !== true) return false; }
+                catch (_) { return false; }
+                if (!writable || expectedScope !== activeProfileId || expectedRevision !== revision) return false;
+                configuration.launchers = validated.value.launchers;
+                return true;
+            }
             if (validated.value.widgets && validated.value.widgets.some((widget, index) => widget.id !== Profiles.widgetIds[index]))
                 return fail(qsTr("Crie/use um perfil para organizar os widgets"));
             // Validate the whole patch first; legacy writes only its supplied fields.
