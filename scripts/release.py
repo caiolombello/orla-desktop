@@ -15,6 +15,8 @@ import caiodock
 # Design checks and the gallery compare the bar and launcher token copies too.
 SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml",
                                "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
+                               "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",
+                               "tests/native/run_control_center_audio.py", "tests/native/control_center_audio.conf.in",
                                "tests/test_design_system.py", "tests/design_gallery.py"))
 
 

@@ -494,3 +494,81 @@ above remain separate. Final status:
 `PASS_INSTALLED_CC_PUBLIC_REHOSTING_AND_TECHNICAL_TAB`, receipt
 `.runtime/cc-transfer-20261015/root-native-r2/RESULT.json`; independent cleanup:
 `root-independent-cleanup-r1/RESULT.json`.
+
+## Native audio pending transfer — 15 October 2026
+
+`tests/native/run_control_center_audio.py` now provides a reproducible isolated
+Wayland/KWin, D-Bus and PipeWire session for the production Control Center.
+`control_center_audio.py` loads the existing dock/bar fixtures, keeps their fake
+settings actions and replaces only the audio override with QML `null`. That
+activates the actual `NativePulseAudio` loader and PlasmaPA client. It neither
+installs code nor sends input to the installed desktop.
+
+The private PipeWire configuration loads no ALSA, Bluetooth, network, device
+enumeration or session-manager modules. Its only outputs are two
+`support.null-audio-sink` nodes, explicitly advertised with `node.virtual=false`.
+This is a synthetic protocol descriptor: PlasmaPA derives `virtualDevice` from
+the Pulse hardware flag, which PipeWire supplies when `node.virtual` is false.
+The production eligibility filter is unchanged. These fixtures certify no
+physical device. The mapping was checked against
+[PulseAudioQt 1.8.1](https://raw.githubusercontent.com/KDE/pulseaudio-qt/v1.8.1/src/device_p.h),
+[PipeWire 1.6.9's node classification](https://raw.githubusercontent.com/PipeWire/pipewire/1.6.9/src/modules/module-protocol-pulse/manager.c)
+and [its Pulse sink flags](https://raw.githubusercontent.com/PipeWire/pipewire/1.6.9/src/modules/module-protocol-pulse/pulse-server.c).
+
+The fresh process uses an explicit private Pulse socket, client configuration
+with autospawn disabled, a private PipeWire core, four private XDG directories
+and an unavailable system bus. The runner captures Source hashes, compares
+known host configuration/package file hashes and modes, and releases only
+processes matching its UID, birth time and unique runtime marker through pidfds.
+Output directories cannot be reused; unsafe path characters are rejected before
+creation. It redacts the home path from owned logs after process cleanup.
+
+The native fixture establishes a pending 80% volume gesture and accepts the
+canonical bar request in one JS frame, before pumping Qt events. It observes:
+
+- Pending request and gesture cleared before `aboutToHide`, and again before
+  the transfer call returns.
+- The actual backend `QObject.destroyed` signal before changing host and
+  publishing its successor. A null loader item is recorded separately and
+  does not count as destruction.
+- Late real readback of 80%, independently checked with `pactl` on the private
+  server, without any old confirmation, non-null event presentation or
+  accessibility announcement.
+- A new 60% request confirmed once, one event presentation and one announcement;
+  the independent server readback is 39,322 raw on both channels. Queue occupancy
+  alone is not used to infer a single HUD history.
+- Return to the dock with the same view and `AudioControlState`, then final
+  close. Three backend QObjects were published and three destroyed, with at
+  most one published backend alive. Counters and observer errors are checked
+  through engine teardown.
+
+Fusion and `org.kde.desktop` runs passed with Qt/PySide6 6.11.2, KWin/PlasmaPA
+6.7.5, PulseAudioQt 1.8.1 and PipeWire 1.6.9. Each ended with zero QML warnings,
+zero lifecycle violations, no tracked live backend and no owned process left;
+the host file fingerprints and Source hashes remained equal. The 76 portable
+audio/Session/Registry checks passed in each style. Design check reported zero
+issues and all seven design guards passed. No product UI, token or geometry
+changed, so this increment reuses the existing visual captures.
+
+The runner and its fixtures require the Source-only bar, so the alpha bundle
+excludes all four new native-audio files. The release test reproduced their
+accidental inclusion before the exclusion and passed after it, retaining its
+byte-for-byte repeat-build and checksum assertions. Published assets are unchanged.
+
+A private negative control removed only `beginClose()`'s audio invalidation.
+The same native test failed with `audio_not_cancelled_before_close`, despite
+eventual cancellation and otherwise successful readback; cleanup still passed.
+This establishes sensitivity to the pre-close ordering regression. No mutation
+was applied to the working tree or installed applet.
+
+An earlier attempt remains failed: assigning Python `None` to the QML `var`
+override produced `undefined`, so the real backend was never loaded. Assigning
+actual JS `null` corrected the fixture. This was not a reproduced product bug.
+Private receipts live under `.runtime/cc-audio-20261015/`; the public runner's
+two JSON results distinguish probe failure from supervisor/cleanup failure.
+
+This closes the isolated real-protocol fixture gap. It does not qualify an audio
+operation pending during transfer in the installed panel, physical input,
+physical hardware, native setter counts, all PulseAudioQt global connections or
+threads, other outputs, or the complete CC0/CC1/T1 acceptance. The current applet
+installation and public 0.2.9 assets were not changed in this increment.
