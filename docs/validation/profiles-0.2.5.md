@@ -324,10 +324,28 @@ reported zero issues. The gallery rendered 70 PNGs; all eight widget captures
 were pixel-identical to the published dark/light 350/420 px images. Four of those
 new captures were visually reviewed. These tests qualify the accessible tree
 and response to focus; they do not establish physical Tab traversal or native
-drag acceptance. Installation and native qualification of this correction remain
-separate gates. Private records are under `root-reachability-r1/`,
+drag acceptance. Installation and native qualification were checked separately
+below. Private records are under `root-reachability-r1/`,
 `root-reachability-open-r1/`, `root-a11y-probe-r1/`, `root-a11y-validation-r1/`
 and `root-a11y-gallery-r1/` in the widget evidence area.
+
+The correction `aad9ca1` was subsequently installed with a backup and one
+controlled Plasma stop/start. Only SettingsContents changed in the 67-file
+package. The case-preserving configuration map, panel/app inventory, protected
+files and modes, actual launcher unit/link facts and resident launcher remained
+equal. Runtime profile-key absence and an inert timer were checked before stop.
+
+A fresh production visit rebound to the new shell/window identity, opened
+Settings and selected Widgets through pointer clicks. After public accessibility
+focus on the clock checkbox, a physical Tab focused Pomodoro. The named actual
+Flickable measured 297×470; both complete 297×50 row groups were contained in it.
+Escape closed the popup, all four tab headers became absent/not showing, and the
+dock retracted. Configuration bytes, package and the visit's shell identity were
+preserved, with the launcher unchanged, accessibility restored and all owned
+devices/observer removed. This qualifies that particular native Tab/focus path
+and row geometry on the single fractional-scale setup. Managed-profile dragging,
+reversal, other keyboard paths and other screens remain open. Receipts are in
+`root-a11y-local-r1/`, `root-a11y-panel-read-r1/` and `root-a11y-native-r1/`.
 
 ### Launcher CI diagnosis checkpoint
 

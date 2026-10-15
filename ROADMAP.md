@@ -954,13 +954,18 @@ desativadas do legado. Só a primeira estava visível; a geometria do viewport
 não foi exposta pela acessibilidade. Escape, recolhimento e ausência posterior
 dos controles do popup foram verificados, sem mudar a configuração.
 
-**Acessibilidade e foco das linhas — Source:** a inspeção seguinte encontrou
+**Acessibilidade e foco das linhas — instalados:** a inspeção seguinte encontrou
 o painel de rolagem, mas as linhas não tinham grupos acessíveis e o foco em uma
 opção podia deixar parte da linha cortada. A correção nomeia o viewport existente,
 agrupa cada widget e revela a linha inteira ao focar checkbox ou setas. Passaram
 63 testes e um skip por estilo Fusion/KDE, sete guardas e design sem problemas;
-as oito capturas de widgets permaneceram iguais em pixels. A instalação e a
-prova nativa dessa correção ainda são gates separados. O diagnóstico também
+as oito capturas de widgets permaneceram iguais em pixels. `aad9ca1` foi instalado
+com backup e uma recarga controlada, preservando o mapa de configuração,
+inventário, arquivos/modos protegidos e launcher. Em Wayland, depois do foco
+público no relógio, Tab focou Pomodoro e as duas linhas completas ficaram dentro
+do viewport real nomeado. Escape, ausência dos cabeçalhos do popup e recolhimento
+passaram. Perfis novos, arraste/reversão e demais caminhos de teclado continuam
+abertos. O diagnóstico também
 passou a usar os cabeçalhos do popup para abertura/fechamento, pois a aba Widgets
 fica selecionada ao reabrir e não contém o botão Cancelar de Aparência.
 
