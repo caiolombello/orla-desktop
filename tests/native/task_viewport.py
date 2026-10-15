@@ -1,4 +1,4 @@
-"""One stable-overflow drag through real Qt pointer events on the owned fixture."""
+"""Stable overflow and partial-destination refusal through owned Qt pointer events."""
 import json
 import time
 from PySide6.QtCore import QPoint, QPointF, Qt
@@ -129,6 +129,71 @@ def run_viewport(window, config, dock, evaluate, snapshot, record, result):
             "foreignRowCount": foreign_count, "fullBeforeOrder": full_ids, "fullAfterOrder": expected_full_ids,
             "geometryBefore": before_geometry, "profilesSetterSignals": writes.count(), "clickedSignals": 0}
         record("viewport-stable-overflow-release")
+        result["viewportCases"] = [result["viewportCase"]]
+
+        # Start from the accepted order; never focus the clipped destination.
+        window.requestActivate()
+        settle(window.isActive)
+        first_x = rect(tiles()[0][1])[0] + viewport.property("contentX")
+        maximum = viewport.property("contentWidth") - viewport.width()
+        assert maximum > 0 and first_x > 0, "partial_destination_no_overflow"
+        viewport.setProperty("contentX", min(maximum, first_x))
+        QTest.qWait(100)
+        current_tiles = tiles()
+        complete = [(row, item) for row, item in current_tiles if inside(rect(item))]
+        partial = [(row, item) for row, item in current_tiles
+                   if 0 <= rect(item)[0] < viewport.width() < rect(item)[0] + item.width()]
+        assert complete and len(partial) == 1, "partial_destination_geometry_missing"
+        source, source_item = complete[0]
+        target, target_item = partial[0]
+        assert source["row"] < target["row"], "partial_destination_not_after_source"
+        focus_geometry = geometry()
+        source_item.forceActiveFocus()
+        QTest.qWait(30)
+        assert geometry() == focus_geometry and not viewport.property("moving"), "partial_destination_focus_scrolled"
+        before = snapshot()
+        full_raw = evaluate("JSON.stringify(taskOrder())")
+        raw = saved()
+        before_geometry = geometry()
+        writes = QSignalSpy(config.profilesJSONChanged)
+        legacy_writes = QSignalSpy(config.launchersChanged)
+        clicks = [QSignalSpy(item.clicked) for _, item in tiles()]
+        bounds = rect(target_item)
+        clipped_left = max(0, bounds[0])
+        clipped_right = min(viewport.width(), bounds[0] + bounds[2])
+        assert 0 < clipped_right - clipped_left < bounds[2], "partial_destination_not_clipped"
+        destination = viewport.mapToScene(QPointF((clipped_left + clipped_right) / 2,
+                                                  bounds[1] + bounds[3] / 2)).toPoint()
+        actual = viewport.mapFromItem(window.contentItem(), QPointF(destination))
+        assert clipped_left <= actual.x() < clipped_right and bounds[1] <= actual.y() < bounds[1] + bounds[3], "partial_destination_rounded_point_outside"
+        assert 0 <= actual.x() < viewport.width() and 0 <= actual.y() < viewport.height(), "partial_destination_pointer_outside_viewport"
+        result["viewportInProgress"] = {"case": "partial-destination-rejected", "source": source["id"],
+            "target": target["id"], "targetBounds": bounds, "visibleWidth": clipped_right - clipped_left,
+            "pointerInViewport": [actual.x(), actual.y()], "geometryBefore": before_geometry}
+        start = source_item.mapToScene(QPointF(source_item.width() / 2, source_item.height() / 2)).toPoint()
+        last = start
+        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
+        held = True
+        move(QPoint(start.x() + 18, start.y()))
+        assert evaluate("taskDrag.active"), "partial_destination_threshold_not_active"
+        move(destination)
+        QTest.qWait(50)
+        marker = named("taskDropIndicator")
+        assert evaluate("taskDrag.active") and evaluate("taskDrag.destination") == "", "partial_destination_accepted_or_canceled"
+        assert not marker.isVisible(), "partial_destination_marker_visible"
+        assert snapshot() == before and saved() == raw and evaluate("JSON.stringify(taskOrder())") == full_raw, "partial_destination_hold_mutation"
+        assert geometry() == before_geometry, "partial_destination_hold_scrolled"
+        assert writes.count() == legacy_writes.count() == 0 and all(spy.count() == 0 for spy in clicks), "partial_destination_hold_write_or_click"
+        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, destination)
+        held = False
+        QTest.qWait(100)
+        assert snapshot() == before and saved() == raw and evaluate("JSON.stringify(taskOrder())") == full_raw, "partial_destination_release_mutation"
+        assert writes.count() == legacy_writes.count() == 0 and all(spy.count() == 0 for spy in clicks), "partial_destination_release_write_or_click"
+        assert not evaluate("taskDrag.pressed") and not marker.isVisible(), "partial_destination_terminal_ticket_or_marker"
+        result["viewportCases"].append({**result["viewportInProgress"], "profilesSetterSignals": writes.count(),
+                                        "clickedSignals": 0, "fullOrderUnchanged": True, "savedUnchanged": True})
+        result.pop("viewportInProgress")
+        record("viewport-partial-destination-rejected")
     finally:
         if held:
             QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, last)
