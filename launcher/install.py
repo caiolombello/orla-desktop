@@ -1,8 +1,9 @@
 """Experimental owned launcher installation manager.
 
 Phase A installs inert verified files, with runtime explicitly unverified.
-Recovery only finishes cleanup of an already fully published installation.
-Service, Meta, update, rollback and partial transactions are separate verticals.
+Payload updates retain one predecessor and the original management tools.
+Install-tail recovery and interrupted-update recovery have separate commands.
+Service, Meta, toolchain updates and retained-payload cleanup remain separate.
 """
 
 from __future__ import annotations
@@ -269,8 +270,7 @@ def _directories(paths, digest):
             "payload-bin": version / "bin", "payload-libexec": version / "libexec", "tools": base / "tools"}
 
 
-def _receipt(paths):
-    data, _pin = _read(_state(paths) / "current.json", mode=0o600, limit=MAX_RECEIPT_BYTES)
+def _receipt_value(paths, data):
     value = _strict_json(data)
     if type(value) is not dict or set(value) != {"schema", "archiveSha256", "commit", "uid", "runtime", "files", "directories"} \
             or value["schema"] != SCHEMA or type(value["archiveSha256"]) is not str or SHA256.fullmatch(value["archiveSha256"]) is None \
@@ -301,6 +301,12 @@ def _receipt(paths):
                 or len(record["pin"]) != 5 or any(type(number) is not int for number in record["pin"]):
             raise InstallError("receipt_schema")
         seen.add(record["key"])
+    return value
+
+
+def _receipt(paths):
+    data, _pin = _read(_state(paths) / "current.json", mode=0o600, limit=MAX_RECEIPT_BYTES)
+    value = _receipt_value(paths, data)
     # Historical admission is immutable; current may never rewrite it to drift.
     old, _pin = _read(_state(paths) / "receipts" / (value["archiveSha256"] + ".json"), mode=0o600, limit=MAX_RECEIPT_BYTES)
     if old != data:
@@ -308,14 +314,21 @@ def _receipt(paths):
     return value
 
 
-def _guard(paths, receipt):
+def _guard(paths, receipt, *, versions_root=None):
     fixed = _files(paths, receipt["archiveSha256"])
+    if versions_root is not None:
+        for relative, mode in PAYLOAD:
+            fixed["payload/" + relative] = (versions_root / receipt["archiveSha256"] / relative, mode)
     for record in receipt["files"]:
         path, mode = fixed[record["key"]]
         data, _pin = _read(path, mode=mode)
         if len(data) != record["size"] or hashlib.sha256(data).hexdigest() != record["sha256"]:
             raise InstallError("managed_drift")
     directories = _directories(paths, receipt["archiveSha256"])
+    if versions_root is not None:
+        version = versions_root / receipt["archiveSha256"]
+        directories.update({"versions": versions_root, "version": version,
+                            "payload-bin": version / "bin", "payload-libexec": version / "libexec"})
     for record in receipt["directories"]:
         with _directory(directories[record["key"]]) as descriptor:
             if list(_directory_identity(os.fstat(descriptor))) != record["pin"]:
@@ -1016,6 +1029,472 @@ def recover_finish_install(paths: InstallPaths, *, backend=None) -> dict:
         raise InstallError("filesystem_unknown") from error
 
 
+UPDATE_SCHEMA = "orla-launcher-payload-update-0.1"
+MAX_UPDATE_BYTES = 512 * 1024
+UPDATE_SHARED = ("tools/install.py", "tools/package.py", "controller", "launcher", "menu")
+UPDATE_PARENTS = ("state", "receipts", "transactions", "state-slot", "data-slot")
+
+
+def _update_need(value, code="update_bank"):
+    if not value:
+        raise InstallError(code)
+
+
+def _update_paths(paths):
+    state_slot = _state(paths) / "payload-update"
+    data_slot = paths.data_home / "orla-desktop/launcher-update"
+    candidates = [state_slot / name for name in ("bank.json", "current.json", "barrier.json", "first-error.json")]
+    candidates += [data_slot / "versions" / ("0" * 64) / relative for relative, _mode in PAYLOAD]
+    candidates += [_state(paths) / "receipts" / ("0" * 64 + ".json")]
+    for path in candidates:
+        _update_need(len(os.fsencode(path)) <= 4096 and len(path.parts) <= 64 and
+                     all(len(os.fsencode(part)) <= 255 for part in path.parts), "install_paths")
+    return state_slot, data_slot
+
+
+def _update_members(path, expected, optional=()):
+    with _directory(path) as descriptor:
+        names = set()
+        with os.scandir(descriptor) as entries:
+            for entry in entries:
+                names.add(entry.name)
+                _update_need(len(names) <= len(expected) + len(optional), "update_workspace")
+        _update_need(set(expected) <= names <= set(expected) | set(optional), "update_workspace")
+    return names
+
+
+def _update_parent_paths(paths):
+    state_slot, data_slot = _update_paths(paths)
+    return {"state": _state(paths), "receipts": _state(paths) / "receipts",
+            "transactions": _state(paths) / "transactions", "state-slot": state_slot, "data-slot": data_slot}
+
+
+def _update_parent_pins(paths):
+    result = []
+    for key, path in _update_parent_paths(paths).items():
+        with _directory(path) as descriptor:
+            value = os.fstat(descriptor)
+            _update_need(value.st_uid == os.getuid() and stat.S_IMODE(value.st_mode) == 0o700, "update_parent")
+            result.append({"key": key, "pin": list(_directory_identity(value))})
+    return result
+
+
+def _update_capture(path, key, mode):
+    data, pin = _read(path, mode=mode)
+    return {"key": key, "pin": list(pin), "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def _update_file_schema(record, key, mode):
+    _update_need(type(record) is dict and set(record) == {"key", "pin", "size", "sha256"} and record["key"] == key)
+    _update_need(type(record["size"]) is int and 0 < record["size"] <= MAX_FILE_BYTES and
+                 type(record["sha256"]) is str and SHA256.fullmatch(record["sha256"]) is not None and _recovery_pin(record["pin"], 9))
+    pin = record["pin"]
+    _update_need(stat.S_ISREG(pin[2]) and stat.S_IMODE(pin[2]) == mode and pin[3] == os.getuid() and
+                 pin[5] == 1 and pin[6] == record["size"])
+
+
+def _update_moved_schema(record, fields):
+    _update_need(type(record) is dict and set(record) == set(fields) and _recovery_pin(record["pin"], 9))
+    encoded = record["dataHex"]
+    _update_need(type(encoded) is str and 0 < len(encoded) <= MAX_RECEIPT_BYTES * 2 and len(encoded) % 2 == 0 and
+                 re.fullmatch(r"[0-9a-f]+", encoded) is not None)
+    pin = record["pin"]
+    _update_need(stat.S_ISREG(pin[2]) and stat.S_IMODE(pin[2]) == 0o600 and pin[3] == os.getuid() and
+                 pin[5] == 1 and pin[6] == len(encoded) // 2)
+    return bytes.fromhex(encoded)
+
+
+def _update_bank(paths, data):
+    _update_need(len(data) <= MAX_UPDATE_BYTES)
+    bank = _strict_json(data)
+    _update_need(type(bank) is dict and set(bank) == {"schema", "uid", "from", "to", "selectors", "payloads",
+                                                   "shared", "histories", "parents", "barrier"})
+    _update_need(bank["schema"] == UPDATE_SCHEMA and type(bank["uid"]) is int and bank["uid"] == os.getuid() and data == _json(bank))
+    receipts = []
+    for key in ("from", "to"):
+        value = _receipt_value(paths, _json(bank[key]))
+        _update_need(value == bank[key])
+        _update_need([item["key"] for item in value["files"]] == list(_files(paths, value["archiveSha256"])))
+        _update_need([item["key"] for item in value["directories"]] == list(_directories(paths, value["archiveSha256"])))
+        for item in value["directories"]:
+            pin = item["pin"]
+            _update_need(_recovery_pin(pin, 5) and stat.S_ISDIR(pin[2]) and stat.S_IMODE(pin[2]) == 0o755 and pin[3] == os.getuid())
+        receipts.append(value)
+    a, b = receipts
+    _update_need(a["archiveSha256"] != b["archiveSha256"])
+    file_maps = [{item["key"]: item for item in value["files"]} for value in receipts]
+    dir_maps = [{item["key"]: item["pin"] for item in value["directories"]} for value in receipts]
+    _update_need(all(file_maps[0][key] == file_maps[1][key] for key in UPDATE_SHARED) and
+                 all(dir_maps[0][key] == dir_maps[1][key] for key in ("base", "tools")) and
+                 dir_maps[0]["versions"][:2] != dir_maps[1]["versions"][:2])
+    selectors = bank["selectors"]
+    _update_need(type(selectors) is list and len(selectors) == 2)
+    for item, key, receipt in zip(selectors, ("from", "to"), receipts):
+        raw = _update_moved_schema(item, ("key", "pin", "dataHex"))
+        _update_need(item["key"] == key and raw == _json(receipt))
+    _update_need(selectors[0]["pin"][:2] != selectors[1]["pin"][:2])
+    payloads = bank["payloads"]
+    _update_need(type(payloads) is list and len(payloads) == 2)
+    for item, key, files in zip(payloads, ("from", "to"), file_maps):
+        _update_need(type(item) is dict and set(item) == {"key", "files"} and item["key"] == key and
+                     type(item["files"]) is list and len(item["files"]) == len(PAYLOAD))
+        for record, (name, mode) in zip(item["files"], PAYLOAD):
+            label = "payload/" + name
+            _update_file_schema(record, label, mode)
+            _update_need(record["size"] == files[label]["size"] and record["sha256"] == files[label]["sha256"])
+    for group, keys in (("shared", UPDATE_SHARED), ("histories", ("from", "to"))):
+        records = bank[group]
+        _update_need(type(records) is list and len(records) == len(keys))
+        for item, key in zip(records, keys):
+            mode = int(file_maps[0][key]["mode"], 8) if group == "shared" else 0o600
+            _update_file_schema(item, key, mode)
+            expected = file_maps[0][key] if group == "shared" else {
+                "size": len(_json((b if key == "to" else a))), "sha256": hashlib.sha256(_json((b if key == "to" else a))).hexdigest()}
+            _update_need(item["size"] == expected["size"] and item["sha256"] == expected["sha256"])
+    parents = bank["parents"]
+    _update_need(type(parents) is list and len(parents) == len(UPDATE_PARENTS))
+    for item, key in zip(parents, UPDATE_PARENTS):
+        _update_need(type(item) is dict and set(item) == {"key", "pin"} and item["key"] == key and _recovery_pin(item["pin"], 5))
+        pin = item["pin"]
+        _update_need(stat.S_ISDIR(pin[2]) and stat.S_IMODE(pin[2]) == 0o700 and pin[3] == os.getuid())
+    raw_barrier = _update_moved_schema(bank["barrier"], ("pin", "dataHex"))
+    barrier = _pending_value(paths, raw_barrier)
+    expected_barrier = {"schema": "orla-launcher-pending-0.1", "operation": "install", "archiveSha256": b["archiveSha256"],
+                        "commit": b["commit"], "uid": os.getuid(), "code": "transaction_in_progress", "files": b["files"],
+                        "ownedFiles": [], "directories": []}
+    _update_need(barrier == expected_barrier and raw_barrier == _json(expected_barrier))
+    return bank
+
+
+def _update_moved(path, record):
+    data, pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+    original = record["pin"]
+    _update_need(list(pin[:8]) == original[:8] and pin[8] >= original[8] and data.hex() == record["dataHex"], "update_moved_changed")
+    return pin
+
+
+def _update_optional(path):
+    with _directory(path.parent) as parent:
+        try:
+            return os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+
+
+def _update_guard(paths, data, pin):
+    state_slot, data_slot = _update_paths(paths)
+    actual, current_pin = _read(state_slot / "bank.json", mode=0o600, limit=MAX_UPDATE_BYTES)
+    _update_need(actual == data and list(current_pin) == list(pin), "update_bank_changed")
+    bank = _update_bank(paths, actual)
+    _update_need(_update_parent_pins(paths) == bank["parents"], "update_parent")
+    for name in ("pending.json", "pending-error.json"):
+        _update_need(_update_optional(_state(paths) / name) is None, "pending_transaction")
+    active = _update_optional(_state(paths) / "pending-intent.json") is not None
+    parked = _update_optional(state_slot / "barrier.json") is not None
+    _update_need(active != parked, "update_barrier")
+    _update_moved(_state(paths) / "pending-intent.json" if active else state_slot / "barrier.json", bank["barrier"])
+    names = _update_members(state_slot, {"bank.json", "current.json"} | ({"barrier.json"} if parked else set()), {"first-error.json"})
+    _update_members(data_slot, {"versions"})
+    if "first-error.json" in names:
+        _read(state_slot / "first-error.json", mode=0o600, limit=4096)
+    receipts = {key: bank[key] for key in ("from", "to")}
+    dir_maps = {key: {item["key"]: item["pin"] for item in receipt["directories"]} for key, receipt in receipts.items()}
+    roots = {"active": _base(paths) / "versions", "slot": data_slot / "versions"}
+    locations = {}
+    for position, path in roots.items():
+        with _directory(path) as descriptor:
+            identity = list(_directory_identity(os.fstat(descriptor)))
+        matching = [key for key in receipts if dir_maps[key]["versions"] == identity]
+        _update_need(len(matching) == 1, "update_versions")
+        locations[position] = matching[0]
+    _update_need(locations["active"] != locations["slot"], "update_versions")
+    for position, key in locations.items():
+        receipt = receipts[key]
+        _guard(paths, receipt, versions_root=roots[position])
+        records = bank["payloads"][key == "to"]["files"]
+        for record, (name, mode) in zip(records, PAYLOAD):
+            _update_need(_update_capture(roots[position] / receipt["archiveSha256"] / name, record["key"], mode) == record, "update_payload_changed")
+    fixed = _files(paths, bank["from"]["archiveSha256"])
+    for record in bank["shared"]:
+        path, mode = fixed[record["key"]]
+        _update_need(_update_capture(path, record["key"], mode) == record, "update_shared_changed")
+    for record, key in zip(bank["histories"], ("from", "to")):
+        path = _state(paths) / "receipts" / (bank[key]["archiveSha256"] + ".json")
+        _update_need(_update_capture(path, key, 0o600) == record and _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)[0] == _json(bank[key]), "update_history_changed")
+    selector_locations = {}
+    for position, path in (("active", _state(paths) / "current.json"), ("slot", state_slot / "current.json")):
+        raw, observed = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+        matching = [record for record in bank["selectors"] if list(observed[:8]) == record["pin"][:8] and
+                    observed[8] >= record["pin"][8] and raw.hex() == record["dataHex"]]
+        _update_need(len(matching) == 1, "update_selector_changed")
+        selector_locations[position] = matching[0]["key"]
+    _update_need(selector_locations["active"] != selector_locations["slot"], "update_selector_changed")
+    _update_need(active or locations["active"] == selector_locations["active"], "update_inactive_mixed")
+    _update_need(_receipt(paths) == bank[selector_locations["active"]], "update_selector_changed")
+    _update_need(_update_parent_pins(paths) == bank["parents"], "update_parent")
+    return bank, ("active" if active else "slot", locations["active"], selector_locations["active"])
+
+
+def _update_error(paths, a, b, error, state_pin):
+    try:
+        state_slot, _data_slot = _update_paths(paths)
+        with _directory(state_slot) as descriptor:
+            if list(_directory_identity(os.fstat(descriptor))) != state_pin:
+                return
+        if _update_optional(state_slot / "first-error.json") is None:
+            _write_new(state_slot / "first-error.json", _json({"schema": "orla-launcher-update-error-0.1", "uid": os.getuid(),
+                       "from": a, "to": b, "code": _error_code(error)}), 0o600)
+    except (InstallError, OSError):
+        pass
+
+
+def _update_rename(paths, data, pin, operation):
+    bank, positions = _update_guard(paths, data, pin)
+    state_slot, data_slot = _update_paths(paths)
+    parents = {item["key"]: item["pin"] for item in bank["parents"]}
+    dirs = {key: {item["key"]: item["pin"] for item in bank[key]["directories"]} for key in ("from", "to")}
+    if operation in ("activate", "park"):
+        _update_need((operation == "activate") == (positions[0] == "slot"), "update_barrier")
+        _update_need(positions[1] == positions[2], "update_barrier")
+        source, target = state_slot / "barrier.json", _state(paths) / "pending-intent.json"
+        left_parent, right_parent = parents["state-slot"], parents["state"]
+        if operation == "park":
+            source, target, left_parent, right_parent = target, source, right_parent, left_parent
+        flags = 1
+        left = bank["barrier"]
+        right = None
+    else:
+        _update_need(positions[0] == "active", "update_barrier")
+        flags = 2
+        if operation == "versions":
+            source, target = _base(paths) / "versions", data_slot / "versions"
+            left_parent, right_parent = dirs["from"]["base"], parents["data-slot"]
+            left = dirs[positions[1]]["versions"]
+            right = dirs["to" if positions[1] == "from" else "from"]["versions"]
+        elif operation == "current":
+            source, target = _state(paths) / "current.json", state_slot / "current.json"
+            left_parent, right_parent = parents["state"], parents["state-slot"]
+            left = bank["selectors"][positions[2] == "to"]
+            right = bank["selectors"][positions[2] != "to"]
+        else:
+            raise InstallError("update_operation")
+    with _directory(source.parent) as source_fd, _directory(target.parent) as target_fd:
+        _update_need(list(_directory_identity(os.fstat(source_fd))) == left_parent and
+                     list(_directory_identity(os.fstat(target_fd))) == right_parent, "update_parent")
+        _update_need(os.fstat(source_fd).st_dev == os.fstat(target_fd).st_dev, "update_cross_device")
+        def check(path, descriptor, expected):
+            if expected is None:
+                try:
+                    os.stat(path.name, dir_fd=descriptor, follow_symlinks=False)
+                except FileNotFoundError:
+                    return
+                raise InstallError("update_conflict")
+            named = os.stat(path.name, dir_fd=descriptor, follow_symlinks=False)
+            if operation == "versions":
+                _update_need(stat.S_ISDIR(named.st_mode) and list(_directory_identity(named)) == expected, "update_versions")
+            else:
+                observed = _update_moved(path, expected)
+                _update_need(_identity(named) == observed, "update_moved_changed")
+                _update_need(_identity(os.stat(path.name, dir_fd=descriptor, follow_symlinks=False)) == observed, "update_moved_changed")
+        check(source, source_fd, left)
+        check(target, target_fd, right)
+        try:
+            rename = ctypes.CDLL(None, use_errno=True).renameat2
+            rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+            rename.restype = ctypes.c_int
+        except (AttributeError, OSError):
+            raise InstallError("update_api_unavailable") from None
+        # Recheck the immutable authority after resolving the syscall seam.
+        raw, bank_pin = _read(state_slot / "bank.json", mode=0o600, limit=MAX_UPDATE_BYTES)
+        _update_need(raw == data and list(bank_pin) == list(pin), "update_bank_changed")
+        check(source, source_fd, left)
+        check(target, target_fd, right)
+        if rename(source_fd, os.fsencode(source.name), target_fd, os.fsencode(target.name), flags) != 0:
+            number = ctypes.get_errno()
+            if number == errno.EXDEV:
+                raise InstallError("update_cross_device")
+            if number in (errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP):
+                raise InstallError("update_api_unavailable")
+            raise InstallError("update_rename_failed")
+        first = None
+        for descriptor in (source_fd, target_fd):
+            try:
+                os.fsync(descriptor)
+            except (InstallError, OSError) as error:
+                first = first or error
+        if first is not None:
+            raise first
+    return _update_guard(paths, data, pin)
+
+
+def _update_normalize_a(paths, data, pin, *, recovery):
+    bank, positions = _update_guard(paths, data, pin)
+    if not recovery:
+        _update_need(positions[0] == "slot", "update_recovery_required")
+    if positions == ("slot", "from", "from"):
+        return _report(paths, bank["from"])
+    if positions[0] == "slot":
+        bank, positions = _update_rename(paths, data, pin, "activate")
+    if positions[1] == "to":
+        bank, positions = _update_rename(paths, data, pin, "versions")
+    if positions[2] == "to":
+        bank, positions = _update_rename(paths, data, pin, "current")
+    _update_need(positions == ("active", "from", "from"), "update_pair")
+    _update_need(_receipt(paths) == bank["from"], "update_selector_changed")
+    _guard(paths, bank["from"])
+    bank, positions = _update_rename(paths, data, pin, "park")
+    _update_need(positions == ("slot", "from", "from"), "update_pair")
+    return _report(paths, bank["from"])
+
+
+def _update_load(paths):
+    state_slot, _data_slot = _update_paths(paths)
+    data, pin = _read(state_slot / "bank.json", mode=0o600, limit=MAX_UPDATE_BYTES)
+    bank, positions = _update_guard(paths, data, pin)
+    return data, pin, bank, positions
+
+
+def _update_prepare(paths, a, decoded, digest, commit):
+    state_slot, data_slot = _update_paths(paths)
+    _update_need(not _exists(state_slot) and not _exists(data_slot), "update_workspace_exists")
+    _update_need(digest != a["archiveSha256"], "update_same_archive")
+    for path in (_state(paths) / "receipts" / (digest + ".json"),
+                 _state(paths) / "transactions" / (digest + "-install.json"),
+                 _state(paths) / "transactions" / (digest + "-installed.json")):
+        _update_need(not _exists(path), "update_history_exists")
+    _mkdir_new(data_slot, 0o700)
+    state_pin = _mkdir_new(state_slot, 0o700)
+    try:
+        versions = data_slot / "versions"
+        directory_pins = {"base": next(item["pin"] for item in a["directories"] if item["key"] == "base"),
+                          "tools": next(item["pin"] for item in a["directories"] if item["key"] == "tools")}
+        directory_pins["versions"] = _mkdir_new(versions)
+        version = versions / digest
+        directory_pins["version"] = _mkdir_new(version)
+        directory_pins["payload-bin"] = _mkdir_new(version / "bin")
+        directory_pins["payload-libexec"] = _mkdir_new(version / "libexec")
+        payload = []
+        for name, mode in PAYLOAD:
+            path = version / name
+            _write_new(path, decoded[name], mode)
+            payload.append(_update_capture(path, "payload/" + name, mode))
+        a_files = {item["key"]: item for item in a["files"]}
+        b_files = [{"key": item["key"], "mode": f"{mode:04o}", "size": item["size"], "sha256": item["sha256"]}
+                   for item, (_name, mode) in zip(payload, PAYLOAD)] + [a_files[key] for key in UPDATE_SHARED]
+        b = {"schema": SCHEMA, "archiveSha256": digest, "commit": commit, "uid": os.getuid(), "runtime": "unverified",
+             "files": b_files, "directories": [{"key": key, "pin": directory_pins[key]} for key in _directories(paths, digest)]}
+        b_data = _json(b)
+        _receipt_value(paths, b_data)
+        _guard(paths, b, versions_root=versions)
+        _write_new(_state(paths) / "receipts" / (digest + ".json"), b_data, 0o600)
+        _write_new(state_slot / "current.json", b_data, 0o600)
+        barrier = {"schema": "orla-launcher-pending-0.1", "operation": "install", "archiveSha256": digest, "commit": commit,
+                   "uid": os.getuid(), "code": "transaction_in_progress", "files": b_files, "ownedFiles": [], "directories": []}
+        _write_new(state_slot / "barrier.json", _json(barrier), 0o600)
+        selectors = []
+        for key, path, receipt in (("from", _state(paths) / "current.json", a), ("to", state_slot / "current.json", b)):
+            raw, pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+            _update_need(raw == _json(receipt), "update_selector_changed")
+            selectors.append({"key": key, "pin": list(pin), "dataHex": raw.hex()})
+        raw_barrier, barrier_pin = _read(state_slot / "barrier.json", mode=0o600, limit=MAX_RECEIPT_BYTES)
+        fixed_a = _files(paths, a["archiveSha256"])
+        payload_a = [_update_capture(fixed_a["payload/" + name][0], "payload/" + name, mode) for name, mode in PAYLOAD]
+        shared = [_update_capture(fixed_a[key][0], key, fixed_a[key][1]) for key in UPDATE_SHARED]
+        histories = [_update_capture(_state(paths) / "receipts" / (receipt["archiveSha256"] + ".json"), key, 0o600)
+                     for key, receipt in (("from", a), ("to", b))]
+        bank = {"schema": UPDATE_SCHEMA, "uid": os.getuid(), "from": a, "to": b, "selectors": selectors,
+                "payloads": [{"key": "from", "files": payload_a}, {"key": "to", "files": payload}],
+                "shared": shared, "histories": histories, "parents": _update_parent_pins(paths),
+                "barrier": {"pin": list(barrier_pin), "dataHex": raw_barrier.hex()}}
+        for left, right in ((_base(paths), data_slot), (_state(paths), state_slot)):
+            with _directory(left) as one, _directory(right) as two:
+                _update_need(os.fstat(one).st_dev == os.fstat(two).st_dev, "update_cross_device")
+        data = _json(bank)
+        _update_bank(paths, data)
+        _update_need(len(data) <= MAX_UPDATE_BYTES)
+        _write_new(state_slot / "bank.json", data, 0o600)
+        stored, pin = _read(state_slot / "bank.json", mode=0o600, limit=MAX_UPDATE_BYTES)
+        _update_need(stored == data, "update_bank_changed")
+        _update_guard(paths, data, pin)
+        return data, pin, bank
+    except (InstallError, OSError) as error:
+        _update_error(paths, a["archiveSha256"], digest, error, state_pin)
+        raise
+
+
+def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
+                   paths: InstallPaths, backend=None) -> dict:
+    """Switch one verified payload; launcher and legacy callers must be quiescent."""
+    try:
+        paths = _paths(paths)
+        _update_paths(paths)
+        if backend is not None:
+            raise InstallError("backend_unimplemented")
+        if type(expected_sha256) is not str or SHA256.fullmatch(expected_sha256) is None or \
+                type(expected_commit) is not str or COMMIT.fullmatch(expected_commit) is None:
+            raise InstallError("archive_pins")
+        package = _package()
+        try:
+            frozen = package._read_archive(archive)
+            _update_need(hashlib.sha256(frozen).hexdigest() == expected_sha256, "archive_hash")
+            manifest = package._verify_archive_data(frozen, expected_commit=expected_commit)
+            _update_need(manifest["schema"] == "orla-launcher-package-0.3", "archive_install_schema")
+            _update_need(tuple(package.PAYLOAD) == PAYLOAD, "package_payload_contract")
+            decoded = {record["name"]: package._decode_member(record) for record in package._archive_records(frozen)
+                       if record["name"] != "manifest.json"}
+        except package.PackageError as error:
+            raise InstallError(error.code) from None
+        _recovery_parents(paths)
+        with _locked(paths):
+            _update_need(all(item["pin"] is None for item in _recovery_controls(paths)), "pending_transaction")
+            a = _receipt(paths)
+            _guard(paths, a)
+            data, pin, bank = _update_prepare(paths, a, decoded, expected_sha256, expected_commit)
+            try:
+                _bank, positions = _update_rename(paths, data, pin, "activate")
+                _bank, positions = _update_rename(paths, data, pin, "versions")
+                _bank, positions = _update_rename(paths, data, pin, "current")
+                _update_need(positions == ("active", "to", "to"), "update_pair")
+                _update_need(_receipt(paths) == bank["to"], "update_selector_changed")
+                _guard(paths, bank["to"])
+                _bank, positions = _update_rename(paths, data, pin, "park")
+                _update_need(positions == ("slot", "to", "to"), "update_pair")
+                return _report(paths, bank["to"])
+            except (InstallError, OSError) as error:
+                _update_error(paths, a["archiveSha256"], expected_sha256, error, bank["parents"][3]["pin"])
+                raise
+    except OSError as error:
+        raise InstallError("filesystem_unknown") from error
+
+
+def _update_return_a(paths, backend, *, recovery):
+    try:
+        paths = _paths(paths)
+        _update_paths(paths)
+        if backend is not None:
+            raise InstallError("backend_unimplemented")
+        _recovery_parents(paths)
+        with _locked(paths):
+            data, pin, bank, _positions = _update_load(paths)
+            try:
+                return _update_normalize_a(paths, data, pin, recovery=recovery)
+            except (InstallError, OSError) as error:
+                _update_error(paths, bank["from"]["archiveSha256"], bank["to"]["archiveSha256"], error, bank["parents"][3]["pin"])
+                raise
+    except OSError as error:
+        raise InstallError("filesystem_unknown") from error
+
+
+def rollback_update(paths: InstallPaths, *, backend=None) -> dict:
+    """Restore the captured predecessor from a complete, inactive selection."""
+    return _update_return_a(paths, backend, recovery=False)
+
+
+def recover_update(paths: InstallPaths, *, backend=None) -> dict:
+    """Return a verified interrupted update to its captured predecessor."""
+    return _update_return_a(paths, backend, recovery=True)
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="orla-launcherctl")
     parser.add_argument("--home", type=Path)
@@ -1026,10 +1505,17 @@ def main(arguments: list[str] | None = None) -> int:
     install_command.add_argument("archive", type=Path)
     install_command.add_argument("--sha256", required=True)
     install_command.add_argument("--commit", required=True)
+    update_command = commands.add_parser("update")
+    update_command.add_argument("archive", type=Path)
+    update_command.add_argument("--sha256", required=True)
+    update_command.add_argument("--commit", required=True)
+    commands.add_parser("rollback")
     for command in ("status", "launch", "uninstall"):
         commands.add_parser(command)
-    recover_command = commands.add_parser("recover")
-    recover_command.add_argument("--finish-install", action="store_true", required=True)
+    recover_command = commands.add_parser("recover", allow_abbrev=False)
+    recovery_mode = recover_command.add_mutually_exclusive_group(required=True)
+    recovery_mode.add_argument("--finish-install", action="store_true")
+    recovery_mode.add_argument("--rollback-update", action="store_true")
     options = parser.parse_args(arguments)
     try:
         home = options.home or Path(os.environ.get("HOME", ""))
@@ -1043,7 +1529,11 @@ def main(arguments: list[str] | None = None) -> int:
         elif options.command == "uninstall":
             result = uninstall(paths)
         elif options.command == "recover":
-            result = recover_finish_install(paths)
+            result = recover_finish_install(paths) if options.finish_install else recover_update(paths)
+        elif options.command == "update":
+            result = update_archive(options.archive, expected_sha256=options.sha256, expected_commit=options.commit, paths=paths)
+        elif options.command == "rollback":
+            result = rollback_update(paths)
         else:
             _launch(paths)
             return 0
