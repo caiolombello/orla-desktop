@@ -45,6 +45,10 @@ class LauncherInstallCliTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.invoke_stub(["launcher", action], [action])
 
+    def test_finish_install_recovery_forwards_the_explicit_mode(self):
+        self.invoke_stub(["launcher", "recover", "--finish-install"],
+                         ["recover", "--finish-install"], code=7)
+
     def test_parser_install_does_not_expand_archive_or_change_checksum(self):
         args = caiodock.parser().parse_args(["launcher", "install", "relative archive.zip", "--sha256", "raw-sha", "--commit", "raw-commit"])
         self.assertEqual(args.command, "launcher")
@@ -56,7 +60,8 @@ class LauncherInstallCliTests(unittest.TestCase):
         bad = (["launcher"], ["launcher", "install", "archive.zip"],
                ["launcher", "install", "archive.zip", "--sha256", "a" * 64],
                ["launcher", "install", "archive.zip", "--commit", "b" * 40],
-               ["launcher", "status", "--commit", "b" * 40], ["launcher", "update"])
+               ["launcher", "status", "--commit", "b" * 40], ["launcher", "update"],
+               ["launcher", "recover"], ["launcher", "recover", "--rollback"])
         with mock.patch.object(caiodock.importlib.util, "spec_from_file_location") as locate:
             for arguments in bad:
                 with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):

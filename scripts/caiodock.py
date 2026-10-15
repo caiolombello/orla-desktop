@@ -328,6 +328,8 @@ def parser() -> argparse.ArgumentParser:
     launcher_commands.add_parser("status", help="read launcher installation status without changing it")
     launcher_commands.add_parser("launch", help="open the independently installed launcher")
     launcher_commands.add_parser("uninstall", help="remove owned launcher files and preserve user configuration")
+    launcher_recover = launcher_commands.add_parser("recover", help="finish an already published launcher installation")
+    launcher_recover.add_argument("--finish-install", action="store_true", required=True)
     if __package__:
         from . import panel_layout
     else:
@@ -365,6 +367,8 @@ def main(argv: list[str] | None = None) -> int:
             arguments = [args.launcher_action]
             if args.launcher_action == "install":
                 arguments.extend([str(args.archive), "--sha256", args.sha256, "--commit", args.commit])
+            elif args.launcher_action == "recover":
+                arguments.append("--finish-install")
             return module.main(arguments)
         elif args.command == "layout":
             if __package__:

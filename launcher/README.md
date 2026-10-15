@@ -514,8 +514,9 @@ dessas ferramentas antes de executar o gerenciador.
 
 Esta etapa cobre a primeira instalação. Arquivos ou instalações preexistentes
 são recusados, inclusive os de instalação manual antiga. Um estado incompleto
-retorna `pending` com causa e evidência de propriedade preservadas; recuperação,
-reinstalação, atualização e reversão entram no próximo incremento. A remoção
+retorna `pending` com causa e evidência de propriedade preservadas. A recuperação
+delimitada da finalização está descrita abaixo; reinstalação, atualização e
+reversão continuam pendentes. A remoção
 confere todos os arquivos antes de apagar e preserva configurações, favoritos,
 aliases e histórico. O status se refere aos arquivos gerenciados: `runtime`
 permanece `unverified`, e a remoção não atesta encerramento de processos.
@@ -536,6 +537,43 @@ clique no menu e abertura de aplicativos continuam sem qualificação nesse flux
 ```sh
 python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
 ```
+
+### Recuperação da finalização — experimental no fonte
+
+Se uma instalação já publicou todos os arquivos, recibos e o marcador de
+instalação, mas a limpeza final falhou, um bootstrap novo e verificado pode
+concluir essa limpeza:
+
+```sh
+python3 -I -B /caminho/bootstrap-novo/install.py recover --finish-install
+# Alternativa com o checkout atual:
+python3 scripts/orla.py launcher recover --finish-install
+~/.local/bin/orla-launcherctl status
+```
+
+O comando exige uma instalação integralmente publicada e confere conteúdo,
+modos, identidades, recibos, journals e diretórios antes de remover cada registro
+pendente. Ele preserva os bytes originais e a primeira causa em um único banco
+privado, `transactions/<SHA256>-finish-install-recovery.json`, dentro do estado
+do instalador. O banco é imutável e limitado a 512 KiB. Uma interrupção durante
+a limpeza pode ser retomada se o banco completo e os registros restantes
+continuarem exatos; repetir a recuperação concluída não altera os arquivos.
+
+Payload parcial, marcador ausente, remoção pendente, arquivos alterados,
+evidência contraditória ou banco parcialmente gravado são recusados e
+preservados. Este comando não repara esses estados nem comprova recuperação
+de falta de energia. Ferramentas, wrappers, menu, versão e recibos instalados
+permanecem iguais; o controlador antigo não ganha o comando novo. Configurações,
+favoritos e aliases são preservados, e `runtime` continua `unverified`.
+
+Passaram 39 testes de instalação/CLI, incluindo 12 de recuperação, 56 do pacote
+e 15 do bundle. O teste causal injeta uma falha final, recupera pelo comando
+público com bootstrap original ausente e usa o controlador instalado para
+consultar/remover. Um teste separado repetiu esse fluxo com o ZIP real da
+execução 38660941244 e seu instalador anterior: os 12 arquivos gerenciados
+permaneceram exatos, a causa e os dados sintéticos foram preservados e a remoção
+independente passou. Essa prova manipula arquivos próprios; não executa o ELF,
+helpers ou a sessão gráfica e não amplia a qualificação nativa do bundle.
 
 ### Bundle acoplado da CI — experimental no fonte
 
