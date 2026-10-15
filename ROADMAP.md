@@ -832,6 +832,39 @@ Meta isolada, execução de apps, outros ambientes, serviço público e migraç�
 do legado seguem abertos. A instalação principal permanece no launcher anterior;
 R2/L0 continuam parciais. Veja o [fluxo](launcher/README.md#sessão-de-busca-pelo-atalho--experimental-no-fonte).
 
+**R2/L0 — serviço opcional no fonte (15/10):** `launcherctl service
+enable/status/disable` configura e retira somente a unidade própria, por escolha
+explícita, com controlador independente do checkout, readback do systemd e
+preservação da primeira falha. A instalação continua inerte; versões antigas de
+ferramentas e serviço legado não são adotados. Uma barreira bloqueia mutações de
+payload também no bootstrap anterior, até a retirada confirmada do serviço.
+Passaram 143 testes portáteis, incluindo 14 de serviço, e a prova de compatibilidade
+com o bootstrap anterior. Em unidade inerte própria no systemd 259, argumentos
+especiais e limpeza de `failed` foram observados; o registro preserva o erro da
+primeira prova e um erro auxiliar de limpeza da segunda, que terminou sem unidade
+residual e sem alterar launcher/configurações anteriores. A primeira tentativa
+pública com o bundle do CI instalou e recusou a ativação antes de iniciar o ELF;
+o serviço foi retirado e o legado restaurado. O diagnóstico real confirmou que a
+enumeração de links do systemd não inclui esse diretório de dados. A correção
+revalida o link próprio após reload, com regressões de recusa indevida e drift;
+a falha inicial e o erro separado do roteiro de input permanecem registrados.
+A nova tentativa com o bundle corrigido passou o ciclo público instalado:
+Meta abriu com foco, `2-1` mostrou `1`, Escape ocultou mantendo o processo e
+Ctrl+Alt+Meta+O reabriu com foco; desativar e reativar também passaram. Em uma
+saída Wayland com escala 1,45, a segunda ativação ficou residente/oculta na
+instalação principal, com backups legados e 127 arquivos anteriores preservados.
+Input, janela de teste e inibidor temporários foram liberados; a captura foi
+revisada. Novo login, execução de aplicativos, migração pública genérica, outros
+ambientes e os demais gates R2/L0 continuam abertos. Veja o
+[fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).
+
+**Próxima entrega de UX1:** simplificar Aparência, mostrando presets, temas e
+controles de forma/movimento antes dos campos técnicos. Cores e JSON ficam em
+“Ajustes avançados”, sem novas preferências nem mudanças de geometria. Aceite:
+operar os controles comuns pelo teclado sem passar pelos campos recolhidos,
+revelar erros editáveis, preservar preview/Aplicar/Cancelar e revisar a galeria
+clara/escura antes da prova curta na sessão real.
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
