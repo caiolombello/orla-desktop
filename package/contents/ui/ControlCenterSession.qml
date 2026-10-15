@@ -18,6 +18,10 @@ Item {
     property QtObject lastErrorClient: null
 
     readonly property QtObject _nativeDialog: popup && popup.nativeDialog ? popup.nativeDialog : null
+    // Window.active also includes its transient family, not only keyboard ownership.
+    readonly property bool _nativeFocusHeld: _nativeDialog
+        ? (_nativeDialog.activeFocusItem !== undefined
+            ? _nativeDialog.activeFocusItem !== null : _nativeDialog.active === true) : false
     readonly property QtObject _hostWindow: host ? host.Window.window : null
     readonly property QtObject _pendingWindow: _pendingHost ? _pendingHost.Window.window : null
     property bool _external: false
@@ -191,6 +195,7 @@ Item {
     on_PendingClientChanged: checkPending()
     onOwnerChanged: if (!owner) shutdown()
     on_NativeDialogChanged: commitQueue.restart()
+    on_NativeFocusHeldChanged: if (!_nativeFocusHeld) commitQueue.restart()
     on_RetiringBackendChanged: if (!_retiringBackend && !_stopped) commitQueue.restart()
 
     function pendingMatches(request) {
@@ -201,7 +206,7 @@ Item {
     }
     function drain() {
         if (_stopped || !owner || !popup || !_closed || popup.visible || _retiringBackend
-                || (_nativeDialog && (_nativeDialog.visible || _nativeDialog.active === true))) return;
+                || (_nativeDialog && (_nativeDialog.visible || _nativeFocusHeld))) return;
         // Signals can accept another request at every assignment below.
         const request = {generation: _generation, client: _pendingClient, host: _pendingHost,
             anchor: _pendingAnchor, external: _pendingExternal};

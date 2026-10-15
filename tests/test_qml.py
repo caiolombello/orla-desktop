@@ -290,6 +290,13 @@ Item {
                 budget.evaluate()
                 self.assertFalse(budget.hasError(), budget.error().toString())
             for cycle in (1, 2):
+                # Establish actual keyboard ownership; active includes transient relatives.
+                self.window.requestActivate()
+                for _ in range(20):
+                    if QGuiApplication.focusWindow() == self.window:
+                        break
+                    QTest.qWait(5)
+                self.assertEqual(QGuiApplication.focusWindow(), self.window)
                 self.engine.rootContext().setContextProperty("ownedPopupAnchor", button)
                 expression = QQmlExpression(self.engine.rootContext(), popup, "openAt(ownedPopupAnchor)")
                 expression.evaluate()

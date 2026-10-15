@@ -338,3 +338,78 @@ A revisão independente não encontrou bloqueadores neste aceite delimitado.
 R1/CC0/CC1-A/T1/UX0 permanecem parciais. Esta prova não exercitou hardware,
 transferência pela barra, os demais popups, foco por Tab nos controles, esquema
 claro nativo, outra escala/tela, perfil normal do usuário ou menus do T3.
+
+## Hidden dialog keyboard ownership — 15 October 2026
+
+The production four-opening fixture reproduced a blocked second Control Center
+opening. Giving the host actual keyboard focus did not fix the old gate:
+`QGuiApplication.focusWindow()` was the host, while the hidden native dialog
+still reported `active=true` and `activeFocusItem=null`. Conversely, during hide
+the dialog could still own keyboard focus and retain a non-null focus item.
+Private signal traces recorded both states without changing production UI.
+
+This agrees with [Qt 6.11's `QWindow::isActive()` contract](https://doc.qt.io/qt-6.11/qwindow.html#isActive):
+activity includes the parent/transient family. The Session now uses the native
+QQuickWindow's `activeFocusItem` for this keyboard barrier and wakes its deferred
+queue when that item clears. A visible native dialog still blocks transfer;
+an undefined focus-item property keeps the existing active-only fallback for
+older boundaries. Generation checks, backend retirement and newer-focus rules
+are unchanged. This is a fix for this dialog flow, not a universal equivalence
+between QML item focus and compositor focus.
+
+Two causal regressions failed before the fix and passed after it. The portable
+case holds a hidden dialog with non-null focus despite `active=false`, then
+allows one transfer after null focus despite `active=true`. The production
+fixture establishes exact host keyboard ownership before each opening and
+retains its original placement, 40 ms wait, lifecycle, Tab and Escape assertions.
+It opens settings and Control Center twice each.
+
+Locally, `test_qml`, `test_shared_control_center_registry`,
+`test_control_center_session` and `test_shared_control_center` passed 91 entries
+per Fusion/KDE style: 88 passed and three skipped. Qt/PySide6 were 6.11.2. Design
+check, seven design guards and the 68-file applet build passed. These are
+offscreen/fixture results; they do not qualify real Plasma host transfers,
+multiple outputs or focus return in the user's session. The earlier failed
+popup result remains historical evidence. Private RED, GREEN, signal traces,
+review and regression receipts are under `.runtime/popup-diagnosis-20261015/`.
+
+The tested 68-file package was installed with a backup and one controlled shell
+stop/start. Only `ControlCenterSession.qml` changed in the applet. Readback
+confirmed package hashes, the full configuration map, inventory, protected
+files and the same resident launcher. This installation result alone is not
+physical popup/focus qualification.
+
+### Installed opening, Escape and reopening
+
+After installation, a fresh physical-input episode passed two openings and two
+Escape closes in Plasma 6.7.5/Wayland, Qt 6.11.2, one output at scale 1.45. Each
+opening first revealed the auto-hide dock through its existing bottom edge.
+Accessibility located `controlCenterButton` inside the owned panel, then both
+`controlCenterContents` and its `controlCenterAllAction` descendant with positive
+geometry. The pane measured 318 × 449 DIP in both openings. No title, media or
+device names were read or captured.
+
+Before each Escape, a fresh KWin observation confirmed the active window belonged
+to the known Plasma process while both CC markers were showing. Both markers
+became non-showing after Escape. The dock hid again after the final pointer
+departure, and the last observed active-window UUID equaled the initial UUID.
+Full configuration bytes/map, package, inventory, protected files and the
+resident launcher remained unchanged. Temporary input devices, accessibility
+flags, observer and bus resources were released or restored.
+
+Earlier attempts remain failed: one queried Component geometry on already-hidden
+accessible nodes, which no longer implement that interface; another completed
+one CC/Escape cycle but did not reveal the auto-hide panel before reopening.
+The final reader asks for geometry only when showing, and the same bounded edge
+sequence is used before both clicks. No production change or preference change
+was made to accommodate either test issue.
+
+This qualifies those two dock-origin openings and closes. It does not establish
+native lifecycle/setter counts, independent keyboard-owner identity, the KWin
+popup window's identity/absence, bar-to-dock transfer, backend actions, other
+outputs or schemes. Final receipt:
+`.runtime/popup-diagnosis-20261015/root-native-r3/RESULT.json`, status
+`PASS_INSTALLED_CC_OPEN_ESCAPE_REOPEN_ESCAPE`. The final regenerated dark/light
+CC gallery captures were visually reviewed and are byte-identical to the
+[published dark](../screenshots/visual-system/popup-dark-control-center.png) and
+[light](../screenshots/visual-system/popup-light-control-center.png) captures.
