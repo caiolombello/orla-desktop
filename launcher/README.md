@@ -630,6 +630,19 @@ preservando os dados sintéticos, arquivos, recibos e histórico esperados.
 Nenhum ELF/helper/display/bus foi executado nessa prova; `runtime` continua
 `unverified`, e a instalação principal permaneceu preservada.
 
+Em prova posterior na mesma máquina, o bootstrap independente produzido pela
+[CI 38666552092](https://github.com/caiolombello/orla-desktop/actions/runs/38666552092)
+atualizou A para B em outro perfil isolado. O wrapper original executou o ELF B,
+a busca `2-1` exibiu `1` pela Calculadora do KRunner e Escape encerrou com código
+zero. A reversão restaurou os arquivos e o seletor A; o controlador original
+consultou A e removeu a instalação ativa. As ferramentas permaneceram exatas
+durante a troca e a reversão; a remoção preservou recibos, dados sintéticos e
+versão retida. Oito configurações/wrappers protegidos ficaram iguais.
+A captura própria foi conferida em Wayland/Fusion, escala 1,45, uma saída.
+A não foi reaberta após a reversão; serviço/Meta, execução de apps, outros
+ambientes, autenticidade e ABI continuam sem qualificação por essa prova.
+A instalação principal e os metadados publicados não mudaram.
+
 ### Bundle acoplado da CI — experimental no fonte
 
 A CI produz um único artifact

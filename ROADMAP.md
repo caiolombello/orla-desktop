@@ -801,6 +801,17 @@ antigos inativos durante a troca; não atesta parada de processos, autenticidade
 ou recuperação geral de falta de energia. R2/U2 continuam parciais. Consulte o
 [fluxo e limites](launcher/README.md#atualização-de-payload-e-reversão--experimental-no-fonte).
 
+**R2/U2 — prova nativa delimitada da atualização (14/10):** o bootstrap
+independente da [CI 38666552092](https://github.com/caiolombello/orla-desktop/actions/runs/38666552092)
+atualizou A→B em perfil isolado. O wrapper anterior abriu o ELF B; `2-1` mostrou
+`1` pela Calculadora do KRunner e Escape encerrou com código zero. A reversão
+restaurou o seletor e os arquivos A, consultados pelo controlador original.
+Sua remoção ativa preservou versão retida, banco, recibos e dados sintéticos;
+oito configurações/wrappers protegidos ficaram exatos. Captura própria conferida
+em Wayland/Fusion, uma saída/escala 1,45. A não foi reaberta após a reversão.
+Serviço/Meta, execução de apps, outros ambientes e os demais gates R2/U2 seguem
+abertos; instalação principal e metadados publicados permaneceram iguais.
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
