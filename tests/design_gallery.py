@@ -153,6 +153,17 @@ class Gallery:
             self.save(f"contexts-auto-{host}-off-350", window, self.scene_rect(popup))
             evaluate("autoContextProfiles.setEnabled(true)")
             self.save(f"contexts-auto-{host}-waiting-350", window, self.scene_rect(popup))
+            snapshot = json.loads(evaluate("JSON.stringify(contextSnapshot)", window))
+            for name, activity_status, desktop_status in (
+                ("activity-unavailable", "unavailable", "ready"),
+                ("both-unavailable", "unavailable", "unavailable"),
+            ):
+                frame = json.loads(json.dumps(snapshot))
+                frame["activity"]["status"] = activity_status
+                frame["desktop"]["status"] = desktop_status
+                evaluate("contextSnapshot=" + json.dumps(frame), window)
+                self.save(f"contexts-auto-{host}-{name}-350", window, self.scene_rect(popup))
+            evaluate("contextSnapshot=" + json.dumps(snapshot), window)
             details = window.findChild(QQuickItem, "autoContextHelpToggle")
             details.forceActiveFocus(Qt.TabFocusReason)
             QTest.keyClick(window, Qt.Key_Space)

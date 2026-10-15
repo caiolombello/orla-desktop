@@ -56,6 +56,69 @@ class AutoContextProfilesTests(unittest.TestCase):
             "ids":["d1","d2","d3"],"names":["Um","Dois","Três"]}}
         self.evaluate("sourceSnapshot=" + json.dumps(frame), settle=settle)
 
+    def test_wait_status_names_missing_domains_without_selecting_until_both_ready(self):
+        self.initialize()
+        self.enable("work")
+        saved = self.config.property("profilesJSON")
+        writes = self.root.property("writes")
+        cases = [
+            ("unavailable", "ready", "Activity atual indisponível."),
+            ("ready", "unavailable", "área de trabalho atual indisponível."),
+            ("unavailable", "unavailable", "Activity e área de trabalho atuais indisponíveis."),
+            ("loading", "ready", "carregamento em andamento."),
+            ("ready", "loading", "carregamento em andamento."),
+            ("loading", "loading", "carregamento em andamento."),
+            ("loading", "unavailable", "área de trabalho atual indisponível."),
+            ("unavailable", "loading", "Activity atual indisponível."),
+        ]
+        for activity_status, desktop_status, reason in cases:
+            with self.subTest(activity=activity_status, desktop=desktop_status):
+                self.context(activity_status=activity_status, desktop_status=desktop_status)
+                status = self.evaluate("automatic.statusText")
+                self.assertEqual(status, "Aguardando contexto KDE: " + reason)
+                self.assertLessEqual(len(status), 160)
+                self.assertTrue(self.evaluate("automatic.observing"))
+                self.assertEqual(self.selected(), "legacy")
+                self.assertEqual(self.config.property("profilesJSON"), saved)
+                self.assertEqual(self.root.property("writes"), writes)
+        self.context()
+        self.assertEqual(self.selected(), "work")
+        self.assertEqual(self.root.property("writes"), writes + 1)
+        self.assertIn("padrão", self.evaluate("automatic.statusText"))
+        self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
+
+    def test_wait_status_preserves_existing_priority_and_manual_choice(self):
+        self.initialize()
+        self.context(activity_status="unavailable")
+        self.assertEqual(self.evaluate("automatic.statusText"), "Alternância automática desativada.")
+        self.assertTrue(self.evaluate("automatic.setDefaultProfile('work'); automatic.setEnabled(true)"))
+        self.assertEqual(self.evaluate("automatic.statusText"), "Aguardando a dock ficar pronta.")
+        self.evaluate("running=true; configuration.autoContextDefaultProfile='missing'")
+        self.assertEqual(self.evaluate("automatic.statusText"), "Confira os perfis, as associações e o perfil padrão.")
+        self.evaluate("configuration.autoContextDefaultProfile='work'; busy=true")
+        saved = self.config.property("profilesJSON")
+        writes = self.root.property("writes")
+        self.assertEqual(self.evaluate("automatic.statusText"), "Aguardando contexto KDE: Activity atual indisponível.")
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        self.assertEqual(self.root.property("writes"), writes)
+        self.context()
+        self.assertEqual(self.evaluate("automatic.statusText"), "Troca de perfil adiada durante a interação.")
+        self.assertEqual(self.selected(), "legacy")
+        self.assertEqual(self.root.property("writes"), writes)
+        self.evaluate("busy=false")
+        self.assertEqual(self.selected(), "work")
+        self.manual("personal")
+        self.assertTrue(self.override())
+        saved = self.config.property("profilesJSON")
+        writes = self.root.property("writes")
+        self.context(activity_status="unavailable")
+        self.evaluate("busy=true")
+        self.assertEqual(self.evaluate("automatic.statusText"), "Seleção manual até mudar de contexto ou reiniciar a dock.")
+        self.assertEqual(self.selected(), "personal")
+        self.assertEqual(self.config.property("profilesJSON"), saved)
+        self.assertEqual(self.root.property("writes"), writes)
+        self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
+
     def test_enabled_ready_context_automatically_selects_default_once(self):
         self.initialize()
         self.context()

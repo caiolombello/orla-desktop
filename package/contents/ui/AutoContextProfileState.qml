@@ -21,7 +21,17 @@ QtObject {
         if (!active) return qsTr("Aguardando a dock ficar pronta.");
         if (!canEnable) return qsTr("Confira os perfis, as associações e o perfil padrão.");
         if (manualOverride) return qsTr("Seleção manual até mudar de contexto ou reiniciar a dock.");
-        if (!readyPair()) return qsTr("Aguardando contexto KDE.");
+        if (!readyPair()) {
+            const snapshot = contexts && contexts.snapshot;
+            if (!snapshot) return qsTr("Aguardando contexto KDE.");
+            const activityUnavailable = snapshot.activity.status === "unavailable";
+            const desktopUnavailable = snapshot.desktop.status === "unavailable";
+            if (activityUnavailable && desktopUnavailable)
+                return qsTr("Aguardando contexto KDE: Activity e área de trabalho atuais indisponíveis.");
+            if (activityUnavailable) return qsTr("Aguardando contexto KDE: Activity atual indisponível.");
+            if (desktopUnavailable) return qsTr("Aguardando contexto KDE: área de trabalho atual indisponível.");
+            return qsTr("Aguardando contexto KDE: carregamento em andamento.");
+        }
         if (interactionBusy) return qsTr("Troca de perfil adiada durante a interação.");
         if (internal.problem) return internal.problem;
         const target = resolveTarget();
