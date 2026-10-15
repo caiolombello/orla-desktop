@@ -16,7 +16,7 @@ PRIVATE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser();parser.add_argument("--area",required=True)
 cases=parser.add_mutually_exclusive_group()
 cases.add_argument("--gesture",action="store_true",help="exercise pointer/keyboard cancellation on the owned fixture")
-cases.add_argument("--viewport",action="store_true",help="one stable-overflow pointer drag on three owned apps")
+cases.add_argument("--viewport",action="store_true",help="exercise scrolled/clipped/event-covered drags on three owned apps")
 cases.add_argument("--competing-move",action="store_true",help="refuse a synchronous second native move")
 args=parser.parse_args();AREA=Path(args.area)
 IDS=("org.orla.ModelA","org.orla.ModelB") + (("org.orla.ModelC",) if args.competing_move or args.viewport else ())
@@ -100,11 +100,11 @@ try:
     assert result["savedLaunchersBefore"]==expected,"setup_saved_order_not_AB"
     if args.viewport:
         from task_viewport import run_viewport
-        result["scope"]="Source stable-overflow Qt pointer drag; three owned synthetic apps in isolated KWin only"
-        result["failureStage"]="VIEWPORT_STABLE_OVERFLOW"
+        result["scope"]="Source viewport Qt pointer gesture matrix; three owned synthetic apps in isolated KWin only"
+        result["failureStage"]="VIEWPORT_GESTURE_MATRIX"
         run_viewport(root,config,dock,dock_eval,snapshot,record,result)
         assert not warnings,"qml_warnings"
-        result["status"]="PASS_SOURCE_TASK_VIEWPORT_STABLE_OVERFLOW"
+        result["status"]="PASS_SOURCE_TASK_VIEWPORT_GESTURES"
     elif args.competing_move:
         evaluate("armCompeting()")
         writes=QSignalSpy(config.profilesJSONChanged)
@@ -181,4 +181,4 @@ finally:
         engine.deleteLater();QCoreApplication.sendPostedEvents(engine,QEvent.DeferredDelete)
     if app is not None:app.processEvents()
     with (AREA/"PROBE-RESULT.json").open("x") as stream:json.dump(result,stream,indent=2);stream.write("\n")
-sys.exit(0 if result["status"] in ("PASS_SOURCE_REFUSAL_RESTORES_RUNNING_ORDER", "PASS_SOURCE_TASK_DRAG_GESTURES", "PASS_SOURCE_COMPETING_MOVE_REFUSED", "PASS_SOURCE_TASK_VIEWPORT_STABLE_OVERFLOW") else 1)
+sys.exit(0 if result["status"] in ("PASS_SOURCE_REFUSAL_RESTORES_RUNNING_ORDER", "PASS_SOURCE_TASK_DRAG_GESTURES", "PASS_SOURCE_COMPETING_MOVE_REFUSED", "PASS_SOURCE_TASK_VIEWPORT_GESTURES") else 1)
