@@ -71,7 +71,7 @@ ColumnLayout {
     }
     function widgetDragValid(intent) {
         return intent !== null && widgetDrag === intent && profiles === intent.profiles
-            && visible && tabs.currentIndex === 1 && !importing && profiles.writable
+            && visible && appearance.editing && tabs.currentIndex === 1 && !importing && profiles.writable
             && profiles.activeProfileId !== "legacy" && profiles.activeProfileId === intent.scope
             && profiles.revision === intent.revision
             && JSON.stringify(profiles.effective.widgets) === intent.snapshot;
@@ -79,7 +79,7 @@ ColumnLayout {
     function beginWidgetDrag(id, handle, x, y) {
         cancelWidgetDrag();
         widgetFocusTicket++;
-        if (!visible || tabs.currentIndex !== 1 || importing || !profiles.writable
+        if (!visible || !appearance.editing || tabs.currentIndex !== 1 || importing || !profiles.writable
                 || profiles.activeProfileId === "legacy") return;
         const intent = {id: id, profiles: profiles, scope: profiles.activeProfileId,
             revision: profiles.revision, snapshot: JSON.stringify(profiles.effective.widgets),
@@ -155,10 +155,18 @@ ColumnLayout {
     }
     onImportingChanged: if (importing) cancelWidgetDrag()
     onProfilesChanged: { cancelWidgetDrag(); widgetFocusTicket++; }
+    onAppearanceChanged: { cancelWidgetDrag(); widgetFocusTicket++; }
     onVisibleChanged: if (!visible) { cancelWidgetDrag(); widgetFocusTicket++; }
     Keys.onEscapePressed: event => {
         if (widgetDrag !== null) { cancelWidgetDrag(); widgetFocusTicket++; event.accepted = true; }
         else event.accepted = false;
+    }
+    Connections {
+        target: settings.appearance
+        function onEditingChanged() {
+            // KDE may keep the popup visible through its exit animation.
+            if (!settings.appearance.editing) { settings.cancelWidgetDrag(); settings.widgetFocusTicket++; }
+        }
     }
     Connections {
         target: settings.profiles
@@ -291,11 +299,15 @@ ColumnLayout {
                                     Layout.preferredWidth: Style.size.iconButton + Style.space.xs
                                     icon.name: "drag-handle-symbolic"
                                     Accessible.name: qsTr("Arrastar %1 para reordenar").arg(checkbox.text)
+                                    Accessible.description: qsTr("Para mover pelo teclado, use os botões de subir e descer.")
+                                    Controls.ToolTip.visible: hovered && enabled && !settings.widgetDragging
+                                    Controls.ToolTip.text: qsTr("Arraste %1 ou use as setas.").arg(checkbox.text)
                                     enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy"
                                     onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
                                     MouseArea {
                                         anchors.fill: parent
                                         preventStealing: true
+                                        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                         onPressed: mouse => settings.beginWidgetDrag(modelData.id, grip, mouse.x, mouse.y)
                                         onPositionChanged: mouse => { if (pressed) settings.updateWidgetDrag(grip, mouse.x, mouse.y); }
                                         onReleased: mouse => settings.finishWidgetDrag(grip, mouse.x, mouse.y)
