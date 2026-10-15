@@ -594,3 +594,35 @@ scroll/overflow and touchscreen gestures, multiple outputs/scales and broader
 context/topology churn remain unqualified. No marketplace/release readiness is
 implied. Private receipts are under `.runtime/app-drag-20261015/` (gesture matrix,
 RED/GREEN cases, final reviews, regression logs and gallery).
+
+## Installed legacy app drag and reversal — 15 October 2026
+
+A fresh episode on the installed 68-file applet passed two physical pointer
+drags in Plasma 6.7.5/Wayland, Qt 6.11.2, one output at scale 1.45. The unchanged
+production package matched `ea3958f`; no UI instrumentation or temporary profile
+was added. Accessibility located the first two app slots by technical ID within
+the owned panel, without reading app or window names. The saved launcher list
+had seven distinct entries and no managed profile.
+
+The first drag produced exactly the first saved-pair swap. Reacquiring both
+slots and dragging back restored the original full configuration map. The dock
+revealed at the bottom edge and hid again after the pointer left. Package,
+inventory, protected files and the resident launcher remained unchanged. All
+temporary input devices, observer, bus name and accessibility flags were
+released or restored. No recovery configuration write was needed.
+
+Two earlier attempts remain failed: the first rejected a Qt `V4Sequence` before
+input because it was not a JavaScript Array; the second observed the forward
+swap and eventual restoration but rejected a read overlapping Plasma's write.
+The final test retains strict JSON-list and complete-map checks. It waits only
+when both complete snapshots equal one of the two precomputed allowed states;
+unknown or mixed changes remain fatal, within the existing five-second deadline.
+
+This proves the installed legacy pair's physical drag/reversal and auto-hide in
+that episode. It does not measure held-pixel feedback, hover write counts, exact
+setter counts or prove absence of app dispatch. No foreign active-window UUID
+was observed; keyboard focus, Escape, managed-profile dragging, overflow,
+touchscreen, other outputs and context churn have separate gates. The prior
+isolated Qt gesture matrix remains separate evidence. Private receipts:
+`.runtime/app-drag-native-20261015/root-native-r1`, `root-native-r2` and
+`root-native-r3` (final status `PASS_LEGACY_APP_SLOT_DRAG_REVERSED`).

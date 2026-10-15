@@ -1019,10 +1019,38 @@ arquivos protegidos e launcher foram preservados, com bloqueio automático
 desativado.
 [Provas, capturas e limites](docs/validation/profiles-0.2.5.md#app-tile-dragging--15-october-2026).
 
-**Próximo aceite de C1/UX1:** gesto físico no painel instalado, overflow/rolagem,
-monitores adicionais e mudanças de contexto; tratar a falha offscreen de popup
-em separado. C1/UX1 continuam parciais e o goal mantém o roadmap completo,
-incluindo integrações opcionais, ecossistema, distribuição e IA.
+**C1/UX1 — arraste no painel instalado (15/10):** uma prova com a versão de 68
+arquivos confirmou por input físico a troca dos dois primeiros apps fixados e
+o retorno à ordem original no modo legado, com sete apps. A dock revelou na
+borda e recolheu ao afastar o ponteiro. O mapa completo de configuração,
+inventário, pacotes e arquivos protegidos ficaram iguais; os recursos
+temporários foram liberados, sem gravação de recuperação. As duas tentativas
+anteriores permanecem registradas como falhas do teste: tipo de sequência Qt e
+leitura durante uma gravação assíncrona. O teste final aceita esperar apenas
+pelos dois mapas completos predefinidos, com prazo limitado. Isso não qualifica
+foco/Escape, contagem de setters nativos ou ausência de execução de apps.
+[Evidência e limites](docs/validation/profiles-0.2.5.md#installed-legacy-app-drag-and-reversal--15-october-2026).
+
+**CC0/UX0 — reabrir a Central de Controle (15/10):** a falha offscreen foi
+isolada: `Window.active` pode continuar verdadeiro para um diálogo oculto cuja
+família transitiva contém a janela com foco. A Session verifica agora o item
+que ainda recebe teclado e preserva a barreira enquanto ele existe. As duas
+regressões causais passaram após falharem na base; as quatro suítes de dock,
+roteamento e ciclo de vida passaram 91 entradas por estilo Fusion/KDE
+(88 aprovadas, três skips). Design, sete guardas, galeria claro/escuro e build
+passaram. O pacote foi instalado com backup e uma recarga, preservando o mapa
+de configuração, inventário, atalhos, arquivos protegidos e launcher. Dois
+ciclos reais de abrir/Escape passaram, revelando a dock pela borda antes de
+cada clique. A dock recolheu ao final e o KWin voltou a indicar o UUID inicial;
+configuração e recursos foram preservados. Transferência entre hosts, identidade
+independente de quem recebe teclado e outras telas continuam abertas.
+[Diagnóstico e validação](docs/validation/shared-control-center-source.md#hidden-dialog-keyboard-ownership--15-october-2026).
+
+**Próximo aceite de C1/UX1/CC0:** arraste com overflow e faixa de evento ativa
+em fixture própria, transferência/foco entre hosts dos popups instalados,
+monitores adicionais e mudanças de contexto. Os marcos
+continuam parciais e o goal mantém o roadmap completo, incluindo integrações
+opcionais, ecossistema, distribuição e IA.
 
 ## Prontidão e recomendação de execução
 
