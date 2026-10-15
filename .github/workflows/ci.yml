@@ -57,6 +57,7 @@ jobs:
           $ORLA_CI_PYTHON -B -m unittest discover -s launcher/tests -p 'test_inventory_policy.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s launcher/tests -p 'test_inventory_host*.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
+          $ORLA_CI_PYTHON -B -m unittest discover -s launcher/tests -p 'test_artifact*.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_contexts.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_desktop_switch.py' -v
@@ -144,6 +145,7 @@ jobs:
         run: |
           set -euo pipefail
           packages=(
+            'bubblewrap-0:0.12.0-1.fc44.x86_64'
             'cmake-0:4.3.0-1.fc44.x86_64'
             'dbus-daemon-1:1.16.2-1.fc44.x86_64'
             'gcc-c++-0:16.2.1-2.fc44.x86_64'
@@ -162,6 +164,7 @@ jobs:
             'qt6-qtdeclarative-devel-0:6.11.2-2.fc44.x86_64'
           )
           expected=(
+            'bubblewrap|0:0.12.0-1.fc44|x86_64|updates'
             'cmake|0:4.3.0-1.fc44|x86_64|fedora'
             'dbus-daemon|1:1.16.2-1.fc44|x86_64|fedora'
             'gcc-c++|0:16.2.1-2.fc44|x86_64|updates'
@@ -206,6 +209,10 @@ jobs:
 
           command -v dbus-daemon
           command -v gdbus
+          test -f /usr/bin/bwrap
+          test -f /usr/lib64/qt6/qml/QtQuick/Controls/Fusion/Button.qml
+          rpm -q --whatprovides /usr/bin/bwrap
+          rpm -q --whatprovides /usr/lib64/qt6/qml/QtQuick/Controls/Fusion/Button.qml
           test -f /usr/lib64/qt6/plugins/kf6/krunner/krunner_services.so
           test -f /usr/lib64/qt6/plugins/kf6/krunner/calculator.so
           rpm -q --whatprovides /usr/lib64/qt6/plugins/kf6/krunner/krunner_services.so
@@ -270,6 +277,55 @@ jobs:
         run: |
           ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
             --output-on-failure --no-tests=error
+
+      - name: Stage launcher after successful CTests
+        run: |
+          set -euo pipefail
+          cmake --install "$RUNNER_TEMP/orla-launcher-build" \
+            --prefix "$RUNNER_TEMP/orla-launcher-stage"
+
+      - name: Produce coupled experimental launcher bundle
+        id: launcher_bundle
+        run: |
+          set -euo pipefail
+          version=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          value = json.loads(Path("package/metadata.json").read_text(encoding="utf-8"))["KPlugin"]["Version"]
+          if not isinstance(value, str):
+              raise SystemExit("KPlugin.Version must be a string")
+          print(value)
+          PY
+          )
+          # artifact.py must bind clean tracked Source, HEAD and final host/stage pins.
+          python3 -B launcher/artifact.py produce \
+            --stage "$RUNNER_TEMP/orla-launcher-stage" \
+            --output "$RUNNER_TEMP/orla-launcher-bundle" \
+            --version "$version" --commit "$GITHUB_SHA" \
+            --ci-image-digest 'sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e' \
+            --controls-data /usr/lib64/qt6/qml/QtQuick/Controls/Fusion/Button.qml
+          printf 'archive=orla-launcher-%s-%s.zip\n' "$version" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify coupled launcher bundle
+        run: python3 -B launcher/artifact.py verify --bundle "$RUNNER_TEMP/orla-launcher-bundle"
+
+      - name: Smoke standalone installation without executing launcher
+        run: python3 -B launcher/artifact.py smoke --bundle "$RUNNER_TEMP/orla-launcher-bundle"
+
+      - name: Upload experimental launcher bundle
+        if: ${{ success() }}
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: orla-launcher-fedora44-x86_64-experimental
+          path: |
+            ${{ runner.temp }}/orla-launcher-bundle/${{ steps.launcher_bundle.outputs.archive }}
+            ${{ runner.temp }}/orla-launcher-bundle/orla-launcher-bootstrap.zip
+            ${{ runner.temp }}/orla-launcher-bundle/runtime-inventory.json
+            ${{ runner.temp }}/orla-launcher-bundle/observations.json
+            ${{ runner.temp }}/orla-launcher-bundle/artifact.json
+            ${{ runner.temp }}/orla-launcher-bundle/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Diagnose failed launcher test without changing its result
         if: ${{ failure() && steps.launcher_ctests.outcome == 'failure' }}

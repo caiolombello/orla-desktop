@@ -536,6 +536,45 @@ continuam sem validação; este incremento não produz um bundle de distribuiç�
 python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
 ```
 
+### Bundle acoplado da CI — experimental no fonte
+
+A configuração da CI prevê um único artifact
+`orla-launcher-fedora44-x86_64-experimental`, retido por sete dias e enviado
+somente após os nove CTests, staging, produção, verificação e smoke passarem.
+Ele reúne seis arquivos: `orla-launcher-<versão>-<commit>.zip`,
+`orla-launcher-bootstrap.zip`, `runtime-inventory.json`, `observations.json`,
+`artifact.json` e `SHA256SUMS`. A versão vem de `KPlugin.Version` no fonte;
+o commit corresponde ao checkout da execução, inclusive ao merge de teste de
+um PR quando aplicável. Isso não anuncia uma release binária qualificada.
+
+O bootstrap contém somente `install.py`, `package.py`, `LICENSE` e
+`INSTALL.txt`. Depois de conferir a origem e materializar esses quatro
+arquivos, a instalação dispensa o checkout:
+
+```sh
+python3 -I -B install.py install /caminho/orla-launcher-VERSAO-COMMIT.zip \
+  --sha256 SHA256_DO_ARQUIVO --commit COMMIT_DE_40_CARACTERES
+~/.local/bin/orla-launcherctl status
+~/.local/bin/orla-launcherctl uninstall
+```
+
+O produtor exige fonte rastreado limpo, HEAD igual ao commit da CI e
+conferências finais dos arquivos de staging e observações consumidas do host.
+As evidências preservam os estados inconclusivos do catálogo; o inventário do
+ZIP continua `caller_assertion_unverified`. A declaração de imagem/execução e
+os checksums não autenticam a origem nem atestam ABI ou runtime.
+
+O smoke cobre instalação, status e remoção em diretórios próprios, com as
+ferramentas independentes e dados preservados; não abre ELF, helper, provider,
+display ou bus. Artifact real disponível, download e abertura em perfil limpo
+continuam sem qualificação nesta descrição. Runtime/Native permanecem `UNRUN`
+para esse bundle; R2 segue parcial.
+
+```sh
+python3 -B launcher/artifact.py verify --bundle /caminho/para/bundle
+python3 -B -m unittest discover -s launcher/tests -p 'test_artifact*.py' -v
+```
+
 ## Compilar e testar
 
 Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.

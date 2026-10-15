@@ -741,6 +741,19 @@ em perfil limpo são o próximo gate, seguidos por atualização, reversão,
 recuperação e serviço/Meta opcionais. R2 permanece parcial. Consulte o
 [fluxo e limites](launcher/README.md#instalação-explícita-para-usuário-novo--experimental-no-fonte).
 
+**R2 — bundle acoplado da CI, experimental no fonte (14/10):** a configuração
+prevê staging após os nove CTests e produção → verificação → smoke de um único
+artifact Fedora44/x86_64, com envio somente em caso de sucesso e retenção de
+sete dias. O conjunto contém ZIP schema 0.3, bootstrap independente, inventário
+declarado, observações, descritor e checksums; schemas 0.2/0.3 e
+`caller_assertion_unverified` permanecem iguais. O produtor deve vincular fonte
+rastreado limpo/HEAD/commit e conferir conjuntamente os arquivos consumidos ao
+final. O smoke não executa launcher ou helpers. Esta descrição não comprova
+artifact real disponível nem qualificação de download/abertura em perfil limpo;
+ABI/runtime/Native seguem `UNRUN` para esse bundle. Autenticidade, atualização,
+reversão e recuperação mantêm seus gates; R2 permanece parcial. Consulte o
+[fluxo e limites](launcher/README.md#bundle-acoplado-da-ci--experimental-no-fonte).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
