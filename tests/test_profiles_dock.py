@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DI
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
-from PySide6.QtGui import QAccessible, QGuiApplication
+from PySide6.QtGui import QAccessible, QAccessibleActionInterface, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy, QTest
@@ -119,6 +119,60 @@ class ProfilesDockTests(unittest.TestCase):
                            if (child := item.child(index)) is not None)
         self.assertEqual(len(matches), 1, f"Expected one accessible {name}")
         return matches[0]
+
+    def test_settings_tabs_expose_press_and_select_once_through_accessibility(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.evaluate("open()", self.popup)
+        tabs = self.window.findChild(QObject, "settingsTabs")
+        self.assertIsNotNone(tabs)
+        self.assertEqual(tabs.property("currentIndex"), 0)
+        profiles = self.evaluate("itemAt(2)", tabs)
+        contexts = self.evaluate("itemAt(3)", tabs)
+        self.assertIsNotNone(profiles)
+        self.assertIsNotNone(contexts)
+        profiles_clicks = QSignalSpy(profiles.clicked)
+        contexts_clicks = QSignalSpy(contexts.clicked)
+        self.assertTrue(profiles_clicks.isValid())
+        self.assertTrue(contexts_clicks.isValid())
+        QTest.qWait(30)
+
+        accessible = self.accessible_named("Perfis")
+        self.assertEqual(accessible.role(), QAccessible.Role.PageTab)
+        actions = accessible.actionInterface()
+        self.assertIsNotNone(actions)
+        press = QAccessibleActionInterface.pressAction()
+        self.assertIn(press, actions.actionNames())
+        actions.doAction(press)
+        self.settle(lambda: tabs.property("currentIndex") == 2)
+        self.assertTrue(profiles.property("checked"))
+        self.assertFalse(contexts.property("checked"))
+        self.assertEqual(profiles_clicks.count(), 1)
+        self.assertEqual(contexts_clicks.count(), 0)
+
+        # An already selected tab follows one click lifecycle and stays exclusive.
+        self.accessible_named("Perfis").actionInterface().doAction(press)
+        self.assertEqual(tabs.property("currentIndex"), 2)
+        self.assertEqual(profiles_clicks.count(), 2)
+        for index in range(4):
+            tab = self.evaluate(f"itemAt({index})", tabs)
+            self.assertEqual(tab.property("checked"), index == 2)
+
+        # Direct dispatch must also respect a disabled tab.
+        self.assertTrue(contexts.setProperty("enabled", False))
+        disabled = self.accessible_named("Contextos")
+        self.assertEqual(disabled.role(), QAccessible.Role.PageTab)
+        self.assertTrue(disabled.state().disabled)
+        disabled_actions = disabled.actionInterface()
+        self.assertIsNotNone(disabled_actions)
+        disabled_actions.doAction(press)
+        QTest.qWait(30)
+        self.assertEqual(tabs.property("currentIndex"), 2)
+        self.assertTrue(profiles.property("checked"))
+        self.assertFalse(contexts.property("checked"))
+        self.assertEqual(profiles_clicks.count(), 2)
+        self.assertEqual(contexts_clicks.count(), 0)
 
     def test_widget_regions_and_rows_are_named_in_the_accessible_tree(self):
         previous = QAccessible.isActive()
