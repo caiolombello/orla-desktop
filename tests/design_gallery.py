@@ -384,6 +384,19 @@ class Gallery:
                     # This fixture owns synthetic profile data; release may
                     # commit it. Never leave a held pointer for the next scene.
                     QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, end)
+                QTest.qWait(30)
+                module = control("moduleDetailsquota")
+                disclosure = module.findChild(QQuickItem, "moduleDisclosure")
+                focus(disclosure)
+                QTest.keyClick(window, Qt.Key_Space)
+                QTest.qWait(30)
+                assert module.property("statusText") == "Desativado neste perfil"
+                viewport = control("widgetScroll").property("contentItem")
+                for label_name in ("moduleDescription", "moduleStatus", "moduleRequirements"):
+                    label = module.findChild(QQuickItem, label_name)
+                    point = label.mapToItem(viewport, QPointF(0, 0))
+                    assert 0 <= point.y() and point.y() + label.height() <= viewport.height()
+                self.save(f"modules-{host}-disabled-{width}", window, self.scene_rect(popup))
             finally:
                 if window is not None:
                     window.close()

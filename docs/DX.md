@@ -76,9 +76,9 @@ Incluir o objetivo do usuário e estados relevantes: inicial, carregando, vazio,
 
 ### Temas e presets
 
-O checkout fonte já inclui o formato de dados `0.1-experimental`, schema, validador, empacotador e dois exemplos sem assets/código em [theme-format.md](theme-format.md). `python3 scripts/themes.py validate themes/examples/essential.json --json` confere um exemplo; `pack` cria um artefato canônico sem sobrescrever arquivos. Os testes portáteis de temas e do bundle também rodam na CI. Esta etapa não instala/aplica temas, nem conclui X1/DX2.
+O checkout fonte já inclui o formato de dados `0.1-experimental`, schema, validador, empacotador e dois exemplos sem assets/código em [theme-format.md](theme-format.md). `python3 scripts/themes.py validate themes/examples/essential.json --json` confere um exemplo; `pack` cria um artefato canônico sem sobrescrever arquivos. Os testes portáteis de temas e do bundle também rodam na CI. O consumidor por colagem já valida, pré-visualiza, aplica e cancela tokens nas configurações do dock; importar arquivos e distribuir temas continuam abertos em X1/DX2.
 
-O consumo no dock e a futura prévia devem carregar dados fictícios e mostrar resultado antes de ativar; tema inválido deve ser rejeitado sem substituir o atual. Nenhum tema requer credencial ou serviço online. Assets locais e outros recursos só entram depois de contrato próprio; não aceitar QML/JavaScript arbitrário como tema. Consulte [EXTENSIONS.md](EXTENSIONS.md) para os gates restantes.
+Use dados fictícios para verificar o consumidor e sua prévia antes de ativar; tema inválido deve ser rejeitado sem substituir o atual. Nenhum tema requer credencial ou serviço online. Assets locais e outros recursos só entram depois de contrato próprio; não aceitar QML/JavaScript arbitrário como tema. Consulte [EXTENSIONS.md](EXTENSIONS.md) para os gates restantes.
 
 ### Traduções e documentação
 

@@ -354,7 +354,7 @@ Começar por dados declarativos, depois contratos de dados/ações com UI render
 | **X1** | Formato de temas/presets, 0.4–0.5 | Primeiro consumidor por colagem e prévia experimental existem; completar schema/compatibilidade, importação segura de arquivo e corpus de consumidores; sem executar código |
 | **X2** | SDK de conteúdo e autoria, 0.4–0.5 | Template, validador, preview e pacote reproduzível; nova pessoa cria tema sem conhecer o núcleo |
 | **X3** | Distribuição de temas, 0.6–0.7 | Origem, licença, compatibilidade, instalação/rollback e revogação local claros |
-| **X4** | Widgets hospedados, 0.7 | Adaptadores internos/mocks entregam dados tipados a blocos finitos da UI; fonte lenta/entrada inválida não trava o dock; executar provedor comunitário depende de X5 |
+| **X4** | Widgets hospedados, 0.7 | Adaptadores internos têm detalhes e estados na aba Widgets, com ativação por perfil e defaults desligados; faltam pacotes externos e leitura granular por módulo; executar provedor comunitário depende de X5 |
 | **X5** | Host de código externo, preview 0.9+ | Isolamento real de arquivos/rede/barramento, broker por capacidade, timeout/cancelamento e revisão independente |
 | **X6** | Provedores de IA | Adaptadores internos seguem A0/A1; terceiros dependem de X5 e A6 |
 | **X7** | Catálogo e economia por classe | Temas após X1–X3; código externo após X5/compatibilidade; pagamentos próprios fora do caminho crítico |
@@ -1105,6 +1105,42 @@ as correções foram no leitor e no roteiro, sem alterar ou reinstalar o produto
 Isso qualifica a opção da dock nesta sessão; Aplicar/Cancelar da barra e
 persistência após reinício continuam abertos.
 [Sequência, evidência e limites](docs/validation/shared-control-center-source.md#installed-optional-dock-entry--15-october-2026).
+
+**UX1/X4/DX1 — descobrir módulos opcionais (15/10):** QuotaLantern, PeriGauge e
+FalaTrace agora têm **Sobre** na mesma lista de Widgets, com finalidade,
+classificação experimental, requisitos e estado. Abrir detalhes é passivo; o
+checkbox existente continua controlando o widget real e a visibilidade do perfil.
+Desativado prevalece sobre cache antigo ou erro; leituras ausentes, inválidas,
+desatualizadas e indisponíveis são distintas. FalaTrace continua indicando estado
+salvo. A interface explicita que a ponte ainda lê os três caches em conjunto.
+Não há catálogo remoto, extração de plugins ou revogação granular nesta entrega.
+
+A revisão encontrou e reproduziu detalhes fora do viewport e interferência na
+área de arraste. As duas regressões passaram após corrigir a revelação depois do
+layout e manter hit-test/midpoint/indicador no cabeçalho. Passaram 130 entradas
+Fusion (126 aprovadas, quatro skips), 36 de módulos/perfis/widgets no estilo KDE
+(35 aprovadas, um skip) e 30 da interface isoladamente no KDE (27 aprovadas, três
+skips), além de design, sete guardas, build e galeria claro/escuro de 350/420 px.
+A sequência completa KDE mantém uma falha de seleção de saída de áudio, reproduzida
+na base anterior completa e ausente na suíte de interface isolada; permanece
+registrada como pendência de ordem dos testes, sem alterar o áudio nesta fatia.
+As capturas são sintéticas: [escuro](docs/screenshots/local-modules/modules-dark-disabled-350.png)
+e [claro](docs/screenshots/local-modules/modules-light-disabled-420.png). A regra
+visual também foi acrescentada ao design system. A versão de 69 arquivos foi
+instalada com backup e uma recarga, preservando configuração completa, painéis,
+papéis da barra, launcher e bancos de recuperação; bloqueio automático continua
+desativado. A interação dos novos detalhes na sessão instalada ainda é UNRUN.
+Extração dos módulos, contrato comunitário, distribuição e os demais gates do
+roadmap continuam abertos.
+
+**CC0 — observação do menu nativo da barra (15/10):** o leitor inicial não via
+um QMenu que o KWin ainda mostrava. A recuperação independente capturou a raiz
+por eventos do app próprio, confirmou o item Configurar e seu foco, e fechou por
+Escape sem ativar ações. Ausência final no KWin, configuração e recursos foram
+conferidos; as falhas anteriores ficaram preservadas, incluindo a indicação
+incorreta de limpeza visual do primeiro roteiro. Isso não qualifica
+Aplicar/Cancelar nem a persistência da barra após reinício.
+[Diagnóstico e limites](docs/validation/shared-control-center-source.md#native-bar-context-menu-observation--15-october-2026).
 
 ## Prontidão e recomendação de execução
 

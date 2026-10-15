@@ -78,7 +78,7 @@ jobs:
           QT_QPA_PLATFORMTHEME: ""
           PYTHONPATH: tests
         run: |
-          $ORLA_CI_PYTHON -B -m unittest test_theme_consumer test_appearance_preset_parser test_appearance_preset -v
+          $ORLA_CI_PYTHON -B -m unittest test_theme_consumer test_appearance_preset_parser test_appearance_preset test_local_modules -v
           $ORLA_CI_PYTHON -B -m unittest \
             test_appearance.AppearanceTests.test_collapsed_advanced_skips_technical_fields_and_common_preview_cancels \
             test_appearance.AppearanceTests.test_keyboard_expands_and_collapsing_focused_color_returns_to_disclosure \

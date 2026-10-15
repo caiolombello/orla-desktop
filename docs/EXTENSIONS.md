@@ -1,6 +1,6 @@
 # Extensões, temas e integrações de IA
 
-> **Proposta de roadmap.** O Orla Dock 0.2.1 alpha ainda não oferece SDK, runtime de plugins, loja nem integração com provedores de IA. Os formatos e as etapas abaixo não são contratos implementados. Devem virar uma especificação versionada e testada antes de convidar terceiros a depender deles.
+> **Proposta de ecossistema.** SDK, runtime de plugins e loja ainda são futuros. Temas experimentais e adaptadores locais já têm consumidores; consulte suas capacidades atuais no roadmap e nos guias. Os contratos propostos abaixo precisam de especificação versionada e testes antes de terceiros dependerem deles.
 
 ## Objetivo
 
@@ -10,6 +10,8 @@ O caminho proposto começa por conteúdo declarativo simples e componentes de in
 
 
 QuotaLantern, PeriGauge, FalaTrace e outros projetos específicos serão plugins opcionais do catálogo. Nenhum será requisito ou widget padrão do Orla. A fundação atual desliga esses widgets por padrão e exige `install --with-integrations` para registrar os adaptadores experimentais incluídos. Extraí-los em pacotes externos, oferecer busca/instalação no catálogo e permitir distribuição gratuita ou comercial ainda são próximos marcos; não há marketplace implementado.
+
+Na aba **Widgets**, cada adaptador local oferece **Sobre** com finalidade, estado e requisitos. Abrir esses detalhes não ativa o widget, relê cache ou instala serviços; o checkbox existente continua salvando a visibilidade no perfil atual. A ponte experimental ainda lê os três caches em conjunto quando ativa: ocultar um widget não revoga isoladamente essa leitura. Os detalhes não são um catálogo de plugins externos nem certificam que o aplicativo ou coletor esteja instalado/ativo. O FalaTrace mostra apenas estado salvo, sem verificar captura ao vivo.
 
 ## Categorias de contribuição
 

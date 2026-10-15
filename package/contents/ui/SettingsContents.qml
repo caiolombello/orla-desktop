@@ -15,6 +15,7 @@ ColumnLayout {
     required property var profiles
     required property var contexts
     property var desktopSwitch: null
+    property var integrations: null
     required property var contextBindings
     readonly property bool contextsTabActive: tabs.currentIndex === 3
     signal appearanceCanceled()
@@ -101,15 +102,16 @@ ColumnLayout {
         const viewport = handle.mapToItem(widgetScroll, x, y);
         if (viewport.x < 0 || viewport.x >= widgetScroll.width
                 || viewport.y < 0 || viewport.y >= widgetScroll.height) return;
-        const point = handle.mapToItem(widgetRowsList, x, y);
         for (let index = 0; index < widgetRows.count; index++) {
             const row = widgetRows.itemAt(index);
-            if (row && point.x >= row.x && point.x < row.x + row.width
-                    && point.y >= row.y && point.y < row.y + row.height) {
-                const top = row.mapToItem(widgetScroll, 0, 0).y;
-                if (top < 0 || top + row.height > widgetScroll.height) return;
+            if (!row) continue;
+            const header = row.header;
+            const point = handle.mapToItem(header, x, y);
+            if (point.x >= 0 && point.x < header.width && point.y >= 0 && point.y < header.height) {
+                const top = header.mapToItem(widgetScroll, 0, 0).y;
+                if (top < 0 || top + header.height > widgetScroll.height) return;
                 widgetDropId = row.widgetId;
-                widgetDropAfter = point.y >= row.y + row.height / 2;
+                widgetDropAfter = point.y >= header.height / 2;
                 return;
             }
         }
@@ -178,8 +180,9 @@ ColumnLayout {
     function reveal(control) {
         const viewport = widgetScroll.contentItem;
         const point = control.mapToItem(viewport, 0, 0);
+        const height = Math.min(control.height, viewport.height);
         if (point.y < 0) viewport.contentY += point.y;
-        else if (point.y + control.height > viewport.height) viewport.contentY += point.y + control.height - viewport.height;
+        else if (point.y + height > viewport.height) viewport.contentY += point.y + height - viewport.height;
     }
     SegmentedTabs {
         id: tabs
@@ -287,7 +290,7 @@ ColumnLayout {
                         Repeater {
                             id: widgetRows
                             model: settings.profiles.effective.widgets
-                            FormRow {
+                            ColumnLayout {
                                 id: widgetRow
                                 required property var modelData
                                 required property int index
@@ -298,69 +301,91 @@ ColumnLayout {
                                 property alias downButton: down
                                 property alias checkbox: checkbox
                                 property alias dragHandle: grip
-                                last: index === widgetRows.count - 1
-                                Rectangle {
-                                    parent: widgetRow
-                                    objectName: "widgetDropIndicator" + modelData.id
-                                    visible: settings.widgetDragging && settings.widgetDropId === modelData.id
-                                    x: 0
-                                    y: settings.widgetDropAfter ? parent.height - height : 0
-                                    width: parent.width
-                                    height: Style.space.xxs
-                                    color: grip.palette.highlight
-                                }
-                                Controls.ToolButton {
-                                    id: grip
-                                    objectName: "widgetDrag" + modelData.id
-                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
-                                    icon.name: "drag-handle-symbolic"
-                                    Accessible.name: qsTr("Arrastar %1 para reordenar").arg(checkbox.text)
-                                    Accessible.description: qsTr("Para mover pelo teclado, use os botões de subir e descer.")
-                                    Controls.ToolTip.visible: hovered && enabled && !settings.widgetDragging
-                                    Controls.ToolTip.text: qsTr("Arraste %1 ou use as setas.").arg(checkbox.text)
-                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy"
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        preventStealing: true
-                                        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                                        onPressed: mouse => settings.beginWidgetDrag(modelData.id, grip, mouse.x, mouse.y)
-                                        onPositionChanged: mouse => { if (pressed) settings.updateWidgetDrag(grip, mouse.x, mouse.y); }
-                                        onReleased: mouse => settings.finishWidgetDrag(grip, mouse.x, mouse.y)
-                                        onCanceled: settings.cancelWidgetDrag()
+                                property alias header: widgetHeader
+                                Layout.fillWidth: true
+                                spacing: 0
+                                FormRow {
+                                    id: widgetHeader
+                                    last: index === widgetRows.count - 1 || moduleInfo.visible
+                                    Rectangle {
+                                        parent: widgetHeader
+                                        objectName: "widgetDropIndicator" + modelData.id
+                                        visible: settings.widgetDragging && settings.widgetDropId === modelData.id
+                                        x: 0
+                                        y: settings.widgetDropAfter ? parent.height - height : 0
+                                        width: parent.width
+                                        height: Style.space.xxs
+                                        color: grip.palette.highlight
+                                    }
+                                    Controls.ToolButton {
+                                        id: grip
+                                        objectName: "widgetDrag" + modelData.id
+                                        Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                        icon.name: "drag-handle-symbolic"
+                                        Accessible.name: qsTr("Arrastar %1 para reordenar").arg(checkbox.text)
+                                        Accessible.description: qsTr("Para mover pelo teclado, use os botões de subir e descer.")
+                                        Controls.ToolTip.visible: hovered && enabled && !settings.widgetDragging
+                                        Controls.ToolTip.text: qsTr("Arraste %1 ou use as setas.").arg(checkbox.text)
+                                        enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy"
+                                        onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            preventStealing: true
+                                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                            onPressed: mouse => settings.beginWidgetDrag(modelData.id, grip, mouse.x, mouse.y)
+                                            onPositionChanged: mouse => { if (pressed) settings.updateWidgetDrag(grip, mouse.x, mouse.y); }
+                                            onReleased: mouse => settings.finishWidgetDrag(grip, mouse.x, mouse.y)
+                                            onCanceled: settings.cancelWidgetDrag()
+                                        }
+                                    }
+                                    Controls.CheckBox {
+                                        id: checkbox
+                                        objectName: "widgetVisible" + modelData.id
+                                        Layout.fillWidth: true
+                                        text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
+                                            : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
+                                            : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
+                                        enabled: settings.profiles.writable && !settings.importing
+                                        checked: modelData.visible
+                                        onToggled: settings.setWidgetVisible(modelData.id, checked)
+                                        onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                    }
+                                    Controls.ToolButton {
+                                        id: up
+                                        objectName: "widgetUp" + modelData.id
+                                        Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                        text: "↑"
+                                        Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
+                                        enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index > 0
+                                        onClicked: settings.moveWidget(modelData.id, -1)
+                                        onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                    }
+                                    Controls.ToolButton {
+                                        id: down
+                                        objectName: "widgetDown" + modelData.id
+                                        Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                        text: "↓"
+                                        Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
+                                        enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index < 6
+                                        onClicked: settings.moveWidget(modelData.id, 1)
+                                        onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
                                     }
                                 }
-                                Controls.CheckBox {
-                                    id: checkbox
-                                    objectName: "widgetVisible" + modelData.id
+                                LocalModuleDetails {
+                                    id: moduleInfo
+                                    objectName: "moduleDetails" + modelData.id
                                     Layout.fillWidth: true
-                                    text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
-                                        : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
-                                        : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
-                                    enabled: settings.profiles.writable && !settings.importing
-                                    checked: modelData.visible
-                                    onToggled: settings.setWidgetVisible(modelData.id, checked)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                    widgetId: modelData.id
+                                    shown: modelData.visible
+                                    integrations: settings.integrations
+                                    onRevealRequested: control => settings.reveal(control)
                                 }
-                                Controls.ToolButton {
-                                    id: up
-                                    objectName: "widgetUp" + modelData.id
-                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
-                                    text: "↑"
-                                    Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
-                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index > 0
-                                    onClicked: settings.moveWidget(modelData.id, -1)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
-                                }
-                                Controls.ToolButton {
-                                    id: down
-                                    objectName: "widgetDown" + modelData.id
-                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
-                                    text: "↓"
-                                    Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
-                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index < 6
-                                    onClicked: settings.moveWidget(modelData.id, 1)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                Rectangle {
+                                    visible: moduleInfo.visible && index < widgetRows.count - 1
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: Style.space.md
+                                    height: 1
+                                    color: Style.alpha(widgetHeader.palette.windowText, Style.state.chip * 2)
                                 }
                             }
                         }
