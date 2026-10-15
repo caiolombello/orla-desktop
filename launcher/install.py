@@ -806,13 +806,14 @@ def uninstall(paths: InstallPaths, *, backend=None) -> dict:
     return {"status": "uninstalled", "runtime": "unverified", "archiveSha256": digest}
 
 
-def _launch(paths):
+def _launch(paths, *, session=False):
     if _pending(paths) is not None:
         raise InstallError("pending_transaction")
     receipt = _receipt(paths)
     _guard(paths, receipt)
     binary = _base(paths) / "versions" / receipt["archiveSha256"] / "bin/orla-launcher"
-    os.execv(str(binary), [str(binary), "--no-global-shortcut"])
+    arguments = ["--managed-shortcuts", "--start-hidden"] if session else ["--no-global-shortcut"]
+    os.execv(str(binary), [str(binary), *arguments])
 
 
 RECOVERY_SCHEMA = "orla-launcher-finish-install-recovery-0.1"
@@ -1510,7 +1511,7 @@ def main(arguments: list[str] | None = None) -> int:
     update_command.add_argument("--sha256", required=True)
     update_command.add_argument("--commit", required=True)
     commands.add_parser("rollback")
-    for command in ("status", "launch", "uninstall"):
+    for command in ("status", "launch", "uninstall", "session"):
         commands.add_parser(command)
     recover_command = commands.add_parser("recover", allow_abbrev=False)
     recovery_mode = recover_command.add_mutually_exclusive_group(required=True)
@@ -1534,6 +1535,9 @@ def main(arguments: list[str] | None = None) -> int:
             result = update_archive(options.archive, expected_sha256=options.sha256, expected_commit=options.commit, paths=paths)
         elif options.command == "rollback":
             result = rollback_update(paths)
+        elif options.command == "session":
+            _launch(paths, session=True)
+            return 0
         else:
             _launch(paths)
             return 0
