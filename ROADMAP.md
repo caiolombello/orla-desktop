@@ -901,14 +901,34 @@ qualificada; suas tentativas e falhas de seletores permanecem registradas.
 Não há aceite de ponteiro, foco espontâneo, pixels nativos ou importação/seleção
 gerenciada na sessão real. Consulte o [registro e capturas](docs/validation/appearance-0.2.3.md#compact-preset-chooser--15-october-2026).
 
-**Próxima entrega de C1/UX1:** reorganizar widgets por arraste na aba Widgets,
-conservando as setas e o teclado. O gesto deve mostrar o destino e salvar uma vez
-apenas ao soltar; cancelar, sair da lista ou trocar de perfil/revisão não escreve.
-Reutilizar o writer atual, sem migrar preferências legadas ou criar outro formato.
-Antes de qualificar o arraste nativo, estabelecer a entrada precisa por ponteiro;
-a Tab legado→temas e a avaliação visual nativa também seguem abertas. Conferir
-350/420 px, ambos os esquemas, foco, cancelamento e preservação de outros perfis.
-C1, UX1 e DX2 seguem parciais; os demais gates do roadmap continuam ativos.
+**C1/UX1 — ordenar widgets por arraste, incremento de 15/10:** perfis gerenciados
+agora têm alças na aba Widgets, com destino visível e um commit guardado ao soltar.
+Não há gravação durante o movimento. Setas, visibilidade e prévia de Aparência
+continuam independentes. Clique, destino original, soltura fora, Escape,
+importação, readonly ou troca de perfil/revisão não gravam uma ordem antiga. O
+foco volta à alça reconstruída somente se o gesto ainda o possui. O teste KDE
+revelou que soltar durante a animação de fechamento ainda podia salvar; a edição
+agora cancela o gesto antes da animação terminar. As duas falhas iniciais foram
+preservadas e a regressão passou. A suíte final teve 100 aprovações e um skip
+Wayland em cada estilo Fusion/KDE, além de sete guardas e 70 PNGs de galeria.
+Cinco casos também entram na CI portátil pelo fixture existente de Settings.
+Oito capturas claras/escuras em 350/420 px mostram alças, rótulos e destino, sem
+alterar fontes, alvos ou orçamento. A instalação local passou com backup e um
+único stop/start; inventário, launcher e 132 arquivos/modos protegidos ficaram
+iguais. Isso ainda não prova arraste físico no popup instalado. Consulte
+[o registro e as capturas](docs/validation/profiles-0.2.5.md#widget-grip-reordering--15-october-2026).
+
+**Próximo aceite de C1/UX1:** primeiro diagnosticar a falha observada na CI do PR
+74: o teardown de runners do launcher excedeu 500 ms após o caso de cancelamento
+Steam. O job portátil passou; os arquivos do launcher não mudaram nesta fatia.
+Não ampliar o timeout nem marcar a execução falha como PASS sem causa/prova.
+Depois, executar o canário por ponteiro no applet instalado:
+criar somente um perfil próprio, arrastar/reverter e restaurar a seleção e a chave
+de perfil original sob comparação guardada, preservando sua presença/ausência.
+Confirmar coordenadas e resultado real, sem usar o gesto offscreen como aceite
+Wayland. Depois, avançar no arraste de aplicativos com alternativa por teclado.
+A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
+DX2 continuam parciais; os demais gates do roadmap permanecem ativos.
 
 ## Prontidão e recomendação de execução
 

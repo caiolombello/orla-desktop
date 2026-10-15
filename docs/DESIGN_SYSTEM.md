@@ -150,6 +150,12 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   its editor and keeps recovery reachable. Collapsing moves focused descendants
   before hiding them; cancel/reopen resets only presentation state. Preserve the
   fixed footer and popup budget; use the short-screen gallery in both schemes.
+- **Widget ordering.** Keep the grip, native checkbox and keyboard arrow actions
+  together in each grouped row. A held drag shows one insertion line and writes
+  nothing; only a valid release saves. Escape first cancels the gesture. Reveal
+  the whole focused row so the destination is visible in a short viewport. Keep
+  wrapped labels and native font/target sizes at 350 and 420 px. Closing editing
+  invalidates the gesture before any popup exit animation finishes.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the

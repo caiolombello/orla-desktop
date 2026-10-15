@@ -1,6 +1,6 @@
 # Manual dock profiles / Perfis manuais do dock
 
-Orla Dock 0.2.5 alpha. P1/C1 are partial; this covers the dock. Profile JSON uses `0.1-experimental`, independently versioned from Orla.
+Orla Dock profiles are alpha. P1/C1 are partial; this covers the dock. Profile JSON uses `0.1-experimental`, independently versioned from Orla. Grip reordering below is in the current Source/local development build and is not part of the published 0.2.9 assets.
 
 ## English
 
@@ -8,7 +8,7 @@ Orla Dock 0.2.5 alpha. P1/C1 are partial; this covers the dock. Profile JSON use
 2. In **Perfis**, **Criar Trabalho, Pessoal e Jogos** makes independent Work, Personal and Games copies of your saved flat preferences. **Preferências anteriores** (Previous preferences) stays active; initialization does not change the visible dock.
 3. Choose a profile, then press **Usar perfil** (Use profile). Moving the selector or its arrow keys only changes the pending choice. To clone the saved active presentation and activate the clone immediately, enter a unique name and press **Criar e usar** (Create and use).
 4. Customize apps and appearance for that profile. Appearance is a preview until **Aplicar** (Apply); **Cancelar**, Escape or closing settings discards it. Apply or Cancel before creating/switching profiles. Changing tabs keeps the draft. Undo belongs to the current profile and is cleared when the profile changes.
-5. In **Widgets**, toggle visibility and move widgets with the up/down buttons. These changes, calendar-event visibility and the current-desktop window filter save immediately. Appearance Cancel does not undo them. Previous preferences allows visibility changes but keeps the original widget order; use a profile to reorder.
+5. In **Widgets**, toggle visibility or move widgets with the up/down buttons. In a managed profile, drag a row by its grip to another visible row: the line shows the destination and releasing saves once. Escape during the held gesture cancels it; a later Escape closes settings. Scroll before starting a new drag to reach other rows. These changes, calendar-event visibility and the current-desktop window filter save immediately. Appearance Cancel does not undo them. Previous preferences allows visibility changes but keeps the original widget order; use a profile to reorder.
 6. Select **Preferências anteriores** and press **Usar perfil** to return to the flat settings. Managed-profile edits do not replace those saved flat fields.
 
 Each profile stores pinned apps, theme/icon/motion/custom appearance, the order and visibility of seven known widgets (clock, Pomodoro, music, system battery, QuotaLantern, PeriGauge and FalaTrace), calendar-event visibility and the current-desktop window filter. Calendar visibility does not select calendars or connect an account; KDE PIM owns that setup. The window filter does not switch desktops.
@@ -27,7 +27,7 @@ Activities/desktop association and switching, bar/launcher/event-surface selecti
 2. Em **Perfis**, **Criar Trabalho, Pessoal e Jogos** faz três cópias independentes das preferências salvas. **Preferências anteriores** permanece ativo; inicializar não muda o dock visível.
 3. Escolha um perfil e pressione **Usar perfil**. O seletor/setas só muda a escolha pendente. Para copiar a apresentação salva do perfil ativo e ativar a cópia, digite um nome único e pressione **Criar e usar**.
 4. Personalize apps e aparência do perfil. A aparência fica em prévia até **Aplicar**; **Cancelar**, Escape ou fechar descarta a prévia. Aplique ou cancele antes de criar/trocar perfil. Mudar de aba mantém o rascunho. Desfazer pertence ao perfil atual e é limpo ao trocar.
-5. Em **Widgets**, altere visibilidade e ordem pelos botões subir/descer. Essas opções, eventos do calendário e filtro pela área atual salvam imediatamente; Cancelar aparência não as desfaz. Preferências anteriores permite mudar visibilidade, mas mantém a ordem original; use um perfil para reordenar.
+5. Em **Widgets**, altere a visibilidade ou use os botões subir/descer para mudar a ordem. Em um perfil gerenciado, arraste a linha pela alça até outra linha visível: o traço mostra o destino e soltar salva uma vez. Escape durante o gesto cancela; outro Escape fecha as configurações. Para alcançar outras linhas, role antes de iniciar outro arraste. Essas opções, eventos do calendário e filtro pela área atual salvam imediatamente; Cancelar aparência não as desfaz. Preferências anteriores permite mudar visibilidade, mas mantém a ordem original; use um perfil para reordenar.
 6. Escolha **Preferências anteriores** e pressione **Usar perfil** para voltar às preferências flat. Alterações nos perfis não substituem esses campos salvos.
 
 Cada perfil guarda apps fixados, tema/ícones/movimento/aparência personalizada, ordem e visibilidade dos sete widgets conhecidos (relógio, Pomodoro, música, bateria do sistema, QuotaLantern, PeriGauge e FalaTrace), eventos do calendário e filtro pela área atual. Mostrar eventos não escolhe calendários nem conecta contas: isso pertence ao KDE PIM. O filtro não troca a área de trabalho.
