@@ -54,6 +54,136 @@ class ProfilesTests(unittest.TestCase):
     def snapshot(self):
         return json.loads(self.evaluate("JSON.stringify(effective)"))
 
+    def guarded_select(self, profile_id, guard):
+        return json.loads(self.evaluate("""(function() {
+            let changes = 0, guardCalls = 0;
+            const observed = function() { changes++; };
+            const continuation = %s;
+            const checked = typeof continuation === 'function' ? () => {
+                guardCalls++;
+                return continuation();
+            } : continuation;
+            configuration.profilesJSONChanged.connect(observed);
+            try {
+                const accepted = select(%s, activeProfileId, revision, checked);
+                return JSON.stringify({accepted:accepted, changes:changes, guardCalls:guardCalls});
+            } finally { configuration.profilesJSONChanged.disconnect(observed); }
+        })()""" % (guard, json.dumps(profile_id))))
+
+    def test_guarded_selection_refuses_a_cancelled_intent_without_changing_profiles(self):
+        self.initialize()
+        raw = self.config.property("profilesJSON")
+        self.assertEqual(self.guarded_select("work", "() => false"),
+                         {"accepted": False, "changes": 0, "guardCalls": 1})
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.state.property("activeProfileId"), "legacy")
+        self.assertEqual(self.warnings, [])
+
+    def test_selection_guard_requires_true_and_validates_noops_without_changes(self):
+        self.initialize()
+        raw = self.config.property("profilesJSON")
+        for guard in ("null", "true", "0", "{}", "'allow'"):
+            with self.subTest(guard=guard):
+                self.assertEqual(self.guarded_select("work", guard),
+                                 {"accepted": False, "changes": 0, "guardCalls": 0})
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+        for guard in ("() => 1", "() => 'allow'", "() => null",
+                      "() => { throw new Error('fixture'); }"):
+            with self.subTest(guard=guard):
+                self.assertEqual(self.guarded_select("work", guard),
+                                 {"accepted": False, "changes": 0, "guardCalls": 1})
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.guarded_select("legacy", "() => false"),
+                         {"accepted": False, "changes": 0, "guardCalls": 1})
+        self.assertEqual(self.guarded_select("legacy", "() => true"),
+                         {"accepted": True, "changes": 0, "guardCalls": 1})
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.warnings, [])
+
+    def test_selection_rechecks_context_after_the_transition_hook(self):
+        self.initialize()
+        raw = self.config.property("profilesJSON")
+        result = json.loads(self.evaluate("""(function() {
+            let context = 'fixture-a', changes = 0, guardCalls = 0;
+            const intendedContext = context;
+            const observed = function() { changes++; };
+            transitionGuard = () => { context = 'fixture-b'; return true; };
+            configuration.profilesJSONChanged.connect(observed);
+            try {
+                const accepted = select('work', activeProfileId, revision, () => {
+                    guardCalls++;
+                    return context === intendedContext;
+                });
+                return JSON.stringify({accepted:accepted, changes:changes,
+                    guardCalls:guardCalls, context:context});
+            } finally {
+                configuration.profilesJSONChanged.disconnect(observed);
+                transitionGuard = null;
+            }
+        })()"""))
+        self.assertEqual(result, {"accepted": False, "changes": 0, "guardCalls": 1,
+                                  "context": "fixture-b"})
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.state.property("activeProfileId"), "legacy")
+        self.assertEqual(self.warnings, [])
+
+    def test_selection_guard_keeps_a_newer_manual_selection_and_aba_revision(self):
+        self.initialize()
+        profiles = json.loads(self.config.property("profilesJSON"))["profiles"]
+        self.assertEqual(self.guarded_select("work",
+                         "() => select('personal', activeProfileId, revision)"),
+                         {"accepted": False, "changes": 1, "guardCalls": 1})
+        self.assertEqual(self.state.property("activeProfileId"), "personal")
+        self.assertEqual(json.loads(self.config.property("profilesJSON"))["profiles"], profiles)
+
+        self.assertTrue(self.command("select", "work"))
+        raw = self.config.property("profilesJSON")
+        self.assertEqual(self.guarded_select("games", """() => {
+            select('personal', activeProfileId, revision);
+            select('work', activeProfileId, revision);
+            return true;
+        }"""), {"accepted": False, "changes": 2, "guardCalls": 1})
+        self.assertEqual(self.state.property("activeProfileId"), "work")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.warnings, [])
+
+    def test_selection_guard_preserves_reentrant_edits_and_invalid_saved_bytes(self):
+        self.initialize()
+        self.assertTrue(self.command("select", "work"))
+        original = json.loads(self.config.property("profilesJSON"))
+        self.assertEqual(self.guarded_select("personal", """() => {
+            commitPresentation({calendarEvents:false}, activeProfileId, revision);
+            return true;
+        }"""), {"accepted": False, "changes": 1, "guardCalls": 1})
+        expected = json.loads(json.dumps(original))
+        next(profile for profile in expected["profiles"] if profile["id"] == "work")["calendarEvents"] = False
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        invalid = '{"formatVersion":"future"}'
+        self.assertEqual(self.guarded_select("personal", """() => {
+            configuration.profilesJSON = %s;
+            return true;
+        }""" % json.dumps(invalid)), {"accepted": False, "changes": 1, "guardCalls": 1})
+        self.assertEqual(self.config.property("profilesJSON"), invalid)
+        self.assertFalse(self.state.property("writable"))
+        self.assertEqual(self.state.property("activeProfileId"), "work")
+        self.assertEqual(self.warnings, [])
+
+    def test_valid_guarded_selection_changes_only_the_active_profile_once(self):
+        original = self.initialize()
+        flat = self.snapshot()
+        timer = {key: self.config.property(key) for key in ("timerDeadline", "timerRemaining", "completedFocus")}
+        self.assertEqual(self.guarded_select("work", "() => true"),
+                         {"accepted": True, "changes": 1, "guardCalls": 1})
+        expected = {**original, "activeProfileId": "work"}
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.snapshot(), flat)
+        self.assertEqual(self.guarded_select("work", "() => true"),
+                         {"accepted": True, "changes": 0, "guardCalls": 1})
+        self.assertTrue(self.command("select", "legacy"))
+        self.assertEqual(self.snapshot(), flat)
+        self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+        self.assertEqual(self.warnings, [])
+
     def test_empty_configuration_stays_legacy_until_explicit_initialization(self):
         baseline = {key: self.configuration_value(key) for key in ("profilesJSON", "appearanceJSON", "launchers", "timerDeadline")}
         self.assertEqual(self.state.property("activeProfileId"), "legacy")
