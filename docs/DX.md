@@ -149,3 +149,28 @@ As fases são gates de saída, não datas. DX1 pode ocorrer junto das correçõe
 O alpha permite testar o fluxo portátil documentado; não prova simplicidade para novos contribuidores, a UX da galeria ou isolamento de extensões. Registrar primeiro uma baseline qualitativa e voluntária com contribuições guiadas. Critério para declarar DX2 utilizável: pelo menos uma pessoa fora do núcleo consegue seguir o guia, pré-visualizar um tema sintético e interpretar erros do validador; corrigir a documentação a partir das dificuldades observadas. Não confundir aceitação de um PR com eficácia do processo.
 
 **Prontidão:** DX0 está pronto para execução e parcialmente presente na documentação atual; sua atualização deve ocorrer junto às mudanças reais dos comandos. DX1 pode começar após mapear um primeiro adaptador/contrato e fixtures. DX2–DX5 estão definidos como roadmap, mas dependem dos schemas, consumidor, isolamento, política de manutenção e evidência de uso descritos acima.
+
+## Evidência de visitas nativas
+
+Leitores AT-SPI e KWin são assíncronos entre si. Uma leitura síncrona de
+acessibilidade pode retornar uma superfície antes de o loop asyncio processar
+seu callback do compositor. Aguarde a associação exata com prazo finito; ausência
+de uma observação ainda não é ausência de janela e não autoriza repetir o input.
+O estado final começa desconhecido e exige uma observação nova, inclusive quando
+o cleanup falha. Nunca deixe um valor inicial de ausência representar o final.
+
+Em Wayland, valide o domínio das coordenadas na versão/escala testada antes de
+clicar. Não transforme ou arredonde extents por suposição. Compare janelas e
+ancestrais com o baseline real: a própria área de trabalho e os painéis também
+podem aparecer como frames acessíveis. Um título ou categoria como Aparência
+não identifica sozinho a superfície. Registre falhas, recuperação e ações via
+acessibilidade separadamente de clique por mouse, seat e foco. Veja a
+[validação instalada da barra](validation/shared-control-center-source.md#installed-bar-configuration-opening-and-accessible-cancel--15-october-2026).
+
+A remoção da janela e duas leituras estáveis em um intervalo curto também não
+comprovam que o KConfig terminou seus flushes pendentes. Inspecione o estado após
+o cleanup e registre qualquer gravação tardia. Declare previamente os caminhos
+exatos de geometria que podem mudar e o domínio da medida independente; não
+arredonde valores para obter concordância nem adote o mapa alterado como banco
+original. Preserve recibos imediatos com sua hora/escopo e qualifique a persistência
+final separadamente.
