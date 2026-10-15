@@ -149,6 +149,30 @@ restart, Activity precedence, UI opt-in, manual override/Resume, appearance
 editing, Pomodoro continuity, the user's panel, focus/seat or monitor behavior.
 P2 remains partial and the user's installed dock remains automatic-off.
 
+## Waiting-state explanation
+
+Commit `bd695bc` replaces the generic wait message with the unavailable domain:
+Activity, desktop or both, with a separate loading state. The both-ready policy,
+manual-choice priority, selection logic, focus and visual tokens are unchanged.
+Two regressions first failed on the generic message. The updated controller,
+dock contexts and design suites then passed **57 tests with one expected skip
+per style** (58 cases), in Fusion and KDE. They cover all eight incomplete pairs,
+no profile writes while waiting, recovery and existing status priorities.
+Design check returned zero issues, the package matched all 72 Source entries,
+and four new synthetic 350 px captures were reviewed in both schemes:
+[dark](../screenshots/contexts-auto-dark-both-unavailable-350.png) /
+[light](../screenshots/contexts-auto-light-both-unavailable-350.png).
+
+This one-file change was installed with a verified read-only 72-file backup and
+one controlled stop/start. A fresh independent check confirmed Source, archive
+and installed files match; configuration, bar, launcher and original banks are
+preserved. Automation stays off, its four disk keys remain absent, autolock is
+false and no automatic shell restart occurred. The development archive is
+`8c16c527efb31d8b6dca7f9bd4e8012f81f2dc0d357476c24827162f5de6b3a9`;
+the public release asset is unchanged. The new message was not exercised in a
+native popup after installation. The earlier private backend result qualifies
+the previous runtime bytes, not this subsequent text update.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -171,6 +195,10 @@ or logs. These hashes identify the records summarized above:
 | Original private KDE Phase2 FAILED result | `7da0268ea2c493423e89cd72f384e74b8fb34b03f1ffc7031bd95570d16d3706` |
 | Private KDE Phase2 backend result | `38c9e62c45bf87ae0b81d61b0822e4219b3bf7e1052fade8e7a8faf8ccd0e963` |
 | Fresh private KDE Phase2 postcheck | `4a67ee4cd22f54b65c6b283910bdee837f96ce02fe5bcb2a7ac99d4eb9e118d8` |
+| Waiting explanation RED result | `e9c6a9bae98937a779f7bba07e045cb3c3233871ac9faf9ac07f4086c297073e` |
+| Waiting explanation GREEN/design/gallery result | `2ca4443e77955d5ccf12a0aa083a2b7c55782e82ac3492942391d68587ec4aaf` |
+| Waiting explanation installation result | `4550676fd3aa3dd14edfcaeb8df18717413a46247d3898f92f71598a99c84092` |
+| Fresh waiting explanation install/backup check | `d0737518cbb76e91fb8ebe45a4d0db273ac17d4e88c50fcddf86e1e7140bafb7` |
 
 ## Next native gates
 

@@ -1299,6 +1299,14 @@ independente preservaram a sessão principal. Isso não completa P2: opt-in por 
 escolha manual/Retomar, precedência de Activity, reinício habilitado, painel do
 usuário, foco/seat e monitores continuam abertos. [Evidência e limites](docs/validation/contexts-auto-installed.md#private-kde-backend-transition).
 
+**P2/UX — motivo da espera (15/10):** o status agora informa Activity, área ou ambas
+indisponíveis, e diferencia carregamento, preservando a exigência do par pronto e
+a escolha manual. Duas regressões causais, 57 aprovações e um skip por estilo,
+design, build e quatro capturas de 350 px em claro/escuro passaram. A alteração
+de texto foi instalada com backup e uma recarga, preservando a sessão e o
+automático desligado; a mensagem nova ainda não foi visitada no popup nativo.
+[Evidência e capturas](docs/validation/contexts-auto-installed.md#waiting-state-explanation).
+
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
 O seletor fornece URL; não fornece bytes validados. A próxima implementação deve
