@@ -938,14 +938,26 @@ real da CI anterior. Nenhuma correção de framework, ampliação de prazo ou re
 da guarda foi adotada. A correção no proprietário do framework exige build e
 regressão próprias.
 
-**Próximo aceite de C1/UX1:** no pacote real, abrir Settings por AT-SPI funcionou
-e preservou configuração, processo e estado de acessibilidade. Uma tentativa de
-entrada pelo ponteiro virtual, com a dock em autohide, não abriu o popup; os
-dispositivos foram liberados e nenhum perfil foi criado. Diagnosticar essa entrada
-e distinguir o comportamento de borda do ponteiro de um defeito do produto antes
-de repetir gravações nativas. Depois, criar um único perfil novo, guardar os
+**Entrada nativa de C1/UX1 — 15/10:** no pacote real, uma nova visita revelou a
+dock em autohide, abriu Settings por um clique de ponteiro virtual nas coordenadas
+acessíveis atuais, fechou com Escape e confirmou o recolhimento. A observação
+usou getters do KWin, sem instrumentar o applet. O diagnóstico corrigiu limitações
+do roteiro de input: geometria real do painel, contatos de borda distintos e
+movimentos relativos observáveis. As tentativas anteriores e seus timeouts
+permanecem registradas. Configuração, pacote, processo Plasma, launcher e 132
+hashes protegidos ficaram iguais; dispositivos e observador foram removidos e
+a acessibilidade foi restaurada. Nenhum perfil foi criado e não houve mudança
+no produto. Consulte a [prova delimitada](docs/validation/profiles-0.2.5.md#production-pointer-entry--15-october-2026).
+
+Uma visita adicional selecionou Widgets por clique e mediu as sete alças
+desativadas do legado. Só a primeira estava visível; a geometria do viewport
+não foi exposta pela acessibilidade. Escape, recolhimento e ausência posterior
+dos controles do popup foram verificados, sem mudar a configuração.
+
+**Próximo aceite de C1/UX1:** criar um único perfil novo com baseline e limpeza
+próprios, revelar e medir duas linhas completas antes do gesto; guardar os
 documentos completos antes/depois do arraste e reversão e restaurar a chave
-original com baseline novo. O aceite do pacote sem instrumentação continua
+original. O aceite do arraste no pacote sem instrumentação continua
 aberto. Avançar então no arraste de aplicativos com alternativa por teclado.
 A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
 DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte

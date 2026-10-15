@@ -242,6 +242,61 @@ before another profile-writing gesture. Private receipts are in
 `root-production-readonly-r1/`, `root-production-readonly-r2/` and
 `root-production-pointer-r1/` under the same widget evidence area.
 
+### Production pointer entry — 15 October 2026
+
+A subsequent bounded visit passed on the unmodified installed applet in Plasma
+6.7.5/Wayland, one 2648×1490 logical output at scale 1.45. A temporary getter-only
+KWin script observed the actual cursor and the exact Plasma-owned dock window's
+`hidden` property. Settings opened through one virtual pointer click at its
+fresh AT-SPI button rectangle; Escape closed it, and leaving the dock restored
+the hidden state. AT-SPI supplied geometry and observation; it did not activate
+the button in this visit.
+
+The diagnostic found limitations in the earlier input procedure. The configured
+panel height was 88, while KWin exposed a 104-pixel frame; the first observer's
+exact-height filter therefore stopped before input. One edge contact produced
+the compositor's one-pixel pushback. Repeating identical absolute values produced
+no new observed cursor record. A distinct second contact revealed the panel,
+but that absolute-only visit timed out waiting for retraction. The relative
+pointer contrast then passed reveal/enter/leave/retraction. Its first one-count
+nudge produced a fresh record with the same rounded integer position, so that
+visitor's movement assertion stopped; the bounded five-count version observed
+actual displacement and passed. These failures remain separate from the passing
+episodes. The edge timing and stateful-event explanations are consistent with
+the [KWin 6.7.5 implementation](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/screenedge.cpp)
+and [Linux input protocol](https://docs.kernel.org/input/event-codes.html).
+
+The final popup visitor used ten bounded relative commands, 167 total absolute
+axis counts, and a 30-second input-helper TTL. Its two earlier accessibility
+attempts stopped before input on unsupported Component interfaces. The final
+visitor skipped those unavailable facades and required one actionable,
+geometry-capable button. The popup was also confirmed absent during cleanup.
+All temporary input devices were released, the owned observer was unloaded,
+and accessibility settings were restored. Configuration bytes, the 67-file
+installed package, shell identity and resident launcher remained unchanged.
+A separate post-check matched 132 protected hashes and the six recorded
+direct-file modes. No profile, layout or product Source was changed.
+
+Private receipts are under `.runtime/dock-edge-20261015/`: `root-panel-read-r1/`,
+`root-abs-timing-r1/` through `r3/`, `root-relative-r1/` / `r2/`, and
+`root-popup-r1/` through `r3/`. Eighteen fake-device checks covered the relative
+helper's validation, event sequence, TTL refusal and partial-construction cleanup.
+No screenshots or personal configuration are published. This qualifies pointer
+entry and dismissal on this setup; fresh-profile dragging, complete document
+reversal, focus return, held-state pixels and native setter counts remain open.
+
+A further read-only visit clicked the Widgets tab at its fresh rectangle and
+observed its checked state, the legacy guidance and all seven disabled grips.
+Only the clock grip was reported showing; the remaining rows were below the
+visible content. AT-SPI exposed no scroll/viewport ancestor, so viewport bounds
+remain unqualified. No scrolling, toggling, profile creation or drag ran. Escape
+and panel retraction completed, with the same preservation/cleanup guards. Since
+Cancel is specific to the Appearance tab, a separate subsequent read confirmed
+the Widgets tab and Cancel controls absent or not showing; that read also
+preserved configuration/shell identity and restored accessibility. These receipts
+are in `root-widget-geometry-r1/`. The next gesture episode must establish full
+row reachability in its fresh managed profile before starting a drag.
+
 ### Launcher CI diagnosis checkpoint
 
 Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`
