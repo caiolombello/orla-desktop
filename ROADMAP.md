@@ -848,10 +848,22 @@ o serviço foi retirado e o legado restaurado. O diagnóstico real confirmou que
 enumeração de links do systemd não inclui esse diretório de dados. A correção
 revalida o link próprio após reload, com regressões de recusa indevida e drift;
 a falha inicial e o erro separado do roteiro de input permanecem registrados.
-Serviço público com
-ELF/atalho e novo login continuam sem qualificação nativa. Meta standalone,
-migração, outros ambientes e os demais gates R2/L0 seguem abertos. Veja o
+A nova tentativa com o bundle corrigido passou o ciclo público instalado:
+Meta abriu com foco, `2-1` mostrou `1`, Escape ocultou mantendo o processo e
+Ctrl+Alt+Meta+O reabriu com foco; desativar e reativar também passaram. Em uma
+saída Wayland com escala 1,45, a segunda ativação ficou residente/oculta na
+instalação principal, com backups legados e 127 arquivos anteriores preservados.
+Input, janela de teste e inibidor temporários foram liberados; a captura foi
+revisada. Novo login, execução de aplicativos, migração pública genérica, outros
+ambientes e os demais gates R2/L0 continuam abertos. Veja o
 [fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).
+
+**Próxima entrega de UX1:** simplificar Aparência, mostrando presets, temas e
+controles de forma/movimento antes dos campos técnicos. Cores e JSON ficam em
+“Ajustes avançados”, sem novas preferências nem mudanças de geometria. Aceite:
+operar os controles comuns pelo teclado sem passar pelos campos recolhidos,
+revelar erros editáveis, preservar preview/Aplicar/Cancelar e revisar a galeria
+clara/escura antes da prova curta na sessão real.
 
 ## Prontidão e recomendação de execução
 

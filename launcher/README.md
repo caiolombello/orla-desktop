@@ -651,9 +651,21 @@ próprio no disco depois do reload e mantém as recusas de dono, identidade e li
 estranhos. A regressão reproduziu a recusa antes da correção e passou depois,
 incluindo remoção/troca do link durante o reload sem iniciar o serviço.
 
-Ativar o serviço público com o ELF instalado,
-abrir/ocultar pelo atalho, desativar e iniciar após novo login seguem pendentes.
-R2/L0 continuam parciais; a instalação principal permanece no launcher anterior.
+Uma nova tentativa com o [bundle corrigido do CI 38677892489](https://github.com/caiolombello/orla-desktop/actions/runs/38677892489)
+passou o ciclo público instalado em Wayland, em uma saída com escala 1,45:
+ativar/status → Meta abre com foco → `2-1` mostra `1` → Escape oculta mantendo o
+processo → Ctrl+Alt+Meta+O reabre com foco → desativar → ativar/status novamente.
+A [captura da consulta própria](../docs/screenshots/launcher-managed-service/native-search.png)
+foi revisada. A segunda ativação ficou residente e oculta na instalação principal;
+wrapper, menu, unidade e link legados permanecem guardados para restauração.
+Os 127 arquivos de estado anteriores ficaram exatos, incluindo a auditoria da
+primeira tentativa. Input, janela de teste e inibidor temporários foram liberados.
+Um getter transitório `sink_refused` foi preservado; somente o snapshot válido
+posterior comprova a ocultação. Os recibos continuam `runtime: unverified`.
+
+Isso qualifica o ciclo delimitado neste login. Inicialização após novo login,
+execução de aplicativos, provedores, outros ambientes e migração pública genérica
+continuam pendentes; R2/L0 permanecem parciais.
 O contrato usa as referências do
 [systemd 259](https://github.com/systemd/systemd/blob/v259/man/org.freedesktop.systemd1.xml)
 e seus [targets de sessão](https://github.com/systemd/systemd/blob/v259/man/systemd.special.xml).
