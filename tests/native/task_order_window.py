@@ -8,7 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQuick import QQuickWindow
 
-assert len(sys.argv)==2 and sys.argv[1] in ("A","B")
+assert len(sys.argv)==2 and sys.argv[1] in ("A","B","C")
 app=QGuiApplication([])
 QGuiApplication.setDesktopFileName("org.orla.Model"+sys.argv[1])
 window=QQuickWindow();window.setTitle(sys.argv[1]);window.resize(240,160)

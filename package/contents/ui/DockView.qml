@@ -29,6 +29,7 @@ Item {
     property alias appearancePreset: appearancePresetState
     property alias systemBattery: power
     property alias profiles: profileState
+    property alias taskDrag: taskDragState
     property alias contexts: contextState
     property alias contextBindings: contextBindingsState
     property alias desktopSwitch: desktopSwitchState
@@ -88,6 +89,103 @@ Item {
         id: profileState
         configuration: root.configuration
         transitionGuard: () => !appearanceState.dirty && !appearancePresetState.dirty
+    }
+    TaskDragState {
+        id: taskDragState
+        profiles: profileState
+        viewActive: root.ready && root.visible && root.enabled && !root.popupOpen
+        readOrder: () => root.taskOrder()
+        commitMove: (from, to, guard) => root.moveTask(from, to, guard)
+    }
+    property string taskDragGeometry: ""
+    property int taskFocusEpoch: 0
+    function dragGeometry() {
+        const point = viewport.mapToItem(root.Window.window.contentItem, 0, 0);
+        return JSON.stringify([point.x, point.y, viewport.width, viewport.height,
+            viewport.contentX, root.eventSlotWidth, localEventSurface.visible]);
+    }
+    function insideTaskViewport(point) {
+        const window = root.Window.window;
+        if (!window || viewport.moving) return false;
+        const position = viewport.mapFromItem(window.contentItem, point.x, point.y);
+        const usable = viewport.width - (localEventSurface.visible ? root.eventSlotWidth : 0);
+        return position.x >= 0 && position.x < usable && position.y >= 0 && position.y < viewport.height;
+    }
+    function taskAtPoint(point) {
+        const window = root.Window.window;
+        if (!insideTaskViewport(point)) return null;
+        const usable = viewport.width - (localEventSurface.visible ? root.eventSlotWidth : 0);
+        const rows = taskOrder();
+        if (rows === null) return null;
+        for (let row = 0; row < rows.length; ++row) {
+            const tile = taskRepeater.itemAt(row);
+            if (!tile || !tile.visible || !tile.enabled) continue;
+            const top = tile.mapToItem(viewport, 0, 0);
+            if (top.x < 0 || top.x + tile.width > usable || top.y < 0 || top.y + tile.height > viewport.height) continue;
+            const local = tile.mapFromItem(window.contentItem, point.x, point.y);
+            if (local.x >= 0 && local.x < tile.width && local.y >= 0 && local.y < tile.height)
+                return {tile: tile, identity: rows[row].identity, after: local.x >= tile.width / 2};
+        }
+        return null;
+    }
+    function beginTaskDrag(tile, point) {
+        if (launcherOrderBusy || viewport.moving) return false;
+        const target = taskAtPoint(point);
+        if (!target || target.tile !== tile || !taskDragState.begin(target.identity)) return false;
+        taskDragGeometry = dragGeometry();
+        return true;
+    }
+    function updateTaskDrag(point) {
+        if (taskDragGeometry !== dragGeometry() || !insideTaskViewport(point)) { taskDragState.cancel(); return; }
+        const target = taskAtPoint(point);
+        // Crossing a slot gap clears the marker without ending a valid gesture.
+        taskDragState.update(target ? target.identity : "", target ? target.after : false);
+    }
+    function finishTaskDrag(point, sourceItem) {
+        updateTaskDrag(point);
+        const captured = taskDragState.intent;
+        const window = root.Window.window;
+        const restore = captured !== null && window && window.active && sourceItem.activeFocus;
+        const visualFocus = sourceItem.visualFocus;
+        const accepted = taskDragState.finish();
+        if (!accepted || !restore) return;
+        const focused = window.activeFocusItem;
+        if (focused && focused !== sourceItem && focused !== window.contentItem) return;
+        const generation = taskDragState.generation, epoch = taskFocusEpoch;
+        Qt.callLater(() => {
+            if (root.Window.window !== window || !window.active || !root.visible || !root.enabled || root.popupOpen
+                || taskDragState.generation !== generation || taskFocusEpoch !== epoch || window.activeFocusItem !== focused) return;
+            const rows = taskOrder();
+            const row = rows === null ? -1 : rows.findIndex(entry => entry.identity === captured.identity);
+            const tile = row >= 0 ? taskRepeater.itemAt(row) : null;
+            if (tile && tile.visible && tile.enabled) tile.forceActiveFocus(visualFocus ? Qt.TabFocusReason : Qt.MouseFocusReason);
+        });
+    }
+    function invalidateTaskDrag() {
+        if (taskDragState.pressed && !taskDragState.committing) taskDragState.cancel();
+    }
+    function checkTaskDragGeometry() {
+        if (taskDragState.pressed && taskDragGeometry !== dragGeometry()) invalidateTaskDrag();
+    }
+    function taskDropTile() {
+        if (!taskDragState.active || !taskDragState.intent || !taskDragState.destination.length) return null;
+        const row = taskDragState.intent.rows.findIndex(entry => entry.identity === taskDragState.destination);
+        return row >= 0 ? taskRepeater.itemAt(row) : null;
+    }
+    Connections {
+        target: tasks
+        function onRowsAboutToBeInserted() { root.invalidateTaskDrag(); }
+        function onRowsAboutToBeRemoved() { root.invalidateTaskDrag(); }
+        function onRowsAboutToBeMoved() { root.invalidateTaskDrag(); }
+        function onModelAboutToBeReset() { root.invalidateTaskDrag(); }
+        function onLayoutAboutToBeChanged() { root.invalidateTaskDrag(); }
+        function onDataChanged() {
+            if (taskDragState.pressed && !taskDragState.committing && !taskDragState.releaseValid(taskDragState.intent))
+                taskDragState.cancel();
+        }
+    }
+    Keys.onEscapePressed: event => {
+        if (taskDragState.pressed) { taskDragState.cancel(); event.accepted = true; }
     }
     readonly property var unavailableContextSnapshot: ({
         outputName: "",
@@ -167,7 +265,7 @@ Item {
         || integrationPopup.visible || controlCenterPopup.visible || pomodoroPopup.visible
         || musicPopup.visible || batteryPopup.visible || nativeTaskMenu.visible || taskMenu.visible
     function hoverTile(tile, hovered) {
-        if (hovered) labelTarget = tile;
+        if (hovered && !taskDragState.active) labelTarget = tile;
         else if (labelTarget === tile) labelTarget = null;
     }
     Loader {
@@ -310,14 +408,25 @@ Item {
         notice = "";
         return true;
     }
-    function moveTask(from, to) {
+    function moveTask(from, to, continuationGuard) {
         const scope = profileState.activeProfileId, revision = profileState.revision;
         if (!profileState.writable || launcherOrderBusy) return false;
+        const allowed = () => {
+            try { return continuationGuard === undefined || (typeof continuationGuard === "function" && continuationGuard() === true); }
+            catch (_) { return false; }
+        };
+        if (!allowed()) return false;
         const original = Profiles.copy(presentation.launchers);
         const before = Array.from(tasks.launcherList);
         if (from < 0 || to < 0 || from >= tasks.count || to >= tasks.count) return false;
-        const membership = taskMembership(taskOrder());
-        if (membership === "") return false;
+        const beforeRows = taskOrder();
+        if (beforeRows === null) return false;
+        const expected = beforeRows.map(row => row.identity);
+        expected.splice(to, 0, expected.splice(from, 1)[0]);
+        const matchesMove = () => {
+            const rows = taskOrder();
+            return rows !== null && JSON.stringify(rows.map(row => row.identity)) === JSON.stringify(expected);
+        };
         launcherOrderBusy = true;
         const current = () => scope === profileState.activeProfileId && revision === profileState.revision;
         try {
@@ -327,8 +436,13 @@ Item {
                 notice = qsTr("A configuração mudou. Tente organizar os apps novamente.");
                 return false;
             }
+            if (!allowed() || !matchesMove()) {
+                launcherReloadPending = true;
+                notice = qsTr("A lista de janelas mudou. Tente organizar os apps novamente.");
+                return false;
+            }
             tasks.syncLaunchers();
-            if (!current() || taskMembership(taskOrder()) !== membership) {
+            if (!current() || !allowed() || !matchesMove()) {
                 launcherReloadPending = true;
                 notice = qsTr("A lista de janelas mudou. Tente organizar os apps novamente.");
                 return false;
@@ -341,7 +455,8 @@ Item {
                 for (const url of original) if (launcherKey(url) === key) ordered.push(url);
             const candidate = original.map(url => beforeKeys.indexOf(launcherKey(url)) !== -1 && orderedKeys.indexOf(launcherKey(url)) !== -1 ? ordered.shift() : url);
             const post = JSON.stringify(taskOrder());
-            const guard = scope === "legacy" ? undefined : () => current() && JSON.stringify(taskOrder()) === post;
+            const guard = scope === "legacy" && continuationGuard === undefined ? undefined
+                : () => current() && allowed() && JSON.stringify(taskOrder()) === post;
             return saveLaunchers(candidate, scope, revision, guard);
         } finally { finishLauncherOrder(); }
     }
@@ -435,7 +550,12 @@ Item {
     Connections {
         target: root.Window.window
         enabled: target !== null
+        // External window loss invalidates even while the native adapter is committing.
+        function onActiveChanged() { if (!target.active && taskDragState.pressed) taskDragState.cancel(); }
+        function onVisibleChanged() { if (!target.visible && taskDragState.pressed) taskDragState.cancel(); }
+        function onClosing() { if (taskDragState.pressed) taskDragState.cancel(); }
         function onActiveFocusItemChanged() {
+            root.taskFocusEpoch++;
             const control = root.Window.window.activeFocusItem;
             root.rememberStableDockControl(control);
             root.revealInViewport(control);
@@ -590,11 +710,16 @@ Item {
         height: root.height
         // Extend Qt's actual bounds without moving or resizing ordinary controls.
         contentWidth: content.width + (localEventSurface.visible ? root.eventSlotWidth : 0)
-        onWidthChanged: root.revealAfterGeometryChange()
+        onWidthChanged: { root.checkTaskDragGeometry(); root.revealAfterGeometryChange(); }
+        onHeightChanged: root.checkTaskDragGeometry()
+        onXChanged: root.checkTaskDragGeometry()
+        onYChanged: root.checkTaskDragGeometry()
+        onContentXChanged: root.checkTaskDragGeometry()
         contentHeight: height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
+        interactive: !taskDragState.pressed
         Controls.ScrollBar.horizontal: Controls.ScrollBar { policy: Controls.ScrollBar.AlwaysOff }
         Row {
             id: content
@@ -619,6 +744,7 @@ Item {
                 model: tasks
                 delegate: Tile {
                     id: taskTile
+                    objectName: "taskTile" + index
                     required property var model
                     required property int index
                     anchors.verticalCenter: parent.verticalCenter
@@ -632,7 +758,7 @@ Item {
                     launching: Boolean(model.IsStartup)
                     activeTask: Boolean(model.IsActive)
                     attention: Boolean(model.IsDemandingAttention)
-                    nativeLabel: root.nativePopups
+                    nativeLabel: root.nativePopups || taskDragState.active
                     onHoveredChanged: root.hoverTile(taskTile, hovered)
                     onActiveFocusChanged: if (activeFocus) root.revealInViewport(taskTile)
                     onClicked: root.activateTask(index)
@@ -645,6 +771,50 @@ Item {
                         }
                     }
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: root.showTaskMenuAt(taskTile.index, taskTile.model, taskTile) }
+                    DragHandler {
+                        id: taskPointer
+                        objectName: "taskDragHandler" + taskTile.index
+                        target: null
+                        acceptedButtons: Qt.LeftButton
+                        acceptedModifiers: Qt.NoModifier
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        property var ownedIntent: null
+                        property bool everActive: false
+                        property int pointId: -1
+                        function cancelOwned() {
+                            if (ownedIntent !== null && taskDragState.intent === ownedIntent) taskDragState.cancel();
+                            ownedIntent = null;
+                        }
+                        onActiveChanged: if (active) {
+                            everActive = true;
+                            if (taskDragState.intent === ownedIntent && ownedIntent !== null && taskDragState.activate()) {
+                                root.labelTarget = null;
+                                root.updateTaskDrag(centroid.scenePosition);
+                            }
+                        }
+                        onCentroidChanged: if (active && ownedIntent !== null && taskDragState.intent === ownedIntent)
+                            root.updateTaskDrag(centroid.scenePosition)
+                        onGrabChanged: (transition, point) => {
+                            if (transition === PointerDevice.GrabPassive && point.state === EventPoint.Pressed) {
+                                everActive = false;
+                                pointId = point.id;
+                                ownedIntent = root.beginTaskDrag(taskTile, point.scenePosition) ? taskDragState.intent : null;
+                            } else if (point.id === pointId) {
+                                if (transition === PointerDevice.UngrabExclusive) {
+                                    if (point.state === EventPoint.Released && everActive && ownedIntent !== null && taskDragState.intent === ownedIntent) {
+                                        // syncLaunchers may recreate this delegate; retire its ticket before committing.
+                                        ownedIntent = null;
+                                        root.finishTaskDrag(point.scenePosition, taskTile);
+                                    } else cancelOwned();
+                                } else if (transition === PointerDevice.CancelGrabExclusive || transition === PointerDevice.CancelGrabPassive
+                                    || (transition === PointerDevice.UngrabPassive && !everActive)) cancelOwned();
+                            }
+                        }
+                        Component.onDestruction: {
+                            if (taskDragState && !taskDragState.committing && ownedIntent !== null
+                                && taskDragState.intent === ownedIntent) taskDragState.cancel();
+                        }
+                    }
                 }
             }
             Tile {
@@ -680,6 +850,21 @@ Item {
 
         }
     }
+    Rectangle {
+        id: taskDropIndicator
+        objectName: "taskDropIndicator"
+        parent: viewport
+        readonly property Item destinationTile: root.taskDropTile()
+        visible: taskDragState.active && destinationTile !== null
+        x: destinationTile ? destinationTile.mapToItem(viewport,
+            taskDragState.after ? destinationTile.width : 0, 0).x - width / 2 : 0
+        y: (viewport.height - height) / 2
+        width: Style.space.xxs
+        height: root.tileSize
+        radius: width / 2
+        color: root.accent
+        z: 2
+    }
     EventSurface {
         id: localEventSurface
         x: root.width - root.outerMargin - width
@@ -688,6 +873,7 @@ Item {
         width: root.eventSlotWidth
         height: Math.max(0, dockSurface.height - 2 * (Style.dock.glassPadding + 1))
         visible: root.localEventsActive && Boolean(localEventState.current)
+        onVisibleChanged: root.checkTaskDragGeometry()
         z: 3
         eventState: localEventState
         surfaceColor: root.surface

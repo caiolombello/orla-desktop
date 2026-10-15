@@ -518,3 +518,79 @@ An early cleanup connection added outside the manager is unsafe because upstream
 still accesses raw runner pointers after `quit()`. A framework-owner correction
 needs its own reviewed build and the same controlled-schedule test. Private
 receipts are under `.runtime/runner-teardown-20261015/root-mechanism-r2/`.
+
+
+### App tile dragging — 15 October 2026
+
+The existing app Tile now owns a mouse/touchpad DragHandler. A portable
+`TaskDragState` captures the profile, revision, saved launchers, complete row
+identities/order and gesture generation at press. Icons stay in their model
+positions while held; one thin before/after marker uses dock tokens. Internal
+gaps clear the destination; outside/covered/clipped destinations cannot commit.
+Only an activated exclusive grab released with `EventPoint.Released` may call
+the native move adapter. Escape, window loss, changed profile/model/geometry and
+cancellation invalidate the intent. Normal clicks, Space and menu actions remain.
+The Qt terminal-event distinction follows [PointerHandler](https://doc.qt.io/qt-6.11/qml-qtquick-pointerhandler.html)
+and [eventPoint](https://doc.qt.io/qt-6.11/qml-qtquick-eventpoint.html).
+
+Actual Source counterexamples were retained before each correction:
+
+- Without the gesture, pointer release left AB unchanged (zero writes/clicks).
+- Crossing a measured 5 px tile gap canceled a valid move. The correction clears
+  only the marker and allows the same captured intent to continue.
+- Deactivation left an active ticket after grab loss. Window transitions now
+  cancel directly, including during commit; a non-release ungrab cannot save.
+- A synchronous second native move preserved membership but published BCA instead
+  of the requested BAC. The adapter now requires the exact identity splice after
+  move and sync. The corrected case refused with zero writes and restored ABC.
+- A valid drop rebuilt its focused delegate and lost focus. The root now restores
+  by identity after the move only when the original window/focus ownership still
+  holds; a newer control focus is preserved.
+
+`tests/native/task_order.py --area PRIVATE_AREA --gesture` passed 12 bounded cases
+on the real Qt/TaskManager stack in an isolated virtual KWin session: managed
+forward/reverse across the measured gap, newer control focus, restoring order,
+self-drop, delivered Escape, outside-and-return, held revision change, owned Tool
+window deactivation with unchanged topology, short click and Space, and legacy
+forward/reverse. Changed-order releases each produced one configuration signal;
+held updates/canceled gestures produced none, and drags emitted no `clicked`.
+The revision case counted its one separate external update. The legacy writer
+accepts a guard only for one validated launcher-list setter, rechecking revision
+and scope after the guard. Multi-field guarded legacy writes remain rejected.
+
+The same script's default refusal case and `--competing-move` case also passed;
+the latter needs the synthetic Model C desktop entry. All runs require a fresh
+owned private area with strict descendant XDG directories and an independently
+owned compositor/DBus session; they do not create that session or run against the
+user's desktop. Fixtures launch only their own synthetic windows, never desktop
+Exec entries. Every wrapper confirmed host shell/config unchanged and its own
+workers gone. Early setup/warning failures remain in the private receipts.
+
+Verified locally: `test_profiles test_task_drag_state test_profiles_dock` ran 49
+entries per Fusion/KDE style (48 passed, 1 skipped); design check, seven design
+guards, gallery and applet build passed. The broader 78-entry run per style had
+73 passes, four skips and the already reproduced offscreen popup failure at
+`test_qml.py:300`. It is not an entirely green full suite. Portable state tests
+are now included in CI without KDE, network, accounts or hardware.
+
+The held captures below use synthetic windows, not personal apps. The marker
+keeps existing tile sizes and event-lane budgets. Both captures and the ordinary
+dock gallery were visually inspected.
+
+![Dark dock with insertion marker](captures/app-drag-dark-held.png)
+
+![Light dock with insertion marker](captures/app-drag-light-held.png)
+
+The final 68-file applet was installed with a backup and exactly one controlled
+shell stop/start. Readback confirmed package hashes/modes, the complete existing
+configuration map, inventory, protected files and resident launcher. Automatic
+locking remained disabled; no new DockView/TaskDragState component warnings were
+captured after reload. A readback-script path error for the root LICENSE was
+corrected without repeating installation; the initial error is retained privately.
+
+This is Qt event delivery in an owned Wayland fixture, not physical input into
+the installed Plasma panel. Physical panel focus/Escape delivery, long-content
+scroll/overflow and touchscreen gestures, multiple outputs/scales and broader
+context/topology churn remain unqualified. No marketplace/release readiness is
+implied. Private receipts are under `.runtime/app-drag-20261015/` (gesture matrix,
+RED/GREEN cases, final reviews, regression logs and gallery).

@@ -446,5 +446,44 @@ class ProfilesTests(unittest.TestCase):
         self.assertEqual(self.warnings, [])
 
 
+    def test_guarded_legacy_patch_allows_only_one_launcher_setter(self):
+        original = self.configuration_value("launchers")
+        reversed_launchers = list(reversed(original))
+        untouched = {key: self.configuration_value(key) for key in
+                     ("profilesJSON", "appearanceJSON", "iconSize", "timerDeadline", "timerRemaining")}
+
+        def guarded(patch, guard):
+            return json.loads(self.evaluate("""(function() {
+                let writes = 0;
+                const observed = function() { writes++; };
+                configuration.launchersChanged.connect(observed);
+                try {
+                    const accepted = commitPresentation(%s, activeProfileId, revision, %s);
+                    return JSON.stringify({accepted:accepted, writes:writes});
+                } finally { configuration.launchersChanged.disconnect(observed); }
+            })()""" % (json.dumps(patch), guard)))
+
+        self.assertEqual(guarded({"launchers": reversed_launchers}, "() => true"),
+                         {"accepted": True, "writes": 1})
+        self.assertEqual(self.configuration_value("launchers"), reversed_launchers)
+        for guard in ("() => false", "() => { throw new Error('fixture'); }"):
+            self.assertEqual(guarded({"launchers": original}, guard),
+                             {"accepted": False, "writes": 0})
+        self.assertEqual(guarded({"launchers": original, "calendarEvents": False},
+                                 "() => { configuration.calendarEvents = false; return true; }"),
+                         {"accepted": False, "writes": 0})
+        self.assertTrue(self.configuration_value("calendarEvents"))
+        # A synchronous guard side effect advances revision and must survive alone.
+        self.assertEqual(guarded({"launchers": original},
+                                 "() => { configuration.calendarEvents = false; return true; }"),
+                         {"accepted": False, "writes": 0})
+        self.assertFalse(self.configuration_value("calendarEvents"))
+        self.assertEqual(self.configuration_value("launchers"), reversed_launchers)
+        self.assertEqual(self.state.property("activeProfileId"), "legacy")
+        for key, value in untouched.items():
+            self.assertEqual(self.configuration_value(key), value)
+        self.assertEqual(self.warnings, [])
+
+
 if __name__ == "__main__":
     unittest.main()
