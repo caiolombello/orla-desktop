@@ -812,6 +812,17 @@ em Wayland/Fusion, uma saída/escala 1,45. A não foi reaberta após a reversão
 Serviço/Meta, execução de apps, outros ambientes e os demais gates R2/U2 seguem
 abertos; instalação principal e metadados publicados permaneceram iguais.
 
+**R2/L0 — sessão de busca pelo atalho no fonte (14/10):** o comando explícito
+`launcherctl session` abre a versão selecionada com os modos gerenciado e
+inicialmente oculto existentes. O bootstrap novo oferece a mesma opção para
+instalações cujas ferramentas anteriores foram preservadas; a CLI Orla também
+encaminha `launcher session`. Guardas de pendência/integridade, abertura manual
+e arquivos compartilhados continuam iguais. Passaram 128 testes de
+instalação/CLI/pacote/bundle, incluindo cinco casos novos com exec capturado.
+Atalho/foco nativos dessa sessão, serviço público, Meta isolada sem checkout e
+migração do legado seguem abertos. A instalação principal não mudou; R2/L0
+permanecem parciais. Veja o [fluxo](launcher/README.md#sessão-de-busca-pelo-atalho--experimental-no-fonte).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
