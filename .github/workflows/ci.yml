@@ -134,6 +134,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      ORLA_LAUNCHER_CI_ROOT: /tmp/orla-launcher-ci-${{ github.run_id }}-${{ github.run_attempt }}
     container:
       image: registry.fedoraproject.org/fedora@sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e
       options: --init
@@ -223,25 +225,49 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Configure launcher
+      - name: Prepare private launcher workspace
         run: |
-          cmake -S launcher -B "$RUNNER_TEMP/orla-launcher-build" \
+          set -euo pipefail
+          test ! -e "$ORLA_LAUNCHER_CI_ROOT"
+          mkdir -m 700 "$ORLA_LAUNCHER_CI_ROOT"
+          mkdir -m 700 "$ORLA_LAUNCHER_CI_ROOT/tmp"
+          # Keep user-install parent guards; container mounts may have another UID.
+          git -c safe.directory="$GITHUB_WORKSPACE" -c safe.directory="$GITHUB_WORKSPACE/.git" \
+            clone --no-hardlinks --no-checkout -- "$GITHUB_WORKSPACE" "$ORLA_LAUNCHER_CI_ROOT/source"
+          git -C "$ORLA_LAUNCHER_CI_ROOT/source" checkout --detach "$GITHUB_SHA"
+          test "$(git -C "$ORLA_LAUNCHER_CI_ROOT/source" rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Configure launcher
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
+        run: |
+          cmake -S launcher -B "$ORLA_LAUNCHER_CI_ROOT/build" \
             -G Ninja \
             -DBUILD_TESTING=ON \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DPython3_EXECUTABLE=/usr/bin/python3
 
       - name: Build launcher and test binaries
-        run: cmake --build "$RUNNER_TEMP/orla-launcher-build" --parallel 2
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
+        run: cmake --build "$ORLA_LAUNCHER_CI_ROOT/build" --parallel 2
 
       - name: Verify isolated test partition selection
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
         run: python3 -B -m unittest discover -s launcher/tests -p 'test_run_isolated.py' -v
 
       - name: Verify launcher CTest inventory
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
         run: |
-          ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
-            --show-only=json-v1 > "$RUNNER_TEMP/orla-launcher-ctests.json"
-          python3 - "$RUNNER_TEMP/orla-launcher-ctests.json" <<'PY'
+          ctest --test-dir "$ORLA_LAUNCHER_CI_ROOT/build" \
+            --show-only=json-v1 > "$ORLA_LAUNCHER_CI_ROOT/ctests.json"
+          python3 - "$ORLA_LAUNCHER_CI_ROOT/ctests.json" <<'PY'
           import json
           import pathlib
           import sys
@@ -268,24 +294,32 @@ jobs:
           PY
 
       - name: Run launcher CTests with private fixtures
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
         id: launcher_ctests
         env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
           QT_QUICK_CONTROLS_STYLE: Fusion
           QT_QPA_PLATFORMTHEME: ""
         run: |
-          ctest --test-dir "$RUNNER_TEMP/orla-launcher-build" \
+          ctest --test-dir "$ORLA_LAUNCHER_CI_ROOT/build" \
             --output-on-failure --no-tests=error
 
       - name: Stage launcher after successful CTests
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
         run: |
           set -euo pipefail
-          cmake --install "$RUNNER_TEMP/orla-launcher-build" \
-            --prefix "$RUNNER_TEMP/orla-launcher-stage"
+          cmake --install "$ORLA_LAUNCHER_CI_ROOT/build" \
+            --prefix "$ORLA_LAUNCHER_CI_ROOT/stage"
 
       - name: Produce coupled experimental launcher bundle
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
         id: launcher_bundle
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
         run: |
           set -euo pipefail
           version=$(python3 - <<'PY'
@@ -299,18 +333,24 @@ jobs:
           )
           # artifact.py must bind clean tracked Source, HEAD and final host/stage pins.
           python3 -B launcher/artifact.py produce \
-            --stage "$RUNNER_TEMP/orla-launcher-stage" \
-            --output "$RUNNER_TEMP/orla-launcher-bundle" \
+            --stage "$ORLA_LAUNCHER_CI_ROOT/stage" \
+            --output "$ORLA_LAUNCHER_CI_ROOT/bundle" \
             --version "$version" --commit "$GITHUB_SHA" \
             --ci-image-digest 'sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e' \
             --controls-data /usr/lib64/qt6/qml/QtQuick/Controls/Fusion/Button.qml
           printf 'archive=orla-launcher-%s-%s.zip\n' "$version" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Verify coupled launcher bundle
-        run: python3 -B launcher/artifact.py verify --bundle "$RUNNER_TEMP/orla-launcher-bundle"
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
+        run: python3 -B launcher/artifact.py verify --bundle "$ORLA_LAUNCHER_CI_ROOT/bundle"
 
       - name: Smoke standalone installation without executing launcher
-        run: python3 -B launcher/artifact.py smoke --bundle "$RUNNER_TEMP/orla-launcher-bundle"
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
+        env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
+        run: python3 -B launcher/artifact.py smoke --bundle "$ORLA_LAUNCHER_CI_ROOT/bundle"
 
       - name: Upload experimental launcher bundle
         if: ${{ success() }}
@@ -318,19 +358,21 @@ jobs:
         with:
           name: orla-launcher-fedora44-x86_64-experimental
           path: |
-            ${{ runner.temp }}/orla-launcher-bundle/${{ steps.launcher_bundle.outputs.archive }}
-            ${{ runner.temp }}/orla-launcher-bundle/orla-launcher-bootstrap.zip
-            ${{ runner.temp }}/orla-launcher-bundle/runtime-inventory.json
-            ${{ runner.temp }}/orla-launcher-bundle/observations.json
-            ${{ runner.temp }}/orla-launcher-bundle/artifact.json
-            ${{ runner.temp }}/orla-launcher-bundle/SHA256SUMS
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/${{ steps.launcher_bundle.outputs.archive }}
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/orla-launcher-bootstrap.zip
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/runtime-inventory.json
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/observations.json
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/artifact.json
+            ${{ env.ORLA_LAUNCHER_CI_ROOT }}/bundle/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
 
       - name: Diagnose failed launcher test without changing its result
+        working-directory: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/source
         if: ${{ failure() && steps.launcher_ctests.outcome == 'failure' }}
         timeout-minutes: 2
         env:
+          TMPDIR: ${{ env.ORLA_LAUNCHER_CI_ROOT }}/tmp
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
           QT_QUICK_CONTROLS_STYLE: Fusion
@@ -338,7 +380,7 @@ jobs:
           DEBUGINFOD_URLS: ""
         run: |
           set -euo pipefail
-          failed="$RUNNER_TEMP/orla-launcher-build/Testing/Temporary/LastTestsFailed.log"
+          failed="$ORLA_LAUNCHER_CI_ROOT/build/Testing/Temporary/LastTestsFailed.log"
           target=""
           if [[ -f "$failed" ]]; then
             if grep -Eq '^[0-9]+:launcher-behavior$' "$failed"; then
@@ -371,4 +413,4 @@ jobs:
             -ex 'set disable-randomization off' \
             -ex 'set startup-with-shell off' \
             -ex run -ex 'thread apply all bt 40' -ex 'info sharedlibrary' \
-            --args "$RUNNER_TEMP/orla-launcher-build/$binary"
+            --args "$ORLA_LAUNCHER_CI_ROOT/build/$binary"
