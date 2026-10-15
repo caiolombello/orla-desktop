@@ -858,12 +858,28 @@ revisada. Novo login, execução de aplicativos, migração pública genérica, 
 ambientes e os demais gates R2/L0 continuam abertos. Veja o
 [fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).
 
-**Próxima entrega de UX1:** simplificar Aparência, mostrando presets, temas e
-controles de forma/movimento antes dos campos técnicos. Cores e JSON ficam em
-“Ajustes avançados”, sem novas preferências nem mudanças de geometria. Aceite:
-operar os controles comuns pelo teclado sem passar pelos campos recolhidos,
-revelar erros editáveis, preservar preview/Aplicar/Cancelar e revisar a galeria
-clara/escura antes da prova curta na sessão real.
+**UX1 — Aparência progressiva, incremento de 15/10:** presets, temas e controles
+de forma/movimento vêm antes de cores e JSON, recolhidos em “Ajustes avançados”.
+Tab pula os campos ocultos; Space/Enter expandem; recolher devolve o foco ao botão.
+Cores inválidas e JSON pendente mantêm a correção acessível. O JSON de tema também
+pode ser limpo quando bloqueia uma importação portátil, preservando a última prévia.
+Não foram criadas preferências nem alterados os formatos salvos ou a geometria.
+Os testes relacionados passaram nos dois estilos Qt, com uma exclusão Wayland por
+estilo; design check e galeria clara/escura passaram. Duas falhas mais amplas de
+diálogo/áudio offscreen também foram reproduzidas no código anterior e não foram
+marcadas como PASS. O applet foi instalado localmente e o Plasma recarregado uma vez:
+após estabilizar, IDs, configuração, bancos e launcher permaneceram preservados.
+A inspeção inicial antes de os monitores serem associados ficou registrada como
+falha, seguida de observação somente de leitura; não houve segunda instalação.
+Gesto físico e foco/grab do popup vivo ainda são UNRUN neste incremento. Consulte
+[o registro e as capturas](docs/validation/appearance-0.2.3.md#progressive-appearance--15-october-2026).
+
+**Próxima prova de UX1:** operar o popup de Aparência instalado com teclado e
+ponteiro, verificar expansão/recolhimento, campo inválido recuperável e Escape sem
+salvar, com alvo privado e identificado. Manter o orçamento de tela e conferir o
+estado salvo depois da visita. A seguir, revisar a densidade dos presets e dos
+controles comuns em telas baixas, sem mudar a geometria para mascarar cortes. C1,
+UX1 e DX2 seguem parciais; os demais gates do roadmap continuam ativos.
 
 ## Prontidão e recomendação de execução
 

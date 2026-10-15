@@ -49,3 +49,66 @@ geometry on multiple monitors, scale/long-text/accessibility matrices, widget
 organization, profiles and configuration import/export remain open. Declarative
 community theme files can be validated/packed but are not imported/applied by
 this editor. No blur, full C1 completion or 1.0 daily-use qualification is claimed.
+
+
+## Progressive appearance — 15 October 2026
+
+This later Source increment keeps the original history above. Presets and theme
+cards lead into form/motion; colors and experimental theme JSON live under an
+initially collapsed **Ajustes avançados**. Expansion is view state only. Apply and
+Undo preserve it during the same edit; cancel/reopen resets it. Hidden controls
+leave the Tab chain, and collapsing a valid focused section returns focus before
+hiding it. Space and Return operate the disclosure. Escape still discards the
+whole settings preview through the existing popup lifecycle.
+
+Canonical token validation reveals invalid colors. Pending/invalid theme JSON
+keeps its nested editor accessible. A valid previously previewed theme can also
+block portable import because its text remains: the UI exposes **Limpar JSON**
+even during that import, while theme editing/preview stay disabled. Clearing
+preserves portable input and the last good appearance; an explicit retry previews
+the portable candidate. No new preferences, tokens, data formats or popup budgets
+were introduced.
+
+Verification on Qt/PySide6 6.11.2:
+
+- The three initial behavior tests failed against the old editor before the UI
+  change. A separate portable/theme conflict test failed before its recovery fix.
+- Appearance, portable appearance/parser/dock and profile suites: 78 passed and
+  one Wayland-dependent test skipped under **each** of Fusion and org.kde.desktop.
+  The five new component cases are included explicitly in portable CI; the new
+  conflict case runs with the existing portable-preset suite.
+- Design check: zero issues; seven design guards passed. The complete gallery
+  generated 56 captures, including four new frames per scheme. Root inspected
+  both schemes at the existing 420 px budget. No screenshot uses user data.
+- The broader 108-test run was **not green**: the production native-dialog test
+  failed under both styles, and the audio pointer-confirmation test also failed
+  under KDE. Both failures reproduced in an isolated copy using the previous
+  editor. They are outside this change and remain open; four Wayland cases were
+  skipped in each broader run. No full-suite/native success is inferred.
+- Early harness failures were corrected: unrestricted Python child-item traversal
+  hit a local Shiboken assertion; scoped lookup avoids unrelated native wrappers.
+  Gallery lookup scope errors were fixed without changing launcher product code.
+
+The applet package was built and installed into the actual local Plasma session,
+with a complete previous-package backup and rollback archive. Only
+`AppearanceEditor.qml` differed from the previously installed package. Plasma was
+stopped/started once through its verified current-user service. An immediate
+inventory observation saw panels with screen=-1 and was retained as FAILED;
+a later read-only observation matched the original inventory exactly, with no
+second install/restart or configuration rewrite. The managed launcher retained
+the same PID/invocation. Panel/app IDs, configuration bytes after stop, shortcut
+and layout-bank pins were unchanged; current-shell journal inspection found no
+relevant AppearanceEditor/dock QML error. This proves installation/reload and
+preservation only. **Physical interaction, native popup anchoring, focus/grabs,
+assistive technology, multiple monitors and light native Plasma remain UNRUN for
+this increment.** No release version or published asset changed.
+
+| State at 420 px | Dark | Light |
+| --- | --- | --- |
+| Initial, advanced collapsed | [Capture](../screenshots/appearance-advanced/appearance-dark-collapsed-420.png) | [Capture](../screenshots/appearance-advanced/appearance-light-collapsed-420.png) |
+| Common controls, keyboard focus | [Capture](../screenshots/appearance-advanced/appearance-dark-common-420.png) | [Capture](../screenshots/appearance-advanced/appearance-light-common-420.png) |
+| Advanced colors | [Capture](../screenshots/appearance-advanced/appearance-dark-colors-420.png) | [Capture](../screenshots/appearance-advanced/appearance-light-colors-420.png) |
+| Recoverable JSON error | [Capture](../screenshots/appearance-advanced/appearance-dark-json-error-420.png) | [Capture](../screenshots/appearance-advanced/appearance-light-json-error-420.png) |
+
+Next acceptance work is the bounded physical visit to the installed popup,
+followed by density/scroll review on short screens. C1/UX1/DX2 remain partial.
