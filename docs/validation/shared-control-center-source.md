@@ -811,7 +811,95 @@ Configuration content captures use synthetic data and the KDE control style:
 | Expanded menu | [capture](../screenshots/bar-settings/bar-dark-settings-expanded.png) | [capture](../screenshots/bar-settings/bar-light-settings-expanded.png) |
 | Focused name, 320×240 | [capture](../screenshots/bar-settings/bar-dark-settings-short-focus.png) | [capture](../screenshots/bar-settings/bar-light-settings-short-focus.png) |
 
-This Source change was not installed in the live session. The fixture renders only
-the settings content: Plasma still owns Apply/Cancel. Native embedding, dismissal,
-seat/focus, fractional geometry and persisted Apply/off-on remain unqualified. The
-previous installed-state two-key ConfigDialog delta and original banks are untouched.
+At the time of the Source/gallery verification this change was not installed. The
+fixture renders only the settings content: Plasma still owns Apply/Cancel. The
+following installation is separate evidence; it does not promote those offscreen
+tests to native embedding, dismissal, seat/focus, fractional geometry or persisted
+Apply/off-on qualification.
+
+## Bar settings package installed — 15 October 2026
+
+Installed the integral 14-file bar tree from `12d05cff87b3f23991ba93781a815d319736ac95`.
+Exactly two files changed from the previously qualified package: `BarSettings.qml`
+and `run_tests.py`; the other twelve retained their hashes and modes. The runner
+is a checkout tool that needs the repository's tests tree, and is not a standalone
+test suite for the installed applet. The update did not create a mixed package or
+change the packaging policy.
+
+The reviewed transaction created a unique, durable read-only backup of the old bar
+and a rollback archive before one controlled stop. Only the bar package was upgraded,
+then the shell was started once. No rollback, configuration restoration, layout
+update, launcher action or additional restart was needed. The dock stayed at its
+qualified 70-file Source/archive/installed identity.
+
+Fresh independent readback confirmed the new bar bytes/modes, panel inventory,
+menu35/CC49 role flags, launcher identity and protected layout banks. The whole
+case-preserving configuration map equals the immutable original plus the previously
+recorded exact ConfigDialog `810/630` footprint. It is still not equal to the original
+map, and this installation does not qualify the dimension correlation. No receipt,
+original bank or size key was rewritten to accommodate that difference. Automatic
+screen locking remained disabled and the service reported zero automatic restarts.
+
+An independent KWin snapshot after the reload found no own normal or popup window.
+Package installation and preservation passed; a new settings window had not yet been
+opened by this installation transaction. Native opening, clean dismissal, dirty
+Cancel, Apply/off-on persistence and pointer/seat/focus remain separate checks.
+
+Private records: `.runtime/bar-settings-install-20261015/sol61-candidate-r1/` and
+`sol61-install-review-r1/`; `root-native-install-r1/RESULT.json` passed with no primary
+or cleanup error. `root/FINAL-INSTALL-VERIFICATION.json`, `root/BACKUP-VERIFIED.json`
+and `root-window-after-install/RESULT.json` independently confirmed the retained state.
+
+The first native visit stopped before opening configuration: its menu predicate
+required KWin `popupMenu`, while this own Qt QMenu was reported as `popupWindow`.
+It consumed one right click and no Down, Enter or Cancel action. That visit remains
+FAILED; it did not establish final popup absence. Input devices and accessibility
+listeners were released and the accessibility setting was restored.
+
+A separate reviewed recovery identified that exact own menu, moved the pointer
+inside it and sent one Escape only after observing a focused menu descendant.
+Fresh readback required the exact menu UUID to disappear, including hidden or
+reclassified windows. Recovery passed with no primary or cleanup error; another
+independent snapshot and full preservation read confirmed absence and the unchanged
+strict `810/630` state. The recovery neither opened configuration nor qualified
+the failed visit. Records: `root-native-ui-r1/RESULT.json` (failed),
+`root-menu-recovery-native-r1/RESULT.json` (passed),
+`root-window-after-menu-recovery/RESULT.json` and
+`root/POST-MENU-RECOVERY-VERIFICATION.json`.
+
+The second independent visit opened the installed configuration through the
+focused Configure item with one Down and one Enter. The same own window exposed
+the two expected role flags, the preset explanation, both initially collapsed
+disclosures and an enabled Cancel with disabled Apply. A subsequent accessibility
+read raised `ValueError` before any Cancel dispatch. This visit remains FAILED.
+Its receipt did not retain the underlying error code or observer count, so the
+specific cause is unknown: an exhausted all-own-PID event budget and a removed
+menu reference are hypotheses, not established causes.
+
+A separate recovery used only the own application's accessibility tree, with no
+menu observer, input device or opening replay. It revalidated the exact active
+configuration UUID, page IDs, role flags and clean footer, then invoked the
+enumerated public Cancel action once. Fresh reads found the exact configuration
+and menu UUIDs absent, including hidden/reclassified windows. Independent readback
+confirmed strict preservation and no remaining own normal or popup window.
+`root-config-recovery-native-r1/RESULT.json` passed without primary or cleanup
+error; `root-window-after-config-recovery/RESULT.json` and
+`root/POST-CONFIG-RECOVERY-VERIFICATION.json` confirmed the result separately.
+
+A third visitor was changed to retire its menu observer after native menu removal
+and before configuration traversal. That attempt failed earlier, during menu
+navigation after Down and before Enter, with another unclassified `ValueError`.
+No configuration was opened by that attempt. Its failed receipt is preserved in
+`root-native-ui-r3/RESULT.json`; observer retirement was not reached and therefore
+is not qualified by that run. A complete opening/clean-Cancel journey in one
+successful attempt remains open. The separate observations above qualify only
+their stated steps, not dirty Cancel, Apply/off-on persistence or pointer/seat/focus.
+
+The last menu was closed in another independently admitted recovery, with one
+focused Escape and no Configure activation. `root-menu-recovery-native-r2/RESULT.json`
+passed without primary or cleanup error. The final independent
+`root-window-final-turn/RESULT.json` found no own normal or popup surface;
+`root/FINAL-TURN-INSTALL-VERIFICATION.json` confirmed the installed packages,
+strict configuration footprint, inventory, roles, launcher, protected banks,
+disabled automatic locking and zero automatic restarts. No failed visitor was
+rewritten, retried in place or relabelled as passing.
