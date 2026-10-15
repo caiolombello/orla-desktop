@@ -1185,3 +1185,28 @@ da barra, launcher e bancos protegidos. Uma leitura independente confirmou essas
 invariantes e o bloqueio automático desativado. A prova de protocolo continua
 sendo do barramento privado; não houve interação física nem leitura de caches
 pessoais para qualificar a nova seleção na sessão instalada.
+
+**T1/CC0 — configuração instalada da barra (15/10):** o menu de contexto da
+Central de Controle abriu a página nativa correta em Plasma 6.7.5/Wayland,
+com as duas opções de papel correspondentes e Aplicar desabilitado. A visita
+por ponteiro não passou: os seletores do helper confundiram coordenadas locais,
+frames da barra/desktop e a categoria Aparência com a UI do dock. Uma recuperação
+separada confirmou o Cancelar via acessibilidade e a remoção da janela, sem editar
+opções da barra. A leitura imediata do mapa era igual ao original; a conferência
+posterior detectou somente DialogWidth=810 e DialogHeight=630 no ConfigDialog
+desse applet. Os demais campos, pacotes, launcher e bancos foram preservados.
+O mapa final não é idêntico e a correlação dimensional segue não qualificada,
+sem arredondamento ou reescrita do baseline. Falhas e recuperações continuam
+separadas no [registro](docs/validation/shared-control-center-source.md#installed-bar-configuration-opening-and-accessible-cancel--15-october-2026).
+Clique de Cancelar, Apply/off-on, coordenadas na escala fracionária e foco/seat
+continuam abertos. A auditoria visual prioriza organizar BarSettings em Conteúdo,
+Aparência e personalização recolhível, explicando os quatro efeitos do preset e
+as dependências entre nome/ícone, sem alterar defaults ou aliases de configuração.
+
+**X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
+prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
+O seletor fornece URL; não fornece bytes validados. A próxima implementação deve
+usar uma fronteira temática estreita e independente das integrações opcionais,
+reutilizar o parser limitado/UTF-8 estrito e qualificar o ciclo seletor/popup no
+Wayland antes de afirmar suporte. Colagem permanece disponível; nenhum leitor,
+SDK, catálogo ou runtime foi acrescentado por essa análise.
