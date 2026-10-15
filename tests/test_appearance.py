@@ -73,6 +73,25 @@ class AppearanceTests(unittest.TestCase):
             QTest.qWait(10)
         self.assertEqual(window.activeFocusItem(), control, "Owned fixture must have settled item focus before synthetic keys")
 
+    def open_advanced(self):
+        disclosure = self.visual_item("appearanceAdvanced")
+        self.assertIsNotNone(disclosure)
+        self.focus_control(self.window, disclosure)
+        if not disclosure.property("checked"):
+            QTest.keyClick(self.window, Qt.Key_Space)
+            self.app.processEvents()
+        self.assertTrue(disclosure.property("checked"))
+        return disclosure
+
+    def open_theme_json(self):
+        self.open_advanced()
+        disclosure = self.visual_item("appearanceThemeJSON")
+        self.focus_control(self.window, disclosure)
+        if not disclosure.property("checked"):
+            QTest.keyClick(self.window, Qt.Key_Space)
+            self.app.processEvents()
+        self.assertTrue(disclosure.property("checked"))
+
     def theme_text(self):
         return next((Path(__file__).resolve().parents[1] / "themes/examples").glob("*.json")).read_text()
 
@@ -89,6 +108,110 @@ class AppearanceTests(unittest.TestCase):
             return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
         lighter, darker = sorted((luminance(foreground), luminance(background)), reverse=True)
         return (lighter + 0.05) / (darker + 0.05)
+
+    def test_collapsed_advanced_skips_technical_fields_and_common_preview_cancels(self):
+        self.window.setHeight(420)
+        self.app.processEvents()
+        technical = [self.visual_item("appearanceColor" + key)
+                     for key in ("foreground", "muted", "accent", "surface", "border")]
+        technical.append(self.visual_item("appearanceThemeJSON"))
+        for control in technical:
+            self.assertIsNotNone(control)
+            self.assertFalse(control.isVisible(), control.objectName())
+        disclosure = self.visual_item("appearanceAdvanced")
+        self.assertIsNotNone(disclosure)
+        self.assertFalse(disclosure.property("checked"))
+        reduced = self.visual_item("appearanceReducedMotion")
+        self.focus_control(self.window, reduced)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertTrue(self.evaluate("effective.tokens.reducedMotion"))
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem(), disclosure)
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), "appearanceDefaults")
+        for control in technical:
+            self.assertFalse(control.hasActiveFocus(), control.objectName())
+        self.focus_control(self.window, self.visual_item("appearanceCancel"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        self.assertFalse(self.evaluate("effective.tokens.reducedMotion"))
+        self.assertEqual(self.warnings, [])
+
+    def test_keyboard_expands_and_collapsing_focused_color_returns_to_disclosure(self):
+        disclosure = self.open_advanced()
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        field = self.visual_item("appearanceColorforeground")
+        self.assertEqual(self.window.activeFocusItem(), field)
+        self.assertTrue(field.isVisible())
+        # Collapse with a descendant focused also covers external close/reset,
+        # where a mouse click has not already moved focus onto the button.
+        disclosure.setProperty("checked", False)
+        self.app.processEvents()
+        self.assertFalse(field.isVisible())
+        self.assertEqual(self.window.activeFocusItem(), disclosure)
+        QTest.keyClick(self.window, Qt.Key_Return)
+        self.assertTrue(disclosure.property("checked"))
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem(), field)
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        self.assertEqual(self.warnings, [])
+
+    def test_theme_validation_reveals_collapsed_advanced_without_losing_invalid_text(self):
+        invalid = '{"name":"incomplete synthetic theme"}'
+        self.set_theme(invalid)
+        self.assertFalse(self.evaluate("previewTheme()"))
+        self.app.processEvents()
+        self.assertTrue(self.state.property("themeError"))
+        self.assertFalse(self.state.property("canApply"))
+        for name in ("appearanceThemeJSON", "appearanceThemeInput", "appearanceError"):
+            self.assertTrue(self.visual_item(name).isVisible(), name)
+        self.assertEqual(self.visual_item("appearanceThemeInput").property("text"), invalid)
+        self.focus_control(self.window, self.visual_item("appearanceCancel"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.state.property("themeText"), "")
+        self.assertEqual(self.state.property("themeError"), "")
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        self.assertEqual(self.warnings, [])
+
+    def test_pending_theme_and_invalid_color_stay_recoverable_until_cleared(self):
+        advanced = self.open_advanced()
+        self.set_theme('{"name":"pending synthetic theme"}')
+        theme = self.visual_item("appearanceThemeJSON")
+        self.assertTrue(self.state.property("themePending"))
+        self.assertEqual(self.state.property("themeError"), "")
+        for disclosure in (theme, advanced):
+            disclosure.setProperty("checked", False)
+            self.assertTrue(disclosure.property("checked"))
+        self.assertTrue(self.visual_item("appearanceThemeInput").isVisible())
+        self.evaluate("clearThemeInput()")
+        advanced.setProperty("checked", False)
+        self.assertFalse(advanced.property("checked"))
+        self.evaluate("setToken('accent', 'invalid')")
+        self.assertTrue(advanced.property("checked"))
+        advanced.setProperty("checked", False)
+        self.assertTrue(advanced.property("checked"))
+        self.assertTrue(self.visual_item("appearanceColoraccent").isVisible())
+        self.evaluate("setToken('accent', '#123456')")
+        advanced.setProperty("checked", False)
+        self.assertFalse(advanced.property("checked"))
+        self.assertEqual(self.config.property("appearanceJSON"), "")
+        self.assertEqual(self.warnings, [])
+
+    def test_apply_undo_preserve_disclosure_and_reopening_resets_it(self):
+        advanced = self.open_advanced()
+        self.evaluate("setToken('radius', 8)")
+        self.assertTrue(self.evaluate("apply()"))
+        self.assertTrue(advanced.property("checked"))
+        self.assertTrue(self.evaluate("undo()"))
+        self.assertTrue(advanced.property("checked"))
+        self.evaluate("cancel(); begin()")
+        self.assertFalse(advanced.property("checked"))
+        self.evaluate("setToken('radius', 100)")
+        self.assertFalse(advanced.property("checked"))
+        self.assertFalse(self.state.property("canApply"))
+        self.assertTrue(self.visual_item("appearanceError").isVisible())
+        self.assertEqual(self.warnings, [])
 
     def test_default_paper_secondary_text_contrasts_with_opaque_surfaces(self):
         self.evaluate("selectTheme('paper')")
@@ -156,7 +279,7 @@ class AppearanceTests(unittest.TestCase):
     def test_theme_controls_use_keyboard_plain_text_and_tab_leaves_input(self):
         import json
         self.window.setHeight(420)
-        self.click("appearanceThemeJSON")
+        self.open_theme_json()
         field = self.visual_item("appearanceThemeInput")
         self.assertIsNotNone(field)
         self.assertTrue(field.isVisible())
@@ -214,7 +337,7 @@ class AppearanceTests(unittest.TestCase):
 
     def test_theme_error_focus_and_oversized_text_preserve_controls_at_420_pixels(self):
         self.window.setHeight(420)
-        self.click("appearanceThemeJSON")
+        self.open_theme_json()
         field = self.visual_item("appearanceThemeInput")
         # No silent TextArea truncation: Qt receives the paste; parser refuses it.
         field.setProperty("text", "é" * 40000)
@@ -284,6 +407,7 @@ class AppearanceTests(unittest.TestCase):
 
     def test_invalid_color_and_numbers_block_apply_and_keep_last_good_preview(self):
         self.evaluate("setToken('accent', '#123456')")
+        self.open_advanced()
         field = self.visual_item("appearanceColoraccent")
         self.focus_control(self.window, field)
         QTest.keyClick(self.window, Qt.Key_A, Qt.ControlModifier)
@@ -404,7 +528,14 @@ class AppearanceTests(unittest.TestCase):
                 self.assertEqual(dock.property("motion"), 0)
                 closed = QSignalSpy(popup.closed)
                 if exit_action == "escape":
-                    self.focus_control(window, window.findChild(QQuickItem, "appearanceCancel"))
+                    disclosure = window.findChild(QQuickItem, "appearanceAdvanced")
+                    self.assertIsNotNone(disclosure)
+                    self.focus_control(window, disclosure)
+                    if not disclosure.property("checked"):
+                        QTest.keyClick(window, Qt.Key_Space)
+                    field = self.visual_item("appearanceColoraccent", window.findChild(QQuickItem, "appearanceAdvancedSection"))
+                    self.assertTrue(field.isVisible())
+                    self.focus_control(window, field)
                     QTest.keyClick(window, Qt.Key_Escape)
                 elif exit_action == "close":
                     expression = QQmlExpression(engine.rootContext(), popup, "close()")

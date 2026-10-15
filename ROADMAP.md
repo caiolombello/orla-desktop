@@ -858,12 +858,37 @@ revisada. Novo login, execução de aplicativos, migração pública genérica, 
 ambientes e os demais gates R2/L0 continuam abertos. Veja o
 [fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).
 
-**Próxima entrega de UX1:** simplificar Aparência, mostrando presets, temas e
-controles de forma/movimento antes dos campos técnicos. Cores e JSON ficam em
-“Ajustes avançados”, sem novas preferências nem mudanças de geometria. Aceite:
-operar os controles comuns pelo teclado sem passar pelos campos recolhidos,
-revelar erros editáveis, preservar preview/Aplicar/Cancelar e revisar a galeria
-clara/escura antes da prova curta na sessão real.
+**UX1 — Aparência progressiva, incremento de 15/10:** presets, temas e controles
+de forma/movimento vêm antes de cores e JSON, recolhidos em “Ajustes avançados”.
+Tab pula os campos ocultos; Space/Enter expandem; recolher devolve o foco ao botão.
+Cores inválidas e JSON pendente mantêm a correção acessível. O JSON de tema também
+pode ser limpo quando bloqueia uma importação portátil, preservando a última prévia.
+Não foram criadas preferências nem alterados os formatos salvos ou a geometria.
+Os testes relacionados passaram nos dois estilos Qt, com uma exclusão Wayland por
+estilo; design check e galeria clara/escura passaram. Duas falhas mais amplas de
+diálogo/áudio offscreen também foram reproduzidas no código anterior e não foram
+marcadas como PASS. O applet foi instalado localmente e o Plasma recarregado uma vez:
+após estabilizar, IDs, configuração, bancos e launcher permaneceram preservados.
+A inspeção inicial antes de os monitores serem associados ficou registrada como
+falha, seguida de observação somente de leitura; não houve segunda instalação.
+A prova seguinte no popup instalado passou com teclas físicas: Space/Enter,
+Tab até a primeira cor, JSON inválido retido com retorno de foco e Aplicar
+bloqueado, Escape, reabertura recolhida e Cancelar. Abertura e seleção inicial de
+foco usaram AT-SPI; isso não qualifica abertura por ponteiro ou foco espontâneo.
+Acessibilidade temporária foi restaurada, quatro arquivos de configuração
+mantiveram seus hashes e os dois serviços mantiveram PID/estado/invocation. Uma
+leitura separada confirmou os 132 arquivos/modos protegidos. As tentativas
+anteriores de ponteiro/seletores ficaram preservadas, sem mudanças no código do
+produto. Os dois checks da CI passaram no código `77a7b85`. Consulte
+[o registro e as capturas](docs/validation/appearance-0.2.3.md#installed-popup-keyboard-followup--15-october-2026).
+
+**Próxima entrega de UX1:** revisar a densidade dos presets e controles comuns em
+telas baixas, preservando o orçamento do popup e seus estados de prévia. O usuário
+deve reconhecer o preset ativo e chegar aos controles comuns com menos rolagem,
+sem esconder erros, estado da importação ou Aplicar/Cancelar. Conferir galeria
+clara/escura, teclado e retorno da edição. A entrada precisa por ponteiro no
+roteiro nativo e avaliação visual nativa continuam pendentes; C1, UX1 e DX2 seguem
+parciais, e os demais gates do roadmap continuam ativos.
 
 ## Prontidão e recomendação de execução
 
