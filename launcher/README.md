@@ -485,9 +485,9 @@ python3 -B -m unittest discover -s launcher/tests -p 'test_inventory_host*.py' -
 ```
 
 A instalação inicial e a remoção descritas abaixo estão disponíveis no fonte.
-O próximo gate é produzir o artifact real na CI e validar sua abertura em
-perfil limpo; depois seguem atualização, reversão, recuperação e os fluxos
-visíveis de busca por Meta e mídia.
+O bundle real da CI já passou pela verificação do download e pelo teste
+delimitado em perfil limpo descrito abaixo. Seguem recuperação, atualização,
+reversão e os fluxos visíveis de busca por Meta e mídia.
 
 ### Instalação explícita para usuário novo — experimental no fonte
 
@@ -529,8 +529,9 @@ Foram aprovados 26 testes de instalação, 56 do pacote e 23 da CLI preexistente
 com fixtures isoladas, nomes Unicode, escaping de Desktop Entry e falhas de
 gravação/remoção. O fluxo público instalar → status → checkout ausente → status
 independente → remover também passou com um pacote sintético e dados preservados.
-Abertura do ELF real, clique no menu KDE e sessão Wayland a partir desse pacote
-continuam sem validação; este incremento não produz um bundle de distribuição.
+Esses testes sintéticos não abrem o ELF nem clicam no menu KDE. A prova do
+download real em Wayland pertence ao incremento de bundle descrito abaixo;
+clique no menu e abertura de aplicativos continuam sem qualificação nesse fluxo.
 
 ```sh
 python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
@@ -538,7 +539,7 @@ python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
 
 ### Bundle acoplado da CI — experimental no fonte
 
-A configuração da CI prevê um único artifact
+A CI produz um único artifact
 `orla-launcher-fedora44-x86_64-experimental`, retido por sete dias e enviado
 somente após os nove CTests, staging, produção, verificação e smoke passarem.
 Ele reúne seis arquivos: `orla-launcher-<versão>-<commit>.zip`,
@@ -564,11 +565,28 @@ As evidências preservam os estados inconclusivos do catálogo; o inventário do
 ZIP continua `caller_assertion_unverified`. A declaração de imagem/execução e
 os checksums não autenticam a origem nem atestam ABI ou runtime.
 
-O smoke cobre instalação, status e remoção em diretórios próprios, com as
-ferramentas independentes e dados preservados; não abre ELF, helper, provider,
-display ou bus. Artifact real disponível, download e abertura em perfil limpo
-continuam sem qualificação nesta descrição. Runtime/Native permanecem `UNRUN`
-para esse bundle; R2 segue parcial.
+O smoke automatizado cobre instalação, status e remoção em diretórios próprios,
+com as ferramentas independentes e dados preservados; não abre ELF, helper,
+provider, display ou bus. A execução real
+[38660941244](https://github.com/caiolombello/orla-desktop/actions/runs/38660941244)
+passou os dois jobs, incluindo os nove CTests, e publicou o
+[artifact experimental](https://github.com/caiolombello/orla-desktop/actions/runs/38660941244/artifacts/11939071577).
+O download teve seus seis arquivos verificados, incluindo os sete arquivos do
+payload schema 0.3. O commit de merge testado é
+`176960241ce9be9abc97efb02d6330d04d1e93d8`; o SHA-256 do ZIP é
+`d18c82420cf59e4f0cb8a29f90a37e3a50c12f6eb993f2d8200b8aed849e4797`.
+
+Esse download foi instalado e aberto em perfil isolado Wayland/Fusion, com
+escala 1,45 em uma saída. A busca `2-1` exibiu `1` pela Calculadora do KRunner;
+Escape encerrou o processo com código zero. A remoção independente passou e os
+dados sintéticos e oito configurações/wrappers protegidos permaneceram exatos.
+A captura da janela própria foi conferida visualmente. A instalação principal
+não mudou. A evidência vale para esse artifact e esse fluxo: não qualifica
+Meta/serviço, abertura de aplicativos, outros monitores/estilos ou ABI geral.
+Os metadados publicados preservam `runtime: unverified` e Native `UNRUN`, pois
+antecedem essa prova separada. Os 97 testes locais de bundle/pacote/instalação
+também passaram. Autenticidade, atualização, reversão, recuperação e serviço/Meta
+opcionais continuam com aceites próprios; R2 segue parcial.
 
 ```sh
 python3 -B launcher/artifact.py verify --bundle /caminho/para/bundle
