@@ -871,15 +871,24 @@ marcadas como PASS. O applet foi instalado localmente e o Plasma recarregado uma
 após estabilizar, IDs, configuração, bancos e launcher permaneceram preservados.
 A inspeção inicial antes de os monitores serem associados ficou registrada como
 falha, seguida de observação somente de leitura; não houve segunda instalação.
-Gesto físico e foco/grab do popup vivo ainda são UNRUN neste incremento. Consulte
-[o registro e as capturas](docs/validation/appearance-0.2.3.md#progressive-appearance--15-october-2026).
+A prova seguinte no popup instalado passou com teclas físicas: Space/Enter,
+Tab até a primeira cor, JSON inválido retido com retorno de foco e Aplicar
+bloqueado, Escape, reabertura recolhida e Cancelar. Abertura e seleção inicial de
+foco usaram AT-SPI; isso não qualifica abertura por ponteiro ou foco espontâneo.
+Acessibilidade temporária foi restaurada, quatro arquivos de configuração
+mantiveram seus hashes e os dois serviços mantiveram PID/estado/invocation. Uma
+leitura separada confirmou os 132 arquivos/modos protegidos. As tentativas
+anteriores de ponteiro/seletores ficaram preservadas, sem mudanças no código do
+produto. Os dois checks da CI passaram no código `77a7b85`. Consulte
+[o registro e as capturas](docs/validation/appearance-0.2.3.md#installed-popup-keyboard-followup--15-october-2026).
 
-**Próxima prova de UX1:** operar o popup de Aparência instalado com teclado e
-ponteiro, verificar expansão/recolhimento, campo inválido recuperável e Escape sem
-salvar, com alvo privado e identificado. Manter o orçamento de tela e conferir o
-estado salvo depois da visita. A seguir, revisar a densidade dos presets e dos
-controles comuns em telas baixas, sem mudar a geometria para mascarar cortes. C1,
-UX1 e DX2 seguem parciais; os demais gates do roadmap continuam ativos.
+**Próxima entrega de UX1:** revisar a densidade dos presets e controles comuns em
+telas baixas, preservando o orçamento do popup e seus estados de prévia. O usuário
+deve reconhecer o preset ativo e chegar aos controles comuns com menos rolagem,
+sem esconder erros, estado da importação ou Aplicar/Cancelar. Conferir galeria
+clara/escura, teclado e retorno da edição. A entrada precisa por ponteiro no
+roteiro nativo e avaliação visual nativa continuam pendentes; C1, UX1 e DX2 seguem
+parciais, e os demais gates do roadmap continuam ativos.
 
 ## Prontidão e recomendação de execução
 
