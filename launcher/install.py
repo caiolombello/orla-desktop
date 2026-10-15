@@ -3,7 +3,8 @@
 Phase A installs inert verified files, with runtime explicitly unverified.
 Payload updates retain one predecessor and the original management tools.
 Install-tail recovery and interrupted-update recovery have separate commands.
-Service, Meta, toolchain updates and retained-payload cleanup remain separate.
+Service activation is an explicit opt-in; installation stays inert.
+Meta, toolchain updates and retained-payload cleanup remain separate.
 """
 
 from __future__ import annotations
@@ -21,8 +22,12 @@ import os
 from pathlib import Path
 import re
 import shlex
+import secrets
+import shutil
 import stat
+import subprocess
 import sys
+import time
 
 
 SCHEMA = "orla-launcher-install-0.1"
@@ -337,6 +342,12 @@ def _guard(paths, receipt, *, versions_root=None):
                 "version": {"bin", "libexec", "LICENSE"}, "payload-bin": {"orla-launcher"},
                 "payload-libexec": {"ai.py", "steam.py", "ai_text_ollama.py", "ai_text_transport.py", "ai_text.py"},
                 "tools": {"install.py", "package.py"}}
+    service_record = _service_record(paths)
+    if service_record is not None:
+        manager = next(record for record in receipt["files"] if record["key"] == "tools/install.py")
+        if service_record[0]["generationSha256"] != manager["sha256"]:
+            raise InstallError("service_generation")
+        expected["base"].add("service.json")
     for key, names in expected.items():
         with _directory(directories[key]) as descriptor:
             with os.scandir(descriptor) as entries:
@@ -473,10 +484,11 @@ def _mkdir_new(path, mode=0o755, *, owned=None, key=None):
         return list(pin)
 
 
-def _publish_version(parent, source_name, target_name):
+def _publish_version(parent, source_name, target_name, *, target_parent=None):
     # Retain the observable absence preflight; the kernel then enforces absence.
+    destination = parent if target_parent is None else target_parent
     try:
-        os.stat(target_name, dir_fd=parent, follow_symlinks=False)
+        os.stat(target_name, dir_fd=destination, follow_symlinks=False)
     except FileNotFoundError:
         pass
     else:
@@ -488,7 +500,7 @@ def _publish_version(parent, source_name, target_name):
         raise InstallError("publish_api_unavailable") from None
     rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     rename.restype = ctypes.c_int
-    if rename(parent, os.fsencode(source_name), parent, os.fsencode(target_name), 1) != 0:
+    if rename(parent, os.fsencode(source_name), destination, os.fsencode(target_name), 1) != 0:
         code = ctypes.get_errno()
         if code == errno.EEXIST:
             raise InstallError("install_conflict")
@@ -635,6 +647,7 @@ def _pending(paths):
 def install_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
                     paths: InstallPaths, backend=None) -> dict:
     paths = _paths(paths)
+    _service_disabled(paths)
     if backend is not None:
         raise InstallError("backend_unimplemented")
     if type(expected_sha256) is not str or SHA256.fullmatch(expected_sha256) is None \
@@ -665,6 +678,7 @@ def install_archive(archive: Path, *, expected_sha256: str, expected_commit: str
                 "sha256": hashlib.sha256(content[key]).hexdigest()} for key, (_path, mode) in files.items()]
     directories, created = {}, {}
     with _locked(paths):
+        _service_disabled(paths)
         if _pending(paths) is not None:
             raise InstallError("pending_transaction")
         if _exists(_state(paths) / "current.json") or _exists(_base(paths)) \
@@ -747,9 +761,11 @@ def _unlink_checked(path, record, mode, *, expected_pin=None, expected_parent=No
 
 def uninstall(paths: InstallPaths, *, backend=None) -> dict:
     paths = _paths(paths)
+    _service_disabled(paths)
     if backend is not None:
         raise InstallError("backend_unimplemented")
     with _locked(paths):
+        _service_disabled(paths)
         if _pending(paths) is not None:
             raise InstallError("pending_transaction")
         receipt = _receipt(paths)
@@ -804,6 +820,623 @@ def uninstall(paths: InstallPaths, *, backend=None) -> dict:
                 raise
             raise InstallError(_error_code(error)) from error
     return {"status": "uninstalled", "runtime": "unverified", "archiveSha256": digest}
+
+
+SERVICE_UNIT = "orla-launcher-managed.service"
+SERVICE_SCHEMA = "orla-launcher-service-0.1"
+
+
+class NativeServiceBackend:
+    """Fixed user-manager operations; no unit ownership/adoption policy here."""
+    _manager = "/org/freedesktop/systemd1"
+    _interface = "org.freedesktop.systemd1.Manager"
+    _dbus = "org.freedesktop.DBus"
+    _unit_interface = "org.freedesktop.systemd1.Unit"
+    _service_interface = "org.freedesktop.systemd1.Service"
+
+    def __init__(self):
+        tool = shutil.which("busctl")
+        self._need(tool is not None, "service_tool_missing")
+        try:
+            self._tool = str(Path(tool).resolve(strict=True))
+            self._need(Path(self._tool).is_absolute(), "service_tool_missing")
+            self._owner = self._unique(self._daemon_raw("GetNameOwner", "s", ["org.freedesktop.systemd1"], "s"))
+            self._owner_check()
+        except (OSError, subprocess.TimeoutExpired):
+            raise InstallError("service_unknown") from None
+
+    @staticmethod
+    def _need(value, code="service_unknown"):
+        if not value:
+            raise InstallError(code)
+
+    @classmethod
+    def _string(cls, value):
+        try:
+            valid = type(value) is str and len(value.encode("utf-8")) <= 4096 and "\0" not in value
+        except UnicodeError:
+            valid = False
+        cls._need(valid)
+        return value
+
+    @classmethod
+    def _strings(cls, value):
+        cls._need(type(value) is list and len(value) <= 256)
+        return [cls._string(item) for item in value]
+
+    @classmethod
+    def _absolute(cls, value):
+        cls._string(value)
+        cls._need(Path(value).is_absolute() and not value.startswith("//") and
+                  all(part not in (".", "..") for part in Path(value).parts))
+        return value
+
+    @classmethod
+    def _uint(cls, value, bits=32):
+        cls._need(type(value) is int and 0 <= value < 2 ** bits)
+        return value
+
+    @classmethod
+    def _unique(cls, value):
+        cls._need(type(value) is str and re.fullmatch(r":[0-9]+\.[0-9]+", value) is not None)
+        return value
+
+    def _wire(self, arguments, signature, *, method, deadline=None):
+        timeout = 5 if deadline is None else min(5, deadline - time.monotonic())
+        self._need(timeout > 0, "service_timeout")
+        try:
+            result = subprocess.run([self._tool, "--user", "--auto-start=no", "--timeout=3s", "--json=short", *arguments],
+                                    capture_output=True, timeout=timeout, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise InstallError("service_unknown") from None
+        self._need(type(result.stdout) is bytes and type(result.stderr) is bytes and
+                   len(result.stdout) + len(result.stderr) <= 256 * 1024 and result.returncode == 0)
+        self._need(deadline is None or time.monotonic() <= deadline, "service_timeout")
+        if method and signature == "" and result.stdout == b"":
+            return None
+        try:
+            value = _strict_json(result.stdout)
+        except (InstallError, ValueError, TypeError, RecursionError):
+            raise InstallError("service_unknown") from None
+        self._need(type(value) is dict and set(value) == {"type", "data"} and value["type"] == signature)
+        data = value["data"]
+        if method:
+            self._need(type(data) is list and len(data) == (0 if signature == "" else 1))
+            return None if signature == "" else data[0]
+        return data
+
+    def _daemon_raw(self, member, signature, body, expected, deadline=None):
+        return self._wire(["call", self._dbus, "/org/freedesktop/DBus", self._dbus, member, signature, *body],
+                          expected, method=True, deadline=deadline)
+
+    def _owner_check(self, deadline=None):
+        current = self._daemon_raw("GetNameOwner", "s", ["org.freedesktop.systemd1"], "s", deadline)
+        self._need(self._unique(current) == self._owner, "service_manager_changed")
+
+    def _call(self, arguments, signature, *, method, deadline=None):
+        self._owner_check(deadline)
+        value = self._wire(arguments, signature, method=method, deadline=deadline)
+        self._owner_check(deadline)
+        return value
+
+    def _method(self, member, signature, body, expected, deadline=None):
+        return self._call(["call", self._owner, self._manager, self._interface, member, signature, *body],
+                          expected, method=True, deadline=deadline)
+
+    def _property(self, path, interface, name, signature, deadline=None):
+        value = self._call(["get-property", self._owner, path, interface, name], signature, method=False, deadline=deadline)
+        if signature == "s": return self._string(value)
+        if signature == "as": return self._strings(value)
+        if signature == "u": return self._uint(value)
+        if signature == "b":
+            self._need(type(value) is bool)
+            return value
+        if signature == "ay":
+            self._need(type(value) is list and len(value) in (0, 16))
+            return bytes(self._uint(item, 8) for item in value).hex()
+        return value
+
+    def paths(self):
+        return [self._absolute(item) for item in self._property(self._manager, self._interface, "UnitPath", "as")]
+
+    def owner_pid(self):
+        self._owner_check()
+        def daemon(member, signature, body, expected):
+            return self._call(["call", self._dbus, "/org/freedesktop/DBus", self._dbus, member, signature, *body], expected, method=True)
+        present = daemon("NameHasOwner", "s", ["org.orla.Launcher"], "b")
+        self._need(type(present) is bool)
+        if not present:
+            self._owner_check()
+            return None
+        owner = self._unique(daemon("GetNameOwner", "s", ["org.orla.Launcher"], "s"))
+        pid = self._uint(daemon("GetConnectionUnixProcessID", "s", [owner], "u"))
+        self._need(pid > 0 and daemon("GetNameOwner", "s", ["org.orla.Launcher"], "s") == owner, "service_bus_changed")
+        self._owner_check()
+        return pid
+
+    def _row(self, deadline=None):
+        rows = self._method("ListUnitsByNames", "as", ["1", SERVICE_UNIT], "a(ssssssouso)", deadline)
+        self._need(type(rows) is list and len(rows) == 1 and type(rows[0]) is list and len(rows[0]) == 10)
+        row = rows[0]
+        for index in (0, 1, 2, 3, 4, 5, 6, 8, 9): self._string(row[index])
+        self._need(row[0] == SERVICE_UNIT and re.fullmatch(r"/[A-Za-z0-9_/]*", row[6]) is not None and
+                   re.fullmatch(r"/[A-Za-z0-9_/]*", row[9]) is not None)
+        self._uint(row[7])
+        return row
+
+    def _epoch(self, row, deadline=None):
+        if row[2] == "not-found":
+            self._need(row[3] == "inactive" and row[4] == "dead" and row[7] == 0)
+            return 0, ""
+        self._need(row[2] == "loaded")
+        return (self._property(row[6], self._service_interface, "MainPID", "u", deadline),
+                self._property(row[6], self._unit_interface, "InvocationID", "ay", deadline))
+
+    @classmethod
+    def _exec_rows(cls, rows):
+        cls._need(type(rows) is list and len(rows) <= 64)
+        result = []
+        for row in rows:
+            cls._need(type(row) is list and len(row) == 10 and type(row[2]) is bool)
+            path, argv = cls._absolute(row[0]), cls._strings(row[1])
+            for index in (3, 4, 5, 6): cls._uint(row[index], 64)
+            cls._uint(row[7])
+            cls._need(all(type(row[index]) is int and -(2 ** 31) <= row[index] < 2 ** 31 for index in (8, 9)))
+            result.append([path, argv, row[2]])
+        return result
+
+    @staticmethod
+    def _pin(value):
+        return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid,
+                value.st_nlink, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+    def _tick(self, pid, proc_fd=None):
+        owned = proc_fd is None
+        if owned:
+            proc_fd = os.open(Path("/proc") / str(pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd, primary, cleanup = None, None, False
+        try:
+            self._need(os.fstat(proc_fd).st_uid == os.getuid(), "service_process_uid")
+            fd = os.open("stat", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=proc_fd)
+            data = bytearray()
+            while len(data) <= 8192:
+                chunk = os.read(fd, 8193 - len(data))
+                if not chunk: break
+                data.extend(chunk)
+            self._need(len(data) <= 8192)
+            try: tick = int(data.rsplit(b")", 1)[1].split()[19])
+            except (ValueError, IndexError): raise InstallError("service_unknown") from None
+            self._need(tick > 0 and os.fstat(proc_fd).st_uid == os.getuid(), "service_process_changed")
+            return tick
+        except BaseException as error:
+            primary = error
+            raise
+        finally:
+            for descriptor in ([fd] if fd is not None else []) + ([proc_fd] if owned else []):
+                try: os.close(descriptor)
+                except OSError: cleanup = True
+            if cleanup and primary is None: raise InstallError("service_unknown") from None
+
+    def _process(self, pid):
+        proc_fd = os.open(Path("/proc") / str(pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd, primary, cleanup = None, None, False
+        try:
+            tick = self._tick(pid, proc_fd)
+            exe = self._absolute(os.readlink("exe", dir_fd=proc_fd))
+            self._need(not exe.endswith(" (deleted)"), "service_process_deleted")
+            fd = os.open("exe", os.O_RDONLY | os.O_CLOEXEC, dir_fd=proc_fd)
+            observed = os.fstat(fd)
+            self._need(stat.S_ISREG(observed.st_mode) and 0 < observed.st_size <= 64 * 1024 * 1024)
+            pin, sha, size = self._pin(observed), hashlib.sha256(), 0
+            while True:
+                block = os.read(fd, min(131072, observed.st_size - size + 1))
+                if not block: break
+                size += len(block)
+                self._need(size <= observed.st_size, "service_process_changed")
+                sha.update(block)
+            self._need(size == observed.st_size and self._pin(os.fstat(fd)) == pin and
+                       self._pin(os.stat("exe", dir_fd=proc_fd)) == pin, "service_process_changed")
+            bus_pid = self.owner_pid()
+            self._need(self._tick(pid, proc_fd) == tick == self._tick(pid) and
+                       os.readlink("exe", dir_fd=proc_fd) == exe and self._pin(os.stat("exe", dir_fd=proc_fd)) == pin,
+                       "service_process_changed")
+            return {"pid": pid, "uid": os.getuid(), "exe": exe, "sha256": sha.hexdigest(), "tick": tick, "busPid": bus_pid}
+        except BaseException as error:
+            primary = error
+            raise
+        finally:
+            for descriptor in ([fd] if fd is not None else []) + [proc_fd]:
+                try: os.close(descriptor)
+                except OSError: cleanup = True
+            if cleanup and primary is None: raise InstallError("service_unknown") from None
+
+    def snapshot(self):
+        try:
+            row = self._row()
+            epoch = self._epoch(row)
+            links = self._method("GetUnitFileLinks", "sb", [SERVICE_UNIT, "false"], "as")
+            links = [self._absolute(item) for item in self._strings(links)]
+            result = {"id": SERVICE_UNIT, "names": [], "load": row[2], "active": row[3], "sub": row[4],
+                      "fragment": "", "dropins": [], "transient": False, "invocation": epoch[1], "pid": epoch[0],
+                      "type": "", "bus": "", "restart": "", "exec": [], "aux": False,
+                      "environment": [], "environmentFiles": [], "links": links, "process": None}
+            if row[2] == "loaded":
+                for key, name, signature in (("id", "Id", "s"), ("names", "Names", "as"), ("fragment", "FragmentPath", "s"),
+                        ("dropins", "DropInPaths", "as"), ("transient", "Transient", "b")):
+                    result[key] = self._property(row[6], self._unit_interface, name, signature)
+                if result["fragment"]: self._absolute(result["fragment"])
+                for item in result["dropins"]: self._absolute(item)
+                for key, name, signature in (("type", "Type", "s"), ("bus", "BusName", "s"), ("restart", "Restart", "s"),
+                                            ("environment", "Environment", "as")):
+                    result[key] = self._property(row[6], self._service_interface, name, signature)
+                result["exec"] = self._exec_rows(self._property(row[6], self._service_interface, "ExecStart", "a(sasbttttuii)"))
+                for name in ("ExecStartPre", "ExecStartPost", "ExecStop", "ExecStopPost", "ExecReload"):
+                    result["aux"] = bool(self._exec_rows(self._property(row[6], self._service_interface, name, "a(sasbttttuii)"))) or result["aux"]
+                files = self._property(row[6], self._service_interface, "EnvironmentFiles", "a(sb)")
+                self._need(type(files) is list and len(files) <= 256)
+                for item in files:
+                    self._need(type(item) is list and len(item) == 2 and type(item[1]) is bool)
+                    result["environmentFiles"].append([self._absolute(item[0]), item[1]])
+                if row[3] == "active": self._need(len(epoch[1]) == 32 and epoch[1] != "0" * 32)
+                if epoch[0]: result["process"] = self._process(epoch[0])
+            after = self._row()
+            self._need(after == row and self._epoch(after) == epoch, "service_epoch_changed")
+            self._owner_check()
+            return result
+        except (OSError, subprocess.TimeoutExpired):
+            raise InstallError("service_unknown") from None
+
+    def _wait(self, target):
+        deadline = time.monotonic() + 10
+        while True:
+            row = self._row(deadline)
+            pid, _invocation = self._epoch(row, deadline)
+            if row[7] == 0:
+                if target is not False and row[3] == "active": return
+                if row[3] in ("inactive", "failed") and pid == 0:
+                    if target is True: raise InstallError("service_start_failed")
+                    return
+            self._need(time.monotonic() < deadline, "service_timeout")
+            time.sleep(min(.1, max(0, deadline - time.monotonic())))
+
+    def _mutate(self, member, target):
+        self._owner_check()
+        if member == "Reload": self._method(member, "", [], "")
+        else:
+            job = self._method(member, "ss", [SERVICE_UNIT, "fail"], "o")
+            self._need(type(job) is str and re.fullmatch(r"/[A-Za-z0-9_/]+", job) is not None)
+        self._wait(target)
+        self._owner_check()
+
+    def reload(self): self._mutate("Reload", None)
+    def start(self): self._mutate("StartUnit", True)
+    def stop(self):
+        self._mutate("StopUnit", False)
+        row = self._row()
+        pid, _invocation = self._epoch(row)
+        self._need(pid == 0 and row[7] == 0, "service_stop_unknown")
+        if row[3] == "failed":
+            # StopUnit preserves a failed state even after the process exits.
+            # Clear only this owned unit before its file is removed/reloaded.
+            self._method("ResetFailedUnit", "s", [SERVICE_UNIT], "")
+            row = self._row()
+            pid, _invocation = self._epoch(row)
+        self._need(pid == 0 and row[3] == "inactive" and row[7] == 0, "service_stop_unknown")
+
+
+def _service_need(value, code="service_unknown"):
+    if not value:
+        raise InstallError(code)
+
+
+def _service_paths(paths):
+    unit = paths.data_home / "systemd/user" / SERVICE_UNIT
+    link = unit.parent / "graphical-session.target.wants" / SERVICE_UNIT
+    for path in (unit, link, _base(paths) / "service.json"):
+        _absolute(path)
+        _service_need(len(os.fsencode(path)) <= 4096 and len(path.parts) <= 64
+                      and all(len(os.fsencode(part)) <= 255 for part in path.parts), "install_paths")
+    return unit, link
+
+
+def _service_disabled(paths):
+    unit, link = _service_paths(paths)
+    # Older bootstraps reject the same barrier as an extra base member.
+    if any(_exists(path) for path in (_base(paths) / "service.json", unit, link)):
+        raise InstallError("service_disable_first")
+
+
+def _service_quote(value):
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
+def _service_command(paths):
+    # The controller is already a verified /bin/sh script. A fixed interpreter
+    # also supports paths rejected as systemd's first executable word.
+    return ["/bin/sh", str(paths.home / ".local/bin/orla-launcherctl"), "session"]
+
+
+def _service_environment(paths):
+    return ["HOME=" + str(paths.home), "XDG_DATA_HOME=" + str(paths.data_home),
+            "XDG_STATE_HOME=" + str(paths.state_home)]
+
+
+def _service_unit(paths, token):
+    command = " ".join(_service_quote(part) for part in _service_command(paths))
+    environment = " ".join(_service_quote(part) for part in _service_environment(paths))
+    # ':' disables environment substitution in argv; '%' remains a specifier.
+    return ("# Orla service " + token + "\n[Unit]\nDescription=Orla Launcher\n"
+            "PartOf=graphical-session.target\nAfter=graphical-session-pre.target\n"
+            "[Service]\nType=dbus\nBusName=org.orla.Launcher\nExecStart=:" + command + "\n"
+            "Environment=" + environment + "\nRestart=no\nTimeoutStartSec=15\nTimeoutStopSec=15\n"
+            "[Install]\nWantedBy=graphical-session.target\n").encode("utf-8")
+
+
+def _service_record(paths):
+    path = _base(paths) / "service.json"
+    if not _exists(path):
+        return None
+    data, pin = _read(path, mode=0o600, limit=4096)
+    record = _strict_json(data)
+    _service_need(type(record) is dict and set(record) == {
+        "schema", "token", "uid", "generationSha256", "unitSha256"}, "service_record")
+    _service_need(record["schema"] == SERVICE_SCHEMA and type(record["uid"]) is int
+                  and record["uid"] == os.getuid() and type(record["token"]) is str
+                  and re.fullmatch(r"[0-9a-f]{32}", record["token"], re.ASCII) is not None
+                  and all(type(record[key]) is str and SHA256.fullmatch(record[key]) is not None
+                          for key in ("generationSha256", "unitSha256")), "service_record")
+    _service_need(hashlib.sha256(_service_unit(paths, record["token"])).hexdigest() == record["unitSha256"], "service_record")
+    audit = _state(paths) / "transactions" / ("service-" + record["token"] + ".json")
+    _service_need(_read(audit, mode=0o600, limit=4096)[0] == data, "service_record")
+    return record, data, pin
+
+
+def _service_generation(paths, receipt):
+    manager = next(item for item in receipt["files"] if item["key"] == "tools/install.py")
+    current, _pin = _read(Path(__file__), mode=0o644, limit=2 * 1024 * 1024)
+    _service_need(hashlib.sha256(current).hexdigest() == manager["sha256"], "service_generation")
+    return manager["sha256"]
+
+
+def _service_link(path, target, *, remove=False):
+    with _directory(path.parent) as parent:
+        before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        _service_need(stat.S_ISLNK(before.st_mode) and before.st_uid == os.getuid()
+                      and before.st_nlink == 1 and os.readlink(path.name, dir_fd=parent) == str(target), "service_drift")
+        _service_need(_identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) == _identity(before), "service_drift")
+        if remove:
+            os.unlink(path.name, dir_fd=parent)
+            os.fsync(parent)
+
+
+def _service_files(paths, record):
+    unit, link = _service_paths(paths)
+    if _exists(unit):
+        data, _pin = _read(unit, mode=0o644, limit=16384)
+        _service_need(hashlib.sha256(data).hexdigest() == record["unitSha256"], "service_drift")
+    if _exists(link):
+        _service_link(link, unit)
+    return _exists(unit), _exists(link)
+
+
+def _service_policy(dropins):
+    _service_need(type(dropins) is list and len(dropins) <= 16, "service_policy_unknown")
+    provenance = []
+    for name in dropins:
+        _service_need(type(name) is str and len(name) <= 4096, "service_policy_unknown")
+        path = Path(name)
+        _service_need(path.parent in {Path(root) / "systemd/user/service.d" for root in
+                                     ("/usr/lib", "/usr/local/lib", "/etc")}, "service_policy_unknown")
+        # Inherited type policies may set timeouts; they cannot add commands or
+        # change this service's authority. Never edit a distribution policy.
+        with _directory(path.parent) as parent:
+            before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            _service_need(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and before.st_nlink == 1
+                          and not before.st_mode & 0o022 and 0 < before.st_size <= 16384, "service_policy_unknown")
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+            try:
+                data = os.read(fd, 16385)
+                _service_need(_identity(os.fstat(fd)) == _identity(before)
+                              == _identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False))
+                              and len(data) == before.st_size, "service_policy_unknown")
+            finally:
+                os.close(fd)
+        section = ""
+        try:
+            for line in data.decode("utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith(("#", ";")):
+                    continue
+                if line.startswith("["):
+                    _service_need(line == "[Service]", "service_policy_unknown")
+                    section = line
+                    continue
+                key, separator, value = line.partition("=")
+                _service_need(section == "[Service]" and separator and key.strip() in {
+                    "TimeoutStartSec", "TimeoutStopSec", "TimeoutAbortSec", "TimeoutStartFailureMode",
+                    "TimeoutStopFailureMode"} and value.strip() and not value.rstrip().endswith("\\"), "service_policy_unknown")
+        except UnicodeDecodeError:
+            raise InstallError("service_policy_unknown") from None
+        provenance.append({"path": name, "sha256": hashlib.sha256(data).hexdigest()})
+    return provenance
+
+
+def _service_effective(paths, receipt, value, *, absent=False, owned_link=False):
+    unit, link = _service_paths(paths)
+    _service_need(type(value) is dict and value.get("id") == SERVICE_UNIT, "service_identity")
+    if absent:
+        _service_need(value.get("load") == "not-found" and value.get("pid") == 0
+                      and value.get("active") == "inactive"
+                      and value.get("links") in ([], [str(link)] if owned_link else []), "service_unmanaged")
+        return []
+    _service_need(value.get("load") == "loaded" and value.get("names") == [SERVICE_UNIT]
+                  and value.get("fragment") == str(unit) and value.get("transient") is False
+                  and value.get("type") == "dbus" and value.get("bus") == "org.orla.Launcher"
+                  and value.get("restart") == "no" and value.get("exec") == [
+                      ["/bin/sh", _service_command(paths), False]] and value.get("aux") is False
+                  and value.get("environmentFiles") == [] and value.get("environment") == _service_environment(paths)
+                  and value.get("links") in ([], [str(link)]), "service_identity")
+    provenance = _service_policy(value.get("dropins"))
+    pid = value.get("pid")
+    _service_need(type(pid) is int and pid >= 0, "service_identity")
+    if pid:
+        process = value.get("process")
+        binary = _base(paths) / "versions" / receipt["archiveSha256"] / "bin/orla-launcher"
+        payload = next(item for item in receipt["files"] if item["key"] == "payload/bin/orla-launcher")
+        _service_need(type(process) is dict and process.get("pid") == pid and process.get("busPid") == pid
+                      and type(process.get("uid")) is int and process["uid"] == os.getuid()
+                      and process.get("exe") == str(binary) and process.get("sha256") == payload["sha256"]
+                      and type(process.get("tick")) is int and process["tick"] > 0
+                      and value.get("active") == "active" and type(value.get("invocation")) is str
+                      and re.fullmatch(r"[0-9a-f]{32}", value["invocation"]) is not None
+                      and value["invocation"] != "0" * 32, "service_process_unknown")
+    else:
+        _service_need(value.get("process") is None and value.get("active") in ("inactive", "failed"), "service_process_unknown")
+    return provenance
+
+
+def _service_error_path(paths, record):
+    return _state(paths) / "transactions" / ("service-" + record["token"] + "-error.json")
+
+
+def _service_failure(paths, record, error):
+    path = _service_error_path(paths, record)
+    if not _exists(path):
+        _write_new(path, _json({"schema": SERVICE_SCHEMA, "token": record["token"],
+                              "code": error.code if isinstance(error, InstallError) else "filesystem_unknown"}), 0o600)
+
+
+def _service_status(paths, backend):
+    unit, link = _service_paths(paths)
+    owned = _service_record(paths)
+    value = backend.snapshot()
+    result = {"unit": SERVICE_UNIT, "runtime": "unverified", "enabled": False}
+    if owned is None:
+        if _exists(unit) or _exists(link) or value.get("load") != "not-found" or value.get("links"):
+            return {**result, "status": "unmanaged", "code": "service_unmanaged"}
+        _service_effective(paths, None, value, absent=True)
+        return {**result, "status": "disabled"}
+    record, _data, _pin = owned
+    receipt = _receipt(paths)
+    _guard(paths, receipt)
+    present, linked = _service_files(paths, record)
+    if not present or not linked or value.get("load") != "loaded":
+        return {**result, "status": "pending", "enabled": None, "code": "service_incomplete"}
+    provenance = _service_effective(paths, receipt, value)
+    result.update(enabled=True, policy=provenance)
+    if _exists(_service_error_path(paths, record)):
+        failure = _strict_json(_read(_service_error_path(paths, record), mode=0o600, limit=4096)[0])
+        _service_need(type(failure) is dict and set(failure) == {"schema", "token", "code"}
+                      and failure["schema"] == SERVICE_SCHEMA and failure["token"] == record["token"]
+                      and type(failure["code"]) is str and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure["code"]) is not None,
+                      "service_record")
+        return {**result, "status": "pending", "code": failure["code"]}
+    return {**result, "status": "active" if value["pid"] else "inactive"}
+
+
+def service(paths: InstallPaths, action: str, *, backend=None) -> dict:
+    """Explicit opt-in lifecycle; status never creates files or starts a process."""
+    paths = _paths(paths)
+    _service_need(action in ("enable", "status", "disable"), "service_action")
+    backend = backend if backend is not None else NativeServiceBackend()
+    if action == "status":
+        return _service_status(paths, backend)
+    if action == "disable" and _service_record(paths) is None:
+        result = _service_status(paths, backend)
+        _service_need(result["status"] == "disabled", "service_unmanaged")
+        return result
+    with _locked(paths):
+        _service_need(_pending(paths) is None, "pending_transaction")
+        receipt = _receipt(paths)
+        _guard(paths, receipt)
+        generation = _service_generation(paths, receipt)
+        owned = _service_record(paths)
+        unit, link = _service_paths(paths)
+        if action == "enable":
+            if owned is not None:
+                result = _service_status(paths, backend)
+                _service_need(result["status"] == "active", "service_disable_first")
+                return result
+            _service_disabled(paths)
+            _service_need(str(unit.parent) in backend.paths(), "service_load_path")
+            _service_effective(paths, receipt, backend.snapshot(), absent=True)
+            _service_need(backend.owner_pid() is None, "service_singleton_busy")
+            token = secrets.token_hex(16)
+            content = _service_unit(paths, token)
+            record = {"schema": SERVICE_SCHEMA, "token": token, "uid": os.getuid(),
+                      "generationSha256": generation, "unitSha256": hashlib.sha256(content).hexdigest()}
+            data = _json(record)
+            _write_new(_state(paths) / "transactions" / ("service-" + token + ".json"), data, 0o600)
+            try:
+                incoming = unit.parent / (".orla-launcher-managed-" + token + ".barrier")
+                _write_new(incoming, data, 0o600)
+                with _directory(unit.parent) as source, _directory(_base(paths)) as destination:
+                    _service_need(os.fstat(source).st_dev == os.fstat(destination).st_dev, "service_cross_device")
+                    _publish_version(source, incoming.name, "service.json", target_parent=destination)
+                    os.fsync(source)
+                    os.fsync(destination)
+                incoming = unit.parent / (".orla-launcher-managed-" + token + ".incoming")
+                _write_new(incoming, content, 0o644)
+                with _directory(unit.parent) as parent:
+                    _publish_version(parent, incoming.name, unit.name)
+                    os.fsync(parent)
+                with _directory(link.parent, create=True) as parent:
+                    os.symlink(str(unit), link.name, dir_fd=parent)
+                    os.fsync(parent)
+                _service_files(paths, record)
+                backend.reload()
+                value = backend.snapshot()
+                _service_effective(paths, receipt, value)
+                _service_need(value["pid"] == 0 and value["links"] == [str(link)]
+                              and backend.owner_pid() is None, "service_singleton_busy")
+                backend.start()
+                result = _service_status(paths, backend)
+                _service_need(result["status"] == "active", "service_start_unknown")
+                return result
+            except (InstallError, OSError) as error:
+                try:
+                    _service_failure(paths, record, error)
+                except (InstallError, OSError):
+                    pass
+                raise
+        _service_need(owned is not None, "service_unmanaged")
+        record, data, pin = owned
+        try:
+            _service_files(paths, record)
+            value = backend.snapshot()
+            if value["load"] == "loaded":
+                _service_effective(paths, receipt, value)
+                if value["pid"] or value["active"] == "failed":
+                    backend.stop()
+                    value = backend.snapshot()
+                    _service_effective(paths, receipt, value)
+                _service_need(value["pid"] == 0 and value["active"] in ("inactive", "failed"), "service_stop_unknown")
+            else:
+                # First reload may have failed before the manager loaded our
+                # unit. Its already-verified link is still ours to remove.
+                _service_effective(paths, receipt, value, absent=True, owned_link=True)
+            _service_files(paths, record)
+            if _exists(link):
+                _service_link(link, unit, remove=True)
+            if _exists(unit):
+                _unlink_checked(unit, {"size": len(_service_unit(paths, record["token"])),
+                                      "sha256": record["unitSha256"]}, 0o644)
+            backend.reload()
+            _service_effective(paths, receipt, backend.snapshot(), absent=True)
+            completion = _json({"schema": SERVICE_SCHEMA, "token": record["token"], "status": "disabled"})
+            audit = _state(paths) / "transactions" / ("service-" + record["token"] + "-disabled.json")
+            if not _exists(audit):
+                _write_new(audit, completion, 0o600)
+            _service_need(_read(audit, mode=0o600, limit=4096)[0] == completion, "service_record")
+            _unlink_checked(_base(paths) / "service.json", {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()},
+                            0o600, expected_pin=list(pin))
+            return {"status": "disabled", "unit": SERVICE_UNIT, "enabled": False, "runtime": "unverified"}
+        except (InstallError, OSError) as error:
+            try:
+                _service_failure(paths, record, error)
+            except (InstallError, OSError):
+                pass
+            raise
 
 
 def _launch(paths, *, session=False):
@@ -984,11 +1617,13 @@ def recover_finish_install(paths: InstallPaths, *, backend=None) -> dict:
     """Clear a verified install tail, preserving its immutable failure evidence."""
     try:
         paths = _paths(paths)
+        _service_disabled(paths)
         if backend is not None:
             raise InstallError("backend_unimplemented")
         # Unlike initial install, recovery has no authority to create a state tree.
         _recovery_parents(paths)
         with _locked(paths):
+            _service_disabled(paths)
             receipt = _receipt(paths)
             _guard(paths, receipt)
             proofs, parents = _recovery_proofs(paths, receipt), _recovery_parents(paths)
@@ -1428,6 +2063,7 @@ def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
     """Switch one verified payload; launcher and legacy callers must be quiescent."""
     try:
         paths = _paths(paths)
+        _service_disabled(paths)
         _update_paths(paths)
         if backend is not None:
             raise InstallError("backend_unimplemented")
@@ -1447,6 +2083,7 @@ def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
             raise InstallError(error.code) from None
         _recovery_parents(paths)
         with _locked(paths):
+            _service_disabled(paths)
             _update_need(all(item["pin"] is None for item in _recovery_controls(paths)), "pending_transaction")
             a = _receipt(paths)
             _guard(paths, a)
@@ -1471,11 +2108,13 @@ def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
 def _update_return_a(paths, backend, *, recovery):
     try:
         paths = _paths(paths)
+        _service_disabled(paths)
         _update_paths(paths)
         if backend is not None:
             raise InstallError("backend_unimplemented")
         _recovery_parents(paths)
         with _locked(paths):
+            _service_disabled(paths)
             data, pin, bank, _positions = _update_load(paths)
             try:
                 return _update_normalize_a(paths, data, pin, recovery=recovery)
@@ -1513,6 +2152,8 @@ def main(arguments: list[str] | None = None) -> int:
     commands.add_parser("rollback")
     for command in ("status", "launch", "uninstall", "session"):
         commands.add_parser(command)
+    service_command = commands.add_parser("service", allow_abbrev=False)
+    service_command.add_argument("action", choices=("enable", "status", "disable"))
     recover_command = commands.add_parser("recover", allow_abbrev=False)
     recovery_mode = recover_command.add_mutually_exclusive_group(required=True)
     recovery_mode.add_argument("--finish-install", action="store_true")
@@ -1535,6 +2176,8 @@ def main(arguments: list[str] | None = None) -> int:
             result = update_archive(options.archive, expected_sha256=options.sha256, expected_commit=options.commit, paths=paths)
         elif options.command == "rollback":
             result = rollback_update(paths)
+        elif options.command == "service":
+            result = service(paths, options.action)
         elif options.command == "session":
             _launch(paths, session=True)
             return 0

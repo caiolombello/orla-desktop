@@ -832,6 +832,21 @@ Meta isolada, execução de apps, outros ambientes, serviço público e migraç�
 do legado seguem abertos. A instalação principal permanece no launcher anterior;
 R2/L0 continuam parciais. Veja o [fluxo](launcher/README.md#sessão-de-busca-pelo-atalho--experimental-no-fonte).
 
+**R2/L0 — serviço opcional no fonte (15/10):** `launcherctl service
+enable/status/disable` configura e retira somente a unidade própria, por escolha
+explícita, com controlador independente do checkout, readback do systemd e
+preservação da primeira falha. A instalação continua inerte; versões antigas de
+ferramentas e serviço legado não são adotados. Uma barreira bloqueia mutações de
+payload também no bootstrap anterior, até a retirada confirmada do serviço.
+Passaram 141 testes portáteis, incluindo 12 de serviço, e a prova de compatibilidade
+com o bootstrap anterior. Em unidade inerte própria no systemd 259, argumentos
+especiais e limpeza de `failed` foram observados; o registro preserva o erro da
+primeira prova e um erro auxiliar de limpeza da segunda, que terminou sem unidade
+residual e sem alterar launcher/configurações anteriores. Serviço público com
+ELF/atalho e novo login continuam sem qualificação nativa. Meta standalone,
+migração, outros ambientes e os demais gates R2/L0 seguem abertos. Veja o
+[fluxo e limites](launcher/README.md#serviço-opcional-de-busca--experimental-no-fonte).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.

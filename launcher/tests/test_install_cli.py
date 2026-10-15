@@ -50,6 +50,11 @@ class LauncherInstallCliTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.invoke_stub(["launcher", "recover", mode], ["recover", mode], code=7)
 
+    def test_service_forwards_only_the_explicit_lifecycle_action(self):
+        for action in ("enable", "status", "disable"):
+            with self.subTest(action=action):
+                self.invoke_stub(["launcher", "service", action], ["service", action], code=7)
+
     def test_update_forwards_verified_archive_without_expanding_shell_text(self):
         arguments = ["update", "/owned/new archive $(not-a-command).zip", "--sha256", "a" * 64, "--commit", "b" * 40]
         self.invoke_stub(["launcher", *arguments], arguments, code=7)
@@ -70,7 +75,9 @@ class LauncherInstallCliTests(unittest.TestCase):
                ["launcher", "recover", "--finish-install", "--rollback-update"],
                ["launcher", "update", "archive.zip"],
                ["launcher", "update", "archive.zip", "--sha256", "a" * 64],
-               ["launcher", "session", "--start-hidden"], ["launcher", "session", "extra"])
+               ["launcher", "session", "--start-hidden"], ["launcher", "session", "extra"],
+               ["launcher", "service"], ["launcher", "service", "start"],
+               ["launcher", "service", "enable", "--force"], ["launcher", "service", "status", "extra"])
         with mock.patch.object(caiodock.importlib.util, "spec_from_file_location") as locate:
             for arguments in bad:
                 with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):
