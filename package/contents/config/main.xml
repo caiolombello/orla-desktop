@@ -9,6 +9,8 @@
     <entry name="appearanceJSON" type="String"><default></default></entry>
     <entry name="profilesJSON" type="String"><default></default></entry>
     <entry name="contextsJSON" type="String"><default></default></entry>
+    <entry name="autoContextEnabled" type="Bool"><default>false</default></entry>
+    <entry name="autoContextDefaultProfile" type="String"><default></default></entry>
     <entry name="iconSize" type="Int"><default>42</default><min>24</min><max>64</max></entry>
     <entry name="animations" type="Bool"><default>true</default></entry>
     <entry name="showClock" type="Bool"><default>true</default></entry>

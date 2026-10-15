@@ -6,6 +6,7 @@ Window {
     property string fixtureProfilesJSON: ""
     property string fixtureContextsJSON: ""
     property int contextWriteCount: 0
+    property int profileWriteCount: 0
     property var contextTimerWitness: dockView.pomodoro
     readonly property bool contextTimerIdentity: contextTimerWitness === dockView.pomodoro
     property var contextSnapshot: ({
@@ -25,7 +26,10 @@ Window {
         property string theme: "glass"
         property string appearanceJSON: ""
         property string profilesJSON: fixtureProfilesJSON
+        onProfilesJSONChanged: profileWriteCount++
         property string contextsJSON: fixtureContextsJSON
+        property bool autoContextEnabled: false
+        property string autoContextDefaultProfile: ""
         onContextsJSONChanged: contextWriteCount++
         property int iconSize: 42
         property bool animations: false

@@ -223,7 +223,7 @@ C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incr
 ### 0.5 — Perfis, Activities e áreas de trabalho
 
 - [ ] **P1: perfis manuais.** Trabalho, Pessoal, Jogos e perfis próprios com apps fixados, aparência, ordem/visibilidade dos widgets e escolha de dock/barra/launcher/eventos. Aceite: alternar e reiniciar restaura cada perfil; o Pomodoro continua com o prazo correto ao trocar de perfil.
-- [ ] **P2: associação a contexto KDE.** A primeira fatia foi publicada na alpha 0.2.8: a aba Contextos associa explicitamente Activity e desktop atuais por ID estável a perfis gerenciados existentes, sem troca automática; a descoberta é somente leitura e as ações exigem intenção explícita. P2 segue parcial até qualificar a integração nativa e definir prioridade entre seleção manual, desktop, Activity e padrão. Aceite futuro: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil.
+- [ ] **P2: associação a contexto KDE.** A alpha 0.2.8 publicou associações explícitas. O Source atual acrescenta automático opcional por instância: Activity → área → padrão gerenciado, com escolha manual até novo contexto confirmado/retomada e preservação de interações. P2 segue parcial até a jornada nativa com persistência/reinício e comportamento por monitor. Aceite: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil. [Regras e limites](docs/contexts.md).
 - [ ] **W1: seletor de contexto.** Mostrar Activity e área atuais; permitir trocar por clique ou atalho, com resposta de erro se o serviço não estiver disponível. Diferenciar trocar o perfil e trocar o contexto do KDE. Aceite: nome e destaque acompanham a troca real, inclusive com comportamento por monitor qualificado.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
@@ -574,7 +574,7 @@ em perfil gerenciado, clipboard e foco nativos mantêm qualificação separada.
 | 1. Composição visual instalada — R1/UX0 | Qualificar esta revisão no painel; depende da revisão e instalação reversível do Source preparado | Abrir/fechar cada popup por clique/Escape, foco visível, claro/escuro, movimento reduzido, autohide sob hover/fullscreen e configuração preservada. Registrar tela/escala/revisão; ambientes não disponíveis permanecem UNRUN. |
 | 2. Windows/Meta → busca — L0/L2 | Atribuição, recuperação, fluxo básico e baseline delimitado de primeira tecla registrados; aceite completo aberto | Expandir prontidão em monitores/escala, cargas e atalho inibido antes de anunciar orçamento. Digitação sem intervalo ainda perde caracteres para a janela anterior; qualquer otimização exige comparação. Manter consulta atual, execução explícita, Escape/foco e recuperação. IA/Steam não são dependências. |
 | 3. Central de Controle na barra — CC0/CC1-A/T1 | Mesmos modelos acessíveis pela barra ou dock, entradas opcionais e dono do estado definido | Abrir não escreve; volume/mudo/saída mostram readback/falha; segunda entrada não cria backend concorrente; desativar barra preserva dock. Áudio real tem prova própria; microfone/brilho/rede são fatias posteriores. |
-| 4. Seletor de área virtual — W1 | Mostrar e trocar a área atual, distinguindo contexto e perfil; depende de prova D-Bus KWin versionada | Clique/atalho troca uma vez e acompanha mudanças externas; indisponibilidade explícita; contexto não apaga perfil. Automação P2 espera decisão de precedência manual/Activity/desktop. |
+| 4. Seletor de área virtual — W1 | Mostrar e trocar a área atual, distinguindo contexto e perfil; depende de prova D-Bus KWin versionada | Clique/atalho troca uma vez e acompanha mudanças externas; indisponibilidade explícita; contexto não apaga perfil. Automação P2 tem precedência definida e Source implementado; a jornada nativa segue aberta. |
 | 5. Aparência portátil — C1/X1 | Exportar/importar aparência, ordem e visibilidade com preview/reversão; depende do schema experimental existente | Exportação sem segredos, eventos ou caminhos privados; import inválido não escreve; Cancelar/Aplicar/desfazer/restart preservam perfil. Catálogo declarativo segue após a prova; código externo continua condicionado a X5. |
 
 Cada incremento registra resultado, evidência, limitação e decisão de continuidade. UX0/UX1/DX2 continuam parciais até seus critérios completos. Provas de provedores/hardware ausentes permanecem UNRUN. Não iniciar checkout, SDK estável ou código de terceiros apenas para completar uma lista de recursos.
@@ -1228,20 +1228,20 @@ separadas. A jornada completa em uma única tentativa, Cancelar com
 edições, Aplicar/persistência e foco/seat continuam abertos.
 [Registro e limites](docs/validation/shared-control-center-source.md#bar-settings-package-installed--15-october-2026).
 
-**P2 — próxima vertical: perfil automático por contexto.** A implementação será
+**P2 — Source: perfil automático por contexto (15/10).** A implementação é
 opcional por instância, desligada por padrão, com precedência Activity → área de
 trabalho → perfil padrão gerenciado escolhido. Os dois contextos precisam estar
 prontos; indisponibilidade mantém o perfil atual. Uma escolha manual prevalece
 até o próximo par confirmado de IDs, mesmo após renomeação ou reconexão; retomar
-explicitamente também poderá liberar o automático. Ao reiniciar com a opção
-habilitada, a observação completa poderá retomar a regra.
+explicitamente também libera o automático. Ao reiniciar com a opção
+habilitada, o primeiro par completo retoma a regra.
 
-A troca deve aguardar edição, arraste, popups em fechamento, transferência da
+A troca aguarda edição, arraste, popups em fechamento, transferência da
 Central e pedidos de áudio, então recalcular somente o contexto mais recente.
-Não deve fechar rascunhos nem trocar a Activity/área KDE. Antes da única escrita,
-revalidar contexto, associação, perfil e intenção manual. Essa política está
-definida; automação, controles de opt-in e jornada nativa ainda não estão
-implementados. O comportamento atual continua sendo associação explícita.
+Não fecha rascunhos nem troca a Activity/área KDE. Antes da única escrita,
+revalida contexto, associação, perfil e intenção manual. O controlador e os
+controles de opt-in estão implementados no Source; a jornada nativa continua
+aberta. A observação contínua é somente leitura e não ativa o escritor de área.
 
 O primeiro pré-requisito de Source acrescenta uma guarda opcional à seleção de
 perfil, executada depois da transição e imediatamente antes da escrita. Recusa,
@@ -1249,13 +1249,28 @@ exceção ou revisão alterada preservam a escolha/edição mais recente, inclus
 uma troca que vai e volta ao mesmo perfil. Uma seleção sem mudança também valida
 a guarda e não grava. O contrato mantém os callers de três argumentos e está
 documentado em [profiles.md](docs/profiles.md#experimental-internal-selection-contract).
-Esse incremento não foi instalado na sessão; o controlador automático e seus
-bloqueios de interação continuam sendo os próximos passos de P2.
+Esse primeiro incremento de guarda não foi instalado na sessão. No passo
+seguinte, o Source passou a compor controlador, observação e bloqueios de
+interação, com um módulo Contextos e ajuda progressiva no design system.
 Os seis casos novos recusam a versão anterior e passam na nova. As suítes afetadas
 passaram em Fusion e KDE: 124 aprovações e um skip de TaskManager por estilo;
 design check, sete guardas de design e build passaram. São provas com configuração
 Qt sintética; a galeria foi renderizada e revista nos dois esquemas. Essas provas
-não qualificam automação, KConfig ou foco na sessão nativa.
+não qualificam KConfig ou foco na sessão nativa.
+
+O controlador acrescenta testes portáteis de precedência, habilitação explícita,
+override manual, ABA, reconexão, documentos inválidos, dois donos e reentrada.
+A composição testa configurações clean/dirty, último contexto, foco do botão
+Retomar, navegação do seletor por mouse/teclado, áudio pendente/gesto e a saída do
+menu fallback. A galeria inclui 350/420 px em claro/escuro. P2 **não está concluído**:
+essa nova composição não foi instalada na sessão; falta trocar contexto KDE real,
+qualificar foco/seat e persistência/reinício, incluindo os gates de monitor.
+As 17 suítes direcionadas passaram em processos isolados em Fusion e KDE: 343
+aprovações e cinco skips de TaskManager por estilo. Os 29 casos do controlador
+entram explicitamente na CI. Build, design check, sete guardas e 23 testes da CLI
+passaram; oito capturas sintéticas foram revistas nos dois esquemas. A próxima
+etapa é instalar o pacote com o automático ainda desligado e provar a UI sem
+edições, antes da jornada nativa com perfis/contextos sintéticos.
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.

@@ -18,6 +18,7 @@ DockPopup {
     readonly property alias entryClient: session.client
     readonly property alias contents: center
     readonly property bool dockOrigin: session.dockOrigin
+    readonly property bool contextSwitchBusy: interactionBusy || session.interactionBusy
     readonly property real screenWidth: geometryHost && geometryHost.Screen.width > 0
         ? (geometryHost.Screen.desktopAvailableWidth > 0 ? Math.min(geometryHost.Screen.width, geometryHost.Screen.desktopAvailableWidth) : geometryHost.Screen.width)
         : geometryHost ? geometryHost.Screen.desktopAvailableWidth : 0

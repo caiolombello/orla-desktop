@@ -37,7 +37,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest, QSignalSpy
 
 
 class ContextsDockTests(unittest.TestCase):
@@ -95,6 +95,13 @@ class ContextsDockTests(unittest.TestCase):
             "profiles.initializeDefaults(profiles.activeProfileId, profiles.revision)"
         ))
 
+    def wait_profile(self, expected):
+        state = self.evaluate("profiles")
+        changed = QSignalSpy(state.activeProfileIdChanged)
+        if state.property("activeProfileId") != expected:
+            self.assertTrue(changed.wait(1000), "No deferred profile selection was observed")
+        self.assertEqual(state.property("activeProfileId"), expected)
+
     def open_contexts(self):
         self.popup.open()
         self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 3)
@@ -114,6 +121,180 @@ class ContextsDockTests(unittest.TestCase):
         }
         self.evaluate("contextSnapshot = " + json.dumps(value), self.window)
         QTest.qWait(10)
+
+    def test_automatic_profiles_require_opt_in_and_wait_for_settings_to_close(self):
+        self.initialize_profiles()
+        self.set_snapshot()
+        automation = self.window.findChild(QObject, "dockAutoContextProfiles")
+        self.assertIsNotNone(automation)
+        self.assertFalse(automation.property("enabled"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "legacy")
+        self.assertTrue(self.evaluate("autoContextProfiles.setDefaultProfile('work')"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "legacy")
+        self.open_contexts()
+        checkbox = self.window.findChild(QQuickItem, "autoContextEnabled")
+        self.assertIsNotNone(checkbox)
+        checkbox.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(checkbox.window(), Qt.Key_Space)
+        QTest.qWait(40)
+        self.assertTrue(automation.property("enabled"))
+        self.assertTrue(self.popup.property("visible"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "legacy")
+        self.popup.close()
+        self.wait_profile("work")
+        self.assertFalse(automation.property("manualOverride"))
+        self.assertFalse(self.dock.property("nativeContextSourceLoaded"))
+        self.assertFalse(self.dock.property("nativeDesktopSwitchBackendLoaded"))
+
+    def test_automatic_default_selector_mouse_and_keyboard_preserve_profile(self):
+        for mouse_open in (False, True):
+            with self.subTest(mouse_open=mouse_open):
+                if mouse_open:
+                    self.dispose()
+                    self.create()
+                self.initialize_profiles()
+                self.assertTrue(self.evaluate("autoContextProfiles.setDefaultProfile('work')"))
+                self.open_contexts()
+                selector = self.window.findChild(QQuickItem, "autoContextDefaultProfile")
+                before = self.config.property("profilesJSON")
+                selector.forceActiveFocus(Qt.TabFocusReason)
+                if mouse_open:
+                    point = selector.mapToScene(QPointF(selector.width() / 2, selector.height() / 2)).toPoint()
+                    QTest.mouseClick(selector.window(), Qt.LeftButton, Qt.NoModifier, point)
+                    QTest.qWait(150)
+                    self.assertTrue(self.evaluate("popup.opened", selector))
+                QTest.keyClick(selector.window(), Qt.Key_Down)
+                QTest.keyClick(selector.window(), Qt.Key_Return)
+                QTest.qWait(150)
+                self.assertEqual(self.config.property("autoContextDefaultProfile"), "personal")
+                self.assertFalse(self.evaluate("popup.visible", selector))
+                self.assertFalse(self.config.property("autoContextEnabled"))
+                self.assertEqual(self.config.property("profilesJSON"), before)
+                QTest.keyClick(selector.window(), Qt.Key_Tab)
+                self.assertTrue(self.window.findChild(QQuickItem, "autoContextEnabled").property("activeFocus"))
+
+    def test_automatic_resume_retires_focus_when_new_context_hides_it(self):
+        self.initialize_profiles()
+        self.set_snapshot()
+        self.assertTrue(self.evaluate("autoContextProfiles.setDefaultProfile('work'); autoContextProfiles.setEnabled(true)"))
+        self.wait_profile("work")
+        self.assertTrue(self.evaluate("profiles.select('personal',profiles.activeProfileId,profiles.revision)"))
+        self.assertTrue(self.evaluate("autoContextProfiles.manualOverride"))
+        self.open_contexts()
+        resume = self.window.findChild(QQuickItem, "autoContextResume")
+        self.assertTrue(resume.property("visible"))
+        resume.forceActiveFocus(Qt.TabFocusReason)
+        self.set_snapshot(activity_id="a2")
+        self.assertFalse(resume.property("visible"))
+        self.assertFalse(resume.property("activeFocus"))
+        focused = self.window.activeFocusItem()
+        self.assertIsNotNone(focused)
+        self.assertTrue(focused.isVisible())
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "personal")
+        self.popup.close()
+        self.wait_profile("work")
+
+    def enable_automatic_bindings(self):
+        self.initialize_profiles()
+        self.set_snapshot()
+        self.config.setProperty("contextsJSON", json.dumps({
+            "formatVersion": "0.1-experimental",
+            "activityBindings": [{"contextId": "a1", "lastKnownName": "Foco", "profileId": "work"}],
+            "desktopBindings": [{"contextId": "d1", "lastKnownName": "Área 1", "profileId": "personal"}],
+        }))
+        self.assertTrue(self.evaluate("autoContextProfiles.setDefaultProfile('games'); autoContextProfiles.setEnabled(true)"))
+        self.wait_profile("work")
+
+    def test_automatic_waits_for_draft_and_applies_only_latest_context(self):
+        self.enable_automatic_bindings()
+        self.open_contexts()
+        self.evaluate("appearance.setToken('radius', 9); pomodoro.toggle()")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        before = self.config.property("profilesJSON")
+        draft = self.evaluate("JSON.stringify(appearance.draft)")
+        deadline = self.config.property("timerDeadline")
+        writes = self.window.property("profileWriteCount")
+        self.set_snapshot(activity_id="a2")
+        self.set_snapshot(activity_id="a3", desktop_id="d2")
+        QTest.qWait(40)
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.assertEqual(self.evaluate("JSON.stringify(appearance.draft)"), draft)
+        self.assertTrue(self.popup.property("visible"))
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        self.popup.close()
+        self.wait_profile("games")
+        self.assertEqual(self.window.property("profileWriteCount"), writes + 1)
+        self.assertEqual(self.config.property("timerDeadline"), deadline)
+        self.assertTrue(self.window.property("contextTimerIdentity"))
+
+    def test_automatic_waits_for_audio_request_and_gesture_without_cancelling(self):
+        self.enable_automatic_bindings()
+        audio = self.window.findChild(QObject, "audioControlState")
+        self.evaluate("active=true", audio)
+        self.assertTrue(self.evaluate("requestVolume(70)", audio))
+        self.set_snapshot(activity_id="a2")
+        self.assertEqual(audio.property("pendingKind"), "volume")
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        backend = self.window.findChild(QObject, "dockAudioBackend")
+        self.evaluate("snapshot=Object.assign({},snapshot,{outputs:snapshot.outputs.map(output => Object.assign({},output,{volumeRaw:45875}))})", backend)
+        self.wait_profile("personal")
+        self.assertEqual(audio.property("pendingKind"), "")
+        self.assertTrue(self.evaluate("beginVolumeGesture()", audio))
+        self.set_snapshot(activity_id="a3", desktop_id="d2")
+        self.assertTrue(audio.property("volumeGestureActive"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "personal")
+        self.evaluate("endVolumeGesture()", audio)
+        self.wait_profile("games")
+
+    def test_automatic_waits_for_fallback_menu_close_callback(self):
+        self.enable_automatic_bindings()
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        self.evaluate("popupType=0;open()", menu)
+        QTest.qWait(40)
+        witness = []
+        menu.closed.connect(lambda: witness.append((menu.property("contextSwitchBusy"), self.evaluate("profiles.activeProfileId"))))
+        self.set_snapshot(activity_id="a2")
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.evaluate("close()", menu)
+        self.wait_profile("personal")
+        self.assertEqual(witness, [(True, "work")])
+        self.assertFalse(menu.property("contextSwitchBusy"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "personal")
+
+    def test_automatic_help_reveals_group_without_reclaiming_newer_focus(self):
+        self.initialize_profiles()
+        controls = self.open_contexts()
+        self.popup.setProperty("width", 350)
+        self.popup.setProperty("heightBudget", 420)
+        disclosure = self.window.findChild(QQuickItem, "autoContextHelpToggle")
+        group = self.window.findChild(QQuickItem, "autoContextDetailsGroup")
+        selector = self.window.findChild(QQuickItem, "autoContextDefaultProfile")
+        disclosure.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(100)
+        self.assertTrue(disclosure.property("checked"))
+        viewport = controls.property("contentItem")
+        top = group.mapToItem(viewport, QPointF(0, 0)).y()
+        self.assertGreaterEqual(top, -1)
+        self.assertLessEqual(top + min(group.height(), viewport.height()), viewport.height() + 1)
+        self.assertTrue(disclosure.property("activeFocus"))
+        self.evaluate("checked=false;checked=true", disclosure)
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(100)
+        self.assertTrue(selector.property("activeFocus"))
+
+    def test_automatic_waits_for_pressed_app_drag_without_saving_it(self):
+        self.enable_automatic_bindings()
+        rows = self.evaluate("taskOrder()")
+        if not rows:
+            self.skipTest("TaskManager exposes no app tiles in this runtime")
+        self.assertTrue(self.evaluate("taskDrag.begin(taskOrder()[0].identity)"))
+        self.assertTrue(self.evaluate("taskDrag.pressed && !taskDrag.active"))
+        self.set_snapshot(activity_id="a2")
+        self.assertTrue(self.evaluate("taskDrag.pressed"))
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.evaluate("taskDrag.cancel()")
+        self.wait_profile("personal")
 
     def test_explicit_desktop_switch_keyboard_preserves_profile_and_pomodoro(self):
         self.initialize_profiles()
