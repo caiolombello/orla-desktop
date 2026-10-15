@@ -2,7 +2,7 @@
 
 ## Português
 
-A prerelease alpha [0.2.8](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) adicionou associações explícitas na aba **Contextos**. O Source atual acrescenta perfis automáticos opcionais; esse incremento ainda não foi publicado em release nem instalado na sessão KDE. Os testes Qt sintéticos não qualificam persistência KConfig, reinício ou foco/seat reais.
+A prerelease alpha [0.2.8](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) adicionou associações explícitas na aba **Contextos**. O Source atual acrescenta perfis automáticos opcionais, ainda sem release. A versão do commit `c5509a1` foi instalada numa sessão KDE/Wayland e passou uma visita sem edição à aba, com o automático desligado; veja a [validação delimitada](validation/contexts-auto-installed.md). Essa prova não qualifica a automação ligada, sua persistência após reinício ou o foco/seat completo. Os testes Qt sintéticos continuam separados dessas provas nativas.
 
 A aba observa Activity e área virtual em cartões separados. Escolha um perfil gerenciado e use **Associar Activity atual** ou **Associar área atual**; **Remover** elimina apenas a associação atual. Navegar nesses seletores não grava. Associar não ativa o modo automático nem troca a Activity/área do KDE.
 
@@ -24,7 +24,7 @@ O documento de associações não armazena as preferências do automático. A co
 
 ## English
 
-The [0.2.8 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) introduced explicit associations. Current Source adds optional automatic profiles; this increment has not been released or installed in the live KDE session. Synthetic Qt tests do not qualify native KConfig persistence, restart or focus/seat behavior.
+The [0.2.8 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.8) introduced explicit associations. Current Source adds optional automatic profiles, without a release yet. Commit `c5509a1` was installed in one KDE/Wayland session and passed a no-edit visit to the tab with automation off; see the [bounded validation](validation/contexts-auto-installed.md). This does not qualify enabled automation, its persistence across restart or complete focus/seat behavior. Synthetic Qt tests remain separate from native evidence.
 
 The tab observes Activity and virtual desktop separately. Choose an existing managed profile, then **Associar Activity atual** or **Associar área atual** to save; **Remover** clears only the current association. Navigating these selectors does not save. Binding alone does not enable automation or switch KDE context.
 
