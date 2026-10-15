@@ -882,13 +882,33 @@ anteriores de ponteiro/seletores ficaram preservadas, sem mudanças no código d
 produto. Os dois checks da CI passaram no código `77a7b85`. Consulte
 [o registro e as capturas](docs/validation/appearance-0.2.3.md#installed-popup-keyboard-followup--15-october-2026).
 
-**Próxima entrega de UX1:** revisar a densidade dos presets e controles comuns em
-telas baixas, preservando o orçamento do popup e seus estados de prévia. O usuário
-deve reconhecer o preset ativo e chegar aos controles comuns com menos rolagem,
-sem esconder erros, estado da importação ou Aplicar/Cancelar. Conferir galeria
-clara/escura, teclado e retorno da edição. A entrada precisa por ponteiro no
-roteiro nativo e avaliação visual nativa continuam pendentes; C1, UX1 e DX2 seguem
-parciais, e os demais gates do roadmap continuam ativos.
+**UX1 — seletor compacto de presets, incremento de 15/10:** “Presets e aparência
+portátil” começa recolhido, com nomes e estado da prévia visíveis. A identidade é
+derivada da prévia atual; não se inventa um preset salvo. O perfil legado mantém
+“Ir para Perfis” sem migração implícita. Erro ou importação pendente revelam os dois
+grupos; uma prévia válida pode recolher, conservando status e foco. No orçamento
+de 420 px, a configuração gerenciada já mostra os três temas básicos mais cedo;
+os controles comuns ainda podem exigir rolagem. A legenda curta “· Prévia” evita
+o corte encontrado no teste estreito de 350 px, sem alterar medidas ou fontes.
+Passaram 85 testes e houve um skip Wayland em cada estilo Fusion/KDE, sete guardas
+de design e a galeria de 62 PNGs; oito estados sintéticos estão publicados em
+claro/escuro. O applet foi instalado com backup e um único stop/start do Plasma;
+inventário, launcher e os 132 arquivos/modos protegidos permaneceram exatos.
+No popup legado instalado, a visita delimitada confirmou expansão/recolhimento,
+Tab até o link de Perfis, Escape, reset ao reabrir e Cancelar, usando abertura/foco
+explícitos por AT-SPI e teclas físicas. A segunda Tab até os temas não foi
+qualificada; suas tentativas e falhas de seletores permanecem registradas.
+Não há aceite de ponteiro, foco espontâneo, pixels nativos ou importação/seleção
+gerenciada na sessão real. Consulte o [registro e capturas](docs/validation/appearance-0.2.3.md#compact-preset-chooser--15-october-2026).
+
+**Próxima entrega de C1/UX1:** reorganizar widgets por arraste na aba Widgets,
+conservando as setas e o teclado. O gesto deve mostrar o destino e salvar uma vez
+apenas ao soltar; cancelar, sair da lista ou trocar de perfil/revisão não escreve.
+Reutilizar o writer atual, sem migrar preferências legadas ou criar outro formato.
+Antes de qualificar o arraste nativo, estabelecer a entrada precisa por ponteiro;
+a Tab legado→temas e a avaliação visual nativa também seguem abertas. Conferir
+350/420 px, ambos os esquemas, foco, cancelamento e preservação de outros perfis.
+C1, UX1 e DX2 seguem parciais; os demais gates do roadmap continuam ativos.
 
 ## Prontidão e recomendação de execução
 

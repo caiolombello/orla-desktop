@@ -26,7 +26,7 @@ from PySide6.QtCore import QObject, QPointF, QRect, QRectF, Qt, QUrl, QCoreAppli
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem, QQuickWindow
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest, QSignalSpy
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
@@ -115,49 +115,112 @@ class Gallery:
         engine.deleteLater()
 
     def appearance_catalog(self, host: str) -> None:
+        """Compact and expanded preset states in the unchanged short popup."""
         engine = self.engine()
         engine.load(QUrl.fromLocalFile(str(TESTS / "QmlHarness.qml")))
         window = engine.rootObjects()[0]
         dock = window.findChild(QQuickItem, "dock")
         context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+
         def evaluate(source):
             expression = QQmlExpression(context, dock, source)
             value, _ = expression.evaluate()
             if expression.hasError():
                 raise RuntimeError(expression.error().toString())
             return value
-        window.setProperty("width", 900)
-        window.setProperty("height", 900)
-        evaluate('root.anchors.centerIn=undefined;root.x=40;root.y=24;settings.popupType=0;'
-                 'settings.width=420;settings.heightBudget=420;'
-                 'profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);'
-                 'profiles.select("work",profiles.activeProfileId,profiles.revision);settings.open()')
-        QTest.qWait(60)
-        popup = window.findChild(QQuickItem, "settingsPopup")
-        pending = [window.contentItem()]
-        choice = None
-        while pending:
-            item = pending.pop()
-            if item.objectName() == "appearancePresetCatalog-essencial":
-                choice = item
-                break
-            pending.extend(item.childItems())
-        assert choice is not None
-        choice.forceActiveFocus(Qt.TabFocusReason)
-        steps, name = (1, "mare") if host == "dark" else (3, "jogo")
-        for _ in range(steps):
-            QTest.keyClick(window, Qt.Key_Tab)
-            QTest.qWait(20)
-        assert window.activeFocusItem().objectName() == "appearancePresetCatalog-" + name
-        QTest.keyClick(window, Qt.Key_Return)
-        self.save(f"preset-catalog-{host}-{name}-420", window, self.scene_rect(popup))
-        window.close()
-        window.deleteLater()
-        QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
-        QTest.qWait(10)
-        engine.deleteLater()
-        QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
-        QTest.qWait(10)
+
+        def control(name):
+            declared = window.findChild(QQuickItem, name)
+            if declared is not None:
+                return declared
+            # Limit delegate lookup to this preset component, not native items
+            # belonging to other popups in the complete fixture.
+            disclosure = window.findChild(QQuickItem, "appearancePresetCatalogDisclosure")
+            if disclosure is None:
+                raise RuntimeError("Missing preset catalog disclosure")
+            target = disclosure.parentItem()
+            source = "(function find(item) { if (item.objectName === " + json.dumps(name) + ") return item; for (const child of item.children) { const found = find(child); if (found) return found; } return null; })(this)"
+            expression = QQmlExpression(QQmlEngine.contextForObject(target), target, source)
+            value, _ = expression.evaluate()
+            if expression.hasError() or value is None:
+                raise RuntimeError("Missing preset gallery control: " + name)
+            return value
+
+        def focus(item):
+            assert item.isVisible() and item.isEnabled()
+            item.forceActiveFocus(Qt.TabFocusReason)
+            QTest.qWait(60)
+            assert window.activeFocusItem() == item
+
+        try:
+            window.setProperty("width", 900)
+            window.setProperty("height", 900)
+            evaluate('root.anchors.centerIn=undefined;root.x=40;root.y=24;settings.popupType=0;'
+                     'settings.width=420;settings.heightBudget=420;settings.open()')
+            QTest.qWait(60)
+            popup = window.findChild(QQuickItem, "settingsPopup")
+            outer = control("appearancePresetCatalogDisclosure")
+            assert not outer.property("checked")
+            assert not control("appearancePresetCatalog-essencial").isVisible()
+            assert control("appearancePresetCatalogProfiles").isVisible()
+            self.save(f"preset-compact-{host}-legacy-420", window, self.scene_rect(popup))
+
+            closed = QSignalSpy(popup.closed)
+            evaluate('settings.close()')
+            if not closed.count():
+                assert closed.wait(1000)
+            evaluate('profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);'
+                     'profiles.select("work",profiles.activeProfileId,profiles.revision)')
+            QTest.qWait(60)
+            opened = QSignalSpy(popup.opened)
+            evaluate('settings.open()')
+            if not opened.count():
+                assert opened.wait(1000)
+            assert not outer.property("checked")
+            assert not control("appearancePresetCatalog-essencial").isVisible()
+            assert not control("appearancePresetCatalogProfiles").isVisible()
+            self.save(f"preset-compact-{host}-managed-420", window, self.scene_rect(popup))
+
+            focus(outer)
+            QTest.keyClick(window, Qt.Key_Space)
+            assert outer.property("checked")
+            choice = control("appearancePresetCatalog-essencial")
+            focus(choice)
+            steps, name = (1, "mare") if host == "dark" else (3, "jogo")
+            for _ in range(steps):
+                QTest.keyClick(window, Qt.Key_Tab)
+                QTest.qWait(20)
+            assert window.activeFocusItem().objectName() == "appearancePresetCatalog-" + name
+            QTest.keyClick(window, Qt.Key_Return)
+            assert evaluate("appearancePreset.hasPreview")
+            self.save(f"preset-catalog-{host}-{name}-420", window, self.scene_rect(popup))
+
+            # Pending/invalid input must reopen both groups without discarding
+            # the last valid preview. Capture its real editor error state.
+            evaluate('appearancePreset.clearInput()')
+            outer.setProperty("checked", False)
+            assert not outer.property("checked")
+            invalid = '{"name":"Aparência portátil sintética incompleta"}'
+            evaluate("appearancePreset.setInputText(" + json.dumps(invalid) + ")")
+            assert not evaluate("appearancePreset.previewImport()")
+            QTest.qWait(60)
+            assert outer.property("checked")
+            assert control("appearancePresetJSON").property("checked")
+            assert control("appearanceError").isVisible()
+            field = control("appearancePresetInput")
+            assert field.property("text") == invalid
+            assert not control("appearanceApply").isEnabled()
+            focus(field)
+            self.save(f"preset-portable-{host}-invalid-420", window, self.scene_rect(popup))
+            # No Apply: every preview/import here belongs only to this fixture.
+        finally:
+            window.close()
+            window.deleteLater()
+            QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
+            QTest.qWait(10)
+            engine.deleteLater()
+            QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
+            QTest.qWait(10)
 
     def appearance_advanced(self, host: str) -> None:
         """Progressive appearance controls in the existing short popup fixture."""
