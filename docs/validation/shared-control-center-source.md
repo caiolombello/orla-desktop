@@ -413,3 +413,84 @@ outputs or schemes. Final receipt:
 CC gallery captures were visually reviewed and are byte-identical to the
 [published dark](../screenshots/visual-system/popup-dark-control-center.png) and
 [light](../screenshots/visual-system/popup-light-control-center.png) captures.
+
+## Newer host focus after native popup close — 15 October 2026
+
+A separate Settings popup defect was reproduced offscreen and in an isolated
+real Wayland/KWin session. A synchronous public `closed` observer established
+`QGuiApplication.focusWindow() == host` and `host.activeFocusItem() == addButton`.
+After the observer returned, DockPopup's deferred callback moved focus back to
+the old Settings anchor. Both failed receipts retain the actual keyboard-owner
+and focus-item observations. This controlled reentrant schedule does not claim
+to reproduce ordinary physical pointer timing in the installed panel.
+
+`DockPopup` now invalidates restoration on visibility, anchor and host changes.
+Its deferred callback requires the original live window/anchor, the same closed
+opening, and no distinct live focused control. Synchronous cancellation remains
+authoritative: the shared Session clears `anchorControl` in `closed`, suppressing
+the generic callback during Control Center transfers. The design system records
+this focus contract for future UI contributions.
+
+The same Wayland challenge passed after the fix: the new control remained focused
+and the old anchor did not regain focus. `test_qml` includes the causal regression.
+The dock, Registry, Session and composition suites passed 92 entries per
+Fusion/KDE style (89 passed, three TaskManager skips). Design check, seven guards,
+gallery and the 68-file applet build passed. The four Settings/Control Center
+captures are byte-identical to the pre-fix local gallery; the current Settings
+captures below were visually reviewed in both schemes.
+
+| Dark | Light |
+|---|---|
+| ![Settings dark](captures/popup-focus-dark-settings.png) | ![Settings light](captures/popup-focus-light-settings.png) |
+
+An additional Source-owned Wayland fixture passed dock → bar → dock requests
+through the canonical Entry/Session while the old dialog was still visible and
+owned keyboard focus. Public signal observations verified `closed`, native hide
+and exact keyboard departure before each host change. The same popup/view/audio
+state/dialog remained, the transient parent matched each requested window, and a
+newer control chosen during final close retained focus. Audio/actions were
+synthetic: their call lists stayed empty, and the native audio loader was absent.
+Real audio backend QObject lifetimes/setters and the installed session's exact
+keyboard-owner identity remain unqualified by this fixture.
+
+Two early transfer-fixture attempts remain failed. The diagnostic identified a
+Python conversion failure reading the typed `contents` QML alias; checking that
+alias's actual identity in QML fixed the observer without changing the product.
+Private receipts are under `.runtime/cc-transfer-20261015/`: Settings RED/GREEN
+in `root-focus-probe-r1/r2`, transfer diagnosis in `r3/r4` and the passing
+transfer fixture in `r5`. The final Source status is
+`PASS_SOURCE_WAYLAND_TWO_WAY_CC_TRANSFER_AND_NEWER_FOCUS`.
+
+The tested package was installed with backup and one controlled shell stop/start.
+Only `DockPopup.qml` changed among the 68 applet files. Readback confirmed the
+complete configuration map, panel inventory, protected files and resident launcher
+preserved. This installation is separate from the physical interaction evidence.
+
+### Installed public rehosting and Tab
+
+After installation, a fresh episode passed three physical entry clicks in the
+order dock → bar → dock. Each opening had one positive-geometry CC pane and inner
+action at the requested panel region. A physical Tab was followed by a changed
+`STATE_FOCUSED` technical control under that pane. Escape closed the final popup,
+and the dock hid after pointer departure. Full configuration bytes/map, dock and
+bar packages, exact bar roles, inventory, protected files and launcher were
+preserved. Temporary input devices, accessibility flags, observer and bus resources
+were released/restored. Automatic locking remains disabled.
+
+The first physical attempt also reached all three hosts and focused controls,
+but failed before final Escape: moving to the current cursor position emitted no
+new motion event. Cleanup hit the same observer error. An independent guarded
+episode closed only the owned CC popup and verified rehide, resources and full
+preservation. The revised reader skips that redundant move, still requires a
+fresh one-pixel nudge and all keyboard/context guards, and passed the complete
+flow on a new baseline. The failed receipt remains failed.
+
+This proves public rehosting and the observed Tab consequences in one installed
+Plasma/Wayland output. It does not prove old visibility at request acceptance,
+queued transfer ordering, exact `QGuiApplication.focusWindow()`/keyboard-seat
+ownership, or real backend lifecycle/setter counts. No unique KWin popup match
+was available, so that identity remains unqualified. Source-owned Wayland facts
+above remain separate. Final status:
+`PASS_INSTALLED_CC_PUBLIC_REHOSTING_AND_TECHNICAL_TAB`, receipt
+`.runtime/cc-transfer-20261015/root-native-r2/RESULT.json`; independent cleanup:
+`root-independent-cleanup-r1/RESULT.json`.
