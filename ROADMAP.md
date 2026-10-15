@@ -1203,6 +1203,19 @@ continuam abertos. A auditoria visual prioriza organizar BarSettings em Conteúd
 Aparência e personalização recolhível, explicando os quatro efeitos do preset e
 as dependências entre nome/ícone, sem alterar defaults ou aliases de configuração.
 
+**T1 — organização visual de BarSettings (Source, 15/10):** implementados módulos
+Conteúdo da barra e Aparência, personalização do menu e ajuda recolhidas, resumo
+dos quatro efeitos do preset e estados desabilitados que preservam preferências.
+A rolagem mantém o foco visível em 320 × 240 e revela a ajuda expandida quando
+cabe; recolher devolve o foco ao controle da seção sem reutilizar um alvo antigo.
+Passaram 39 testes em Fusion e 39 no estilo KDE, incluindo seis novos de
+apresentação com controles Qt reais. Design check e sete guardas passaram;
+oito capturas claro/escuro foram revistas. O contrato visual e a galeria agora
+cobrem essa página para futuras contribuições de pessoas e IAs. Veja o
+[registro e capturas](docs/validation/shared-control-center-source.md#bar-settings-presentation--15-october-2026).
+Esta fatia ainda não foi instalada: os testes usam fixtures/offscreen e não
+encerram os gates de integração na janela nativa, Apply/Cancel ou persistência.
+
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
 O seletor fornece URL; não fornece bytes validados. A próxima implementação deve
