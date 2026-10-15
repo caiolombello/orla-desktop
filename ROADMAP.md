@@ -969,14 +969,31 @@ abertos. O diagnóstico também
 passou a usar os cabeçalhos do popup para abertura/fechamento, pois a aba Widgets
 fica selecionada ao reabrir e não contém o botão Cancelar de Aparência.
 
-**Próximo aceite de C1/UX1:** criar um único perfil novo com baseline e limpeza
-próprios, revelar e medir duas linhas completas antes do gesto; guardar os
-documentos completos antes/depois do arraste e reversão e restaurar a chave
-original. O aceite do arraste no pacote sem instrumentação continua
-aberto. Avançar então no arraste de aplicativos com alternativa por teclado.
+**Arraste de widgets qualificado no pacote instalado — 15/10:** um episódio
+novo criou um único perfil pela interface, revelou e mediu as duas linhas
+completas e realizou um arraste de ida e outro de volta. O documento completo
+mudou somente a ordem do primeiro par e a reversão recuperou inclusive os bytes
+originais. A seleção de legado preservou o registro; Escape e recolhimento
+passaram. A limpeza removeu só a chave temporária com uma recarga controlada e
+confirmou o mapa original inteiro, ausência da chave em disco/runtime, pacote,
+inventário, arquivos/modos protegidos e launcher. O pacote estava sem
+instrumentação e em autohide normal, numa saída Wayland com escala fracionária.
+A tentativa anterior falhou antes de ack/arraste por ler o valor vazio anterior;
+o perfil apareceu depois e foi removido em recuperação independente verificada.
+Essa falha permanece registrada. A nova espera pela gravação esperada passou
+dez casos simulados; os dois checks hospedados passaram no Source `f2a1086`.
+[Prova e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
+
+**Próximo aceite de C1/UX1:** arrastar aplicativos fixados, mantendo a alternativa
+por menu/teclado existente, sem ativar o app nem salvar durante hover. Antes de
+implementar, verificar a recuperação da ordem manual do TaskManager se o save
+for recusado; pela leitura do [contrato KDE 6.7.5](https://github.com/KDE/plasma-workspace/blob/cc1ab7963f94a9b76836412855caed6b94066188/libtaskmanager/tasksmodel.h#L887-L911),
+recarregar apenas `launcherList` ainda não é uma recuperação comprovada para
+apps em execução. Indicador mantido, contagem nativa de setters, renderização do
+WidgetStrip e retorno de foco externo continuam sem qualificação neste fluxo.
 A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
 DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte
-[evidência, recuperação e limites](docs/validation/profiles-0.2.5.md#subsequent-diagnostic-canary-and-recovery--15-october-2026).
+[evidência, recuperação e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
 
 ## Prontidão e recomendação de execução
 

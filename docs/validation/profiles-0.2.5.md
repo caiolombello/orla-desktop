@@ -347,6 +347,70 @@ and row geometry on the single fractional-scale setup. Managed-profile dragging,
 reversal, other keyboard paths and other screens remain open. Receipts are in
 `root-a11y-local-r1/`, `root-a11y-panel-read-r1/` and `root-a11y-native-r1/`.
 
+### Production managed-profile drag and reversal — 15 October 2026
+
+A subsequent attempt failed before its first acknowledgment or any drag: the
+first agreed disk/runtime value after Create was still empty. The new profile
+appeared in a later read. The original finite custody refused deletion without
+an acknowledgment and left the original desktop running; that attempt remains
+FAILED. A separate reviewed recovery matched the sole synthetic profile to the
+exact name emitted by that attempt and verified that removing only its key
+restored the entire original case-sensitive configuration map. It then stopped
+Plasma once, deleted only `profilesJSON`, restarted once and confirmed the full
+map, original key absence, package, inventory, protected files/modes and resident
+launcher. It did not fabricate doc0 or reopen the failed custody instance.
+
+The next private controller distinguishes read consistency from completion: it
+waits up to five seconds for the expected full document, checking the deadline
+after a guarded read as well. Only the exact preceding value may be retried;
+unexpected new data fails immediately. Ten synthetic-clock cases passed,
+including delayed completion, foreign data, guard errors and late responses.
+These are controller checks, not additional product or native gesture tests.
+
+A distinct fresh episode then passed on the uninstrumented 67-file production
+package containing `aad9ca1`, in Plasma 6.7.5/Wayland on the single fractional-scale
+output. It opened Settings through normal autohide reveal and pointer clicks,
+created exactly one new profile through the public form, and durably acknowledged
+its complete doc0 before further input. Public accessibility focus anchored the
+clock checkbox; three actual Tabs, including enabled managed-profile controls,
+reached Pomodoro. Both whole rows and enabled grips were measured inside the
+named actual clipped viewport.
+
+Two pointer gestures were emitted through the owned temporary input device:
+clock after Pomodoro, then Pomodoro after clock. The first persisted doc1 equaled
+doc0 with only the first two widgets exchanged, preserving visibility and every
+other field. Fresh Settings-row geometry also showed that exchange. The reverse
+persisted doc2 equaled doc0 in both parsed content and complete raw bytes, with
+the Settings rows restored. Selecting the previous preferences through the
+public selector/Home/Use path produced doc3 with only the active ID changed to
+legacy and the owned profile record unchanged. All four full raw documents and
+their hash/length/parsed receipts were retained privately and checked again.
+
+Escape closed the popup and the dock retracted. Input devices, observer, owned
+bus name/connection and temporary accessibility state were released before one
+controlled cleanup stop/start. Only the owned profile key was deleted. Fresh
+final readback confirmed the exact original configuration map, profile-key
+absence on disk/runtime, inert timer, inventory, source/installed package,
+protected files/modes and actual launcher unit/link/process; no temporary input
+device remained. The new episode had no primary or cleanup errors. Independent
+static review of the saved chain found no material overclaim. The initial failed
+episode and its separate recovery remain distinct from this acceptance.
+
+This qualifies one managed-profile widget-order-and-reverse flow on the installed
+product. It does not qualify held indicator pixels, native setter/hover-write
+counts, the dock's WidgetStrip rendering, external-application focus return,
+application-tile dragging or other output configurations. C1/P1/UX1 remain
+partial. Private records: `root-managed-native-r1/`,
+`root-late-profile-recovery-r1/`, `root-managed-native-r2/` and
+`sol61-managed-native-audit-r1/`. The successful raw RESULT retains a stale
+preparation-only `scope` label; its status, guards, documents and final readback
+establish the bounded result without rewriting that receipt.
+
+Both hosted jobs also passed on the accessibility/focus Source checkpoint
+`f2a1086ff87363c01fb29f5276c30439038d3a22` in
+[run 38741910764](https://github.com/caiolombello/orla-desktop/actions/runs/38741910764).
+The subsequent native visits changed no product Source.
+
 ### Launcher CI diagnosis checkpoint
 
 Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`
