@@ -442,6 +442,33 @@ class Gallery:
         window.close()
         engine.deleteLater()
 
+    def bar_settings(self, host: str) -> None:
+        """Configuration content only; Plasma owns the native dialog footer."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "BarSettingsHarness.qml")))
+        window = engine.rootObjects()[0]
+        settings = window.findChild(QQuickItem, "barSettingsUnderTest")
+        context = QQmlEngine.contextForObject(settings)
+
+        def evaluate(source):
+            expression = QQmlExpression(context, settings, source)
+            expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+
+        self.save(f"bar-{host}-settings", window)
+        window.resize(320, 560)
+        self.save(f"bar-{host}-settings-narrow", window)
+        window.resize(520, 900)
+        evaluate('setMenuOpen(true); cfg_menuIcon = "none"; cfg_showMenuLabel = false')
+        self.save(f"bar-{host}-settings-expanded", window)
+        window.resize(320, 240)
+        name = window.findChild(QQuickItem, "menuLabelSetting")
+        QQmlExpression(context, name, "forceActiveFocus(Qt.TabFocusReason)").evaluate()
+        self.save(f"bar-{host}-settings-short-focus", window)
+        window.close()
+        engine.deleteLater()
+
     def launcher(self) -> None:
         engine = self.engine()
         stubs = QQmlComponent(engine)
@@ -743,6 +770,7 @@ def render(host: str, output: Path) -> int:
     gallery.appearance_advanced(host)
     gallery.widget_order(host)
     gallery.bar(host)
+    gallery.bar_settings(host)
     if host == "dark":
         gallery.launcher()
     app.processEvents()
