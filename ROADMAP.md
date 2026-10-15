@@ -819,9 +819,18 @@ instalações cujas ferramentas anteriores foram preservadas; a CLI Orla também
 encaminha `launcher session`. Guardas de pendência/integridade, abertura manual
 e arquivos compartilhados continuam iguais. Passaram 128 testes de
 instalação/CLI/pacote/bundle, incluindo cinco casos novos com exec capturado.
-Atalho/foco nativos dessa sessão, serviço público, Meta isolada sem checkout e
-migração do legado seguem abertos. A instalação principal não mudou; R2/L0
-permanecem parciais. Veja o [fluxo](launcher/README.md#sessão-de-busca-pelo-atalho--experimental-no-fonte).
+Em prova nativa separada, o bootstrap da
+[CI 38668551212](https://github.com/caiolombello/orla-desktop/actions/runs/38668551212)
+abriu o payload B anterior em perfil isolado: Ctrl+Alt+Meta+O abriu/focou duas
+vezes sem clique, `2-1` mostrou `1`, Escape ocultou mantendo processo/registro,
+a reabertura usou o mesmo processo e Ctrl+Q encerrou com código zero. O serviço
+anterior foi restaurado; nove arquivos protegidos e a semântica dos atalhos
+ficaram exatos. A primeira tentativa inconclusiva do observador foi preservada;
+a nova exigiu uma leitura válida de janela oculta dentro do prazo. Captura
+própria conferida em Wayland/Fusion, uma saída/escala 1,45. Novo ELF da CI,
+Meta isolada, execução de apps, outros ambientes, serviço público e migração
+do legado seguem abertos. A instalação principal permanece no launcher anterior;
+R2/L0 continuam parciais. Veja o [fluxo](launcher/README.md#sessão-de-busca-pelo-atalho--experimental-no-fonte).
 
 ## Prontidão e recomendação de execução
 

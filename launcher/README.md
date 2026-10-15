@@ -568,9 +568,26 @@ python3 scripts/orla.py launcher session
 Passaram 57 testes de instalação/CLI, 56 do pacote e 15 do bundle: 128 no total.
 Os cinco casos novos capturam o exec, verificando os argumentos fixos, recusa
 antes de executar quando há pendência/drift, seleção B/A após atualização/reversão
-e preservação da abertura manual. Não iniciam ELF, atalhos ou D-Bus. A prova
-nativa de abrir/ocultar/reabrir pelo atalho dessa instalação continua pendente;
-a prova gráfica da atualização abaixo usa a abertura manual.
+e preservação da abertura manual. Esses testes não iniciam ELF, atalhos ou D-Bus.
+
+Em prova nativa separada, o bootstrap da
+[CI 38668551212](https://github.com/caiolombello/orla-desktop/actions/runs/38668551212)
+iniciou uma instalação isolada com o payload B previamente verificado. O atalho
+físico Ctrl+Alt+Meta+O abriu e focou a busca duas vezes, sem clique. `2-1` mostrou
+`1` pela Calculadora do KRunner; Escape ocultou a janela mantendo processo e
+registro ativos, e a reabertura usou o mesmo processo. Ctrl+Q encerrou com código
+zero. O serviço anterior foi restaurado com o mesmo executável; nove arquivos
+protegidos e os atalhos/configurações de Orla, KRunner e Meta permaneceram exatos.
+
+A primeira tentativa ficou inconclusiva porque o observador recusou a leitura
+após Escape (`sink_refused`, causa exata desconhecida). Seu registro foi
+preservado. Uma nova tentativa, em outro perfil, aguardou uma leitura válida
+dentro do prazo; uma leitura inconclusiva anterior não contou como janela oculta.
+A captura própria foi conferida em Wayland/Fusion, uma saída/escala 1,45. Isso
+qualifica o fluxo delimitado com o bootstrap novo e o payload B anterior, sem
+qualificar o novo ELF da CI, Meta isolada, execução de apps, outros ambientes,
+serviço/autostart público ou migração do legado. A instalação principal continua
+com o launcher anterior. R2/L0 permanecem parciais.
 
 ### Recuperação da finalização — experimental no fonte
 
