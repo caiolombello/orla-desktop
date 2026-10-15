@@ -41,13 +41,18 @@ class LauncherInstallCliTests(unittest.TestCase):
         self.invoke_stub(["launcher", *arguments], arguments, code=7)
 
     def test_status_launch_uninstall_match_standalone_actions(self):
-        for action in ("status", "launch", "uninstall"):
+        for action in ("status", "launch", "uninstall", "rollback"):
             with self.subTest(action=action):
                 self.invoke_stub(["launcher", action], [action])
 
     def test_finish_install_recovery_forwards_the_explicit_mode(self):
-        self.invoke_stub(["launcher", "recover", "--finish-install"],
-                         ["recover", "--finish-install"], code=7)
+        for mode in ("--finish-install", "--rollback-update"):
+            with self.subTest(mode=mode):
+                self.invoke_stub(["launcher", "recover", mode], ["recover", mode], code=7)
+
+    def test_update_forwards_verified_archive_without_expanding_shell_text(self):
+        arguments = ["update", "/owned/new archive $(not-a-command).zip", "--sha256", "a" * 64, "--commit", "b" * 40]
+        self.invoke_stub(["launcher", *arguments], arguments, code=7)
 
     def test_parser_install_does_not_expand_archive_or_change_checksum(self):
         args = caiodock.parser().parse_args(["launcher", "install", "relative archive.zip", "--sha256", "raw-sha", "--commit", "raw-commit"])
@@ -61,7 +66,10 @@ class LauncherInstallCliTests(unittest.TestCase):
                ["launcher", "install", "archive.zip", "--sha256", "a" * 64],
                ["launcher", "install", "archive.zip", "--commit", "b" * 40],
                ["launcher", "status", "--commit", "b" * 40], ["launcher", "update"],
-               ["launcher", "recover"], ["launcher", "recover", "--rollback"])
+               ["launcher", "recover"], ["launcher", "recover", "--rollback"],
+               ["launcher", "recover", "--finish-install", "--rollback-update"],
+               ["launcher", "update", "archive.zip"],
+               ["launcher", "update", "archive.zip", "--sha256", "a" * 64])
         with mock.patch.object(caiodock.importlib.util, "spec_from_file_location") as locate:
             for arguments in bad:
                 with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):

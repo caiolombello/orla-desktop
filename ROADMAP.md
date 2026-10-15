@@ -137,7 +137,7 @@ Publicado significa que o incremento integra os assets indicados; Source signifi
 | Notificações | Toast local opt-in 0.2.7 do Pomodoro; HUD de áudio Source opt-in por perfil, com confirmação, agrupamento e expiração | Ilha/HUD global, outros eventos, regras completas e qualificação nativa sem duplicar notificações/OSD do KDE |
 | Barra superior | Menu Orla experimental somente no fonte: menu do sistema e nome do app ativo, Plasma 6.7.x | Qualificar ações/painel/foco, composição com Menu Global/relógio/bandeja nativos, preset reversível e Central de Controle |
 | Launcher estilo Raycast | Componente experimental no fonte, com build separado; KRunner/Milou como fallback | Interface por teclado, comandos compartilhados, painel de ações e integração com perfis/projetos |
-| Updates e distribuição | Repositório MIT, landing bilíngue, releases alpha e instalação do dock; launcher com nove CTests, bundle experimental real da CI, download verificado e calculadora em perfil Wayland isolado; instalação/remoção e recuperação delimitada no fonte | Atualização/reversão do launcher, autenticidade, distribuição qualificada, matriz nativa e UI/cache de updates |
+| Updates e distribuição | Repositório MIT, landing bilíngue, releases alpha e instalação do dock; launcher com nove CTests, bundle real verificado e calculadora Wayland isolada; instalação, recuperação e atualização/reversão de payload no fonte | Gestão completa de versões/ferramentas, migração do legado, autenticidade, distribuição qualificada, matriz nativa e UI/cache de updates |
 | UX/UI e DX | Identidade Orla, temas, tokens/componentes compartilhados e galeria sintética no Source; documentação de contribuição e testes por ambiente | Completar estados/fluxos, editor/exportação, acessibilidade e qualificação nativa; onboarding e autoria guiada |
 | Ecossistema | Contribuições ao código pelo GitHub | Formato declarativo, SDK, compatibilidade, catálogo e plugins com isolamento comprovado |
 | IA | Detecção explícita de CLI e compatibilidade anônima do Codex (PR 20); contratos/parsers offline (PR 28), lifecycle com fakes (PR 30), adaptadores privados Ollama/OpenAI e integração operacional Ollama numérico nesta mudança Source com UI, streaming/cancelamento e fixtures privadas. O entrypoint T1/T2 direto continua `unsupported_transport`; OpenAI HTTPS permanece sem ligação operacional | Empacotar helpers de forma relocável e qualificar Ollama/modelo, semântica, clipboard/acessibilidade e uso nativo; credenciais/auth e backend API opt-in de A1 continuam abertos |
@@ -777,9 +777,40 @@ anterior da execução 38660941244: 12 arquivos gerenciados exatos, bootstrap
 ausente, consulta/remoção pelo controlador original e dados sintéticos
 preservados. Nenhum ELF/helper/display/bus foi executado nessa prova;
 `runtime` continua `unverified` e a instalação principal não mudou.
-Atualização, reversão, recuperação de estados parciais e serviço/Meta opcionais
-seguem pendentes; R2 permanece parcial. Consulte o
+Recuperação de outros estados e serviço/Meta opcionais mantêm seus gates;
+R2 permanece parcial. Consulte o
 [comando e limites](launcher/README.md#recuperação-da-finalização--experimental-no-fonte).
+
+**R2/U2 — atualizar o payload e voltar ao predecessor (14/10):** `update ZIP
+--sha256 --commit`, `rollback` e `recover --rollback-update` no bootstrap novo/CLI
+fazem A→B→A em instalação própria, preservando ferramentas, wrappers, menu e
+recibos anteriores. Um banco imutável e uma barreira compreendida pelos
+gerenciadores antigos vinculam as duas versões; a recuperação sempre retorna
+A, conferindo ambos os lados. Passaram 52 testes de instalação/CLI, 56 do pacote
+e 15 do bundle, incluindo 11 provas de atualização/reversão e interrupções.
+O ciclo público com dois bundles reais das execuções 38660941244/38663711018
+passou em perfis isolados com os gerenciadores anteriores `92c28e8` e `ade321b`:
+consulta B, reversão A, recuperação sem alteração e remoção pelo controlador
+original, com arquivos/dados/recibos/histórico preservados. São builds 0.2.9
+distintas, não uma nova release. A prova opera arquivos e gerenciadores, sem
+executar ELF/helper/display/bus; não amplia o aceite nativo nem altera a
+instalação principal. A etapa admite uma transação e retém o outro payload após
+remoção ativa; encadeamento, limpeza dos retidos, atualização das ferramentas,
+migração do legado e serviço/Meta seguem pendentes. Exige launcher e comandos
+antigos inativos durante a troca; não atesta parada de processos, autenticidade
+ou recuperação geral de falta de energia. R2/U2 continuam parciais. Consulte o
+[fluxo e limites](launcher/README.md#atualização-de-payload-e-reversão--experimental-no-fonte).
+
+**R2/U2 — prova nativa delimitada da atualização (14/10):** o bootstrap
+independente da [CI 38666552092](https://github.com/caiolombello/orla-desktop/actions/runs/38666552092)
+atualizou A→B em perfil isolado. O wrapper anterior abriu o ELF B; `2-1` mostrou
+`1` pela Calculadora do KRunner e Escape encerrou com código zero. A reversão
+restaurou o seletor e os arquivos A, consultados pelo controlador original.
+Sua remoção ativa preservou versão retida, banco, recibos e dados sintéticos;
+oito configurações/wrappers protegidos ficaram exatos. Captura própria conferida
+em Wayland/Fusion, uma saída/escala 1,45. A não foi reaberta após a reversão.
+Serviço/Meta, execução de apps, outros ambientes e os demais gates R2/U2 seguem
+abertos; instalação principal e metadados publicados permaneceram iguais.
 
 ## Prontidão e recomendação de execução
 

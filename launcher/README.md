@@ -486,8 +486,9 @@ python3 -B -m unittest discover -s launcher/tests -p 'test_inventory_host*.py' -
 
 A instalação inicial e a remoção descritas abaixo estão disponíveis no fonte.
 O bundle real da CI já passou pela verificação do download e pelo teste
-delimitado em perfil limpo descrito abaixo. Seguem recuperação, atualização,
-reversão e os fluxos visíveis de busca por Meta e mídia.
+delimitado em perfil limpo descrito abaixo. Recuperação e atualização com reversão
+têm incrementos delimitados a seguir; gestão completa das versões, Meta e mídia
+mantêm seus próximos aceites.
 
 ### Instalação explícita para usuário novo — experimental no fonte
 
@@ -515,8 +516,8 @@ dessas ferramentas antes de executar o gerenciador.
 Esta etapa cobre a primeira instalação. Arquivos ou instalações preexistentes
 são recusados, inclusive os de instalação manual antiga. Um estado incompleto
 retorna `pending` com causa e evidência de propriedade preservadas. A recuperação
-delimitada da finalização está descrita abaixo; reinstalação, atualização e
-reversão continuam pendentes. A remoção
+delimitada da finalização e a atualização de payload com reversão estão descritas
+abaixo. Reinstalação e migração de instalações antigas continuam pendentes. A remoção
 confere todos os arquivos antes de apagar e preserva configurações, favoritos,
 aliases e histórico. O status se refere aos arquivos gerenciados: `runtime`
 permanece `unverified`, e a remoção não atesta encerramento de processos.
@@ -574,6 +575,73 @@ execução 38660941244 e seu instalador anterior: os 12 arquivos gerenciados
 permaneceram exatos, a causa e os dados sintéticos foram preservados e a remoção
 independente passou. Essa prova manipula arquivos próprios; não executa o ELF,
 helpers ou a sessão gráfica e não amplia a qualificação nativa do bundle.
+
+### Atualização de payload e reversão — experimental no fonte
+
+Uma instalação gerenciada pode receber um ZIP schema 0.3 verificado e guardar
+uma versão anterior para reversão. Feche o launcher e mantenha outros comandos
+de abertura/gerenciamento inativos durante estas operações experimentais:
+
+```sh
+python3 -I -B /caminho/bootstrap-novo/install.py update /caminho/novo-launcher.zip \
+  --sha256 SHA256_DO_ARQUIVO --commit COMMIT_DE_40_CARACTERES
+~/.local/bin/orla-launcherctl status
+python3 -I -B /caminho/bootstrap-novo/install.py rollback
+# Se a troca foi interrompida, recuperar sempre volta à versão anterior:
+python3 -I -B /caminho/bootstrap-novo/install.py recover --rollback-update
+```
+
+Os mesmos comandos estão disponíveis em `python3 scripts/orla.py launcher`.
+Os dois modos de `recover` são explícitos e mutuamente exclusivos. O bootstrap
+novo preserva as ferramentas, wrappers e menu já instalados; o controlador
+anterior continua consultando e removendo a versão selecionada, mesmo sem o
+checkout. A verificação usa SHA/commit externos, sem autenticar a distribuição.
+
+O diretório gerenciado mantém exatamente uma versão. A outra fica em
+`$XDG_DATA_HOME/orla-desktop/launcher-update`, e o estado privado usa
+`payload-update` dentro do estado do instalador. Um banco imutável vincula ambas
+as versões e os dois seletores antes de ativar a barreira de transação.
+A recuperação confere os dois lados e retorna à versão anterior; arquivos ou
+identidades divergentes são recusados, com a primeira falha preservada quando
+sua gravação é possível. As trocas usam renomeação Linux sem copiar/apagar como
+alternativa. [Semântica de troca](https://man7.org/linux/man-pages/man2/rename.2.html)
+
+Esta etapa suporta uma transação e um predecessor, sem encadear atualizações,
+trocar as ferramentas instaladas ou limpar versões retidas. A remoção pelo
+controlador antigo remove os 12 arquivos ativos e preserva a outra versão,
+workspaces e histórico; esses arquivos retidos ainda exigem uma etapa de gestão
+própria. Uma preparação incompleta fica preservada e é recusada sem bloquear A.
+Os comandos antigos não revogam uma abertura admitida antes da barreira; por
+isso exigem inatividade durante a troca. Serviço/Meta, migração do legado,
+processos em execução e recuperação geral de falta de energia mantêm seus gates.
+
+Passaram 52 testes de instalação/CLI, incluindo 11 de atualização/reversão,
+56 do pacote e 15 do bundle: 123 no total. Os testes exercitam as quatro posições
+de interrupção da atualização, interrupção da reversão, retomada para A,
+integridade dos dois lados, banco parcial, lock e syscall indisponível.
+O ciclo público também passou com dois bundles reais da CI, das execuções
+[38660941244](https://github.com/caiolombello/orla-desktop/actions/runs/38660941244) e
+[38663711018](https://github.com/caiolombello/orla-desktop/actions/runs/38663711018),
+em dois perfis isolados com os gerenciadores anteriores `92c28e8` e `ade321b`.
+Os dois bundles são builds 0.2.9 de commits diferentes, com executáveis distintos;
+isso não anuncia uma nova versão de produto. Atualizar, consultar B, reverter,
+recuperar A sem alteração e remover pelo controlador original passaram,
+preservando os dados sintéticos, arquivos, recibos e histórico esperados.
+Nenhum ELF/helper/display/bus foi executado nessa prova; `runtime` continua
+`unverified`, e a instalação principal permaneceu preservada.
+
+Em prova posterior na mesma máquina, o bootstrap independente produzido pela
+[CI 38666552092](https://github.com/caiolombello/orla-desktop/actions/runs/38666552092)
+atualizou A para B em outro perfil isolado. O wrapper original executou o ELF B,
+a busca `2-1` exibiu `1` pela Calculadora do KRunner e Escape encerrou com código
+zero. A reversão restaurou os arquivos e o seletor A; o controlador original
+consultou A e removeu a instalação ativa. As ferramentas permaneceram exatas
+durante a troca e a reversão; a remoção preservou recibos, dados sintéticos e
+versão retida. Oito configurações/wrappers protegidos ficaram iguais.
+A captura própria foi conferida em Wayland/Fusion, escala 1,45, uma saída.
+A não foi reaberta após a reversão; serviço/Meta, execução de apps, outros
+ambientes, autenticidade e ABI continuam sem qualificação por essa prova.
+A instalação principal e os metadados publicados não mudaram.
 
 ### Bundle acoplado da CI — experimental no fonte
 

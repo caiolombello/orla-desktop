@@ -325,11 +325,18 @@ def parser() -> argparse.ArgumentParser:
     launcher_install.add_argument("archive", type=Path)
     launcher_install.add_argument("--sha256", required=True)
     launcher_install.add_argument("--commit", required=True)
+    launcher_update = launcher_commands.add_parser("update", help="update the owned launcher payload and retain its predecessor")
+    launcher_update.add_argument("archive", type=Path)
+    launcher_update.add_argument("--sha256", required=True)
+    launcher_update.add_argument("--commit", required=True)
     launcher_commands.add_parser("status", help="read launcher installation status without changing it")
     launcher_commands.add_parser("launch", help="open the independently installed launcher")
     launcher_commands.add_parser("uninstall", help="remove owned launcher files and preserve user configuration")
-    launcher_recover = launcher_commands.add_parser("recover", help="finish an already published launcher installation")
-    launcher_recover.add_argument("--finish-install", action="store_true", required=True)
+    launcher_commands.add_parser("rollback", help="restore the retained launcher payload")
+    launcher_recover = launcher_commands.add_parser("recover", help="recover an owned launcher transaction", allow_abbrev=False)
+    launcher_recovery_mode = launcher_recover.add_mutually_exclusive_group(required=True)
+    launcher_recovery_mode.add_argument("--finish-install", action="store_true")
+    launcher_recovery_mode.add_argument("--rollback-update", action="store_true")
     if __package__:
         from . import panel_layout
     else:
@@ -365,10 +372,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.modules[spec.name] = module
             spec.loader.exec_module(module)
             arguments = [args.launcher_action]
-            if args.launcher_action == "install":
+            if args.launcher_action in ("install", "update"):
                 arguments.extend([str(args.archive), "--sha256", args.sha256, "--commit", args.commit])
             elif args.launcher_action == "recover":
-                arguments.append("--finish-install")
+                arguments.append("--finish-install" if args.finish_install else "--rollback-update")
             return module.main(arguments)
         elif args.command == "layout":
             if __package__:
