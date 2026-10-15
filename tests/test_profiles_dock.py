@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 
 
 class ProfilesDockTests(unittest.TestCase):
@@ -477,6 +477,57 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertLessEqual(point.y() + create.height(), ancestor.height() + 1)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertNotIn(self.evaluate("profiles.activeProfileId"), ["legacy", "work", "personal", "games"])
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_saves_once_on_release_and_preserves_other_profile_data(self):
+        self.initialize()
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(30)  # Let the short viewport finish its tab layout before revealing rows.
+        self.evaluate("appearance.setToken('radius',8)")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        original_raw = self.config.property("profilesJSON")
+        original = json.loads(original_raw)
+        flat = self.flat()
+        grip = self.owned_item("widgetDragclock")
+        self.assertIsNotNone(grip, "The row must expose its real pointer grip")
+        target = self.owned_item("widgetDragpomodoro")
+        self.assertIsNotNone(target)
+        self.focus(target)
+        self.focus(grip)
+        QTest.qWait(30)
+        start = grip.mapToScene(QPointF(grip.width() / 2, grip.height() / 2)).toPoint()
+        end = target.mapToScene(QPointF(target.width() / 2, target.height() * .75)).toPoint()
+        self.assertGreaterEqual(start.y(), 0)
+        self.assertLess(end.y(), self.window.height())
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+        try:
+            QTest.mouseMove(self.window, end, 30)
+            QTest.qWait(20)
+            indicator = self.owned_item("widgetDropIndicatorpomodoro")
+            self.assertIsNotNone(indicator)
+            self.assertTrue(indicator.property("visible"), "Held drag must show its destination")
+            self.assertEqual(self.config.property("profilesJSON"), original_raw)
+            self.assertEqual(writes.count(), 0, "Moving must not write the profile")
+        finally:
+            QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, end)
+        self.settle(lambda: writes.count() == 1)
+        saved = json.loads(self.config.property("profilesJSON"))
+        old_work = next(p for p in original["profiles"] if p["id"] == "work")
+        new_work = next(p for p in saved["profiles"] if p["id"] == "work")
+        expected = [old_work["widgets"][1], old_work["widgets"][0], *old_work["widgets"][2:]]
+        self.assertEqual(new_work["widgets"], expected)
+        self.assertEqual({k: v for k, v in old_work.items() if k != "widgets"},
+                         {k: v for k, v in new_work.items() if k != "widgets"})
+        self.assertEqual([p for p in saved["profiles"] if p["id"] != "work"],
+                         [p for p in original["profiles"] if p["id"] != "work"])
+        self.assertEqual(saved["activeProfileId"], "work")
+        self.assertEqual(self.flat(), flat)
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        self.assertLess(self.owned_item("pomodoroButton").x(), self.owned_item("clockTile").x())
+        self.assertEqual(writes.count(), 1)
         self.assertEqual(self.warnings, [])
 
     def test_widget_reorder_keyboard_and_appearance_draft_survive_tabs(self):

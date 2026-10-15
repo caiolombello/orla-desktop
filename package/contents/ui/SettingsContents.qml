@@ -59,6 +59,113 @@ ColumnLayout {
             }
         });
     }
+    property var widgetDrag: null
+    property string widgetDropId: ""
+    property bool widgetDropAfter: false
+    property bool widgetDragging: false
+    property int widgetFocusTicket: 0
+    function cancelWidgetDrag() {
+        widgetDrag = null;
+        widgetDropId = "";
+        widgetDragging = false;
+    }
+    function widgetDragValid(intent) {
+        return intent !== null && widgetDrag === intent && profiles === intent.profiles
+            && visible && tabs.currentIndex === 1 && !importing && profiles.writable
+            && profiles.activeProfileId !== "legacy" && profiles.activeProfileId === intent.scope
+            && profiles.revision === intent.revision
+            && JSON.stringify(profiles.effective.widgets) === intent.snapshot;
+    }
+    function beginWidgetDrag(id, handle, x, y) {
+        cancelWidgetDrag();
+        widgetFocusTicket++;
+        if (!visible || tabs.currentIndex !== 1 || importing || !profiles.writable
+                || profiles.activeProfileId === "legacy") return;
+        const intent = {id: id, profiles: profiles, scope: profiles.activeProfileId,
+            revision: profiles.revision, snapshot: JSON.stringify(profiles.effective.widgets),
+            x: x, y: y, ticket: widgetFocusTicket};
+        widgetDrag = intent;
+        // Focusing may dispatch a profile change; it must not retarget this press.
+        handle.forceActiveFocus(Qt.MouseFocusReason);
+        if (!widgetDragValid(intent)) cancelWidgetDrag();
+    }
+    function updateWidgetDrag(handle, x, y) {
+        const intent = widgetDrag;
+        if (!widgetDragValid(intent)) { cancelWidgetDrag(); return; }
+        const dx = x - intent.x, dy = y - intent.y;
+        const threshold = Qt.styleHints.startDragDistance;
+        if (!widgetDragging && dx * dx + dy * dy < threshold * threshold) return;
+        widgetDragging = true;
+        widgetDropId = "";
+        const viewport = handle.mapToItem(widgetScroll, x, y);
+        if (viewport.x < 0 || viewport.x >= widgetScroll.width
+                || viewport.y < 0 || viewport.y >= widgetScroll.height) return;
+        const point = handle.mapToItem(widgetRowsList, x, y);
+        for (let index = 0; index < widgetRows.count; index++) {
+            const row = widgetRows.itemAt(index);
+            if (row && point.x >= row.x && point.x < row.x + row.width
+                    && point.y >= row.y && point.y < row.y + row.height) {
+                const top = row.mapToItem(widgetScroll, 0, 0).y;
+                if (top < 0 || top + row.height > widgetScroll.height) return;
+                widgetDropId = row.widgetId;
+                widgetDropAfter = point.y >= row.y + row.height / 2;
+                return;
+            }
+        }
+    }
+    function finishWidgetDrag(handle, x, y) {
+        updateWidgetDrag(handle, x, y);
+        const intent = widgetDrag;
+        if (!widgetDragValid(intent) || !widgetDragging || widgetDropId === "") {
+            cancelWidgetDrag(); return;
+        }
+        const widgets = JSON.parse(intent.snapshot);
+        const from = widgets.findIndex(widget => widget.id === intent.id);
+        let to = widgets.findIndex(widget => widget.id === widgetDropId);
+        if (from < 0 || to < 0) { cancelWidgetDrag(); return; }
+        if (widgetDropAfter) to++;
+        if (from < to) to--;
+        if (from === to) { cancelWidgetDrag(); return; }
+        const widget = widgets.splice(from, 1)[0];
+        widgets.splice(to, 0, widget);
+        // Only the still-focused grip may hand focus to this stable item before delegates rebuild.
+        const ownsFocus = handle.activeFocus;
+        if (ownsFocus) widgetRowsList.forceActiveFocus(Qt.OtherFocusReason);
+        const guard = () => settings.widgetDragValid(intent);
+        let committed = false;
+        try { committed = intent.profiles.commitPresentation({widgets: widgets}, intent.scope, intent.revision, guard); }
+        finally { cancelWidgetDrag(); }
+        if (!committed || !ownsFocus) return;
+        const revision = intent.revision + 1;
+        const expectedWidgets = JSON.stringify(widgets);
+        Qt.callLater(() => {
+            if (!widgetRowsList.activeFocus || settings.widgetFocusTicket !== intent.ticket
+                    || !settings.visible || tabs.currentIndex !== 1 || settings.importing
+                    || settings.profiles !== intent.profiles || !settings.profiles.writable
+                    || settings.profiles.activeProfileId !== intent.scope || settings.profiles.revision !== revision
+                    || JSON.stringify(settings.profiles.effective.widgets) !== expectedWidgets) return;
+            for (let index = 0; index < widgetRows.count; index++) {
+                const row = widgetRows.itemAt(index);
+                if (row && row.widgetId === intent.id && row.dragHandle.enabled) {
+                    row.dragHandle.forceActiveFocus(Qt.OtherFocusReason);
+                    break;
+                }
+            }
+        });
+    }
+    onImportingChanged: if (importing) cancelWidgetDrag()
+    onProfilesChanged: { cancelWidgetDrag(); widgetFocusTicket++; }
+    onVisibleChanged: if (!visible) { cancelWidgetDrag(); widgetFocusTicket++; }
+    Keys.onEscapePressed: event => {
+        if (widgetDrag !== null) { cancelWidgetDrag(); widgetFocusTicket++; event.accepted = true; }
+        else event.accepted = false;
+    }
+    Connections {
+        target: settings.profiles
+        function onRevisionChanged() { if (settings.widgetDrag !== null) settings.cancelWidgetDrag(); }
+        function onActiveProfileIdChanged() { settings.cancelWidgetDrag(); }
+        function onWritableChanged() { if (!settings.profiles.writable) settings.cancelWidgetDrag(); }
+    }
     function reveal(control) {
         const viewport = widgetScroll.contentItem;
         const point = control.mapToItem(viewport, 0, 0);
@@ -68,6 +175,7 @@ ColumnLayout {
     SegmentedTabs {
         id: tabs
         objectName: "settingsTabs"
+        onCurrentIndexChanged: { settings.cancelWidgetDrag(); settings.widgetFocusTicket++; }
         Layout.fillWidth: true
         SegmentTab { text: qsTr("Aparência") }
         SegmentTab { text: qsTr("Widgets") }
@@ -90,6 +198,7 @@ ColumnLayout {
         AppearanceEditor { appearance: settings.appearance; preset: settings.appearancePreset; onProfilesRequested: tabs.currentIndex = 2; onCanceled: settings.appearanceCanceled() }
         Controls.ScrollView {
             id: widgetScroll
+            objectName: "widgetScroll"
             contentWidth: availableWidth
             clip: true
             ColumnLayout {
@@ -139,23 +248,60 @@ ColumnLayout {
                 }
                 SectionLabel { text: qsTr("Widgets") }
                 Controls.Label { Layout.fillWidth: true; visible: settings.profiles.activeProfileId === "legacy"; text: qsTr("Crie/use um perfil para organizar os widgets. Aqui você pode mudar a visibilidade."); textFormat: Text.PlainText; wrapMode: Text.WordWrap }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Arraste pela alça e solte para salvar a ordem. As setas também movem os widgets.")
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                }
                 Card {
                     Layout.fillWidth: true
                     padding: 0
                     ColumnLayout {
+                        id: widgetRowsList
+                        objectName: "widgetRowsList"
                         anchors.fill: parent
                         spacing: 0
                         Repeater {
                             id: widgetRows
                             model: settings.profiles.effective.widgets
                             FormRow {
+                                id: widgetRow
                                 required property var modelData
                                 required property int index
                                 property string widgetId: modelData.id
                                 property alias upButton: up
                                 property alias downButton: down
                                 property alias checkbox: checkbox
+                                property alias dragHandle: grip
                                 last: index === widgetRows.count - 1
+                                Rectangle {
+                                    parent: widgetRow
+                                    objectName: "widgetDropIndicator" + modelData.id
+                                    visible: settings.widgetDragging && settings.widgetDropId === modelData.id
+                                    x: 0
+                                    y: settings.widgetDropAfter ? parent.height - height : 0
+                                    width: parent.width
+                                    height: Style.space.xxs
+                                    color: grip.palette.highlight
+                                }
+                                Controls.ToolButton {
+                                    id: grip
+                                    objectName: "widgetDrag" + modelData.id
+                                    Layout.preferredWidth: Style.size.iconButton + Style.space.xs
+                                    icon.name: "drag-handle-symbolic"
+                                    Accessible.name: qsTr("Arrastar %1 para reordenar").arg(checkbox.text)
+                                    enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy"
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        preventStealing: true
+                                        onPressed: mouse => settings.beginWidgetDrag(modelData.id, grip, mouse.x, mouse.y)
+                                        onPositionChanged: mouse => { if (pressed) settings.updateWidgetDrag(grip, mouse.x, mouse.y); }
+                                        onReleased: mouse => settings.finishWidgetDrag(grip, mouse.x, mouse.y)
+                                        onCanceled: settings.cancelWidgetDrag()
+                                    }
+                                }
                                 Controls.CheckBox {
                                     id: checkbox
                                     objectName: "widgetVisible" + modelData.id
