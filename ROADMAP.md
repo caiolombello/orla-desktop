@@ -1213,8 +1213,35 @@ apresentação com controles Qt reais. Design check e sete guardas passaram;
 oito capturas claro/escuro foram revistas. O contrato visual e a galeria agora
 cobrem essa página para futuras contribuições de pessoas e IAs. Veja o
 [registro e capturas](docs/validation/shared-control-center-source.md#bar-settings-presentation--15-october-2026).
-Esta fatia ainda não foi instalada: os testes usam fixtures/offscreen e não
-encerram os gates de integração na janela nativa, Apply/Cancel ou persistência.
+A barra foi instalada depois dessa validação, com backup durável e uma recarga
+controlada. Uma leitura independente confirmou os 14 arquivos iguais ao Source,
+dock de 70 arquivos preservada, papéis/inventário, launcher e bancos intactos.
+O mapa continua igual ao original mais os dois campos de tamanho já registrados
+(810/630), sem adotar essa diferença como baseline original nem qualificá-la como
+correlação geométrica. Bloqueio automático desativado; zero reinícios automáticos.
+A nova página foi observada na janela nativa, e uma recuperação independente
+acionou Cancelar uma vez e confirmou seu fechamento com preservação estrita.
+Os testes completos não concluíram: houve uma recusa na classificação da janela
+e duas exceções `ValueError` com causa ainda não qualificada. Os resultados foram
+preservados e as superfícies remanescentes foram fechadas em recuperações
+separadas. A jornada completa em uma única tentativa, Cancelar com
+edições, Aplicar/persistência e foco/seat continuam abertos.
+[Registro e limites](docs/validation/shared-control-center-source.md#bar-settings-package-installed--15-october-2026).
+
+**P2 — próxima vertical: perfil automático por contexto.** A implementação será
+opcional por instância, desligada por padrão, com precedência Activity → área de
+trabalho → perfil padrão gerenciado escolhido. Os dois contextos precisam estar
+prontos; indisponibilidade mantém o perfil atual. Uma escolha manual prevalece
+até o próximo par confirmado de IDs, mesmo após renomeação ou reconexão; retomar
+explicitamente também poderá liberar o automático. Ao reiniciar com a opção
+habilitada, a observação completa poderá retomar a regra.
+
+A troca deve aguardar edição, arraste, popups em fechamento, transferência da
+Central e pedidos de áudio, então recalcular somente o contexto mais recente.
+Não deve fechar rascunhos nem trocar a Activity/área KDE. Antes da única escrita,
+revalidar contexto, associação, perfil e intenção manual. Essa política está
+definida; automação, controles de opt-in e jornada nativa ainda não estão
+implementados. O comportamento atual continua sendo associação explícita.
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
