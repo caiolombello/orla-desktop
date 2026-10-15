@@ -21,13 +21,13 @@ def inside():
     root = Path(__file__).resolve().parents[1]
     data = Path(os.environ["XDG_DATA_HOME"])
     archive = caiodock.build(root, Path(os.environ["HOME"]) / "artifacts")
-    caiodock.install(archive, data)
+    caiodock.install(archive, data, with_integrations=True)
     history = Path(os.environ["HOME"]) / ".local/share/codexbar-linux/history.jsonl"
     history.parent.mkdir(parents=True)
     now = datetime.now(timezone.utc).isoformat()
     history.write_text(json.dumps({"timestamp": now, "providers": [{"provider": "codex", "updated_at": now,
         "primary": {"used_percent": 42, "window_minutes": 300}}]}) + "\n")
-    app = QGuiApplication([])
+    app = QGuiApplication([sys.argv[0], "--inside"])
     engine = QQmlApplicationEngine()
     warnings = []
     engine.warnings.connect(lambda values: warnings.extend(value.toString() for value in values))
@@ -36,7 +36,7 @@ def inside():
     integration = engine.rootObjects()[0]
     try:
         deadline = time.monotonic() + 8
-        while integration.property("loading") and time.monotonic() < deadline:
+        while integration.property("quotaSummary") != "codex · 42% usado" and not integration.property("error") and time.monotonic() < deadline:
             QTest.qWait(30)
         assert not integration.property("loading"), "D-Bus call timed out"
         assert not integration.property("error"), integration.property("error")

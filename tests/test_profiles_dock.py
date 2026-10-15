@@ -503,6 +503,7 @@ class ProfilesDockTests(unittest.TestCase):
         QTest.qWait(30)
         self.assertTrue(self.evaluate("presentation.widgets.find(w => w.id === 'quota').visible"))
         self.assertTrue(self.owned_item("quotaTile").isVisible())
+        self.assertEqual(self.evaluate("JSON.stringify(integrations.enabledModules)"), '["quota"]')
         self.assertEqual(self.window.activeFocusItem().objectName(), "widgetVisiblequota")
         after = json.loads(self.config.property("profilesJSON"))
         expected = json.loads(original)
@@ -516,6 +517,7 @@ class ProfilesDockTests(unittest.TestCase):
         QTest.qWait(30)
         self.assertEqual(json.loads(self.config.property("profilesJSON")), json.loads(original))
         self.assertFalse(self.owned_item("quotaTile").isVisible())
+        self.assertEqual(self.evaluate("JSON.stringify(integrations.enabledModules)"), '[]')
         self.assertEqual(self.window.activeFocusItem().objectName(), "widgetVisiblequota")
 
     def test_expanded_optional_module_keeps_its_header_as_a_drag_destination(self):

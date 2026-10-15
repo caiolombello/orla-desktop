@@ -36,10 +36,11 @@ class PeripheralsUiTests(unittest.TestCase):
         self.app.processEvents()
 
     def accept(self, peripherals):
-        value = {'schemaVersion': 1, 'quota': {'status': 'missing', 'windows': [], 'costs': []},
+        value = {'schemaVersion': 2, 'modules': ['quota', 'peripherals', 'recording'],
+                 'quota': {'status': 'missing', 'windows': [], 'costs': []},
                  'peripherals': peripherals, 'recording': {'status': 'missing', 'state': 'unknown'}}
         expression = QQmlExpression(self.engine.rootContext(), self.integration,
-                                    'acceptSnapshot(' + json.dumps(json.dumps(value)) + ')')
+                                    'acceptSnapshot(' + json.dumps(json.dumps(value)) + ", ['quota','peripherals','recording'])")
         accepted, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
         self.assertTrue(accepted)

@@ -50,7 +50,7 @@ class LocalModuleTests(unittest.TestCase):
         self.assertTrue(state.isVisible())
         self.assertEqual(state.property("text"), "Desativado neste perfil")
         self.assertIn("QuotaLantern", self.control("moduleDescription").property("text"))
-        self.assertIn("três módulos", self.control("moduleRequirements").property("text"))
+        self.assertIn("Só os módulos ativados", self.control("moduleRequirements").property("text"))
         self.assertFalse(self.details.property("shown"))
         self.assertEqual(self.bridge.property("refreshRequests"), 0)
         QTest.keyClick(self.window, Qt.Key_Space)
