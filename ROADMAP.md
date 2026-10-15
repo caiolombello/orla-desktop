@@ -985,11 +985,19 @@ dez casos simulados; os dois checks hospedados passaram no Source `f2a1086`.
 [Prova e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
 
 **Próximo aceite de C1/UX1:** arrastar aplicativos fixados, mantendo a alternativa
-por menu/teclado existente, sem ativar o app nem salvar durante hover. Antes de
-implementar, verificar a recuperação da ordem manual do TaskManager se o save
-for recusado; pela leitura do [contrato KDE 6.7.5](https://github.com/KDE/plasma-workspace/blob/cc1ab7963f94a9b76836412855caed6b94066188/libtaskmanager/tasksmodel.h#L887-L911),
-recarregar apenas `launcherList` ainda não é uma recuperação comprovada para
-apps em execução. Indicador mantido, contagem nativa de setters, renderização do
+por menu/teclado existente, sem ativar o app nem salvar durante hover. O
+pré-requisito de recuperação foi reproduzido e corrigido: no TaskManager real,
+recarregar `launcherList` deixava os apps abertos visualmente invertidos após
+uma recusa. A reconciliação agora segue o perfil atual e adia recargas durante
+um movimento nativo. Passaram o teste causal, troca reentrante de perfil,
+movimento seguinte, janelas duplicadas e posições de apps não fixados em KWin
+isolado. A correção foi instalada com backup e uma recarga, preservando os 67
+arquivos/modos esperados, configuração, inventário e launcher; bloqueio automático
+continua desativado. O teste nativo reproduzível integra `tests/native/`.
+Isso não qualifica o gesto de arrastar apps, ainda não implementado. A suíte
+offscreen encontrou uma falha de popup também reproduzida na base anterior;
+não é uma suíte inteiramente aprovada. [Provas e limites](docs/validation/profiles-0.2.5.md#running-app-order-recovery--15-october-2026).
+Indicador mantido, contagem nativa de setters, renderização do
 WidgetStrip e retorno de foco externo continuam sem qualificação neste fluxo.
 A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
 DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte
