@@ -115,6 +115,40 @@ development archive SHA-256 is
 the public 0.2.9 asset is unchanged. The physical no-edit panel journey above was
 not repeated after this final one-file update.
 
+## Private KDE backend transition
+
+A separate isolated KDE episode passed on 2026-10-15 with a private session bus,
+virtual KWin compositor and real ActivityManager. A real `plasmawindowed` process
+loaded an uninstrumented, byte-exact 72-file applet copy from runtime Source
+`72ea3ad`. Preferences, three synthetic profiles and desktop associations were
+seeded before launch; no external profile writer or selection hook ran after launch.
+With a valid private Activity and two private desktops, real desktop transitions
+produced **work → personal → work** in that same process. Semantic document
+checks preserved all other profile fields. The final work selection remained in
+the private configuration after the host exited normally. No network or input
+was used; this is a backend result, not a panel or keyboard journey.
+
+The preceding Phase1 qualified infrastructure only. Phase2's first attempt failed
+before desktop creation or applet launch because its guard expected the wrong
+`desktops` signature. Its FAILED receipt remains intact. The second attempt
+corrected that guard to `a(iss)`, matching the
+[KWin 6.7.5 public XML](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml),
+and passed without a product-code change. Private sockets and owned children
+were removed, with no cleanup errors. A fresh independent postcheck confirmed
+the main session's configuration/packages were preserved and its current
+Activity remained empty.
+
+Commit `81b22a5` also makes the same accessible-tab regression part of the
+existing portable appearance suite: **38/38 passed in both styles, without
+skips**. That commit adds test coverage only; the runtime applet above remains
+Source `72ea3ad`. Documentation-only updates do not change those tested bytes.
+
+This qualifies real private desktop transitions and semantic on-disk profile
+selection, including flush after normal exit. It does not qualify enabled
+restart, Activity precedence, UI opt-in, manual override/Resume, appearance
+editing, Pomodoro continuity, the user's panel, focus/seat or monitor behavior.
+P2 remains partial and the user's installed dock remains automatic-off.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -133,24 +167,27 @@ or logs. These hashes identify the records summarized above:
 | Source candidate AT-SPI result | `92f27093083cc62664199ee133cfb2dbadcd85287fdc0b24429dd970796b9718` |
 | Final one-file installation result | `9b87b9157ac0fb2aad1ec8747a7e8b42d040dc7872a7f970739f81bd6f4ffe81` |
 | Fresh one-file install/backup verification | `96ff061b862f141fc19da896aaaa8a0e0c789214714c18da04c57dee68da3423` |
+| Private KDE Phase1 infrastructure result | `323a4528f2d3f8f65259c8005d14371f98dc1a81958884334c0e5997945cf4bf` |
+| Original private KDE Phase2 FAILED result | `7da0268ea2c493423e89cd72f384e74b8fb34b03f1ffc7031bd95570d16d3706` |
+| Private KDE Phase2 backend result | `38c9e62c45bf87ae0b81d61b0822e4219b3bf7e1052fade8e7a8faf8ccd0e963` |
+| Fresh private KDE Phase2 postcheck | `4a67ee4cd22f54b65c6b283910bdee837f96ce02fe5bcb2a7ac99d4eb9e118d8` |
 
 ## Next native gates
 
-First qualify enabled selection from the real KDE models in a separately owned
-instance, with private preferences and no changes to the user's dock profiles.
-A positive test needs both real contexts ready; this session's missing current
-Activity does not meet that precondition. Desktop-only automation needs an
-explicit policy for stable absence versus transient unavailability before code
-or fallback rules change.
-A real `plasmawindowed` host can qualify that narrower path, but cannot establish
-panel behavior or reaction to a context transition by itself. A private XDG
-directory does not isolate its session-bus singleton; an existing host must be
-detected rather than reused or displaced ([Plasma 6.7.5 implementation](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/plasma-windowed/main.cpp)).
+The private backend gate above is now qualified; the earlier main-session
+experiment still lacks a current Activity and remains a preserved negative
+case. Desktop-only automation needs an explicit policy for stable absence versus
+transient unavailability before code or fallback rules change.
 
-Then qualify actual desktop transitions, Activity precedence, manual override and
-Resume, dirty appearance/Cancel/Apply, restart with automation enabled,
-rename/removal of associated contexts, Pomodoro continuity and monitor behavior.
+Next qualify UI opt-in, manual override and Resume, Activity precedence, dirty
+appearance/Cancel/Apply, restart with automation enabled, rename/removal of
+associated contexts, Pomodoro continuity, the user's panel, focus/seat and monitor
+behavior. Private backend desktop transitions do not establish these behaviors
+in the user's panel. A private XDG directory alone does not isolate the
+`plasmawindowed` session-bus singleton; the successful episode used a private bus
+([Plasma 6.7.5 implementation](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/plasma-windowed/main.cpp)).
 Any temporary desktop or panel needs a separately reviewed cleanup path before
-creation. Offscreen tests, the controlled package reload and this no-edit visit
-do not close those gates. [P2's acceptance criteria](../../ROADMAP.md#05--perfis-activities-e-áreas-de-trabalho)
+creation. Offscreen tests, package reloads and this bounded private backend
+result do not close the remaining gates.
+[P2's acceptance criteria](../../ROADMAP.md#05--perfis-activities-e-áreas-de-trabalho)
 remain unchanged.

@@ -1285,9 +1285,19 @@ falhou na versão anterior e passou após a correção; as suítes afetadas tive
 55 aprovações e dois skips por estilo. Cinco ações AT-SPI passaram na candidata
 Wayland sem instrumentação. A correção foi instalada com backup e uma recarga;
 barra, launcher, configuração e bancos originais foram preservados, mantendo
-o automático desligado. A galeria foi revista em claro/escuro. Troca real de
-contexto, opt-in por gesto, foco/seat, reinício habilitado e monitores continuam
-abertos. [Evidência e limites](docs/validation/contexts-auto-installed.md#enabled-host-diagnosis-and-accessible-tabs).
+o automático desligado. A galeria foi revista em claro/escuro. A mesma regressão
+passou também na suíte portátil: 38/38 em cada estilo, sem skips (`81b22a5`).
+
+Uma etapa posterior passou somente o backend KDE privado: ActivityManager e
+KWin reais, barramento/compositor isolados e a cópia íntegra de 72 arquivos
+(`72ea3ad`) produziram trabalho → pessoal → trabalho no mesmo `plasmawindowed`,
+com transições de área e documento final persistido após saída normal. Nenhum
+writer externo/hook de seleção foi usado após o lançamento, nem input ou rede. A primeira
+tentativa falhou no guard da assinatura pública antes de mutação; ela permanece
+FAILED, e a correção `a(iss)` pertence apenas ao visitante. Cleanup e verificação
+independente preservaram a sessão principal. Isso não completa P2: opt-in por UI,
+escolha manual/Retomar, precedência de Activity, reinício habilitado, painel do
+usuário, foco/seat e monitores continuam abertos. [Evidência e limites](docs/validation/contexts-auto-installed.md#private-kde-backend-transition).
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
