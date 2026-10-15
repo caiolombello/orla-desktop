@@ -1263,14 +1263,31 @@ override manual, ABA, reconexão, documentos inválidos, dois donos e reentrada.
 A composição testa configurações clean/dirty, último contexto, foco do botão
 Retomar, navegação do seletor por mouse/teclado, áudio pendente/gesto e a saída do
 menu fallback. A galeria inclui 350/420 px em claro/escuro. P2 **não está concluído**:
-essa nova composição não foi instalada na sessão; falta trocar contexto KDE real,
+nessa etapa Source a composição ainda não havia sido instalada; falta trocar contexto KDE real,
 qualificar foco/seat e persistência/reinício, incluindo os gates de monitor.
 As 17 suítes direcionadas passaram em processos isolados em Fusion e KDE: 343
 aprovações e cinco skips de TaskManager por estilo. Os 29 casos do controlador
 entram explicitamente na CI. Build, design check, sete guardas e 23 testes da CLI
-passaram; oito capturas sintéticas foram revistas nos dois esquemas. A próxima
-etapa é instalar o pacote com o automático ainda desligado e provar a UI sem
-edições, antes da jornada nativa com perfis/contextos sintéticos.
+passaram; oito capturas sintéticas foram revistas nos dois esquemas. A etapa
+seguinte instalou o pacote com o automático ainda desligado e provou a UI sem
+edições, conforme o registro abaixo.
+
+**P2/UX — atualização instalada e diagnóstico de 15/10:** o pacote de 72 arquivos
+foi instalado e passou a visita sem edição com o automático desligado. O teste
+isolado ligado manteve o perfil anterior: o serviço KDE informa Activity atual
+vazia, enquanto a área virtual está pronta. Isso explica a espera pelo par
+completo; não constitui aprovação da seleção automática positiva. Um modo
+somente por área exige definir ausência estável versus indisponibilidade
+temporária antes de mudar a precedência.
+
+As abas de configurações agora oferecem ativação acessível explícita. A regressão
+falhou na versão anterior e passou após a correção; as suítes afetadas tiveram
+55 aprovações e dois skips por estilo. Cinco ações AT-SPI passaram na candidata
+Wayland sem instrumentação. A correção foi instalada com backup e uma recarga;
+barra, launcher, configuração e bancos originais foram preservados, mantendo
+o automático desligado. A galeria foi revista em claro/escuro. Troca real de
+contexto, opt-in por gesto, foco/seat, reinício habilitado e monitores continuam
+abertos. [Evidência e limites](docs/validation/contexts-auto-installed.md#enabled-host-diagnosis-and-accessible-tabs).
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
