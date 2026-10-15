@@ -626,3 +626,55 @@ touchscreen, other outputs and context churn have separate gates. The prior
 isolated Qt gesture matrix remains separate evidence. Private receipts:
 `.runtime/app-drag-native-20261015/root-native-r1`, `root-native-r2` and
 `root-native-r3` (final status `PASS_LEGACY_APP_SLOT_DRAG_REVERSED`).
+
+## Scrolled app viewport and event exclusion — 15 October 2026
+
+`tests/native/task_order.py --area PRIVATE_AREA --viewport` exercises four
+pointer cases against the actual Source DockView and TaskManager in an owned
+virtual KWin/DBus session. It needs synthetic Model A/B/C desktop entries and a
+separate permission entry matching the probe interpreter with
+`X-KDE-Wayland-Interfaces=org_kde_plasma_window_management`. The script requires
+four strict descendant XDG directories; it neither creates a compositor nor
+targets the installed panel. This is a native KDE prerequisite, outside portable CI.
+
+- A valid drop in a pre-scrolled 113 px viewport moves ABC to BAC while retaining
+  all window identities, including the separate probe row. Both complete 50 px
+  app tiles and the held insertion marker remain inside the viewport. Structural
+  model signals, persistence signals and observed delegate clicks stay at zero
+  during the hold. Release emits one `profilesJSONChanged`, zero legacy signals
+  and zero observed clicks. An independent expected document permits only the
+  active profile's launcher splice; every other saved field/profile is preserved.
+- A third app with only 3 px visible rejects the pointer inside that visible
+  intersection, without a marker or saved/native order change.
+- A fully visible app covered by the event body also rejects the drag. The
+  pointer is independently inside the app/body intersection, outside the close
+  control. The current event, pending queue and sequence are preserved.
+- A completion arriving during a valid held move cancels before further motion.
+  Clearing it intentionally preserves the sequence; a distinct subsequent move,
+  confirmed by the actual DragHandler centroid, cannot rearm the same gesture.
+
+Refused/canceled cases preserve the complete saved JSON bytes and full task-order
+snapshot, with zero structural model/persistence/click signals through release.
+The spies observe notifications, not exact setter invocations or global app
+dispatch. Structural observation covers moves, insertions, removals, resets and
+layout changes; snapshots separately check task identities and geometry.
+
+Three private product mutants were rejected at their intended assertions:
+removing whole-tile right-bound validation, removing event-width exclusion, and
+removing the event visibility invalidation. These copies were never installed.
+The final four-case Source run passed without QML warnings; each episode verified
+the host shell, installed package, protected configuration and launcher unchanged,
+and its owned processes gone. A setup permission failure and a later test-only
+handler lookup failure remain recorded; neither is promoted to a product failure.
+
+The existing `--gesture` matrix also passed all 12 cases on the final Source.
+Design check reported zero issues, seven design guards passed, and CLI help and
+`git diff --check` passed. These native episodes used Fusion; no new KDE-style
+or full portable-suite result is claimed for this test-only increment.
+
+No product QML/JS changed in this increment, and no installation or shell reload
+was needed. This qualifies stable pre-scrolled geometry in an isolated fixture,
+not wheel/touchpad scrolling, autoscroll, held pixel appearance, physical panel
+overflow, multiple outputs/scales or changing contexts. Private receipts are under
+`.runtime/task-viewport-20261015/`; the final matrix status is
+`PASS_SOURCE_TASK_VIEWPORT_GESTURES`.

@@ -1046,9 +1046,21 @@ configuração e recursos foram preservados. Transferência entre hosts, identid
 independente de quem recebe teclado e outras telas continuam abertas.
 [Diagnóstico e validação](docs/validation/shared-control-center-source.md#hidden-dialog-keyboard-ownership--15-october-2026).
 
-**Próximo aceite de C1/UX1/CC0:** arraste com overflow e faixa de evento ativa
-em fixture própria, transferência/foco entre hosts dos popups instalados,
-monitores adicionais e mudanças de contexto. Os marcos
+**C1/UX1 — overflow e eventos, prova isolada (15/10):** quatro casos novos
+passaram no DockView/TaskManager real em KWin próprio: soltura válida com viewport
+pré-rolado, destino parcialmente cortado, app coberto pelo corpo do aviso e aviso
+que chega durante o gesto. O último cancela antes de novo movimento e não rearma
+ao remover o aviso. Observadores contínuos verificam a estrutura do modelo; o
+oráculo compara o documento inteiro de perfis e permite apenas a troca esperada
+no perfil ativo. Três alterações propositalmente incorretas em cópias privadas
+foram detectadas. Não houve mudança de produto, instalação ou recarga; os episódios
+preservaram a sessão real e encerraram seus processos próprios. Isso não qualifica
+overflow físico no painel, rolagem por input, autoscroll ou outras telas.
+[Provas e limites](docs/validation/profiles-0.2.5.md#scrolled-app-viewport-and-event-exclusion--15-october-2026).
+
+**Próximo aceite de C1/UX1/CC0:** transferência/foco entre hosts dos popups
+instalados, overflow e cancelamento no painel real, monitores adicionais e
+mudanças de contexto. Os marcos
 continuam parciais e o goal mantém o roadmap completo, incluindo integrações
 opcionais, ecossistema, distribuição e IA.
 
