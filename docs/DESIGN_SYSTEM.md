@@ -162,6 +162,12 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   buttons as children. Name the existing ScrollView and its clipped content
   viewport; do not substitute the card or outer panel bounds for that viewport.
   Focus on any row control reveals the whole row, including its grip and arrows.
+  Optional local modules keep their native checkbox and arrows in that same header.
+  Put a collapsed “Sobre” disclosure below it; opening details is passive. Reveal
+  the expanded text after layout settles, only while that disclosure still has
+  focus. An oversized group reveals its top; drag hit-testing and insertion lines
+  use the header, excluding the detail body. Explain the shared local-cache bridge
+  and distinguish disabled, stale, invalid and unavailable states in plain text.
 - **App ordering.** Drag the existing app tile; keep its native click, keyboard
   and context menu. Show one thin accent insertion line before/after the target,
   without moving icons or saving while held. Crossing an internal gap clears only
