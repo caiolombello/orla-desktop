@@ -1243,6 +1243,20 @@ revalidar contexto, associação, perfil e intenção manual. Essa política est
 definida; automação, controles de opt-in e jornada nativa ainda não estão
 implementados. O comportamento atual continua sendo associação explícita.
 
+O primeiro pré-requisito de Source acrescenta uma guarda opcional à seleção de
+perfil, executada depois da transição e imediatamente antes da escrita. Recusa,
+exceção ou revisão alterada preservam a escolha/edição mais recente, inclusive
+uma troca que vai e volta ao mesmo perfil. Uma seleção sem mudança também valida
+a guarda e não grava. O contrato mantém os callers de três argumentos e está
+documentado em [profiles.md](docs/profiles.md#experimental-internal-selection-contract).
+Esse incremento não foi instalado na sessão; o controlador automático e seus
+bloqueios de interação continuam sendo os próximos passos de P2.
+Os seis casos novos recusam a versão anterior e passam na nova. As suítes afetadas
+passaram em Fusion e KDE: 124 aprovações e um skip de TaskManager por estilo;
+design check, sete guardas de design e build passaram. São provas com configuração
+Qt sintética; a galeria foi renderizada e revista nos dois esquemas. Essas provas
+não qualificam automação, KConfig ou foco na sessão nativa.
+
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
 O seletor fornece URL; não fornece bytes validados. A próxima implementação deve

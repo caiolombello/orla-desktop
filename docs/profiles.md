@@ -38,4 +38,25 @@ Limites: até 16 perfis nomeados, além de Preferências anteriores; nomes únic
 
 `profilesJSON` vazio usa as preferências flat, sem migração implícita. JSON inválido, grande demais ou de formato futuro é preservado e bloqueia gravações da apresentação. Na inicialização, o dock usa flat; substituição inválida durante execução mantém a última apresentação validada. Relate o erro em vez de editar KConfig com o Plasma aberto. Se a aparência personalizada salva for inválida ao copiar, o novo perfil usa as preferências anteriores de tema/ícones/movimento e mostra um aviso; o valor flat original é preservado.
 
+## Experimental internal selection contract
+
+`ProfileState.select(id, expectedScope, expectedRevision, continuationGuard)` accepts
+an optional synchronous predicate. Existing three-argument calls retain their
+behavior. A supplied non-function is rejected; an eligible call evaluates the
+predicate once, after the transition hook and immediately before the saved-document
+assignment. Only boolean `true` accepts it; a throw or any other value refuses the
+selection. A same-profile no-op still checks the predicate and changes no saved data.
+
+For example, `profiles.select("work", profiles.activeProfileId, profiles.revision,
+() => false)` refuses the request without changing the saved document. Writable
+state, scope and revision are rechecked after the predicate, so a reentrant manual
+selection, edit or invalid document is preserved instead of being overwritten.
+The caller must validate its own captured context, binding and request generation;
+this method does not infer those authorities or roll back callback side effects.
+
+This is a Source prerequisite for opt-in automatic context selection. Its controller,
+continuous context observation, controls and native journey are not implemented by
+this contract. The unit tests use synthetic Qt configuration, not a live KConfig
+transaction or a Plasma/Wayland focus qualification.
+
 Associação/troca de Activities/desktops, escolha de barra/launcher/eventos, gestos/foco de popup nativo e qualificação da release completa continuam pendentes. Consulte a [validação](validation/profiles-0.2.5.md).
