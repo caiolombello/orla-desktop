@@ -566,7 +566,7 @@ de falta de energia. Ferramentas, wrappers, menu, versão e recibos instalados
 permanecem iguais; o controlador antigo não ganha o comando novo. Configurações,
 favoritos e aliases são preservados, e `runtime` continua `unverified`.
 
-Passaram 39 testes de instalação/CLI, incluindo 12 de recuperação, 56 do pacote
+Passaram 40 testes de instalação/CLI, incluindo 13 de recuperação, 56 do pacote
 e 15 do bundle. O teste causal injeta uma falha final, recupera pelo comando
 público com bootstrap original ausente e usa o controlador instalado para
 consultar/remover. Um teste separado repetiu esse fluxo com o ZIP real da

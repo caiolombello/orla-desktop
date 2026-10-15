@@ -813,7 +813,10 @@ def _recovery_need(value, code="recovery_bank"):
 
 
 def _recovery_pin(value, count):
-    return type(value) is list and len(value) == count and all(type(number) is int and 0 <= number < 2 ** 64 for number in value)
+    # Only file-type and permission bits may reach the native stat predicates.
+    return (type(value) is list and len(value) == count
+            and all(type(number) is int and 0 <= number < 2 ** 64 for number in value)
+            and value[2] <= 0xffff)
 
 
 def _recovery_controls(paths):

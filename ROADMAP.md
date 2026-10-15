@@ -771,7 +771,7 @@ limpeza quando o banco e o restante permanecem exatos. Ferramentas, wrappers,
 menu, versão e recibos instalados não são substituídos. Instalações parciais,
 marcadores ausentes, remoção pendente, drift e banco incompleto são recusados,
 preservando evidência. Não é recuperação geral de crash ou de falta de energia.
-Passaram 39 testes de instalação/CLI (12 de recuperação), 56 do pacote e 15 do
+Passaram 40 testes de instalação/CLI (13 de recuperação), 56 do pacote e 15 do
 bundle. A compatibilidade foi verificada também com o ZIP real e o instalador
 anterior da execução 38660941244: 12 arquivos gerenciados exatos, bootstrap
 ausente, consulta/remoção pelo controlador original e dados sintéticos

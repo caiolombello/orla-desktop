@@ -210,6 +210,22 @@ class FinishInstallRecoveryGuardTests(unittest.TestCase):
                 self.refuse_without_cleanup(fixture)
                 self.assertEqual((bank.read_bytes(), fixture[5]._identity(bank.stat())), (raw, pin))
 
+    def test_out_of_range_captured_modes_refuse_without_a_python_exception(self):
+        for field in ("pending", "proofs", "parents"):
+            with self.subTest(field=field):
+                fixture = self.late_failure()
+                manager = fixture[5]
+                with mock.patch.object(manager, "_unlink_checked", side_effect=manager.InstallError("write_failed")):
+                    with self.assertRaises(manager.InstallError):
+                        self.recover(fixture)
+                bank = self.bank(fixture)
+                value = json.loads(bank.read_bytes())
+                value[field][0]["pin"][2] = 2 ** 63 - 1
+                raw = manager._json(value)
+                bank.write_bytes(raw)
+                self.refuse_without_cleanup(fixture)
+                self.assertEqual(bank.read_bytes(), raw)
+
     def test_same_content_new_inode_at_unlink_seam_cannot_be_deleted(self):
         fixture = self.late_failure()
         manager = fixture[5]
