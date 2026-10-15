@@ -913,22 +913,43 @@ preservadas e a regressão passou. A suíte final teve 100 aprovações e um ski
 Wayland em cada estilo Fusion/KDE, além de sete guardas e 70 PNGs de galeria.
 Cinco casos também entram na CI portátil pelo fixture existente de Settings.
 Oito capturas claras/escuras em 350/420 px mostram alças, rótulos e destino, sem
-alterar fontes, alvos ou orçamento. A instalação local passou com backup e um
+alterar fontes, alvos ou orçamento. A instalação inicial passou com backup e um
 único stop/start; inventário, launcher e 132 arquivos/modos protegidos ficaram
 iguais. Isso ainda não prova arraste físico no popup instalado. Consulte
 [o registro e as capturas](docs/validation/profiles-0.2.5.md#widget-grip-reordering--15-october-2026).
 
-**Próximo aceite de C1/UX1:** primeiro diagnosticar a falha observada na CI do PR
-74: o teardown de runners do launcher excedeu 500 ms após o caso de cancelamento
-Steam. O job portátil passou; os arquivos do launcher não mudaram nesta fatia.
-Não ampliar o timeout nem marcar a execução falha como PASS sem causa/prova.
-Depois, executar o canário por ponteiro no applet instalado:
-criar somente um perfil próprio, arrastar/reverter e restaurar a seleção e a chave
-de perfil original sob comparação guardada, preservando sua presença/ausência.
-Confirmar coordenadas e resultado real, sem usar o gesto offscreen como aceite
-Wayland. Depois, avançar no arraste de aplicativos com alternativa por teclado.
+**Diagnóstico posterior de C1/UX1:** um pacote privado, alterado apenas pelas
+sondas em `DockView.qml`, recebeu arrastes reais com a dock temporariamente
+sempre visível. A tentativa final reutilizou o perfil sintético deixado por
+tentativas falhas e reportou troca/reversão e retorno ao legado. Não foram
+guardados todos os documentos intermediários, e somente o indicador reverso tem
+uma amostra fresca de destino válida. Essa evidência permanece instrumentada;
+contagem de gravações continua sendo evidência offscreen. A limpeza posterior
+falhou e deixou o Plasma parado. Uma recuperação separada devolveu o desktop,
+removeu somente a chave própria e confirmou sua ausência no runtime/disco, mapa
+de configuração original, pacote real, inventário, 132 hashes protegidos e
+launcher preservados. As falhas anteriores permanecem registradas.
+
+Os dois jobs do PR 75 passaram em `7c65859`. A falha anterior do PR 74 continua
+preservada: um experimento privado com o ELF KRunner 6.31 demonstrou que finalizar
+os workers entre `quit()` e as conexões tardias de limpeza produz o mesmo erro de
+destruição em 500 ms. Isso prova um mecanismo suficiente, sem reconstruir a ordem
+real da CI anterior. Nenhuma correção de framework, ampliação de prazo ou remoção
+da guarda foi adotada. A correção no proprietário do framework exige build e
+regressão próprias.
+
+**Próximo aceite de C1/UX1:** no pacote real, abrir Settings por AT-SPI funcionou
+e preservou configuração, processo e estado de acessibilidade. Uma tentativa de
+entrada pelo ponteiro virtual, com a dock em autohide, não abriu o popup; os
+dispositivos foram liberados e nenhum perfil foi criado. Diagnosticar essa entrada
+e distinguir o comportamento de borda do ponteiro de um defeito do produto antes
+de repetir gravações nativas. Depois, criar um único perfil novo, guardar os
+documentos completos antes/depois do arraste e reversão e restaurar a chave
+original com baseline novo. O aceite do pacote sem instrumentação continua
+aberto. Avançar então no arraste de aplicativos com alternativa por teclado.
 A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
-DX2 continuam parciais; os demais gates do roadmap permanecem ativos.
+DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte
+[evidência, recuperação e limites](docs/validation/profiles-0.2.5.md#subsequent-diagnostic-canary-and-recovery--15-october-2026).
 
 ## Prontidão e recomendação de execução
 

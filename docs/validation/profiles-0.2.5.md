@@ -138,8 +138,9 @@ passed its portable job but failed [launcher UI cleanup in CI](https://github.co
 The Steam-departure body reported successful cancellation/reaping; its owned-runner
 teardown then exceeded 500 ms, and the next case aborted because runners remained.
 Launcher sources were unchanged by this widget increment. The cause remains open;
-no timeout relaxation, hidden rerun or launcher fix is claimed here. This CI failure
-must be diagnosed before proceeding with broader native acceptance.
+no timeout relaxation, hidden rerun or launcher fix is claimed here. The later
+diagnosis and its limits are recorded below; passing repeats do not turn the
+original failed execution into a pass.
 
 ### Local installation and remaining Native acceptance
 
@@ -162,3 +163,111 @@ must create only an owned profile, drag/reverse with actual input, return to the
 original selection and restore only its guarded profile key, including original
 presence/absence. Until that runs, C1/P1/UX1 remain partial; app dragging and the
 other roadmap gates also remain open.
+
+### Subsequent diagnostic canary and recovery — 15 October 2026
+
+A later private native episode used a diagnostic package with the same 67 package
+members. Only `DockView.qml` differed: it added geometry/state observations,
+timers and journal output. The widget gesture implementation itself was unchanged.
+The panel was temporarily made always visible because virtual-pointer edge entry
+did not reveal the autohiding dock. This episode therefore does **not** qualify
+the unmodified production applet or normal autohide entry.
+
+Earlier attempts failed at popup opening, hover, journal access, tab discovery,
+row reachability and screenshot coordinates; their receipts remain retained.
+The final attempt reused the synthetic profile left by an earlier attempt. It
+sent two real pointer drags and reported runtime/disk agreement, a first-pair
+exchange, reversal to its starting document, and return to legacy selection.
+Its input bridge reported release of its temporary devices. Full before/after
+documents were not retained, so their complete equality cannot be independently
+rechecked from saved snapshots. Input acknowledgments prove emission only.
+
+The saved reverse trace contains a fresh held destination. The forward trace
+shows drag state but no valid destination at that sample. The script's broader
+`any(dragging)` predicates included earlier observations and cannot qualify both
+held indicators. Native exactly-one-save and no-hover-write counts were not
+recorded; those properties remain offscreen-test evidence. Screenshots show
+postgesture states, not held state, and remain private because their crops include
+background fragments.
+
+The subsequent cleanup failed and left Plasma stopped. Its comparator both
+lowercased keys and treated a stored configuration map as a filename; this was
+not evidence of actual tray drift, and KConfig key case was not relaxed. A fresh,
+case-preserving read of the original raw backup and current file found exactly
+one differing key: the owned `profilesJSON` document.
+
+A separate recovery first restored the desktop without deleting a key after a
+mode-format comparison refused the write. That refusal is preserved. The next
+guarded cleanup compared the actual octal mode representation and correct layout
+bank path, stopped the verified shell once, removed only that exact owned key,
+and started it once. The final receipt reports:
+
+- `PASS_RECOVERED_AND_CLEANED`, no error in that cleanup execution;
+- the original profile-key absence on both physical disk and runtime;
+- full case-preserving configuration-map equality with the original raw backup;
+- exact real-package and panel-inventory equality;
+- 132 protected hashes, the separately recorded direct-file modes, and the
+  resident launcher preserved.
+
+This successful recovery does not relabel the earlier attempts or failed cleanup
+as an uninterrupted native pass. Private custody is under
+`.runtime/widget-drag-20261015/root-native-r1/`, the independent
+`sol61-native-evidence-audit-r1/`, and `root-recovery-r1/` / `root-recovery-r2/`.
+No personal configuration, trace text or native background image is published.
+
+Next acceptance is a new bounded visit to the **uninstrumented** production
+applet: establish popup entry/geometry, create one fresh owned profile, retain
+complete documents around drag/reversal, and restore the original key with a
+fresh baseline. Accessibility-based opening, pointer opening, held-state pixels,
+focus and setter counts must each be described according to what actually ran.
+C1/P1/UX1 remain partial.
+
+The subsequent unmodified-production visit opened Settings with the public AT-SPI
+`Press` action, read its own accessible tab/control geometry, and closed it with
+Cancel. Original accessibility settings, configuration bytes and the shell
+process were preserved. No profile or pointer action ran in that visit. Its first
+read-only attempt stopped on an unsupported accessibility interface; the corrected
+visitor retained that failure separately.
+
+One new physical-pointer attempt then approached the lower screen edge and clicked
+the externally measured settings-button center. The ordinary autohide panel did
+not open Settings through that input path. All input acknowledgments were emission
+only; the popup assertion failed. Temporary input devices were released,
+accessibility settings and configuration bytes were restored/preserved, and no
+profile was created. The test's premature opened flag also produced a missing-
+Cancel cleanup error; the saved UI observation had never shown that popup open.
+This remains a failed entry test, not production-drag acceptance. Further work
+must distinguish virtual-pointer/edge behavior from a product interaction defect
+before another profile-writing gesture. Private receipts are in
+`root-production-readonly-r1/`, `root-production-readonly-r2/` and
+`root-production-pointer-r1/` under the same widget evidence area.
+
+### Launcher CI diagnosis checkpoint
+
+Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`
+in [run 38686612789](https://github.com/caiolombello/orla-desktop/actions/runs/38686612789).
+This is a later source/checkpoint result; it does not fix or explain the original
+PR #74 teardown failure.
+
+The original isolated case passed locally. An observation-only private copy also
+passed the original `launcher-ui` partition: 26 QtTest entries, CTest 13.58 s,
+with the same 500 ms destruction budget and fail-closed next-owner barrier.
+The original hosted GDB diagnostic had exited normally as well. These are
+nonreproductions, not repair evidence.
+
+A separate controlled scheduling probe then exercised the actual pinned
+KRunner 6.31 ELF (`fd352644c12df0c4fdd4ce18ca01e16155791a941f28805d52156972e1fa2934`)
+in a private network-isolated container without the live session. Disassembly
+confirmed `quit()` before the two `finished` cleanup connections. The probe
+forwarded real `quit()` and joined only the first two allowed workers at that
+exact call site, within 50 ms each, forcing completion before the late connections.
+Both joins succeeded. The unchanged original ownership test then failed its
+500 ms runner-destruction audit with surviving runners: 2 QtTest entries passed,
+1 failed, wrapper exit 1. This demonstrates a sufficient mechanism on that pinned
+runtime; it does not reconstruct the actual scheduling history of CI #74.
+
+No correction, timeout increase, disabled audit or framework mutation was adopted.
+An early cleanup connection added outside the manager is unsafe because upstream
+still accesses raw runner pointers after `quit()`. A framework-owner correction
+needs its own reviewed build and the same controlled-schedule test. Private
+receipts are under `.runtime/runner-teardown-20261015/root-mechanism-r2/`.
