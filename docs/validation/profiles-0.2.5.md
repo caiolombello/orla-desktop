@@ -51,3 +51,392 @@ Local native receipts: `.runtime/profiles-native-proof/REPORT.md`, `evidence/sum
 A prior `kactivitymanagerd --help` attempt with inherited environment remains UNKNOWN; this isolated proof does not establish that all user-session configuration was unchanged.
 
 **Resumo em português:** 49 testes direcionados passaram em Fusion e KDE; a regressão registrada passou 123 testes. A implementação de perfis foi aprovada em revisão. A prova nativa privada, com metadata 0.2.4 e 26 arquivos congelados incluindo overlays de perfis, comprovou Apply/Cancel/disco/reinício e um ciclo próprio de remover/recriar, com JSON salvo explicitamente atribuído ao novo applet; não prova recuperação automática após apagar. A revisão independente dos recibos aprovou a prova delimitada sem blockers. A primeira tentativa falhou no comparador da fixture e permanece preservada. Os comandos/sinais foram programáticos: popup, foco, gesto humano, retomada do timer entre processos e release completa continuam sem qualificação. P1/C1 permanecem parciais; P2/W1 são trilhas separadas.
+
+
+## Widget grip reordering — 15 October 2026
+
+This current Source increment adds direct manipulation to Settings → Widgets in
+an explicitly chosen managed profile. It retains the native checkbox and existing
+up/down actions. The grip has a symbolic icon, hover help and keyboard guidance.
+A held drag shows a single insertion line; only a valid release saves through the
+existing profile writer. There is no hover write, implicit legacy migration,
+new saved preference, data format, dependency or popup-budget change. Source code
+for this increment is pinned at `1d41dca79f37d3986d5d253330ca25da30393302`.
+
+The press captures its profile object, scope, revision and full widget snapshot
+before requesting focus, then rechecks the capture. Release uses stable widget
+IDs, refuses an off-viewport target and submits at most one guarded profile write.
+Click-without-drag, self-drop, outside release, Escape, tab/popup close, import,
+readonly state or changed scope/revision cancel without an additional order write.
+The first Escape during a held gesture cancels it; the next closes settings.
+Targets must be visible; there is no edge autoscroll or cross-panel drag in this
+increment. The existing arrow controls remain available to reach any row.
+
+A still-focused grip parks focus on the stable list before its delegate is
+rebuilt. Restoration requires that list still own focus, the same gesture ticket,
+profile and exact postwrite revision/widgets. A newer focus owner is preserved.
+Closing the editing session invalidates the gesture immediately, even while KDE
+keeps the popup visible for its exit animation. Cancellation before the setter
+prevents the write; cancellation after an already completed setter invalidates
+later focus work and does not pretend to undo that write.
+
+### Verification
+
+- The first public pointer test failed against the prior UI because there was no
+  grip. With the implementation it observes a held destination line, zero writes
+  during movement, exactly one on release, the rendered dock order, unchanged
+  visibility/other profile data/flat preferences, and the preserved appearance
+  draft. Arrow-key reorder/focus coverage remains unchanged.
+- Six new cases run in the actual Dock fixture. Five also run in the existing
+  portable Settings fixture through the `test_appearance_preset` CI module:
+  normal focus restoration, preservation of newer focus, click/self/outside/Escape,
+  held invalidation and legacy/readonly refusal. The detailed rendered-dock/data
+  test remains local; no hidden Tile geometry is inferred from the portable fixture.
+- Final related suites ran **101 tests under each of Fusion and org.kde.desktop:
+  100 passed, one skipped**. The skipped desktop-URL/TaskManager case needs a
+  Wayland/X11 connection. The suites were profiles/dock, widget strip, appearance,
+  portable appearance, its dock fixture and parser. These are offscreen Qt pointer
+  events, not native seat/grab or physical-pointer qualification.
+- The initial KDE full run had two real close-during-animation failures, one per
+  fixture. Both were retained and then passed the focused regression and final
+  complete run after the editing-lifecycle guard. The earlier static review missed
+  that animation window; a second review covered the correction.
+- Early fixture failures are retained: tab layout was not yet settled before
+  mapping pointer positions; a portable import scenario had lost its editing
+  session after a profile change. Tests now wait for actual popup close/reopen and
+  assert editing/pending preconditions. A separate real geometry finding revealed
+  only the grip, clipping the target row by eight pixels; focusing now reveals the
+  entire row, without widening the popup or weakening bounds.
+- Design check reported zero issues and all seven design guards passed. The final
+  complete gallery generated 70 PNGs including its index. Eight new states below
+  were inspected in both schemes at 350/420 px. The final images are byte-identical
+  to the reviewed images before the nonvisual close guard; names wrap at 350 px
+  without changing fonts or targets. All captures contain synthetic data.
+
+| State | Dark | Light |
+| --- | --- | --- |
+| Idle, 350 px | [Capture](../screenshots/widget-order/widgets-dark-idle-350.png) | [Capture](../screenshots/widget-order/widgets-light-idle-350.png) |
+| Held destination, 350 px | [Capture](../screenshots/widget-order/widgets-dark-drag-350.png) | [Capture](../screenshots/widget-order/widgets-light-drag-350.png) |
+| Idle, 420 px | [Capture](../screenshots/widget-order/widgets-dark-idle-420.png) | [Capture](../screenshots/widget-order/widgets-light-idle-420.png) |
+| Held destination, 420 px | [Capture](../screenshots/widget-order/widgets-dark-drag-420.png) | [Capture](../screenshots/widget-order/widgets-light-drag-420.png) |
+
+Reproduce the current related checks in a compatible KDE/Qt environment:
+
+```bash
+for orla_style in Fusion org.kde.desktop; do
+  PYTHONPATH=tests QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE="$orla_style" python3 -B -m unittest test_profiles_dock test_widget_strip test_appearance test_appearance_preset test_appearance_preset_dock test_appearance_preset_parser -v
+done
+python3 scripts/design.py check
+python3 scripts/design.py gallery
+```
+
+The historical broader commands above remain historical evidence; this increment
+does not relabel previously recorded unrelated native-dialog/audio failures green.
+
+A separate host checkpoint found that [PR #74](https://github.com/caiolombello/orla-desktop/pull/74)
+passed its portable job but failed [launcher UI cleanup in CI](https://github.com/caiolombello/orla-desktop/actions/runs/38683861698/job/116254167457).
+The Steam-departure body reported successful cancellation/reaping; its owned-runner
+teardown then exceeded 500 ms, and the next case aborted because runners remained.
+Launcher sources were unchanged by this widget increment. The cause remains open;
+no timeout relaxation, hidden rerun or launcher fix is claimed here. The later
+diagnosis and its limits are recorded below; passing repeats do not turn the
+original failed execution into a pass.
+
+### Local installation and remaining Native acceptance
+
+The public applet installer updated the actual local package after the final
+checks. A full previous-package backup and rollback archive were retained. The
+67-member package changed only `SettingsContents.qml`, now matching SHA-256
+`256a44f0ade96bef41abb3cef02c7995b51173da2841274b6eafd5ae3c92d9f8`.
+One guarded Plasma stop/install/start passed. Readiness waited through three
+unmapped-screen observations, then admitted an exact inventory match. Panel/app
+IDs, configuration target, the resident launcher and the 132 protected file/hash/
+mode entries remained unchanged. No release asset/version was replaced.
+
+This update proves installation/reload and those preservation checks only.
+**Actual installed widget dragging/reversal, physical pointer entry, native
+pixels/focus, cross-process persistence and other displays/scales remain UNRUN
+for this increment.** Installation did not invoke profile creation, selection or
+migration. The prior compact-popup keyboard proof is a different, explicitly
+bounded increment and does not qualify widget dragging. A planned native canary
+must create only an owned profile, drag/reverse with actual input, return to the
+original selection and restore only its guarded profile key, including original
+presence/absence. Until that runs, C1/P1/UX1 remain partial; app dragging and the
+other roadmap gates also remain open.
+
+### Subsequent diagnostic canary and recovery — 15 October 2026
+
+A later private native episode used a diagnostic package with the same 67 package
+members. Only `DockView.qml` differed: it added geometry/state observations,
+timers and journal output. The widget gesture implementation itself was unchanged.
+The panel was temporarily made always visible because virtual-pointer edge entry
+did not reveal the autohiding dock. This episode therefore does **not** qualify
+the unmodified production applet or normal autohide entry.
+
+Earlier attempts failed at popup opening, hover, journal access, tab discovery,
+row reachability and screenshot coordinates; their receipts remain retained.
+The final attempt reused the synthetic profile left by an earlier attempt. It
+sent two real pointer drags and reported runtime/disk agreement, a first-pair
+exchange, reversal to its starting document, and return to legacy selection.
+Its input bridge reported release of its temporary devices. Full before/after
+documents were not retained, so their complete equality cannot be independently
+rechecked from saved snapshots. Input acknowledgments prove emission only.
+
+The saved reverse trace contains a fresh held destination. The forward trace
+shows drag state but no valid destination at that sample. The script's broader
+`any(dragging)` predicates included earlier observations and cannot qualify both
+held indicators. Native exactly-one-save and no-hover-write counts were not
+recorded; those properties remain offscreen-test evidence. Screenshots show
+postgesture states, not held state, and remain private because their crops include
+background fragments.
+
+The subsequent cleanup failed and left Plasma stopped. Its comparator both
+lowercased keys and treated a stored configuration map as a filename; this was
+not evidence of actual tray drift, and KConfig key case was not relaxed. A fresh,
+case-preserving read of the original raw backup and current file found exactly
+one differing key: the owned `profilesJSON` document.
+
+A separate recovery first restored the desktop without deleting a key after a
+mode-format comparison refused the write. That refusal is preserved. The next
+guarded cleanup compared the actual octal mode representation and correct layout
+bank path, stopped the verified shell once, removed only that exact owned key,
+and started it once. The final receipt reports:
+
+- `PASS_RECOVERED_AND_CLEANED`, no error in that cleanup execution;
+- the original profile-key absence on both physical disk and runtime;
+- full case-preserving configuration-map equality with the original raw backup;
+- exact real-package and panel-inventory equality;
+- 132 protected hashes, the separately recorded direct-file modes, and the
+  resident launcher preserved.
+
+This successful recovery does not relabel the earlier attempts or failed cleanup
+as an uninterrupted native pass. Private custody is under
+`.runtime/widget-drag-20261015/root-native-r1/`, the independent
+`sol61-native-evidence-audit-r1/`, and `root-recovery-r1/` / `root-recovery-r2/`.
+No personal configuration, trace text or native background image is published.
+
+Next acceptance is a new bounded visit to the **uninstrumented** production
+applet: establish popup entry/geometry, create one fresh owned profile, retain
+complete documents around drag/reversal, and restore the original key with a
+fresh baseline. Accessibility-based opening, pointer opening, held-state pixels,
+focus and setter counts must each be described according to what actually ran.
+C1/P1/UX1 remain partial.
+
+The subsequent unmodified-production visit opened Settings with the public AT-SPI
+`Press` action, read its own accessible tab/control geometry, and closed it with
+Cancel. Original accessibility settings, configuration bytes and the shell
+process were preserved. No profile or pointer action ran in that visit. Its first
+read-only attempt stopped on an unsupported accessibility interface; the corrected
+visitor retained that failure separately.
+
+One new physical-pointer attempt then approached the lower screen edge and clicked
+the externally measured settings-button center. The ordinary autohide panel did
+not open Settings through that input path. All input acknowledgments were emission
+only; the popup assertion failed. Temporary input devices were released,
+accessibility settings and configuration bytes were restored/preserved, and no
+profile was created. The test's premature opened flag also produced a missing-
+Cancel cleanup error; the saved UI observation had never shown that popup open.
+This remains a failed entry test, not production-drag acceptance. Further work
+must distinguish virtual-pointer/edge behavior from a product interaction defect
+before another profile-writing gesture. Private receipts are in
+`root-production-readonly-r1/`, `root-production-readonly-r2/` and
+`root-production-pointer-r1/` under the same widget evidence area.
+
+### Production pointer entry — 15 October 2026
+
+A subsequent bounded visit passed on the unmodified installed applet in Plasma
+6.7.5/Wayland, one 2648×1490 logical output at scale 1.45. A temporary getter-only
+KWin script observed the actual cursor and the exact Plasma-owned dock window's
+`hidden` property. Settings opened through one virtual pointer click at its
+fresh AT-SPI button rectangle; Escape closed it, and leaving the dock restored
+the hidden state. AT-SPI supplied geometry and observation; it did not activate
+the button in this visit.
+
+The diagnostic found limitations in the earlier input procedure. The configured
+panel height was 88, while KWin exposed a 104-pixel frame; the first observer's
+exact-height filter therefore stopped before input. One edge contact produced
+the compositor's one-pixel pushback. Repeating identical absolute values produced
+no new observed cursor record. A distinct second contact revealed the panel,
+but that absolute-only visit timed out waiting for retraction. The relative
+pointer contrast then passed reveal/enter/leave/retraction. Its first one-count
+nudge produced a fresh record with the same rounded integer position, so that
+visitor's movement assertion stopped; the bounded five-count version observed
+actual displacement and passed. These failures remain separate from the passing
+episodes. The edge timing and stateful-event explanations are consistent with
+the [KWin 6.7.5 implementation](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/screenedge.cpp)
+and [Linux input protocol](https://docs.kernel.org/input/event-codes.html).
+
+The final popup visitor used ten bounded relative commands, 167 total absolute
+axis counts, and a 30-second input-helper TTL. Its two earlier accessibility
+attempts stopped before input on unsupported Component interfaces. The final
+visitor skipped those unavailable facades and required one actionable,
+geometry-capable button. The popup was also confirmed absent during cleanup.
+All temporary input devices were released, the owned observer was unloaded,
+and accessibility settings were restored. Configuration bytes, the 67-file
+installed package, shell identity and resident launcher remained unchanged.
+A separate post-check matched 132 protected hashes and the six recorded
+direct-file modes. No profile, layout or product Source was changed.
+
+Private receipts are under `.runtime/dock-edge-20261015/`: `root-panel-read-r1/`,
+`root-abs-timing-r1/` through `r3/`, `root-relative-r1/` / `r2/`, and
+`root-popup-r1/` through `r3/`. Eighteen fake-device checks covered the relative
+helper's validation, event sequence, TTL refusal and partial-construction cleanup.
+No screenshots or personal configuration are published. This qualifies pointer
+entry and dismissal on this setup; fresh-profile dragging, complete document
+reversal, focus return, held-state pixels and native setter counts remain open.
+
+A further read-only visit clicked the Widgets tab at its fresh rectangle and
+observed its checked state, the legacy guidance and all seven disabled grips.
+Only the clock grip was reported showing; the remaining rows were below the
+visible content. AT-SPI exposed no scroll/viewport ancestor, so viewport bounds
+remain unqualified. No scrolling, toggling, profile creation or drag ran. Escape
+and panel retraction completed, with the same preservation/cleanup guards. Since
+Cancel is specific to the Appearance tab, a separate subsequent read confirmed
+the Widgets tab and Cancel controls absent or not showing; that read also
+preserved configuration/shell identity and restored accessibility. These receipts
+are in `root-widget-geometry-r1/`. The next gesture episode must establish full
+row reachability in its fresh managed profile before starting a drag.
+
+### Accessible widget rows and full-row focus — 15 October 2026
+
+The next production observation found the ScrollView's `panel` ancestor, which
+the previous role filter had omitted. The individual FormRow items were absent
+from that accessible hierarchy. Public focus on the Pomodoro checkbox scrolled
+it into view, but its grip extended below the observed panel bounds. Settings
+also retained its selected Widgets tab across reopening, so Cancel was an invalid
+opening/closing witness for that visit. The first assertion failure is retained;
+a separate continuation observed the open Widgets tab, measured its ancestors,
+focused the checkbox, and closed the popup with Escape. The Widgets control's
+absence, unchanged configuration/shell and restored accessibility were checked.
+No profile was created.
+
+The Source correction names the existing ScrollView and its actual clipped
+Flickable, groups each widget row for accessibility, and reveals the complete
+row when its checkbox or either arrow receives focus. It retains the controls,
+layout, font sizes, geometry budgets and profile writer. A public QAccessible
+tree test first failed on the unnamed region and passed with the semantics.
+A separate containment test then failed four focus cases at 350/420 px before
+the three child focus handlers were corrected, and passed afterwards.
+
+The affected suites passed 63 tests plus one platform-dependent skip under each
+of Fusion and org.kde.desktop. Seven design guards passed and design check
+reported zero issues. The gallery rendered 70 PNGs; all eight widget captures
+were pixel-identical to the published dark/light 350/420 px images. Four of those
+new captures were visually reviewed. These tests qualify the accessible tree
+and response to focus; they do not establish physical Tab traversal or native
+drag acceptance. Installation and native qualification were checked separately
+below. Private records are under `root-reachability-r1/`,
+`root-reachability-open-r1/`, `root-a11y-probe-r1/`, `root-a11y-validation-r1/`
+and `root-a11y-gallery-r1/` in the widget evidence area.
+
+The correction `aad9ca1` was subsequently installed with a backup and one
+controlled Plasma stop/start. Only SettingsContents changed in the 67-file
+package. The case-preserving configuration map, panel/app inventory, protected
+files and modes, actual launcher unit/link facts and resident launcher remained
+equal. Runtime profile-key absence and an inert timer were checked before stop.
+
+A fresh production visit rebound to the new shell/window identity, opened
+Settings and selected Widgets through pointer clicks. After public accessibility
+focus on the clock checkbox, a physical Tab focused Pomodoro. The named actual
+Flickable measured 297×470; both complete 297×50 row groups were contained in it.
+Escape closed the popup, all four tab headers became absent/not showing, and the
+dock retracted. Configuration bytes, package and the visit's shell identity were
+preserved, with the launcher unchanged, accessibility restored and all owned
+devices/observer removed. This qualifies that particular native Tab/focus path
+and row geometry on the single fractional-scale setup. Managed-profile dragging,
+reversal, other keyboard paths and other screens remain open. Receipts are in
+`root-a11y-local-r1/`, `root-a11y-panel-read-r1/` and `root-a11y-native-r1/`.
+
+### Production managed-profile drag and reversal — 15 October 2026
+
+A subsequent attempt failed before its first acknowledgment or any drag: the
+first agreed disk/runtime value after Create was still empty. The new profile
+appeared in a later read. The original finite custody refused deletion without
+an acknowledgment and left the original desktop running; that attempt remains
+FAILED. A separate reviewed recovery matched the sole synthetic profile to the
+exact name emitted by that attempt and verified that removing only its key
+restored the entire original case-sensitive configuration map. It then stopped
+Plasma once, deleted only `profilesJSON`, restarted once and confirmed the full
+map, original key absence, package, inventory, protected files/modes and resident
+launcher. It did not fabricate doc0 or reopen the failed custody instance.
+
+The next private controller distinguishes read consistency from completion: it
+waits up to five seconds for the expected full document, checking the deadline
+after a guarded read as well. Only the exact preceding value may be retried;
+unexpected new data fails immediately. Ten synthetic-clock cases passed,
+including delayed completion, foreign data, guard errors and late responses.
+These are controller checks, not additional product or native gesture tests.
+
+A distinct fresh episode then passed on the uninstrumented 67-file production
+package containing `aad9ca1`, in Plasma 6.7.5/Wayland on the single fractional-scale
+output. It opened Settings through normal autohide reveal and pointer clicks,
+created exactly one new profile through the public form, and durably acknowledged
+its complete doc0 before further input. Public accessibility focus anchored the
+clock checkbox; three actual Tabs, including enabled managed-profile controls,
+reached Pomodoro. Both whole rows and enabled grips were measured inside the
+named actual clipped viewport.
+
+Two pointer gestures were emitted through the owned temporary input device:
+clock after Pomodoro, then Pomodoro after clock. The first persisted doc1 equaled
+doc0 with only the first two widgets exchanged, preserving visibility and every
+other field. Fresh Settings-row geometry also showed that exchange. The reverse
+persisted doc2 equaled doc0 in both parsed content and complete raw bytes, with
+the Settings rows restored. Selecting the previous preferences through the
+public selector/Home/Use path produced doc3 with only the active ID changed to
+legacy and the owned profile record unchanged. All four full raw documents and
+their hash/length/parsed receipts were retained privately and checked again.
+
+Escape closed the popup and the dock retracted. Input devices, observer, owned
+bus name/connection and temporary accessibility state were released before one
+controlled cleanup stop/start. Only the owned profile key was deleted. Fresh
+final readback confirmed the exact original configuration map, profile-key
+absence on disk/runtime, inert timer, inventory, source/installed package,
+protected files/modes and actual launcher unit/link/process; no temporary input
+device remained. The new episode had no primary or cleanup errors. Independent
+static review of the saved chain found no material overclaim. The initial failed
+episode and its separate recovery remain distinct from this acceptance.
+
+This qualifies one managed-profile widget-order-and-reverse flow on the installed
+product. It does not qualify held indicator pixels, native setter/hover-write
+counts, the dock's WidgetStrip rendering, external-application focus return,
+application-tile dragging or other output configurations. C1/P1/UX1 remain
+partial. Private records: `root-managed-native-r1/`,
+`root-late-profile-recovery-r1/`, `root-managed-native-r2/` and
+`sol61-managed-native-audit-r1/`. The successful raw RESULT retains a stale
+preparation-only `scope` label; its status, guards, documents and final readback
+establish the bounded result without rewriting that receipt.
+
+Both hosted jobs also passed on the accessibility/focus Source checkpoint
+`f2a1086ff87363c01fb29f5276c30439038d3a22` in
+[run 38741910764](https://github.com/caiolombello/orla-desktop/actions/runs/38741910764).
+The subsequent native visits changed no product Source.
+
+### Launcher CI diagnosis checkpoint
+
+Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`
+in [run 38686612789](https://github.com/caiolombello/orla-desktop/actions/runs/38686612789).
+This is a later source/checkpoint result; it does not fix or explain the original
+PR #74 teardown failure.
+
+The original isolated case passed locally. An observation-only private copy also
+passed the original `launcher-ui` partition: 26 QtTest entries, CTest 13.58 s,
+with the same 500 ms destruction budget and fail-closed next-owner barrier.
+The original hosted GDB diagnostic had exited normally as well. These are
+nonreproductions, not repair evidence.
+
+A separate controlled scheduling probe then exercised the actual pinned
+KRunner 6.31 ELF (`fd352644c12df0c4fdd4ce18ca01e16155791a941f28805d52156972e1fa2934`)
+in a private network-isolated container without the live session. Disassembly
+confirmed `quit()` before the two `finished` cleanup connections. The probe
+forwarded real `quit()` and joined only the first two allowed workers at that
+exact call site, within 50 ms each, forcing completion before the late connections.
+Both joins succeeded. The unchanged original ownership test then failed its
+500 ms runner-destruction audit with surviving runners: 2 QtTest entries passed,
+1 failed, wrapper exit 1. This demonstrates a sufficient mechanism on that pinned
+runtime; it does not reconstruct the actual scheduling history of CI #74.
+
+No correction, timeout increase, disabled audit or framework mutation was adopted.
+An early cleanup connection added outside the manager is unsafe because upstream
+still accesses raw runner pointers after `quit()`. A framework-owner correction
+needs its own reviewed build and the same controlled-schedule test. Private
+receipts are under `.runtime/runner-teardown-20261015/root-mechanism-r2/`.

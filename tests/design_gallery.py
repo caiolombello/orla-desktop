@@ -306,6 +306,94 @@ class Gallery:
             QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
             QTest.qWait(10)
 
+    def widget_order(self, host: str) -> None:
+        """Owned grip interaction at the two existing settings widths."""
+        for width in (350, 420):
+            engine = self.engine()
+            window = None
+            try:
+                engine.load(QUrl.fromLocalFile(str(TESTS / "QmlHarness.qml")))
+                window = engine.rootObjects()[0]
+                dock = window.findChild(QQuickItem, "dock")
+                config = window.findChild(QObject, "configuration")
+                context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+
+                def evaluate(source, target=dock):
+                    expression = QQmlExpression(context if target is dock else QQmlEngine.contextForObject(target), target, source)
+                    value, _ = expression.evaluate()
+                    if expression.hasError():
+                        raise RuntimeError(expression.error().toString())
+                    return value
+
+                def control(name):
+                    declared = window.findChild(QQuickItem, name)
+                    if declared is not None:
+                        return declared
+                    rows = window.findChild(QQuickItem, "widgetRowsList")
+                    if rows is None:
+                        raise RuntimeError("Missing widget list")
+                    source = "(function find(item) { if (item.objectName === " + json.dumps(name) + ") return item; for (const child of item.children) { const found = find(child); if (found) return found; } return null; })(this)"
+                    found = evaluate(source, rows)
+                    if found is None:
+                        raise RuntimeError("Missing widget gallery control: " + name)
+                    return found
+
+                def focus(item):
+                    assert item.isVisible() and item.isEnabled()
+                    item.forceActiveFocus(Qt.TabFocusReason)
+                    QTest.qWait(30)
+                    assert window.activeFocusItem() == item
+
+                window.setProperty("width", 900)
+                window.setProperty("height", 900)
+                evaluate('root.anchors.centerIn=undefined;root.x=40;root.y=24;settings.popupType=0;'
+                         'settings.width=' + str(width) + ';settings.heightBudget=420;'
+                         'profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);'
+                         'profiles.select("work",profiles.activeProfileId,profiles.revision)')
+                popup = window.findChild(QQuickItem, "settingsPopup")
+                opened = QSignalSpy(popup.opened)
+                evaluate('settings.open()')
+                if not opened.count():
+                    assert opened.wait(1000)
+                window.findChild(QQuickItem, "settingsTabs").setProperty("currentIndex", 1)
+                QTest.qWait(30)  # Match the qualified tab/layout precondition.
+                grip, target = control("widgetDragclock"), control("widgetDragpomodoro")
+                focus(target)
+                focus(grip)
+                QTest.qWait(30)
+                for handle in (grip, target):
+                    geometry = json.loads(evaluate('(function() { let row=parent; while (row && row.widgetId === undefined) row=row.parent; if (!row) return "null"; const p=row.mapToItem(widgetScroll,0,0); return JSON.stringify({top:p.y,height:row.height,viewport:widgetScroll.height}); })()', handle))
+                    assert geometry is not None
+                    assert geometry["top"] >= 0
+                    assert geometry["top"] + geometry["height"] <= geometry["viewport"]
+                start = grip.mapToScene(QPointF(grip.width() / 2, grip.height() / 2)).toPoint()
+                end = target.mapToScene(QPointF(target.width() / 2, target.height() * .75)).toPoint()
+                assert 0 <= start.y() < window.height() and 0 <= end.y() < window.height()
+                original = config.property("profilesJSON")
+                writes = QSignalSpy(config.profilesJSONChanged)
+                self.save(f"widgets-{host}-idle-{width}", window, self.scene_rect(popup))
+                QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
+                try:
+                    QTest.mouseMove(window, end, 30)
+                    QTest.qWait(20)
+                    assert control("widgetDropIndicatorpomodoro").property("visible")
+                    assert config.property("profilesJSON") == original and writes.count() == 0
+                    self.save(f"widgets-{host}-drag-{width}", window, self.scene_rect(popup))
+                    assert config.property("profilesJSON") == original and writes.count() == 0
+                finally:
+                    # This fixture owns synthetic profile data; release may
+                    # commit it. Never leave a held pointer for the next scene.
+                    QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, end)
+            finally:
+                if window is not None:
+                    window.close()
+                    window.deleteLater()
+                    QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
+                    QTest.qWait(10)
+                engine.deleteLater()
+                QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
+                QTest.qWait(10)
+
     def bar(self, host: str) -> None:
         from test_bar import FixtureApplication, FixtureControlCenter, FixtureSession
         session, application, center = FixtureSession(), FixtureApplication(), FixtureControlCenter()
@@ -640,6 +728,7 @@ def render(host: str, output: Path) -> int:
     gallery.dock(host)
     gallery.appearance_catalog(host)
     gallery.appearance_advanced(host)
+    gallery.widget_order(host)
     gallery.bar(host)
     if host == "dark":
         gallery.launcher()
