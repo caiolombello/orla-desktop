@@ -156,6 +156,10 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   the whole focused row so the destination is visible in a short viewport. Keep
   wrapped labels and native font/target sizes at 350 and 420 px. Closing editing
   invalidates the gesture before any popup exit animation finishes.
+  Expose each row as a named accessible group while keeping its checkbox and
+  buttons as children. Name the existing ScrollView and its clipped content
+  viewport; do not substitute the card or outer panel bounds for that viewport.
+  Focus on any row control reveals the whole row, including its grip and arrows.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the

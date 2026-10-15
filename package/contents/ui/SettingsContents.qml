@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import "../code/Profiles.js" as Profiles
@@ -207,8 +208,21 @@ ColumnLayout {
         Controls.ScrollView {
             id: widgetScroll
             objectName: "widgetScroll"
+            Accessible.name: qsTr("Opções dos widgets")
             contentWidth: availableWidth
             clip: true
+            Binding {
+                target: widgetScroll.contentItem
+                property: "Accessible.role"
+                value: Accessible.Pane
+                when: !!widgetScroll.contentItem
+            }
+            Binding {
+                target: widgetScroll.contentItem
+                property: "Accessible.name"
+                value: qsTr("Conteúdo das opções de widgets")
+                when: !!widgetScroll.contentItem
+            }
             ColumnLayout {
                 width: widgetScroll.availableWidth
                 spacing: Style.space.sm
@@ -278,6 +292,8 @@ ColumnLayout {
                                 required property var modelData
                                 required property int index
                                 property string widgetId: modelData.id
+                                Accessible.role: Accessible.Grouping
+                                Accessible.name: qsTr("Widget: %1").arg(checkbox.text)
                                 property alias upButton: up
                                 property alias downButton: down
                                 property alias checkbox: checkbox
@@ -324,7 +340,7 @@ ColumnLayout {
                                     enabled: settings.profiles.writable && !settings.importing
                                     checked: modelData.visible
                                     onToggled: settings.setWidgetVisible(modelData.id, checked)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
                                 }
                                 Controls.ToolButton {
                                     id: up
@@ -334,7 +350,7 @@ ColumnLayout {
                                     Accessible.name: qsTr("Mover %1 para antes").arg(checkbox.text)
                                     enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index > 0
                                     onClicked: settings.moveWidget(modelData.id, -1)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
                                 }
                                 Controls.ToolButton {
                                     id: down
@@ -344,7 +360,7 @@ ColumnLayout {
                                     Accessible.name: qsTr("Mover %1 para depois").arg(checkbox.text)
                                     enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy" && index < 6
                                     onClicked: settings.moveWidget(modelData.id, 1)
-                                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                                    onActiveFocusChanged: if (activeFocus) settings.reveal(widgetRow)
                                 }
                             }
                         }

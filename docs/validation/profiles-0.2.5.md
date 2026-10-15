@@ -297,6 +297,38 @@ preserved configuration/shell identity and restored accessibility. These receipt
 are in `root-widget-geometry-r1/`. The next gesture episode must establish full
 row reachability in its fresh managed profile before starting a drag.
 
+### Accessible widget rows and full-row focus — 15 October 2026
+
+The next production observation found the ScrollView's `panel` ancestor, which
+the previous role filter had omitted. The individual FormRow items were absent
+from that accessible hierarchy. Public focus on the Pomodoro checkbox scrolled
+it into view, but its grip extended below the observed panel bounds. Settings
+also retained its selected Widgets tab across reopening, so Cancel was an invalid
+opening/closing witness for that visit. The first assertion failure is retained;
+a separate continuation observed the open Widgets tab, measured its ancestors,
+focused the checkbox, and closed the popup with Escape. The Widgets control's
+absence, unchanged configuration/shell and restored accessibility were checked.
+No profile was created.
+
+The Source correction names the existing ScrollView and its actual clipped
+Flickable, groups each widget row for accessibility, and reveals the complete
+row when its checkbox or either arrow receives focus. It retains the controls,
+layout, font sizes, geometry budgets and profile writer. A public QAccessible
+tree test first failed on the unnamed region and passed with the semantics.
+A separate containment test then failed four focus cases at 350/420 px before
+the three child focus handlers were corrected, and passed afterwards.
+
+The affected suites passed 63 tests plus one platform-dependent skip under each
+of Fusion and org.kde.desktop. Seven design guards passed and design check
+reported zero issues. The gallery rendered 70 PNGs; all eight widget captures
+were pixel-identical to the published dark/light 350/420 px images. Four of those
+new captures were visually reviewed. These tests qualify the accessible tree
+and response to focus; they do not establish physical Tab traversal or native
+drag acceptance. Installation and native qualification of this correction remain
+separate gates. Private records are under `root-reachability-r1/`,
+`root-reachability-open-r1/`, `root-a11y-probe-r1/`, `root-a11y-validation-r1/`
+and `root-a11y-gallery-r1/` in the widget evidence area.
+
 ### Launcher CI diagnosis checkpoint
 
 Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`

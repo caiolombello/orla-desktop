@@ -954,6 +954,16 @@ desativadas do legado. Só a primeira estava visível; a geometria do viewport
 não foi exposta pela acessibilidade. Escape, recolhimento e ausência posterior
 dos controles do popup foram verificados, sem mudar a configuração.
 
+**Acessibilidade e foco das linhas — Source:** a inspeção seguinte encontrou
+o painel de rolagem, mas as linhas não tinham grupos acessíveis e o foco em uma
+opção podia deixar parte da linha cortada. A correção nomeia o viewport existente,
+agrupa cada widget e revela a linha inteira ao focar checkbox ou setas. Passaram
+63 testes e um skip por estilo Fusion/KDE, sete guardas e design sem problemas;
+as oito capturas de widgets permaneceram iguais em pixels. A instalação e a
+prova nativa dessa correção ainda são gates separados. O diagnóstico também
+passou a usar os cabeçalhos do popup para abertura/fechamento, pois a aba Widgets
+fica selecionada ao reabrir e não contém o botão Cancelar de Aparência.
+
 **Próximo aceite de C1/UX1:** criar um único perfil novo com baseline e limpeza
 próprios, revelar e medir duas linhas completas antes do gesto; guardar os
 documentos completos antes/depois do arraste e reversão e restaurar a chave

@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DI
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy, QTest
@@ -104,6 +104,80 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertGreaterEqual(start.y(), 0)
         self.assertLess(end.y(), self.window.height())
         return start, end
+
+    def accessible_named(self, name, within=None):
+        root = within or QAccessible.queryAccessibleInterface(self.window)
+        self.assertIsNotNone(root)
+        pending, matches, visited = [root], [], 0
+        while pending:
+            item = pending.pop()
+            visited += 1
+            self.assertLess(visited, 2048)
+            if item.text(QAccessible.Text.Name) == name:
+                matches.append(item)
+            pending.extend(child for index in range(item.childCount())
+                           if (child := item.child(index)) is not None)
+        self.assertEqual(len(matches), 1, f"Expected one accessible {name}")
+        return matches[0]
+
+    def test_widget_regions_and_rows_are_named_in_the_accessible_tree(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(30)
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        options = self.accessible_named("Opções dos widgets")
+        viewport = self.accessible_named("Conteúdo das opções de widgets", options)
+        self.assertEqual(options.role(), QAccessible.Role.Pane)
+        self.assertEqual(viewport.role(), QAccessible.Role.Pane)
+        self.assertGreater(viewport.rect().height(), 0)
+        for label in ("Relógio e calendário", "Pomodoro", "Música (MPRIS)",
+                      "Bateria do computador", "QuotaLantern", "PeriGauge", "FalaTrace"):
+            row = self.accessible_named("Widget: " + label, viewport)
+            self.assertEqual(row.role(), QAccessible.Role.Grouping)
+            self.assertFalse(row.state().focusable)
+            controls = [row.child(index) for index in range(row.childCount())]
+            names = {item.text(QAccessible.Text.Name) for item in controls}
+            self.assertTrue({label, "Arrastar " + label + " para reordenar",
+                             "Mover " + label + " para antes", "Mover " + label + " para depois"} <= names)
+            self.assertTrue(self.accessible_named("Arrastar " + label + " para reordenar", row).state().disabled)
+            self.assertFalse(self.accessible_named(label, row).state().disabled)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.warnings, [])
+
+    def test_focused_widget_controls_reveal_the_whole_row_in_a_short_viewport(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.initialize()
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        for width in (350, 420):
+            self.popup.setProperty("width", width)
+            QTest.qWait(30)
+            for control, label in (("widgetVisiblepomodoro", "Pomodoro"),
+                                   ("widgetVisiblesystemBattery", "Bateria do computador"),
+                                   ("widgetUpmusic", "Música (MPRIS)"),
+                                   ("widgetDownquota", "QuotaLantern"),
+                                   ("widgetDragclock", "Relógio e calendário")):
+                with self.subTest(width=width, control=control):
+                    self.focus(self.owned_item(control))
+                    QTest.qWait(10)
+                    viewport = self.accessible_named("Conteúdo das opções de widgets")
+                    row = self.accessible_named("Widget: " + label, viewport)
+                    self.assertTrue(viewport.rect().contains(row.rect()),
+                                    f"Focused row {row.rect()} must fit viewport {viewport.rect()}")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.warnings, [])
 
     def widgets(self, visible=True, reverse=False):
         ids = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"]
