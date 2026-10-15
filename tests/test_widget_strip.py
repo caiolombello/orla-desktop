@@ -30,6 +30,7 @@ class WidgetStripTests(unittest.TestCase):
         self.integrations = self.window.findChild(QObject, "fixtureIntegrations")
         self.battery = self.window.findChild(QObject, "fixtureBattery")
         QTest.qWait(30)
+        self.publish()
 
     def tearDown(self):
         if self.engine.rootObjects():
@@ -55,13 +56,14 @@ class WidgetStripTests(unittest.TestCase):
 
     def publish(self, quota=None, peripherals=None, recording=None):
         snapshot = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
+            "modules": ["quota", "peripherals", "recording"],
             "quota": quota or {"status": "missing", "windows": [], "costs": []},
             "peripherals": peripherals or {"status": "missing", "devices": []},
             "recording": recording or {"status": "missing", "state": "unknown"},
         }
         text = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
-        self.assertTrue(self.evaluate("acceptSnapshot(" + json.dumps(text) + ")", self.integrations))
+        self.assertTrue(self.evaluate("acceptSnapshot(" + json.dumps(text) + ", ['quota','peripherals','recording'])", self.integrations))
 
     # Widgets are square live icons (slot = iconSize 42 + Style.dock.slotGap 8);
     # `live` says whether the icon shows data or its idle face.

@@ -38,6 +38,37 @@ class IntegrationTests(unittest.TestCase):
         path.write_text(json.dumps(record))
         return path
 
+    def test_selected_modules_read_only_their_cache_and_omit_other_payloads(self):
+        paths = {'quota': '.local/share/codexbar-linux/history.jsonl',
+                 'peripherals': '.local/state/perigauge/state.json',
+                 'recording': '.local/state/recording-cli/recording-session.json'}
+        legacy = self.bridge.collect_snapshot(self.home, self.now)
+        for module, relative in paths.items():
+            with self.subTest(module=module), patch.object(self.bridge, '_read_bounded', side_effect=FileNotFoundError) as read:
+                result = self.bridge.collect_selected_snapshot([module], self.home, self.now)
+                read.assert_called_once_with(self.home / relative, **({'history': True} if module == 'quota' else {}))
+                self.assertEqual(result, {'schemaVersion': 2, 'modules': [module],
+                                         module: legacy[module]})
+
+    def test_empty_and_invalid_module_selections_do_no_cache_io(self):
+        with patch.object(self.bridge, '_read_bounded', side_effect=AssertionError('unexpected cache read')) as read, \
+                patch.object(self.bridge.Path, 'home', side_effect=AssertionError('unexpected home lookup')):
+            self.assertEqual(self.bridge.collect_selected_snapshot([]),
+                             {'schemaVersion': 2, 'modules': []})
+            for selection in (None, 'quota', {}, ['unknown'], ['quota', 'quota'], [False],
+                              [['quota']], ['quota', 'peripherals', 'recording', 'quota']):
+                with self.subTest(selection=selection), self.assertRaises(ValueError):
+                    self.bridge.collect_selected_snapshot(selection)
+            read.assert_not_called()
+
+    def test_selected_modules_are_canonical_and_legacy_shape_is_unchanged(self):
+        result = self.bridge.collect_selected_snapshot(['recording', 'quota'], self.home, self.now)
+        self.assertEqual(result['modules'], ['quota', 'recording'])
+        self.assertNotIn('peripherals', result)
+        legacy = self.bridge.collect_snapshot(self.home, self.now)
+        self.assertEqual(set(legacy), {'schemaVersion', 'quota', 'peripherals', 'recording'})
+        self.assertEqual(legacy['schemaVersion'], 1)
+
     def test_cache_percentages_preserve_zero_and_discard_sensitive_fields(self):
         self.write_history([self.snapshot([{
             'provider': 'codex', 'updated_at': self.now.isoformat(), 'account_email': 'secret@example.com',
@@ -285,13 +316,13 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(quota['costs'], [])
 
     @unittest.skipUnless(shutil.which('dbus-run-session'), 'private D-Bus runner unavailable')
-    def test_service_exits_when_installed_source_changes_despite_regular_requests(self):
+    def test_private_bus_selective_wire_and_source_change_exit(self):
         # A private bus and copied source keep this check away from user services.
         runner = r'''
 import json, os, subprocess, sys, tempfile, time
 from pathlib import Path
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtDBus import QDBusConnection, QDBusInterface
+from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusArgument, QDBusMessage
 app = QCoreApplication([])
 with tempfile.TemporaryDirectory() as temporary:
     source = Path(temporary) / 'integrations.py'
@@ -307,6 +338,22 @@ with tempfile.TemporaryDirectory() as temporary:
             time.sleep(.02)
         iface = QDBusInterface('org.caiodock.Integrations', '/org/caiodock/Integrations', 'org.caiodock.Integrations1', bus)
         assert json.loads(iface.call('Snapshot').arguments()[0])['schemaVersion'] == 1
+        for modules in ([], ['quota'], ['recording', 'peripherals'], ['unknown'], ['quota', 'quota']):
+            argument = QDBusArgument()
+            argument << modules
+            message = QDBusMessage.createMethodCall('org.caiodock.Integrations', '/org/caiodock/Integrations',
+                                                   'org.caiodock.Integrations1', 'SnapshotFor')
+            message.setArguments([argument])
+            reply = bus.call(message)
+            assert reply.type() == QDBusMessage.ReplyMessage, reply.errorMessage()
+            frame = json.loads(reply.arguments()[0])
+            if modules in (['unknown'], ['quota', 'quota']):
+                assert frame == {'schemaVersion': 2, 'error': 'invalid-modules'}, frame
+            else:
+                selected = [name for name in ('quota', 'peripherals', 'recording') if name in modules]
+                assert frame['modules'] == selected and frame['schemaVersion'] == 2, frame
+                assert set(frame) == {'schemaVersion', 'modules', *selected}, frame
+
         source.write_bytes(source.read_bytes() + b'\n# Simulated install update\n')
         deadline = time.monotonic() + 8
         while service.poll() is None and time.monotonic() < deadline:

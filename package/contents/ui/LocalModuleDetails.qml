@@ -81,7 +81,7 @@ ColumnLayout {
         Controls.Label {
             objectName: "moduleRequirements"
             Layout.fillWidth: true
-            text: qsTr("Requer o aplicativo e a ponte local do instalador. A ponte lê os caches dos três módulos em conjunto.")
+            text: qsTr("Requer o aplicativo e a ponte local atualizada. Só os módulos ativados neste perfil têm seus caches lidos pela dock.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
             font.pixelSize: Style.type.caption

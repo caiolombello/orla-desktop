@@ -11,7 +11,32 @@ O caminho proposto começa por conteúdo declarativo simples e componentes de in
 
 QuotaLantern, PeriGauge, FalaTrace e outros projetos específicos serão plugins opcionais do catálogo. Nenhum será requisito ou widget padrão do Orla. A fundação atual desliga esses widgets por padrão e exige `install --with-integrations` para registrar os adaptadores experimentais incluídos. Extraí-los em pacotes externos, oferecer busca/instalação no catálogo e permitir distribuição gratuita ou comercial ainda são próximos marcos; não há marketplace implementado.
 
-Na aba **Widgets**, cada adaptador local oferece **Sobre** com finalidade, estado e requisitos. Abrir esses detalhes não ativa o widget, relê cache ou instala serviços; o checkbox existente continua salvando a visibilidade no perfil atual. A ponte experimental ainda lê os três caches em conjunto quando ativa: ocultar um widget não revoga isoladamente essa leitura. Os detalhes não são um catálogo de plugins externos nem certificam que o aplicativo ou coletor esteja instalado/ativo. O FalaTrace mostra apenas estado salvo, sem verificar captura ao vivo.
+Na aba **Widgets**, cada adaptador local oferece **Sobre** com finalidade, estado e requisitos. Abrir esses detalhes não ativa o widget, relê cache ou instala serviços; o checkbox existente continua salvando a visibilidade no perfil atual. A dock pede à ponte experimental somente os caches dos módulos visíveis no perfil/contexto atual. Ocultar um módulo limpa seus dados e invalida respostas pendentes; uma leitura já enviada pode terminar, mas seu resultado é descartado. Com todos desligados, a dock não inicia a ponte. Os detalhes não são um catálogo de plugins externos nem certificam que o aplicativo ou coletor esteja instalado/ativo. O FalaTrace mostra apenas estado salvo, sem verificar captura ao vivo.
+
+## Contrato experimental de leitura local
+
+O consumidor é a dock e o opt-in continua sendo a visibilidade efetiva do widget.
+A interface `org.caiodock.Integrations1`, no serviço e caminho já existentes,
+ganha `SnapshotFor(as) → s`: uma lista de até três IDs únicos entre `quota`,
+`peripherals` e `recording`. A resposta JSON tem `schemaVersion: 2`, `modules`
+na ordem canônica acima e somente os objetos pedidos. Lista vazia lê nenhum
+cache; seleção inválida devolve `{"schemaVersion":2,"error":"invalid-modules"}`
+antes de qualquer leitura. O ID não pode selecionar caminhos arbitrários.
+
+`Snapshot()` e `--snapshot` preservam o schema 1 completo para consumidores
+anteriores. A dock nova não usa fallback para essa chamada: ponte antiga ou
+indisponível produz estado neutro e uma orientação de atualização. Isso é uma
+garantia de consumo da dock, não uma permissão de acesso que impeça outros
+clientes locais de chamar a interface legada. Os campos continuam sendo cache,
+sem atestar instalação, processo ativo ou coleta ao vivo.
+
+A seleção é eventual: mudanças limpam a apresentação imediatamente; há no máximo
+uma chamada em voo, e a seleção mais recente é enviada depois que ela termina.
+Gerações distintas descartam sucesso e erro antigos, inclusive voltar ao mesmo
+perfil. O estado portátil e o transporte KDE são separados para testar essas
+transições sem contas, rede, hardware ou serviços pessoais. A serialização de
+`QStringList` segue o [sistema de tipos Qt D-Bus 6.11](https://doc.qt.io/qt-6.11/qdbustypesystem.html)
+e também é verificada em barramento privado.
 
 ## Categorias de contribuição
 

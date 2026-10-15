@@ -8,6 +8,7 @@ DockUI.Integrations {
     height: 480
     // dbus_smoke.py passes --inside; ordinary UI tests stay isolated from the session service.
     active: Qt.application.arguments.indexOf("--inside") >= 0
+    enabledModules: ["quota"]
 
     QtObject {
         id: dockFixture
