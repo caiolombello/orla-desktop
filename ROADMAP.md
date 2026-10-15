@@ -1307,6 +1307,16 @@ de texto foi instalada com backup e uma recarga, preservando a sessão e o
 automático desligado; a mensagem nova ainda não foi visitada no popup nativo.
 [Evidência e capturas](docs/validation/contexts-auto-installed.md#waiting-state-explanation).
 
+**P2 — reinício habilitado no backend privado (15/10):** a prova com o pacote
+atual (`bd695bc`) repetiu as transições e encerrou o primeiro host normalmente.
+Com ele ausente, mudar só a área não alterou o perfil salvo. O segundo host,
+com novo processo/owner e a mesma configuração sem novo seed, selecionou Pessoal
+automaticamente e persistiu após saída normal. Cleanup e postcheck preservaram
+a sessão principal, ainda com o automático desligado. Isso qualifica esse
+reinício no KDE privado; UI de opt-in, escolha manual/Retomar, precedência de
+Activity, painel do usuário, foco/seat e monitores continuam abertos.
+[Registro](docs/validation/contexts-auto-installed.md#private-kde-enabled-restart).
+
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
 O seletor fornece URL; não fornece bytes validados. A próxima implementação deve

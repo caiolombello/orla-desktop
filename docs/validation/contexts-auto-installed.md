@@ -173,6 +173,26 @@ the public release asset is unchanged. The new message was not exercised in a
 native popup after installation. The earlier private backend result qualifies
 the previous runtime bytes, not this subsequent text update.
 
+## Private KDE enabled restart
+
+A further private KDE episode used the current 72-file package from `bd695bc`,
+including the waiting-state text update. It repeated work → personal → work,
+then closed the first applet host normally. With that host and its singleton
+absent, changing only the private desktop left the saved work profile intact.
+A new host, identified by its own process lifetime and bus owner, loaded the
+same configuration and selected personal automatically. No seed, association
+or external profile writer ran after the first launch. Personal remained saved
+after the second normal exit and after restoring the private desktop while the
+host was absent.
+
+Both hosts and the private KDE infrastructure were reaped without cleanup
+errors. A fresh independent check confirmed the same main shell process,
+unchanged configuration/packages/inventory/bar/launcher/banks, an empty main
+Activity, unlocked screen and automation still off. This qualifies enabled
+restart and desktop transitions for the private backend on the current runtime
+bytes. It does not qualify UI opt-in, manual override/Resume, Activity precedence,
+the new waiting message in a native popup, the user's panel or focus/seat.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -199,16 +219,19 @@ or logs. These hashes identify the records summarized above:
 | Waiting explanation GREEN/design/gallery result | `2ca4443e77955d5ccf12a0aa083a2b7c55782e82ac3492942391d68587ec4aaf` |
 | Waiting explanation installation result | `4550676fd3aa3dd14edfcaeb8df18717413a46247d3898f92f71598a99c84092` |
 | Fresh waiting explanation install/backup check | `d0737518cbb76e91fb8ebe45a4d0db273ac17d4e88c50fcddf86e1e7140bafb7` |
+| Private KDE enabled-restart result | `73cb29e3b6c542e051c61fabbc97d4b0b1fc1319d82da9a0c143daf2297b1c21` |
+| Fresh enabled-restart postcheck | `66b3a707e741d854032b328d167d684c501b58d127e4f3fc4f638f1953933b25` |
 
 ## Next native gates
 
-The private backend gate above is now qualified; the earlier main-session
+The private backend transition and enabled-restart gates above are now qualified;
+the earlier main-session
 experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
 Next qualify UI opt-in, manual override and Resume, Activity precedence, dirty
-appearance/Cancel/Apply, restart with automation enabled, rename/removal of
+appearance/Cancel/Apply, rename/removal of
 associated contexts, Pomodoro continuity, the user's panel, focus/seat and monitor
 behavior. Private backend desktop transitions do not establish these behaviors
 in the user's panel. A private XDG directory alone does not isolate the
