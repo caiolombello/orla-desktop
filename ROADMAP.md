@@ -1087,10 +1087,24 @@ protocolo real com descritores sintéticos, sem certificar hardware ou o painel
 instalado. O runner e os limites estão no [guia de validação](docs/validation/shared-control-center-source.md#native-audio-pending-transfer--15-october-2026).
 
 **Próximo aceite de C1/UX1/CC0:** operação de áudio pendente e ciclo de backend
-na Central instalada, configuração opcional pela interface nativa, overflow e
-cancelamento no painel real, monitores adicionais e mudanças de contexto. Os marcos
+na Central instalada, Aplicar/Cancelar da configuração nativa do módulo da barra,
+overflow e cancelamento no painel real, monitores adicionais e mudanças de contexto. Os marcos
 continuam parciais e o goal mantém o roadmap completo, incluindo integrações
 opcionais, ecossistema, distribuição e IA.
+
+**CC0/T1 — entrada opcional da dock na sessão instalada (15/10):** a opção global
+foi desativada pela interface; a Central continuou acessível pela barra, com Tab
+e Escape, enquanto o botão da dock permaneceu ausente. Reativar pelo mesmo
+checkbox e fechar/reabrir preservou a escolha. Doze observações durante o uso
+pela barra confirmaram o estado desativado. Ao final, configuração completa,
+pacotes, papéis da barra, bancos de layout e launcher ficaram iguais; a dock
+terminou recolhida e os recursos temporários foram liberados. Passaram 17 casos
+sintéticos de configuração e 12 de admissão do clique. Três tentativas anteriores
+do teste e uma recuperação independente de preferência permanecem registradas;
+as correções foram no leitor e no roteiro, sem alterar ou reinstalar o produto.
+Isso qualifica a opção da dock nesta sessão; Aplicar/Cancelar da barra e
+persistência após reinício continuam abertos.
+[Sequência, evidência e limites](docs/validation/shared-control-center-source.md#installed-optional-dock-entry--15-october-2026).
 
 ## Prontidão e recomendação de execução
 

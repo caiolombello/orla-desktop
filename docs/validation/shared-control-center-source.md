@@ -572,3 +572,83 @@ operation pending during transfer in the installed panel, physical input,
 physical hardware, native setter counts, all PulseAudioQt global connections or
 threads, other outputs, or the complete CC0/CC1/T1 acceptance. The current applet
 installation and public 0.2.9 assets were not changed in this increment.
+
+## Installed optional dock entry — 15 October 2026
+
+The global `showControlCenter` checkbox passed an installed-session cycle on
+Plasma/KWin 6.7.5, Qt 6.11.2 and KConfig 6.30.0, with one Wayland output at
+scale 1.45. The applet and bar matched the unchanged Source packages, with
+68 and 14 files respectively. This was physical pointer/keyboard input to the
+production UI, with bounded own-process accessibility and KWin observations.
+
+The exercised sequence is also the manual reproduction procedure:
+
+1. Open dock Settings → Widgets, leave preferences untouched and close it.
+2. Reopen and uncheck the global Control Center option. Check the unchecked
+   control, effective setting and saved configuration; the dock entry disappears.
+3. Open the Control Center from the right bar entry while the dock option stays
+   off. Tab changes the focused technical control; Escape closes the popup.
+4. Restore the option through the same dock checkbox. Close and reopen Settings
+   to confirm it remains checked, then close the popup.
+5. Confirm the original configuration and final hidden dock state.
+
+The complete configuration map admitted only three predeclared states: the
+original explicit true, that same map with only this key set to false, or that
+same map with only this key absent (the false default). Strict Boolean effective
+readback was checked separately from cached key membership. KConfig can retain a
+reverted key in memory after removing it from the serialized file; this is
+supported by [revertEntry in KConfig 6.30.0](https://raw.githubusercontent.com/KDE/kconfig/v6.30.0/src/core/kconfigdata.cpp),
+its [key-list predicate](https://raw.githubusercontent.com/KDE/kconfig/v6.30.0/src/core/kconfig.cpp)
+and [separate disk write map](https://raw.githubusercontent.com/KDE/kconfig/v6.30.0/src/core/kconfigini.cpp).
+The successful off state had no disk key, cached membership true, effective
+false and an unchecked checkbox. No other deletion or configuration drift was
+accepted. The original baseline and layout recovery banks were never rewritten.
+
+All 12 bar-phase witnesses retained that off state and an absent dock entry.
+The actual CC pane and inner action appeared at the bar; Tab changed focus from
+the all-settings action to the volume slider. Restoration and the final reopen
+were checked through the UI. The episode used 11 clicks and 32 relative nudges
+(263 total displacement), within the 48/600 input bounds and 150-second helper
+TTL. The first-to-last input command span was 60.116 seconds.
+
+Final readback matched the complete original configuration map and bytes.
+Configuration mode, panel inventory, exact bar roles, installed packages,
+protected files, layout banks and resident launcher remained equal. The dock was
+already stably hidden after closing Settings; no extra final leave gesture was
+dispatched or claimed.
+Temporary devices, accessibility flags, observer and bus resources were
+released/restored. Automatic locking remained disabled. The existing product
+Source and visual/layout definitions were reused, without installation or shell
+reload.
+
+Three earlier native attempts remain failed. The first stopped before preference
+input because the reader expected `selected`; the installed TabButton exposes
+`checked`, and the named content viewport has the intended AT-SPI `panel` role.
+Two no-edit diagnostics confirmed these states and actual checkbox containment.
+The second attempt toggled off, then incorrectly waited for cached key presence
+to equal disk presence. A separate, guarded single-key scripting recovery
+restored the original preference and full configuration; that recovery does not
+count as a UI cycle. The third stopped before any click when reveal changed the
+dock width. The final visitor waits for two equal guarded geometry reads before
+target input, retaining the existing fresh pre-click checks and deadlines.
+
+Seventeen final synthetic configuration cases and 12 synthetic UI-admission
+cases passed. The latter include clipped/foreign/ambiguous targets and a causal
+check that an always-admitting substitute is rejected by the harness. An earlier
+synthetic harness caught its own assertion; its receipt is superseded and is not
+used as evidence. All native failures and the independent recovery are retained.
+
+Private receipts are under `.runtime/cc-config-20261015/`: the final native result
+is `root-native-r4/RESULT.json`, status
+`PASS_INSTALLED_DOCK_CC_GLOBAL_CHECKBOX_CYCLE`; final fresh preservation readback
+is `root-publication-r1/FINAL-VERIFICATION.json`. Configuration cases are in
+`root-contract-r5`, and UI cases in `root-admission-r4-corrected`. These local
+receipts are distinct from the repository's portable/offscreen CI tests.
+
+This qualifies the dock's global immediate preference, persistence across close
+and reopen, and bar access while that dock entry is disabled. Native bar
+configuration Apply/Cancel, restart persistence, multiple outputs, exact native
+setter counts, independent keyboard-seat identity/focus return, pending audio
+and backend lifecycle in the installed panel remain separate gates. CC0/CC1/T1
+remain partial. The existing visual captures and public release assets are
+unchanged.
