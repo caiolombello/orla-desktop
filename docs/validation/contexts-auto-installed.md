@@ -368,9 +368,9 @@ The matching portable public-control case also covers an unavailable interval
 and repeats the same-name contrast against the saved association name. The
 complete appearance/composition suite passed **43 tests per style**, Fusion and
 KDE, without warnings. No production package changed. That episode did not
-qualify active timer continuity; the separate journey below does. Activity
-rename/removal, other interaction drafts, the user's panel, focus/seat, monitor
-behavior and native setter counts remain open; P2 is still partial.
+qualify active timer continuity or Activity rename/removal; the separate
+journeys below do. Other interaction drafts, the user's panel, focus/seat,
+monitor behavior and native setter counts remain open; P2 is still partial.
 
 ## Active Pomodoro across automatic profiles and process restart
 
@@ -434,6 +434,71 @@ Production code did not change, so no reinstall, reload, version or release
 asset was needed. Rendered appearance, user-panel restart, physical focus/seat,
 completion/break/reset/sound and full P1/P2 acceptance remain separate.
 
+## Activity rename, current removal and same-name recreation
+
+The same unchanged installed package passed a separate private KDE/Wayland
+Activity journey with **13 public Press actions, zero SetFocus, nine strict
+configuration checkpoints and one normal-exit persistence check**. There was
+one unchanged desktop D0 and no desktop association. The private daemon's
+worker-created Activity R was retained as the restoration anchor. Its other
+fresh, namespace-created default Activity became subject A with a synthetic
+name. The exact two-ID universe was checked before setup and mutations; no
+Activity from the main session was adopted or changed.
+
+Synthetic setup bound A to Personal and chose Games as the default. All profile
+data, raw associations and 13 legacy flags stayed intact; only activeProfileId
+could change. The six inactive-timer values stayed 0/371/false/3/25/5 for deadline,
+remaining, break phase, completed focus, focus minutes and break minutes.
+No external configuration writer ran after launch.
+
+| Step | Observed result |
+| --- | --- |
+| Initial A | Automatic Personal |
+| Rename A from N1 to N2 | Same ID, updated public Source label, byte-identical saved Personal |
+| Choose Work in the public selector | Personal stayed saved until **Usar perfil**; then manual Work |
+| Rename A back to N1 | Same ID and manual status, updated Source label, byte-identical saved Work |
+| Close Settings | Manual Work remained in A |
+| Remove A while it was current | Actual daemon selected R, list contained only R and A's name was absent; automatic Games replaced Work |
+| Create C with N1 and select it | New returned ID, distinct from A/R; Games stayed selected |
+| Visit Contexts | New current name N1 and exactly one old Activity association preserved by ID |
+
+No corrective Activity setter selected R during A's removal. Games distinguishes
+the new confirmed context from both manual Work and associated Personal. C used
+the exact last live name and saved lastKnownName of A; retaining Games excludes
+adopting the old association by name. Public label reads establish Source
+feedback, without claiming their rendered visibility or a directly exposed
+Source ID. Every Press required a unique own-PID control with the expected role,
+an announced Press action and fresh visible/showing/enabled state.
+
+The private host rule explicitly included all Activities as well as all desktops,
+using the versioned KWin [activity/activityrule settings](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/rulesettings.kcfg).
+It was written and read back before compositor startup, only inside the private
+configuration. This is not a direct observation of onAllActivities and does not
+qualify the user's panel. Consumed Activity method signatures were checked against
+the actual daemon's introspection before new mutations. An older cached XML
+differs from the currently published tag; neither unused overloads nor the whole
+remote XML were assumed to describe the installed binary.
+
+The host exited normally with code 0 and flushed Games. Only after host absence
+was R restored and the owned C removed; the final universe contained R with its
+original name and D0 unchanged. Deleted A was not recreated. Direct children
+were reaped, accessibility daemon exit confirmed and private sockets absent,
+without forced termination or cleanup errors. The reader took **24.704/40
+seconds**; the full episode and cleanup took **29.224 seconds** within the
+unchanged 60-second runtime plus 10-second cleanup budget. A fresh independent
+postcheck preserved the main process, full configuration, bar, launcher,
+inventory, original banks and Source/installation equality. Main automation
+remained off, its four disk keys absent, autolock disabled and screen unlocked.
+
+The portable lifecycle case now shares its public-control scenario between
+desktop and Activity domains, preserving the desktop expectations. The Activity
+case additionally checks a synthetic unavailable interval before the confirmed
+anchor; it does not claim that exact intermediate frame occurred natively.
+The complete composition module passed **44/44 in Fusion and 44/44 in KDE**,
+without warnings or skips. No production code, package, reload or release asset
+changed. Other interaction drafts, main-panel operation/restart, physical
+focus/seat, monitors and native setter counts remain open; P2 is still partial.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -493,6 +558,10 @@ or logs. These hashes identify the records summarized above:
 | Pomodoro first-host observations | `67d291acbed526a58c353d309a3b2358dcef95a35d6501dd232013dc01ccd8fb` |
 | Pomodoro restarted-host observations | `9e63f78c07bbd5981336143cd8474af61a8b876e7a00a0fdad0c89fe48ad5650` |
 | Fresh Pomodoro journey postcheck | `141cb49f0f18a5fdce2902775cb78a43729de22c4512d46782a1f351bb02f15e` |
+| Complete portable Activity composition suite | `8238fcca6a5cf8f2af3f51fbd2e040b43629f09d381534ea43b60bc9390dd3fc` |
+| Private Activity lifecycle journey PASS | `a702280231a7a8dd9a1ab9b2b871a502e80c2078b0189840f5b2a2d3976ff61e` |
+| Activity actions/configuration checkpoints | `7ecc6825c2a3be5c54599daf80d7634450d275ea9f963afd8c618dd5dc2b2849` |
+| Fresh Activity lifecycle postcheck | `64a94e571b6be984cca648f3365299ecf750672ca68b99b3fb2981a692277c9e` |
 
 ## Next native gates
 
@@ -504,10 +573,13 @@ experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-The bounded desktop rename/removal/recreation and active Pomodoro journeys are
-now qualified in the private KDE fixture. Next qualify Activity rename/removal:
-preserve the association and manual choice for the same ID, then distinguish a
-new ID reusing the removed Activity's name without deleting profile data.
+The bounded desktop and Activity rename/removal/recreation and active Pomodoro
+journeys are now qualified in the private KDE fixture. Next define an explicit
+desktop-only opt-in for sessions without a current Activity, preserving the
+existing both-ready default. That explicit choice would ignore Activity
+availability; it must not infer absence from a transient outage.
+That policy needs Source/UI/tests before a corresponding native journey; no
+fallback or configuration change is delivered by the lifecycle evidence.
 Other interaction drafts, the user's panel, focus/seat and monitor behavior also
 remain open. Persisted timerRemaining alone is not the running countdown; the
 Pomodoro qualification above required the original deadline and real counts.

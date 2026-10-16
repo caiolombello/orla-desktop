@@ -189,35 +189,46 @@ class AppearancePresetTests(unittest.TestCase):
         self.assertEqual(self.warnings, [])
 
     def test_desktop_lifecycle_preserves_manual_choice_and_binding_identity(self):
+        self.context_lifecycle('desktop')
+
+    def test_activity_lifecycle_preserves_manual_choice_and_binding_identity(self):
+        self.context_lifecycle('activity')
+
+    def context_lifecycle(self, domain):
         previous = QAccessible.isActive()
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, previous)
         self.initialize()
+        anchor, subject, replacement = ('r', 'a', 'c') if domain == 'activity' else ('d0', 'd1', 'd2')
+        anchor_profile = 'games' if domain == 'activity' else 'work'
+        associations = [{'contextId': subject, 'lastKnownName': 'Synthetic one', 'profileId': 'personal'}]
+        if domain == 'desktop':
+            associations.insert(0, {'contextId': anchor, 'lastKnownName': 'Synthetic zero', 'profileId': 'work'})
         bindings = json.dumps({
-            'formatVersion': '0.1-experimental', 'activityBindings': [],
-            'desktopBindings': [
-                {'contextId': 'd0', 'lastKnownName': 'Synthetic zero', 'profileId': 'work'},
-                {'contextId': 'd1', 'lastKnownName': 'Synthetic one', 'profileId': 'personal'},
-            ],
+            'formatVersion': '0.1-experimental',
+            'activityBindings': associations if domain == 'activity' else [],
+            'desktopBindings': associations if domain == 'desktop' else [],
         }, indent=2)
         self.config.setProperty('contextsJSON', bindings)
 
         def snapshot(current, ids, names, status='ready'):
+            selected = {'status': status, 'currentId': current, 'ids': ids, 'names': names}
             self.evaluate('sourceContextSnapshot = ' + json.dumps({
                 'outputName': 'Synthetic-output',
-                'activity': {'status': 'ready', 'currentId': 'activity-a',
+                'activity': selected if domain == 'activity' else {'status': 'ready', 'currentId': 'activity-a',
                              'ids': ['activity-a'], 'names': ['Synthetic activity']},
-                'desktop': {'status': status, 'currentId': current, 'ids': ids, 'names': names},
+                'desktop': selected if domain == 'desktop' else {'status': 'ready', 'currentId': 'desktop-zero',
+                            'ids': ['desktop-zero'], 'names': ['Synthetic desktop']},
             }))
 
-        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic one'])
+        snapshot(subject, [anchor, subject], ['Synthetic zero', 'Synthetic one'])
         self.config.setProperty('autoContextDefaultProfile', 'games')
         self.config.setProperty('autoContextEnabled', True)
         self.settle(lambda: self.evaluate('profiles.activeProfileId') == 'personal')
         original = json.loads(self.config.property('profilesJSON'))
         flat = self.flat()
         timer = {key: self.config.property(key) for key in
-                 ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus')}
+                 ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus', 'focusMinutes', 'breakMinutes')}
 
         def preserved(profile):
             expected = json.loads(json.dumps(original))
@@ -261,33 +272,33 @@ class AppearancePresetTests(unittest.TestCase):
         preserved('work')
         manual_raw = self.config.property('profilesJSON')
 
-        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic renamed'])
+        snapshot(subject, [anchor, subject], ['Synthetic zero', 'Synthetic renamed'])
         QTest.qWait(40)
         self.assertEqual(self.config.property('profilesJSON'), manual_raw)
         preserved('work')
-        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic one'])
+        snapshot(subject, [anchor, subject], ['Synthetic zero', 'Synthetic one'])
         QTest.qWait(40)
         self.assertEqual(self.config.property('profilesJSON'), manual_raw)
         preserved('work')
-        snapshot('', [], [], status='unavailable')
+        snapshot('', [], [], status='unavailable')  # Synthetic input, not a claimed native signal sequence.
         QTest.qWait(40)
         self.assertEqual(self.config.property('profilesJSON'), manual_raw)
         preserved('work')
-        snapshot('d0', ['d0'], ['Synthetic zero'])
+        snapshot(anchor, [anchor], ['Synthetic zero'])
         QTest.qWait(40)
-        preserved('work')
-        snapshot('d0', ['d0', 'd2'], ['Synthetic zero', 'Synthetic one'])
+        preserved(anchor_profile)
+        snapshot(anchor, [anchor, replacement], ['Synthetic zero', 'Synthetic one'])
         QTest.qWait(40)
-        preserved('work')
-        snapshot('d2', ['d0', 'd2'], ['Synthetic zero', 'Synthetic one'])
+        preserved(anchor_profile)
+        snapshot(replacement, [anchor, replacement], ['Synthetic zero', 'Synthetic one'])
         self.settle(lambda: self.evaluate('profiles.activeProfileId') == 'games')
         preserved('games')  # Distinguishes both a leaked manual Work and name-bound Personal.
 
         self.evaluate('open()', self.popup)
         self.settle(lambda: self.popup.property('visible'))
         tab('Contextos')
-        current = self.owned_item('desktopContextName')
-        stale = self.owned_item('staleDesktopBindings')
+        current = self.owned_item(domain + 'ContextName')
+        stale = self.owned_item('stale' + domain.capitalize() + 'Bindings')
         self.assertIsNotNone(current)
         self.assertIsNotNone(stale)
         self.assertTrue(current.isVisible())
