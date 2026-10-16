@@ -232,11 +232,15 @@ inválidos/repetidos, prévia pendente ou edição obsoleta não gravam; repetir
 mesmo nome válido é no-op. Teclado, rascunho e foco passaram nos testes portáteis;
 a galeria cobre 350/420 px em claro/escuro, incluindo a primeira abertura corrigida.
 As cinco suítes direcionadas passaram 170 testes, com dois skips de TaskManager,
-por estilo Fusion/KDE. Instalação e jornada nativa de renomear ainda estão
-pendentes. P1/P2 continuam parciais. [Evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-rename-development-16-october-2026).
+por estilo Fusion/KDE. O ajuste posterior de acessibilidade passou novamente
+38 testes e um skip por estilo. O pacote está instalado; a jornada R2 no KDE
+privado passou edição pública, gravação somente do nome e persistência na saída
+normal. R1 continua FAILED em seu registro. A sessão principal foi preservada;
+isso não qualifica seu painel físico nem completa P1/P2.
+[Evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-rename-development-16-october-2026).
 
-**Próximo incremento de P1/UX:** concluir a prova instalada de renomear e planejar
-a remoção de perfil com confirmação e destino explícitos. Decidir antes como
+**Próximo incremento de P1/UX:** planejar a remoção de perfil com confirmação e
+destino explícitos. Decidir antes como
 tratar perfil ativo, padrão automático e associações por ID. Importar/exportar
 perfis e escolher barra/launcher/eventos permanecem separados.
 
