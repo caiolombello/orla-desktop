@@ -1,7 +1,9 @@
 """Automatic profile selection with real portable states; no KDE/service access."""
 import json
+import math
 import os
 from pathlib import Path
+import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -9,6 +11,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 from PySide6.QtCore import QObject, QUrl, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtTest import QSignalSpy, QTest
 
 
 class AutoContextProfilesTests(unittest.TestCase):
@@ -274,6 +277,88 @@ class AutoContextProfilesTests(unittest.TestCase):
         self.evaluate("restartController()")
         self.assertEqual(self.selected(), "work")
         self.assertFalse(self.override())
+
+    def test_real_timer_ticks_across_automatic_profiles_and_recreation(self):
+        self.initialize()
+        document = json.loads(self.config.property('profilesJSON'))
+        personal = next(profile for profile in document['profiles'] if profile['id'] == 'personal')
+        next(widget for widget in personal['widgets'] if widget['id'] == 'pomodoro')['visible'] = False
+        self.config.setProperty('profilesJSON', json.dumps(document))
+
+        def desktop(current):
+            self.evaluate('sourceSnapshot=' + json.dumps({
+                'outputName': 'Synthetic-output',
+                'activity': {'status': 'ready', 'currentId': 'a1', 'ids': ['a1'], 'names': ['Synthetic activity']},
+                'desktop': {'status': 'ready', 'currentId': current,
+                            'ids': ['d0', 'd1'], 'names': ['Synthetic zero', 'Synthetic one']},
+            }))
+
+        desktop('d0')
+        self.bind('desktop', 'work')
+        desktop('d1')
+        self.bind('desktop', 'personal')
+        desktop('d0')
+        self.enable('games')
+        self.assertEqual(self.selected(), 'work')
+        baseline = json.loads(self.config.property('profilesJSON'))
+        bindings = self.config.property('contextsJSON')
+        self.evaluate('configuration.timerDeadline=Date.now()+60000')
+        fields = ('timerDeadline', 'timerRemaining', 'timerBreak', 'focusMinutes', 'breakMinutes', 'completedFocus')
+        saved = {key: self.config.property(key) for key in fields}
+        self.assertEqual(saved['timerRemaining'], 371)
+        self.assertFalse(saved['timerBreak'])
+        self.assertEqual(saved['completedFocus'], 3)
+        self.assertTrue(self.evaluate('createTimer()'))
+        timer = self.root.findChild(QObject, 'fixturePomodoro')
+        self.assertIsNotNone(timer)
+
+        def preserved(profile, visible):
+            expected = dict(baseline, activeProfileId=profile)
+            self.assertEqual(json.loads(self.config.property('profilesJSON')), expected)
+            self.assertEqual(self.config.property('contextsJSON'), bindings)
+            self.assertEqual({key: self.config.property(key) for key in fields}, saved)
+            self.assertEqual(self.evaluate("profileState.effective.widgets.find(w=>w.id==='pomodoro').visible"), visible)
+            self.assertTrue(timer.property('running'))
+            self.assertEqual(timer.property('phaseSeconds'), 1500)
+            # The ticker can be up to one interval behind this independent wall-clock read.
+            earliest = time.time()
+            seconds = timer.property('secondsLeft')
+            latest = time.time()
+            self.assertGreaterEqual(seconds, math.ceil(saved['timerDeadline'] / 1000 - latest) - 1)
+            self.assertLessEqual(seconds, math.ceil(saved['timerDeadline'] / 1000 - earliest) + 1)
+            self.assertGreater(seconds, 0)
+            self.assertLess(seconds, saved['timerRemaining'])
+            return seconds
+
+        def next_tick():
+            before = timer.property('secondsLeft')
+            changed = QSignalSpy(timer.secondsLeftChanged)
+            self.assertTrue(changed.wait(1600), 'The real 500 ms ticker must advance without poll()')
+            self.assertLess(timer.property('secondsLeft'), before)
+
+        first = preserved('work', True)
+        next_tick()
+        next_tick()
+        self.assertLess(preserved('work', True), first)
+        desktop('d1')
+        self.assertEqual(self.selected(), 'personal')
+        preserved('personal', False)
+        next_tick()
+        desktop('d0')
+        self.assertEqual(self.selected(), 'work')
+        before_recreation = preserved('work', True)
+        destroyed = QSignalSpy(timer.destroyed)
+        self.assertTrue(self.evaluate('retireTimer()'))
+        if not destroyed.count():
+            self.assertTrue(destroyed.wait(1000))
+        self.assertEqual(destroyed.count(), 1)
+        QTest.qWait(1100)  # Real elapsed time while no Pomodoro instance exists.
+        self.assertTrue(self.evaluate('createTimer()'))
+        timer = self.root.findChild(QObject, 'fixturePomodoro')
+        self.assertIsNotNone(timer)
+        self.assertLess(preserved('work', True), before_recreation)
+        next_tick()
+        preserved('work', True)
 
     def test_unavailable_binding_target_pauses_instead_of_silent_fallback(self):
         self.prepare()

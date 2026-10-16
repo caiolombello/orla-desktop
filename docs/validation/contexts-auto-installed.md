@@ -367,9 +367,72 @@ still persisted. Cleanup and a fresh main-session preservation check passed.
 The matching portable public-control case also covers an unavailable interval
 and repeats the same-name contrast against the saved association name. The
 complete appearance/composition suite passed **43 tests per style**, Fusion and
-KDE, without warnings. No production package changed. Active timer continuity,
-Activity rename/removal, other interaction drafts, the user's panel, focus/seat,
-monitor behavior and native setter counts remain open; P2 is still partial.
+KDE, without warnings. No production package changed. That episode did not
+qualify active timer continuity; the separate journey below does. Activity
+rename/removal, other interaction drafts, the user's panel, focus/seat, monitor
+behavior and native setter counts remain open; P2 is still partial.
+
+## Active Pomodoro across automatic profiles and process restart
+
+The unchanged installed 72-entry package passed a separate private KDE/Wayland
+journey with the real Pomodoro and public accessible countdown. Synthetic setup
+enabled the Pomodoro tile only in Work, bound D0 to Work and D1 to Personal, and
+seeded one ten-minute absolute deadline before the first host launch. The actual
+Source QML/JavaScript parser, including its Appearance dependency, validated the
+profile document. No profile contains timer fields.
+
+The saved remaining value was deliberately 371 seconds, distinct from the
+running countdown. The original deadline, remaining value, focus phase,
+completed-focus count 3 and 25/5-minute durations stayed exact throughout.
+Entire profile documents allowed only activeProfileId changes; raw associations
+and all 13 legacy flags were preserved. No external configuration writer ran
+after the first launch, and no Press, SetFocus, timer method or clock override
+supplied the observations.
+
+| Observation | Real countdown, seconds | Witness |
+| --- | --- | --- |
+| W1 | 597 | Work, own visible/showing/enabled Pomodoro tile |
+| W2 | 596 | Same host, 1.224 seconds after W1 |
+| Personal | Hidden | Actual D1/Personal; one Pomodoro node, zero showing; independent host marker still visible/showing/enabled |
+| W3 | 593 | Actual D0/Work again |
+| W4 | 589 | New host epoch and bus owner, same saved configuration |
+| W5 | 587 | Second host, 1.292 seconds after W4 |
+
+Each count matched the original deadline against real wall time. Both hosts
+shared a guarded wall/monotonic anchor. The single public name getter had a
+400 ms bound; the integer-count interval included an explicit 1000 ms delivery
+allowance before rounding. This is compatibility with a quantized countdown,
+not a claim of a maximum one-second age or observation of every ticker update.
+
+The certified host-absent interval was **2.601 seconds**, measured from observed
+reaped termination to just before the second launch. After a conservative
+100 ms clock-error discount, 2500 ms remained. W4 and W5 also had to be below
+the minimum count predicted if that entire interval had been paused: **589 <
+590** and **587 < 589**. Thus decreasing values alone could not pass a missed
+offline interval. The protocol was reviewed and frozen before execution; the
+original proposed 1.1-second gap was rejected during static review, never run.
+
+Both hosts exited normally with code 0 and flushed Work with unchanged timer
+globals. Each accessibility infrastructure cycle ended completely before the
+next. Only after both hosts were absent was D0 restored and the owned D1
+removed. Direct children were reaped, daemon exits confirmed and sockets absent,
+without forced termination or cleanup errors. The whole episode took 15.311
+seconds within its fixed 60-second runtime plus 10-second cleanup budget; the
+readers used 5.255/16 and 2.554/12 seconds.
+
+A fresh independent postcheck preserved Source/installation equality, the
+complete main configuration, bar, launcher, inventory and original layout
+banks. Main automation remained off with all four disk keys absent; autolock
+remained disabled, the screen unlocked and the original Plasma process intact.
+
+The matching portable regression uses the production timer's real ticker,
+automatic Work/Personal/Work state, confirmed destruction, elapsed time and
+recreation. Its complete module passed **32/32 in Fusion and 32/32 in KDE**,
+without warnings or skips; design check found zero issues. This portable test
+qualifies Qt-instance recreation, separately from the native process restart.
+Production code did not change, so no reinstall, reload, version or release
+asset was needed. Rendered appearance, user-panel restart, physical focus/seat,
+completion/break/reset/sound and full P1/P2 acceptance remain separate.
 
 ## Evidence identifiers
 
@@ -426,6 +489,10 @@ or logs. These hashes identify the records summarized above:
 | Private desktop lifecycle journey PASS | `fc53af663ba40bc460a290ac4845761b69176847d6f76e073d39f3cd8a6f54ee` |
 | Lifecycle actions/configuration milestones | `f55782a159ae91083a1e84592f9a460068aee97233be7bb16640895e6851f860` |
 | Fresh lifecycle journey postcheck | `634cadd047e3cc1f688f8158f3b25632f654007d3fccdfad99e3046215837773` |
+| Pomodoro native journey PASS | `a607304ccdaeb2ebdb3e9ad93f7c3e42f78a86cfc742d8e68a7d3b894d70a71c` |
+| Pomodoro first-host observations | `67d291acbed526a58c353d309a3b2358dcef95a35d6501dd232013dc01ccd8fb` |
+| Pomodoro restarted-host observations | `9e63f78c07bbd5981336143cd8474af61a8b876e7a00a0fdad0c89fe48ad5650` |
+| Fresh Pomodoro journey postcheck | `141cb49f0f18a5fdce2902775cb78a43729de22c4512d46782a1f351bb02f15e` |
 
 ## Next native gates
 
@@ -437,12 +504,13 @@ experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-The bounded desktop rename/removal/recreation journey is now qualified in the
-private KDE fixture. Next qualify an active Pomodoro across automatic profile
-changes and normal process restart, using its original deadline and a real
-decreasing public countdown without resetting it. Persisted timerRemaining alone
-is not the running countdown. Activity rename/removal, other interaction drafts,
-the user's panel, focus/seat and monitor behavior also remain open.
+The bounded desktop rename/removal/recreation and active Pomodoro journeys are
+now qualified in the private KDE fixture. Next qualify Activity rename/removal:
+preserve the association and manual choice for the same ID, then distinguish a
+new ID reusing the removed Activity's name without deleting profile data.
+Other interaction drafts, the user's panel, focus/seat and monitor behavior also
+remain open. Persisted timerRemaining alone is not the running countdown; the
+Pomodoro qualification above required the original deadline and real counts.
 Private backend desktop transitions do not establish these behaviors
 in the user's panel. A private XDG directory alone does not isolate the
 `plasmawindowed` session-bus singleton; the successful episode used a private bus

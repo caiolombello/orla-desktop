@@ -17,6 +17,7 @@ Item {
     property bool rejectSelectionResult: false
     property var afterGuardHook: null
     property var second: null
+    property var timerState: null
     property int preferenceSetters: 0
     property var selectionResults: []
     property int writes: 0
@@ -46,6 +47,11 @@ Item {
         property bool calendarEvents: true
         property bool currentDesktopOnly: false
         property double timerDeadline: 1234567890000
+        property int timerRemaining: 371
+        property bool timerBreak: false
+        property int focusMinutes: 25
+        property int breakMinutes: 5
+        property int completedFocus: 3
         onProfilesJSONChanged: harness.writes++
     }
     DockUI.ProfileState {
@@ -110,5 +116,17 @@ Item {
         if (!automatic) throw new Error(component.errorString());
     }
     function restartController() { if (automatic) automatic.destroy(); automatic = null; createController(); }
+    Component { id: timerFactory; DockUI.Pomodoro { objectName: "fixturePomodoro"; configuration: config } }
+    function createTimer() {
+        if (timerState) return false;
+        timerState = timerFactory.createObject(harness);
+        return Boolean(timerState);
+    }
+    function retireTimer() {
+        if (!timerState) return false;
+        timerState.destroy();
+        timerState = null;
+        return true;
+    }
     Component.onCompleted: createController()
 }
