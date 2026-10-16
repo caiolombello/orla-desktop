@@ -38,7 +38,7 @@ assert os.environ.get("HOME") == _ORIGINAL_HOME
 assert os.environ.get("CODEX_HOME") == _ORIGINAL_CODEX_HOME
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, QUrl, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QAccessible, QAccessibleActionInterface, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest, QSignalSpy
@@ -106,6 +106,485 @@ class ContextsDockTests(unittest.TestCase):
         expression = QQmlExpression(QQmlEngine.contextForObject(control), control, "Accessible.pressAction()")
         expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
+
+    def saved_control(self, name):
+        item = self.window.findChild(QQuickItem, name)
+        self.assertIsNotNone(item, "Saved association needs public control: " + name)
+        return item
+
+    def saved_press(self, control):
+        if not QAccessible.isActive():
+            QAccessible.setActive(True)
+            self.addCleanup(QAccessible.setActive, False)
+        interface = QAccessible.queryAccessibleInterface(control)
+        self.assertIsNotNone(interface)
+        action = interface.actionInterface()
+        self.assertIsNotNone(action)
+        names = action.actionNames()
+        press = QAccessibleActionInterface.pressAction()
+        self.assertEqual(len(names), len(set(names)), names)
+        self.assertEqual(names.count(press), 1, names)
+        action.doAction(press)
+
+    def saved_fixture(self):
+        self.initialize_profiles()
+        document = {"formatVersion": "0.1-experimental", "activityBindings": [
+            {"contextId": "same-id", "lastKnownName": "Mesmo nome", "profileId": "missing"}],
+            "desktopBindings": [{"contextId": "same-id", "lastKnownName": "Mesmo nome", "profileId": "work"}]}
+        self.config.setProperty("contextsJSON", json.dumps(document, ensure_ascii=False, indent=2))
+        controls = self.open_contexts()
+        self.popup.setProperty("heightBudget", 420)
+        self.popup.setProperty("width", 350)
+        return controls, document
+
+    def choose_saved(self, index=0):
+        selector = self.saved_control("savedContextSelector")
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(40)
+        self.saved_press(selector)
+        QTest.qWait(150)
+        self.assertTrue(self.evaluate("popup.visible", selector))
+        for _ in range(index + 1):
+            QTest.keyClick(self.window, Qt.Key_Down)
+        QTest.keyClick(self.window, Qt.Key_Return)
+        QTest.qWait(150)
+        return selector
+
+    def test_saved_context_explicit_choice_cancel_and_one_domain_write(self):
+        controls, document = self.saved_fixture()
+        toggle = self.saved_control("savedContextToggle")
+        before = self.configuration_snapshot()
+        writes = QSignalSpy(self.config.contextsJSONChanged)
+        self.saved_press(toggle)
+        selector = self.saved_control("savedContextSelector")
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertEqual(selector.property("count"), 2)
+        self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+        self.choose_saved()
+        details = self.saved_control("savedContextDetails")
+        self.assertIn("same-id", details.property("text"))
+        self.assertIn("Activity", details.property("text"))
+        self.assertIn("Perfil indisponível", details.property("text"))
+        self.assertFalse(selector.isEnabled(), "Cancel before choosing a different target")
+        self.assertEqual(writes.count(), 0)
+        self.saved_press(self.saved_control("savedContextCancel"))
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.choose_saved()
+        confirm = self.saved_control("savedContextRemove")
+        clicked = QSignalSpy(confirm.clicked)
+        self.saved_press(confirm)
+        self.assertEqual(clicked.count(), 1)
+        self.assertEqual(writes.count(), 1)
+        expected = dict(document, activityBindings=[])
+        self.assertEqual(json.loads(self.config.property("contextsJSON")), expected)
+        after = self.configuration_snapshot()
+        self.assertEqual({k: v for k, v in after.items() if k != "contextsJSON"},
+                         {k: v for k, v in before.items() if k != "contextsJSON"})
+        self.assertTrue(self.window.property("contextTimerIdentity"))
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+
+    def test_saved_context_public_delegate_mouse_keyboard_and_escape_lifecycle(self):
+        controls, _ = self.saved_fixture()
+        before = self.configuration_snapshot()
+        writes = QSignalSpy(self.config.contextsJSONChanged)
+        toggle = self.saved_control("savedContextToggle")
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        selector = self.saved_control("savedContextSelector")
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(80)
+        point = selector.mapToScene(QPointF(selector.width() / 2, selector.height() / 2)).toPoint()
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(150)
+        self.assertTrue(self.evaluate("popup.visible", selector))
+        option = self.evaluate("popup.contentItem.itemAtIndex(1)", selector)
+        self.assertIsNotNone(option)
+        self.saved_press(option)
+        QTest.qWait(150)
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.assertIn("Área", self.saved_control("savedContextDetails").property("text"))
+        self.assertIn("Trabalho", self.saved_control("savedContextDetails").property("text"))
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.qWait(60)
+        self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+        self.assertTrue(self.popup.property("visible"))
+        self.assertTrue(selector.property("activeFocus"))
+        self.saved_press(selector)
+        QTest.qWait(150)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.qWait(150)
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.assertTrue(self.popup.property("visible"))
+        self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+        self.choose_saved()
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 2)
+        QTest.qWait(50)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 3)
+        QTest.qWait(50)
+        self.assertTrue(self.saved_control("savedContextQuestion").isVisible())
+        self.assertEqual(selector.property("currentIndex"), 0)
+        self.popup.close()
+        self.assertFalse(controls.property("sessionOpen"))
+        self.assertFalse(controls.property("savedOpen"))
+        QTest.qWait(300)
+        self.open_contexts()
+        self.assertFalse(controls.property("savedOpen"))
+        self.saved_press(toggle)
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.saved_press(selector)
+        QTest.qWait(150)
+        self.assertTrue(self.evaluate("popup.visible", selector))
+        self.popup.close()
+        QTest.qWait(300)
+        self.assertFalse(self.evaluate("popup.visible", selector), "Closing Settings must also retire its native child menu")
+        self.open_contexts()
+        self.saved_press(toggle)
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(80)
+        self.assertEqual(self.window.activeFocusItem(), selector)
+        self.assertEqual(selector.property("currentIndex"), -1)
+        # A real focused Cancel and Escape both hand off only their existing focus.
+        self.choose_saved()
+        cancel = self.saved_control("savedContextCancel")
+        cancel.forceActiveFocus(Qt.TabFocusReason)
+        self.saved_press(cancel)
+        self.assertEqual(self.window.activeFocusItem(), selector)
+        self.choose_saved()
+        outside = self.saved_control("activityBind")
+        def newer_focus():
+            if not self.saved_control("savedContextQuestion").isVisible():
+                outside.forceActiveFocus(Qt.TabFocusReason)
+        controls.savedIntentChanged.connect(newer_focus)
+        try:
+            cancel.forceActiveFocus(Qt.TabFocusReason)
+            self.saved_press(cancel)
+        finally:
+            controls.savedIntentChanged.disconnect(newer_focus)
+        self.assertEqual(self.window.activeFocusItem(), outside)
+        self.saved_press(selector)
+        QTest.qWait(150)
+        self.assertTrue(self.evaluate("popup.visible", selector))
+        self.saved_press(toggle)
+        QTest.qWait(150)
+        self.assertFalse(controls.property("savedOpen"))
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.saved_press(toggle)
+        self.saved_press(selector)
+        QTest.qWait(150)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 2)
+        QTest.qWait(150)
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 3)
+        QTest.qWait(50)
+        self.assertTrue(controls.property("savedOpen"))
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.configuration_snapshot(), before)
+
+    def test_saved_context_stale_aba_impact_and_nested_owners_refuse_without_writes(self):
+        controls, _ = self.saved_fixture()
+        self.saved_press(self.saved_control("savedContextToggle"))
+        changes = [
+            "const v=configuration.autoContextEnabled;configuration.autoContextEnabled=!v;configuration.autoContextEnabled=v;",
+            "const v=configuration.autoContextDefaultProfile;configuration.autoContextDefaultProfile='work';configuration.autoContextDefaultProfile=v;",
+            "const v=configuration.autoContextPolicy;configuration.autoContextPolicy='desktop';configuration.autoContextPolicy=v;",
+            "const v=configuration.contextsJSON;configuration.contextsJSON='';configuration.contextsJSON=v;",
+            "const v=configuration.profilesJSON;configuration.profilesJSON=' '+v;configuration.profilesJSON=v;",
+            "const v=contextSnapshot;contextSnapshot=({outputName:'Changed',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'unavailable',currentId:'',ids:[],names:[]}});contextSnapshot=v;",
+        ]
+        for code in changes:
+            with self.subTest(change=code):
+                self.choose_saved()
+                writes = QSignalSpy(self.config.contextsJSONChanged)
+                self.evaluate("(function(){"+code+"})()", self.window if "contextSnapshot" in code else self.dock)
+                after_change = writes.count()
+                before = self.configuration_snapshot()
+                confirm = self.saved_control("savedContextRemove")
+                self.assertFalse(confirm.isEnabled())
+                self.assertIn("mudou", self.saved_control("savedContextStatus").property("text"))
+                self.saved_press(confirm)
+                self.assertEqual(writes.count(), after_change)
+                self.assertEqual(self.configuration_snapshot(), before)
+                self.assertTrue(self.saved_control("savedContextQuestion").isVisible())
+                self.saved_press(self.saved_control("savedContextCancel"))
+        raw = self.config.property("profilesJSON")
+        qml = "import QtQml; QtObject { " + "; ".join(
+            "property var " + key + ": " + value for key, value in self.configuration_snapshot().items()) + " }"
+        other = self.evaluate("Qt.createQmlObject("+json.dumps(qml)+",profiles)")
+        snapshot = self.evaluate("JSON.stringify(contexts.snapshot)")
+        context_qml = "import QtQml; QtObject { property int revision: " + str(self.evaluate("contexts.revision")) + "; property var snapshot: " + snapshot + " }"
+        other_context = self.evaluate("Qt.createQmlObject("+json.dumps(context_qml)+",contexts)")
+        profile_qml = "import QtQml; QtObject { property var configuration: null; property bool writable: true; property string activeProfileId: " + json.dumps(self.evaluate("profiles.activeProfileId")) + "; property int revision: " + str(self.evaluate("profiles.revision")) + "; property string savedJSON: " + json.dumps(raw) + " }"
+        other_profiles = self.evaluate("Qt.createQmlObject("+json.dumps(profile_qml)+",profiles)")
+        other_profiles.setProperty("configuration", self.config)
+        for owner, prop, replacement in [(self.evaluate("profiles"), "configuration", other),
+                                         (self.evaluate("contextBindings"), "configuration", other),
+                                         (controls, "configuration", other),
+                                         (self.evaluate("contextBindings"), "profiles", other_profiles),
+                                         (self.evaluate("contextBindings"), "contexts", other_context),
+                                         (controls, "contexts", other_context)]:
+            with self.subTest(owner=prop):
+                self.choose_saved()
+                original = owner.property(prop)
+                owner.setProperty(prop, replacement)
+                owner.setProperty(prop, original)
+                self.assertFalse(self.saved_control("savedContextRemove").isEnabled())
+                before = self.configuration_snapshot()
+                writes = QSignalSpy(self.config.contextsJSONChanged)
+                self.saved_press(self.saved_control("savedContextRemove"))
+                self.assertEqual(writes.count(), 0)
+                self.assertEqual(self.configuration_snapshot(), before)
+                self.saved_press(self.saved_control("savedContextCancel"))
+
+    def test_saved_context_guard_refuses_reentrant_impact_and_session_close(self):
+        controls, _ = self.saved_fixture()
+        # A fixture proxy uses the ordinary bindingsState injection; the real writer
+        # receives the UI continuation after a synchronous presentation-side callback.
+        qml = 'import QtQml; QtObject {\n            property var source: null\n            property var configuration: source ? source.configuration : null\n            property var profiles: source ? source.profiles : null\n            property var contexts: source ? source.contexts : null\n            readonly property var bindings: source ? source.bindings : ({activityBindings:[],desktopBindings:[]})\n            readonly property var savedJSON: source ? source.savedJSON : ""\n            readonly property int revision: source ? source.revision : -1\n            readonly property bool writable: source ? source.writable : false\n            readonly property string error: source ? source.error : ""\n            property string mode: "impact"\n            property var popup: null\n            signal continuing()\n            function unbind(k,id,scope,pr,cr,br,guard) {\n                if (mode === "impact") {\n                    const old = configuration.autoContextEnabled;\n                    configuration.autoContextEnabled = !old;\n                    configuration.autoContextEnabled = old;\n                } else if (mode === "close") popup.close();\n                else continuing();\n                return source.unbind(k,id,scope,pr,cr,br,guard);\n            }\n        }'
+        proxy = self.evaluate("Qt.createQmlObject("+json.dumps(qml)+",contextBindings)")
+        proxy.setProperty("source", self.evaluate("contextBindings"))
+        proxy.setProperty("popup", self.popup)
+        controls.setProperty("bindingsState", proxy)
+        def newer_choice():
+            self.saved_press(self.saved_control("savedContextCancel"))
+            self.choose_saved()
+        proxy.continuing.connect(newer_choice)
+        for mode in ("impact", "choice", "close"):
+            proxy.setProperty("mode", mode)
+            self.saved_press(self.saved_control("savedContextToggle")) if not controls.property("savedOpen") else None
+            self.choose_saved()
+            before = self.configuration_snapshot()
+            writes = QSignalSpy(self.config.contextsJSONChanged)
+            self.saved_press(self.saved_control("savedContextRemove"))
+            self.assertEqual(writes.count(), 0)
+            self.assertEqual(self.configuration_snapshot(), before)
+            if mode in ("impact", "choice"):
+                if mode == "impact":
+                    self.assertIn("mudou", self.saved_control("savedContextStatus").property("text"))
+                else:
+                    self.assertTrue(self.saved_control("savedContextQuestion").isVisible())
+                    self.assertTrue(self.saved_control("savedContextRemove").isEnabled())
+                self.saved_press(self.saved_control("savedContextCancel"))
+            else:
+                self.assertFalse(controls.property("sessionOpen"))
+                self.assertFalse(controls.property("savedOpen"))
+
+    def test_saved_context_empty_future_cache_zero_profiles_and_dirty_preview(self):
+        controls, document = self.saved_fixture()
+        toggle = self.saved_control("savedContextToggle")
+        self.saved_press(toggle)
+        self.assertEqual(self.saved_control("savedContextSelector").property("count"), 2)
+        protected = '{"formatVersion":"future","owned":true}'
+        self.config.setProperty("contextsJSON", protected)
+        selector = self.saved_control("savedContextSelector")
+        self.assertFalse(selector.isEnabled())
+        self.assertEqual(selector.property("count"), 0, "Protected raw cannot expose the last valid cache as current")
+        self.assertEqual(selector.property("currentIndex"), -1)
+        before = self.configuration_snapshot()
+        self.saved_press(selector)
+        self.assertFalse(self.evaluate("popup.visible", selector))
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.config.setProperty("contextsJSON", "")
+        self.assertEqual(selector.property("count"), 0)
+        self.assertFalse(selector.isEnabled())
+        self.config.setProperty("profilesJSON", json.dumps({"formatVersion":"0.2-experimental", "activeProfileId":"legacy", "profiles":[]}))
+        self.config.setProperty("contextsJSON", json.dumps(document))
+        self.assertTrue(selector.isEnabled(), "Zero valid profiles must still allow removing orphan references")
+        self.evaluate("appearance.setToken('radius',9)")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        draft = self.evaluate("JSON.stringify(appearance.effective)")
+        before = self.configuration_snapshot()
+        self.choose_saved(1)
+        self.assertIn("Perfil indisponível", self.saved_control("savedContextDetails").property("text"))
+        writes = QSignalSpy(self.config.contextsJSONChanged)
+        self.saved_press(self.saved_control("savedContextRemove"))
+        self.assertEqual(writes.count(), 1)
+        self.assertEqual(json.loads(self.config.property("contextsJSON")), dict(document, desktopBindings=[]))
+        self.assertEqual(self.evaluate("JSON.stringify(appearance.effective)"), draft)
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        after = self.configuration_snapshot()
+        self.assertEqual({k:v for k,v in before.items() if k != "contextsJSON"}, {k:v for k,v in after.items() if k != "contextsJSON"})
+        self.assertTrue(self.window.property("contextTimerIdentity"))
+
+    def test_saved_context_maximum_list_domain_identity_long_plain_details_and_reload(self):
+        self.initialize_profiles()
+        long_id = "x" * 256
+        document = {"formatVersion":"0.1-experimental", "activityBindings":[], "desktopBindings":[]}
+        for kind in ("activityBindings", "desktopBindings"):
+            document[kind] = [{"contextId":str(i) if i < 63 else long_id,
+                "lastKnownName":"<b>" + "L"*121 + "</b>", "profileId":"missing"} for i in range(64)]
+        self.config.setProperty("contextsJSON", json.dumps(document, ensure_ascii=False, indent=2))
+        self.evaluate("contextSnapshot=({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'loading',currentId:'',ids:[],names:[]}})", self.window)
+        self.open_contexts()
+        self.saved_press(self.saved_control("savedContextToggle"))
+        selector = self.choose_saved(127)
+        self.assertEqual(selector.property("count"), 128)
+        self.assertEqual(selector.property("currentIndex"), 127)
+        details = self.saved_control("savedContextDetails")
+        self.assertEqual(self.evaluate("Number(textFormat)", details), Qt.PlainText.value)
+        self.assertIn(long_id, details.property("text"))
+        self.assertIn("<b>", details.property("text"))
+        self.assertIn("Área", details.property("text"))
+        writes = QSignalSpy(self.config.contextsJSONChanged)
+        self.saved_press(self.saved_control("savedContextRemove"))
+        self.assertEqual(writes.count(), 1)
+        expected = dict(document, desktopBindings=document["desktopBindings"][:-1])
+        self.assertEqual(json.loads(self.config.property("contextsJSON")), expected)
+        raw, profiles_raw = self.config.property("contextsJSON"), self.config.property("profilesJSON")
+        self.dispose()
+        self.create(raw, profiles_raw)
+        self.open_contexts()
+        self.saved_press(self.saved_control("savedContextToggle"))
+        selector = self.saved_control("savedContextSelector")
+        self.assertEqual(selector.property("count"), 127)
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertEqual(json.loads(self.config.property("contextsJSON")), expected)
+
+    def test_saved_context_long_native_menu_rows_do_not_overlap(self):
+        self.initialize_profiles()
+        document = {"formatVersion":"0.1-experimental"}
+        for kind in ("activityBindings", "desktopBindings"):
+            document[kind] = [{"contextId":str(i), "lastKnownName":"Contexto " + str(i), "profileId":"work"} for i in range(64)]
+        self.config.setProperty("contextsJSON", json.dumps(document))
+        self.open_contexts()
+        self.saved_press(self.saved_control("savedContextToggle"))
+        selector = self.saved_control("savedContextSelector")
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(80)
+        self.saved_press(selector)
+        QTest.qWait(200)
+        # Read Qt visual geometry in QML: wrapping all private QQuickMenuItem
+        # descendants through PySide childItems can abort in Qt6.11.2/Shiboken.
+        tops = json.loads(self.evaluate("""(function(){
+            const menu = popup.contentItem, pending = [menu], rows = [];
+            while (pending.length) {
+                const item = pending.pop();
+                pending.push(...Array.from(item.children));
+                if (!item.objectName.startsWith('savedContextOption')) continue;
+                const top = item.mapToItem(menu,0,0).y;
+                if (item.visible && top >= 0 && top < menu.height) rows.push([item.objectName,top]);
+            }
+            return JSON.stringify(rows);
+        })()""", selector))
+        self.assertGreater(len(tops),1)
+        self.assertEqual(len({top for _,top in tops}),len(tops), "Native menu rows overlap: " + str(tops))
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+
+    def test_saved_context_writer_keeps_newer_question_and_focus(self):
+        controls, document = self.saved_fixture()
+        self.saved_press(self.saved_control("savedContextToggle"))
+        outside = self.saved_control("activityBind")
+        for mode in ("focus", "question", "aba"):
+            with self.subTest(mode=mode):
+                self.config.setProperty("contextsJSON", json.dumps(document))
+                if self.saved_control("savedContextQuestion").isVisible():
+                    self.saved_press(self.saved_control("savedContextCancel"))
+                self.choose_saved()
+                writes = QSignalSpy(self.config.contextsJSONChanged)
+                def newer_ui():
+                    if mode != "focus":
+                        self.saved_press(self.saved_control("savedContextCancel"))
+                        self.choose_saved()  # the survivor is the desktop with the same ID
+                        if mode == "aba":
+                            self.saved_press(self.saved_control("savedContextCancel"))
+                            self.choose_saved()
+                    outside.forceActiveFocus(Qt.TabFocusReason)
+                self.config.contextsJSONChanged.connect(newer_ui)
+                try:
+                    self.saved_press(self.saved_control("savedContextRemove"))
+                finally:
+                    self.config.contextsJSONChanged.disconnect(newer_ui)
+                QTest.qWait(80)
+                self.assertEqual(writes.count(), 1)
+                self.assertEqual(self.window.activeFocusItem(), outside)
+                self.assertEqual(json.loads(self.config.property("contextsJSON")), dict(document, activityBindings=[]))
+                if mode == "focus":
+                    self.assertFalse(self.saved_control("savedContextQuestion").isVisible())
+                else:
+                    self.assertTrue(self.saved_control("savedContextQuestion").isVisible())
+                    self.assertIn("Área", self.saved_control("savedContextDetails").property("text"))
+                    self.assertTrue(self.saved_control("savedContextRemove").isEnabled())
+
+    def test_saved_context_focus_rims_stale_recovery_and_newer_reveal_350_420(self):
+        controls, _ = self.saved_fixture()
+        toggle = self.saved_control("savedContextToggle")
+        self.saved_press(toggle)
+        for width in (350,420):
+            with self.subTest(width=width):
+                self.popup.setProperty("width", width)
+                selector = self.saved_control("savedContextSelector")
+                selector.forceActiveFocus(Qt.TabFocusReason)
+                QTest.qWait(100)
+                self.assert_saved_rim(controls, selector)
+                self.choose_saved()
+                confirm = self.saved_control("savedContextRemove")
+                confirm.forceActiveFocus(Qt.TabFocusReason)
+                QTest.qWait(100)
+                self.assert_saved_rim(controls, confirm)
+                self.config.setProperty("autoContextEnabled", not self.config.property("autoContextEnabled"))
+                cancel = self.saved_control("savedContextCancel")
+                cancel.forceActiveFocus(Qt.TabFocusReason)
+                QTest.qWait(100)
+                self.assert_saved_rim(controls, cancel)
+                status = self.saved_control("savedContextStatus")
+                viewport = controls.property("contentItem")
+                top = status.mapToItem(viewport, QPointF(0,0)).y()
+                self.assertGreaterEqual(top, 0)
+                self.assertLessEqual(top+status.height(), viewport.height())
+                self.saved_press(cancel)
+                selector.forceActiveFocus(Qt.TabFocusReason)
+                outside = self.saved_control("activityBind")
+                outside.forceActiveFocus(Qt.TabFocusReason)
+                QTest.qWait(100)
+                self.assertEqual(self.window.activeFocusItem(), outside)
+
+    def test_saved_context_open_empty_reveals_message_with_disclosure(self):
+        self.initialize_profiles()
+        controls = self.open_contexts()
+        self.popup.setProperty("width", 350)
+        self.popup.setProperty("heightBudget", 420)
+        toggle = self.saved_control("savedContextToggle")
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(60)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(100)
+        message = self.saved_control("savedContextAvailability")
+        self.assertEqual(message.property("text"), "Nenhuma associação salva.")
+        viewport = controls.property("contentItem")
+        top = message.mapToItem(viewport,QPointF(0,0)).y()
+        self.assertGreaterEqual(top,0)
+        self.assertLessEqual(top+message.height(),viewport.height(), "Opening an empty module must reveal its result")
+        self.assert_saved_rim(controls, toggle)
+
+    def test_saved_context_reopened_disclosure_reveals_after_width_change(self):
+        controls, _ = self.saved_fixture()
+        toggle = self.saved_control("savedContextToggle")
+        self.config.setProperty("contextsJSON", '{"formatVersion":"future","owned":true}')
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(100)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(100)
+        self.assert_saved_rim(controls, toggle)
+        self.popup.close()
+        QTest.qWait(300)
+        self.config.setProperty("contextsJSON", "")
+        self.popup.setProperty("width", 420)
+        self.open_contexts()
+        QTest.qWait(300)
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(100)
+        self.assert_saved_rim(controls, toggle)
+
+    def assert_saved_rim(self, controls, item):
+        viewport = controls.property("contentItem")
+        point = item.mapToItem(viewport, QPointF(0,0))
+        self.assertGreaterEqual(point.y()-3, 0)
+        self.assertLessEqual(point.y()+item.height()+3, viewport.height())
+        self.assertTrue(item.property("activeFocus"))
 
     def configuration_snapshot(self):
         meta = self.config.metaObject()
