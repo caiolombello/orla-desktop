@@ -226,11 +226,19 @@ C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incr
 - [ ] **P2: associação a contexto KDE.** A alpha 0.2.8 publicou associações explícitas. O Source atual oferece automático opcional por instância: Activity → área → padrão gerenciado, com escolha manual até novo contexto confirmado/retomada e preservação das interações. O pacote está instalado com automático desligado na sessão principal. No KDE privado real, foram qualificadas transições/precedência/reinício, os seletores e o fluxo de ativação/manual/Retomar, a prévia/Cancelar/Aplicar/Desfazer de aparência, o ciclo de áreas por ID e a continuidade do Pomodoro com relógio real. O ciclo de Activities também passou: renomear preservou associação e escolha manual; remover a Activity corrente selecionou a âncora sem setter corretivo; um novo ID com o mesmo nome usou Jogos e manteve a associação antiga. Foram 13 Press e dez verificações incluindo saída/persistência; a suíte de composição passou 44 testes por estilo. As regras de residência da janela foram explícitas na fixture; isso não qualifica o painel do usuário. P2 segue parcial: faltam outros rascunhos/interações, painel do usuário, foco/seat, monitores e contagem nativa de setters. A política explícita “Somente áreas” já está implementada e instalada, preservando o padrão que exige ambos os contextos prontos. Após corrigir a restauração inicial de perfil tratada como seleção manual, a jornada R3 passou opt-in público, transições e reinício na mesma configuração, com Activity vazia real. Os dois processos encerraram normalmente; a sessão principal permaneceu preservada. As tentativas R1/R2 continuam FAILED em seus registros. Os demais gates de P2 permanecem abertos. Aceite: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil. [Regras e limites](docs/contexts.md), [prova instalada e próximos gates](docs/validation/contexts-auto-installed.md).
 - [ ] **W1: seletor de contexto.** Mostrar Activity e área atuais; permitir trocar por clique ou atalho, com resposta de erro se o serviço não estiver disponível. Diferenciar trocar o perfil e trocar o contexto do KDE. Aceite: nome e destaque acompanham a troca real, inclusive com comportamento por monitor qualificado.
 
-**Próximo incremento de P1/UX:** renomear o perfil ativo gerenciado pela aba
-Perfis, sem recriar seu ID. Aceite: alterar somente o nome em uma escrita,
-preservando associações, aparência, apps e Pomodoro; nome inválido/repetido,
-prévia pendente ou edição obsoleta não gravam. Revisar teclado, foco e os
-viewports de 350/420 px em claro/escuro. Remover/importar perfis fica separado.
+**P1/UX — renomear perfil (Source):** a aba Perfis oferece edição explícita do
+nome ativo, preservando ID, associações, aparência, apps e Pomodoro. Nomes
+inválidos/repetidos, prévia pendente ou edição obsoleta não gravam; repetir o
+mesmo nome válido é no-op. Teclado, rascunho e foco passaram nos testes portáteis;
+a galeria cobre 350/420 px em claro/escuro, incluindo a primeira abertura corrigida.
+As cinco suítes direcionadas passaram 170 testes, com dois skips de TaskManager,
+por estilo Fusion/KDE. Instalação e jornada nativa de renomear ainda estão
+pendentes. P1/P2 continuam parciais. [Evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-rename-development-16-october-2026).
+
+**Próximo incremento de P1/UX:** concluir a prova instalada de renomear e planejar
+a remoção de perfil com confirmação e destino explícitos. Decidir antes como
+tratar perfil ativo, padrão automático e associações por ID. Importar/exportar
+perfis e escolher barra/launcher/eventos permanecem separados.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 

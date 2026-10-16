@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtTest import QSignalSpy
 
 
 class ProfilesTests(unittest.TestCase):
@@ -182,6 +183,114 @@ class ProfilesTests(unittest.TestCase):
         self.assertTrue(self.command("select", "legacy"))
         self.assertEqual(self.snapshot(), flat)
         self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+        self.assertEqual(self.warnings, [])
+
+    def test_rename_changes_only_the_active_managed_name_once(self):
+        self.initialize()
+        self.assertTrue(self.command("select", "work"))
+        original = json.loads(self.config.property("profilesJSON"))
+        presentation = self.snapshot()
+        fields = [self.config.metaObject().property(i).name()
+                  for i in range(self.config.metaObject().propertyOffset(), self.config.metaObject().propertyCount())
+                  if self.config.metaObject().property(i).name() != "profilesJSON"]
+        flat = {key: self.configuration_value(key) for key in fields}
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        selections = QSignalSpy(self.state.activeProfileIdChanged)
+        revision = self.state.property("revision")
+        self.assertTrue(self.command("rename", "  Trabalho sintético  "))
+        expected = json.loads(json.dumps(original))
+        expected["profiles"][0]["name"] = "Trabalho sintético"
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(changes.count(), 1)
+        self.assertEqual(selections.count(), 0)
+        self.assertGreater(self.state.property("revision"), revision)
+        self.assertEqual(self.snapshot(), presentation)
+        self.assertEqual({key: self.configuration_value(key) for key in fields}, flat)
+        self.assertEqual(self.warnings, [])
+
+    def test_rename_refuses_legacy_invalid_names_stale_and_invalid_saved_bytes(self):
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        self.assertFalse(self.command("rename", "Synthetic"))
+        self.assertEqual(changes.count(), 0)
+        self.assertEqual(self.config.property("profilesJSON"), "")
+        self.initialize()
+        self.assertFalse(self.command("rename", "Synthetic"))
+        self.assertTrue(self.command("select", "work"))
+        raw = self.config.property("profilesJSON")
+        count = changes.count()
+        revision = self.state.property("revision")
+        for name in (None, True, 1, {}, [], "", "  ", "x" * 49, "bad\nname", "bad\u0085name", " Pessoal "):
+            with self.subTest(name=name):
+                self.assertFalse(self.command("rename", name))
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+                self.assertEqual(changes.count(), count)
+        for expression in ("rename('Synthetic')", f"rename('Synthetic','personal',{revision})",
+                           f"rename('Synthetic','work',{revision - 1})"):
+            self.assertFalse(self.evaluate(expression))
+            self.assertEqual(changes.count(), count)
+        for name in ("Trabalho", "  Trabalho  "):
+            self.assertTrue(self.command("rename", name))
+            self.assertEqual(changes.count(), count)
+            self.assertEqual(self.state.property("revision"), revision)
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+        for invalid in ('FUTURE-BYTES', '{"formatVersion":"future"}'):
+            self.config.setProperty("profilesJSON", invalid)
+            count = changes.count()
+            self.assertFalse(self.state.property("writable"))
+            self.assertFalse(self.command("rename", "Synthetic"))
+            self.assertEqual(changes.count(), count)
+            self.assertEqual(self.config.property("profilesJSON"), invalid)
+        self.assertEqual(self.warnings, [])
+
+    def test_rename_transition_refusal_and_reentrant_changes_keep_newer_authority(self):
+        self.initialize()
+        self.assertTrue(self.command("select", "work"))
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        raw = self.config.property("profilesJSON")
+        for guard in ("false", "() => false", "() => { throw new Error('fixture'); }"):
+            self.evaluate("transitionGuard=" + guard)
+            self.assertFalse(self.command("rename", "Synthetic"))
+            self.assertEqual(changes.count(), 0)
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+        # Both changed scope and an ABA selection advance revision. Only the hook's writes survive.
+        for body, expected, writes in (
+                ("select('personal',activeProfileId,revision);", "personal", 1),
+                ("select('personal',activeProfileId,revision);select('work',activeProfileId,revision);", "work", 2),
+                ("commitPresentation({calendarEvents:false},activeProfileId,revision);", "work", 1),
+                ("rename('Newer name',activeProfileId,revision);", "work", 1)):
+            with self.subTest(body=body):
+                self.evaluate("transitionGuard=null")
+                self.config.setProperty("profilesJSON", raw)
+                count = changes.count()
+                self.evaluate("transitionGuard=() => { transitionGuard=null;" + body + "return true; }")
+                self.assertFalse(self.command("rename", "Stale name"))
+                self.assertEqual(changes.count() - count, writes)
+                self.assertEqual(self.state.property("activeProfileId"), expected)
+                document = json.loads(self.config.property("profilesJSON"))
+                intended = json.loads(raw)
+                intended["activeProfileId"] = expected
+                if "commitPresentation" in body:
+                    intended["profiles"][0]["calendarEvents"] = False
+                if "Newer name" in body:
+                    intended["profiles"][0]["name"] = "Newer name"
+                self.assertEqual(document, intended)
+        self.assertEqual(self.warnings, [])
+
+    def test_rename_preserves_absent_optional_fields_and_noop_raw_formatting(self):
+        document = self.initialize()
+        document["activeProfileId"] = "work"
+        for profile in document["profiles"]:
+            profile.pop("showAudioHud")
+        raw = json.dumps(document, indent=2) + "  \n"
+        self.config.setProperty("profilesJSON", raw)
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        self.assertTrue(self.command("rename", " Trabalho "))
+        self.assertEqual(changes.count(), 0)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertTrue(self.command("rename", "Novo nome"))
+        document["profiles"][0]["name"] = "Novo nome"
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), document)
+        self.assertEqual(changes.count(), 1)
         self.assertEqual(self.warnings, [])
 
     def test_empty_configuration_stays_legacy_until_explicit_initialization(self):
