@@ -916,6 +916,19 @@ teste nativo nesta revisão. Os recibos históricos abaixo mantêm seu escopo.
 
 Build, busca real por aplicativos/calculadora, cancelamento, proteção contra callbacks antigos e execução exclusiva de uma fixture própria foram verificados. Os testes de teclado Qt simulam eventos dentro da própria janela; não comprovam atalhos globais nem foco real no compositor. Todos os CTests usam bus D-Bus privado sem diretórios de ativação de serviços e XDG/runtime temporários próprios. O processo Qt verifica o ID desse bus antes de construir RunnerManager. O teste de fixture cria um `.desktop` e recibo próprios; tudo é removido ao terminar, e nenhum aplicativo pessoal é lançado automaticamente. O runner do Plasma pode registrar o acesso ao aplicativo explicitamente aberto em serviços do desktop, como KActivities; desligar o histórico do Orla não desliga esses serviços.
 
+**Diagnóstico de teardown nos testes:** a guarda mantém um único prazo de 500 ms
+para juntar as threads e observar a destruição de todos os runners capturados.
+Somente quando essa guarda falha, os registros `ORLA_TEST_RUNNER_FAILURE`,
+`ORLA_TEST_RUNNER_TRACE`, `ORLA_TEST_RUNNER_JOIN` e
+`ORLA_TEST_RUNNER_DIAGNOSTICS_OMITTED` mostram metadados capturados antes do reset,
+orçamento restante e sinais observados. A saída adicional limita-se a 34 linhas
+e 20 KiB de payload, sem consultas, caminhos ou IDs arbitrários de plugins.
+Timestamp zero significa "não observado nessa leitura"; não revela eventos
+pendentes na fila. Os observadores podem alterar o escalonamento e consomem o
+mesmo prazo. A linha ordinária de sucesso, as falhas e a barreira que impede o
+próximo proprietário continuam iguais. Isso é instrumentação de teste, sem
+correção do encerramento de produção.
+
 **Recibo histórico dos probes iniciais:** atalho por gesto real, foco global e retorno do foco permaneceram UNRUN nesses probes. O caminho usa `KWaylandExtras::xdgActivationToken` e `KWindowSystem::activateWindow`, com callbacks canceláveis; KWin decide conceder foco. A janela continua visível para clique se o compositor recusar. A fonte KWin 6.7.5 ainda documenta o limite de passar seat/serial por KGlobalAccel a clientes sem foco. Não há solicitação de interfaces privilegiadas ou inspeção das janelas de outros apps. O primeiro probe manual terminou sem gesto. No segundo, a pessoa confirmou “Abriu e o foco voltou”, mas os eventos shortcut/↓/Escape não apareceram no recibo instrumentado. Esse relato humano foi preservado e não foi convertido em PASS nativo. As duas janelas da fixture pertenciam ao mesmo processo; não houve qualificação entre aplicativos, e a admissão L0 ampla permanece aberta.
 
 **Prova posterior delimitada:** em `43905da`, Ctrl+Alt+Meta+O, consulta,
