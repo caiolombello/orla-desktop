@@ -84,7 +84,7 @@ class ProfilesDockTests(unittest.TestCase):
         press = QAccessibleActionInterface.pressAction()
         names = actions.actionNames()
         self.assertIn(press, names)
-        if control.objectName().startswith("profileRename"):
+        if control.objectName().startswith(("profileRename", "profileRemove")):
             self.assertEqual(len(names), len(set(names)), f"Button actions must be unique: {names}")
             self.assertEqual(names.count(press), 1)
         actions.doAction(press)
@@ -94,6 +94,329 @@ class ProfilesDockTests(unittest.TestCase):
         return {meta.property(index).name(): self.evaluate(
             "JSON.stringify(configuration[" + json.dumps(meta.property(index).name()) + "])")
                 for index in range(meta.propertyOffset(), meta.propertyCount())}
+
+    def test_remove_active_requires_explicit_destination_and_public_confirmation(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.initialize()
+        self.open_profiles()
+        disclosure = self.owned_item("profileRemoveToggle")
+        self.assertIsNotNone(disclosure, "Removal needs a passive public confirmation disclosure")
+        selector = self.owned_item("profileSelector")
+        self.press(selector)
+        self.accessible_press_combo_option(selector, "Pessoal")
+        bindings = {"formatVersion": "0.1-experimental", "activityBindings": [
+            {"contextId": "activity-work", "lastKnownName": "Foco", "profileId": "work"},
+            {"contextId": "activity-old", "lastKnownName": "Anterior", "profileId": "work"}],
+            "desktopBindings": [{"contextId": "desktop-old", "lastKnownName": "Antiga", "profileId": "work"}]}
+        self.config.setProperty("contextsJSON", json.dumps(bindings))
+        self.config.setProperty("autoContextDefaultProfile", "work")
+        self.config.setProperty("autoContextEnabled", True)
+        self.evaluate("pomodoro.toggle()")
+        self.evaluate("timerWitness = contentItem.children.find(item => item.objectName === 'dock').pomodoro", self.window)
+        before = json.loads(self.config.property("profilesJSON"))
+        configuration = self.configuration_snapshot()
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.press(disclosure)
+        destination = self.owned_item("profileRemoveDestination")
+        confirm = self.owned_item("profileRemoveConfirm")
+        clicks = QSignalSpy(confirm.clicked)
+        self.assertEqual(destination.property("currentIndex"), -1)
+        self.assertFalse(confirm.isEnabled())
+        self.assertIn("Trabalho", self.owned_item("profileRemoveQuestion").property("text"))
+        self.assertIn("3", self.owned_item("profileRemoveImpact").property("text"))
+        self.assertIn("padrão", self.owned_item("profileRemoveImpact").property("text"))
+        self.press(confirm)
+        self.assertEqual(writes.count(), 0)
+        self.press(destination)
+        self.accessible_press_combo_option(destination, "Pessoal")
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.assertEqual(writes.count(), 0)
+        self.focus(destination)
+        QTest.keyClick(self.window, Qt.Key_Return)
+        self.assertEqual(writes.count(), 0, "Destination Enter is never removal confirmation")
+        if self.evaluate("popup.visible", destination):
+            QTest.keyClick(self.window, Qt.Key_Escape)
+        self.press(confirm)
+        expected = json.loads(json.dumps(before))
+        expected["profiles"] = [profile for profile in expected["profiles"] if profile["id"] != "work"]
+        expected["activeProfileId"] = "personal"
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(writes.count(), 1)
+        self.assertEqual(clicks.count(), 1)
+        self.assertFalse(destination.isVisible())
+        self.assertEqual(self.window.activeFocusItem(), selector)
+        self.assertEqual(self.owned_item("profileActiveName").property("text"), "Pessoal")
+        after = self.configuration_snapshot()
+        self.assertEqual({key: value for key, value in after.items() if key != "profilesJSON"},
+                         {key: value for key, value in configuration.items() if key != "profilesJSON"})
+        self.assertTrue(self.evaluate("timerWitness === contentItem.children.find(item => item.objectName === 'dock').pomodoro", self.window))
+
+    def choose_remove_destination(self, text="Pessoal"):
+        if not QAccessible.isActive():
+            QAccessible.setActive(True)
+            self.addCleanup(QAccessible.setActive, False)
+        selector = self.owned_item("profileRemoveDestination")
+        self.focus(selector)
+        QTest.qWait(30)
+        self.press(selector)
+        self.accessible_press_combo_option(selector, text)
+        return selector
+
+    def test_remove_last_requires_explicit_legacy_and_keeps_initialized_empty(self):
+        self.initialize()
+        document = json.loads(self.config.property("profilesJSON"))
+        document["profiles"] = [profile for profile in document["profiles"] if profile["id"] == "work"]
+        self.config.setProperty("profilesJSON", json.dumps(document))
+        self.config.setProperty("autoContextDefaultProfile", "work")
+        self.open_profiles()
+        self.press(self.owned_item("profileRemoveToggle"))
+        selector = self.owned_item("profileRemoveDestination")
+        self.assertEqual(selector.property("count"), 1)
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertIn("desligado", self.owned_item("profileRemoveImpact").property("text"))
+        before = self.configuration_snapshot()
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.choose_remove_destination("Preferências anteriores")
+        self.press(self.owned_item("profileRemoveConfirm"))
+        self.assertEqual(json.loads(self.config.property("profilesJSON")),
+                         {"formatVersion": "0.2-experimental", "activeProfileId": "legacy", "profiles": []})
+        self.assertEqual(writes.count(), 1)
+        self.assertTrue(self.evaluate("profiles.initialized"))
+        self.assertFalse(self.owned_item("profileInitialize").isVisible())
+        self.assertFalse(self.owned_item("profileRemoveToggle").isEnabled())
+        after = self.configuration_snapshot()
+        self.assertEqual({key: value for key, value in after.items() if key != "profilesJSON"},
+                         {key: value for key, value in before.items() if key != "profilesJSON"})
+        self.owned_item("profileName").setProperty("text", "Novo")
+        self.press(self.owned_item("profileCreate"))
+        self.assertTrue(self.evaluate("profiles.activeProfileId.startsWith('custom-')"))
+
+    def test_remove_impact_aba_and_transition_hook_changes_refuse_without_writes(self):
+        self.initialize()
+        self.open_profiles()
+        raw = self.config.property("profilesJSON")
+        mutations = [
+            "const v=configuration.autoContextDefaultProfile;configuration.autoContextDefaultProfile='work';configuration.autoContextDefaultProfile=v;",
+            "const v=configuration.autoContextEnabled;configuration.autoContextEnabled=!v;configuration.autoContextEnabled=v;",
+            "const v=configuration.autoContextPolicy;configuration.autoContextPolicy='desktop';configuration.autoContextPolicy=v;",
+            "const v=configuration.contextsJSON;configuration.contextsJSON=JSON.stringify({formatVersion:'0.1-experimental',activityBindings:[],desktopBindings:[]});configuration.contextsJSON=v;",
+            "const v=contextBindings.profiles;const other=Qt.createQmlObject('import QtQml; QtObject { property bool writable: true }',profiles);contextBindings.profiles=other;contextBindings.profiles=v;other.destroy();",
+        ]
+        for code in mutations:
+            with self.subTest(mutation=code):
+                self.press(self.owned_item("profileRemoveToggle"))
+                selector = self.choose_remove_destination()
+                writes = QSignalSpy(self.config.profilesJSONChanged)
+                self.evaluate("(function(){" + code + "})()")
+                confirm = self.owned_item("profileRemoveConfirm")
+                self.assertFalse(confirm.isEnabled())
+                self.assertIn("mudou", self.owned_item("profileRemoveStatus").property("text"))
+                self.press(confirm)
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+                self.assertEqual(writes.count(), 0)
+                self.assertEqual(selector.property("currentText"), "Pessoal")
+                self.press(self.owned_item("profileRemoveCancel"))
+        self.press(self.owned_item("profileRemoveToggle"))
+        self.choose_remove_destination()
+        self.evaluate("const original=profiles.transitionGuard;profiles.transitionGuard=()=>{profiles.transitionGuard=original;const v=configuration.autoContextEnabled;configuration.autoContextEnabled=!v;configuration.autoContextEnabled=v;return true;}")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.press(self.owned_item("profileRemoveConfirm"))
+        self.assertEqual(writes.count(), 0, "The required final guard must see impact ABA after transition")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.press(self.owned_item("profileRemoveCancel"))
+        self.press(self.owned_item("profileRemoveToggle"))
+        self.choose_remove_destination()
+        editor = self.owned_item("profileControls")
+        self.evaluate("const original=profiles.transitionGuard;profiles.transitionGuard=()=>{profiles.transitionGuard=original;const v=removeDestination;removeDestination='legacy';removeDestination=v;return true;}", editor)
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.press(self.owned_item("profileRemoveConfirm"))
+        self.assertEqual(writes.count(), 0, "A newer destination ABA during transition cancels the outer intent")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        owner = self.evaluate("profiles")
+        original = self.evaluate("profiles.transitionGuard")
+        closing = self.evaluate("() => { close(); return true; }", self.popup)
+        owner.setProperty("transitionGuard", closing)
+        try:
+            self.press(self.owned_item("profileRemoveConfirm"))
+        finally:
+            owner.setProperty("transitionGuard", original)
+        self.assertEqual(writes.count(), 0, "Settings close cancels admission before the exit animation finishes")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+
+    def test_remove_invalid_bindings_and_nested_configuration_owner_mismatch_block(self):
+        self.initialize()
+        self.open_profiles()
+        raw = self.config.property("profilesJSON")
+        self.config.setProperty("contextsJSON", '{"formatVersion":"future"}')
+        self.press(self.owned_item("profileRemoveToggle"))
+        self.choose_remove_destination()
+        self.assertFalse(self.owned_item("profileRemoveConfirm").isEnabled())
+        self.assertIn("associações", self.owned_item("profileRemoveStatus").property("text"))
+        self.press(self.owned_item("profileRemoveCancel"))
+        self.config.setProperty("contextsJSON", "")
+        editor = self.owned_item("profileControls")
+        for name in ("configuration", "contextBindings"):
+            original = editor.property(name)
+            editor.setProperty(name, None)
+            self.press(self.owned_item("profileRemoveToggle"))
+            self.choose_remove_destination()
+            self.assertFalse(self.owned_item("profileRemoveConfirm").isEnabled())
+            self.assertIn("donos", self.owned_item("profileRemoveStatus").property("text"))
+            self.press(self.owned_item("profileRemoveCancel"))
+            editor.setProperty(name, original)
+        # Same raw values in a different real QObject must not hide an ownership change.
+        qml = 'import QtQml; QtObject { property var launchers: []; property string profilesJSON: '+json.dumps(raw)+'; property string contextsJSON: ""; property string autoContextDefaultProfile: ""; property bool autoContextEnabled: false; property string autoContextPolicy: "activity-desktop" }'
+        other = self.evaluate("Qt.createQmlObject("+json.dumps(qml)+",profiles)")
+        for expression in ("profiles", "contextBindings"):
+            owner = self.evaluate(expression)
+            self.press(self.owned_item("profileRemoveToggle"))
+            self.choose_remove_destination()
+            owner.setProperty("configuration", other)
+            self.assertFalse(self.owned_item("profileRemoveConfirm").isEnabled())
+            owner.setProperty("configuration", self.config)
+            self.assertFalse(self.owned_item("profileRemoveConfirm").isEnabled(), "Owner ABA must remain stale")
+            self.press(self.owned_item("profileRemoveConfirm"))
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+            self.press(self.owned_item("profileRemoveCancel"))
+
+    def test_remove_exclusive_editors_dirty_cancel_tab_and_settings_close_are_passive(self):
+        self.initialize()
+        self.open_profiles()
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        rename = self.owned_item("profileRenameToggle")
+        remove = self.owned_item("profileRemoveToggle")
+        for toggle, name in ((remove, "profileRemoveDestination"), (rename, "profileRenameName")):
+            self.focus(toggle)
+            QTest.keyClick(self.window, Qt.Key_Space)
+            QTest.keyClick(self.window, Qt.Key_Escape)
+            self.assertFalse(self.owned_item(name).isVisible())
+            self.assertTrue(self.popup.property("visible"), "Disclosure Escape cancels inline first")
+            self.assertEqual(writes.count(), 0)
+        self.press(rename)
+        field = self.owned_item("profileRenameName")
+        field.setProperty("text", "Rascunho")
+        self.assertFalse(remove.isEnabled())
+        self.press(remove)
+        self.assertEqual(field.property("text"), "Rascunho")
+        self.press(self.owned_item("profileRenameCancel"))
+        self.press(remove)
+        selector = self.choose_remove_destination()
+        self.assertFalse(rename.isEnabled())
+        self.press(rename)
+        self.assertFalse(field.isVisible())
+        tabs = self.window.findChild(QObject, "settingsTabs")
+        tabs.setProperty("currentIndex", 3)
+        tabs.setProperty("currentIndex", 2)
+        self.assertEqual(selector.property("currentText"), "Pessoal")
+        self.evaluate("appearance.setToken('radius',8)")
+        self.assertFalse(self.owned_item("profileRemoveConfirm").isEnabled())
+        self.assertIn("prévia", self.owned_item("profileRemoveStatus").property("text"))
+        self.press(self.owned_item("profileRemoveConfirm"))
+        self.evaluate("appearance.cancel();appearance.begin()")
+        self.focus(selector)
+        self.press(selector)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        self.settle(lambda: not self.evaluate("popup.visible", selector))
+        QTest.qWait(30)  # KDE's Menu finishes its close/focus lifecycle before another Escape.
+        self.assertTrue(selector.isVisible(), "First Escape only closes the native option popup")
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        self.assertFalse(selector.isVisible())
+        self.assertTrue(self.popup.property("visible"))
+        self.press(remove)
+        self.choose_remove_destination()
+        self.evaluate("close()", self.popup)
+        newer = self.window.findChild(QQuickItem, "settingsButton")
+        newer.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(30)
+        self.assertEqual(self.window.activeFocusItem(), newer)
+        self.settle(lambda: not self.popup.property("visible"))
+        self.open_profiles()
+        self.assertFalse(selector.isVisible())
+        self.press(remove)
+        self.assertEqual(selector.property("currentIndex"), -1)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+
+    def test_remove_writer_preserves_newer_destination_opening_and_focus(self):
+        self.initialize()
+        self.open_profiles()
+        other = self.owned_item("profileName")
+        original = self.config.property("profilesJSON")
+        for mode in ("destination", "opening", "aba"):
+            with self.subTest(mode=mode):
+                self.config.setProperty("profilesJSON", original)
+                self.press(self.owned_item("profileRemoveToggle"))
+                selector = self.choose_remove_destination()
+                confirm = self.owned_item("profileRemoveConfirm")
+                before = json.loads(self.config.property("profilesJSON"))
+                scope = before["activeProfileId"]
+                writes = QSignalSpy(self.config.profilesJSONChanged)
+                def newer_ui():
+                    if mode == "destination":
+                        selector.forceActiveFocus(Qt.TabFocusReason)
+                        QTest.keyClick(self.window, Qt.Key_Home)
+                    elif mode == "opening":
+                        self.press(self.owned_item("profileRemoveCancel"))
+                        self.press(self.owned_item("profileRemoveToggle"))
+                    else:
+                        editor = self.owned_item("profileControls")
+                        editor.setProperty("removeDestination", "legacy")
+                        editor.setProperty("removeDestination", "personal")
+                    other.forceActiveFocus(Qt.TabFocusReason)
+                self.config.profilesJSONChanged.connect(newer_ui)
+                try:
+                    self.press(confirm)
+                finally:
+                    self.config.profilesJSONChanged.disconnect(newer_ui)
+                self.assertEqual(writes.count(), 1)
+                self.assertTrue(selector.isVisible())
+                self.assertEqual(self.window.activeFocusItem(), other)
+                self.assertEqual(selector.property("currentIndex"), {"destination": 0, "opening": -1, "aba": 1}[mode])
+                self.assertFalse(any(profile["id"] == scope for profile in json.loads(self.config.property("profilesJSON"))["profiles"]))
+                self.press(self.owned_item("profileRemoveCancel"))
+
+    def test_remove_first_open_and_stale_recovery_reveal_complete_rims_350_420(self):
+        self.initialize()
+        self.open_profiles()
+        viewport = self.owned_item("profileControls").property("contentItem")
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        for width in (350, 420):
+            with self.subTest(width=width):
+                self.popup.setProperty("width", width)
+                toggle = self.owned_item("profileRemoveToggle")
+                self.focus(toggle)
+                QTest.qWait(300)
+                QTest.keyClick(self.window, Qt.Key_Space)
+                QTest.keyClick(self.window, Qt.Key_Tab)
+                selector = self.owned_item("profileRemoveDestination")
+                self.assertEqual(self.window.activeFocusItem(), selector)
+                QTest.qWait(30)
+                self.assertGreaterEqual(selector.mapToItem(viewport, QPointF(0, 0)).y() - 2, 0)
+                self.assertLessEqual(selector.mapToItem(viewport, QPointF(0, 0)).y()+selector.height()+2, viewport.height())
+                self.choose_remove_destination()
+                for name in ("profileRemoveCancel", "profileRemoveConfirm"):
+                    item = self.owned_item(name)
+                    self.focus(item)
+                    QTest.qWait(30)
+                    point = item.mapToItem(viewport, QPointF(0, 0))
+                    self.assertGreaterEqual(point.x()-3, 0)
+                    self.assertGreaterEqual(point.y()-3, 0)
+                    self.assertLessEqual(point.x()+item.width()+3, viewport.width())
+                    self.assertLessEqual(point.y()+item.height()+3, viewport.height())
+                self.config.setProperty("autoContextDefaultProfile", "games" if width == 350 else "work")
+                self.focus(self.owned_item("profileRemoveCancel"))
+                QTest.qWait(30)
+                status = self.owned_item("profileRemoveStatus")
+                point = status.mapToItem(viewport, QPointF(0, 0))
+                self.assertGreaterEqual(point.y(), 0)
+                self.assertLessEqual(point.y()+status.height(), viewport.height())
+                QTest.keyClick(self.window, Qt.Key_Escape)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
 
     def test_rename_active_profile_is_explicit_and_changes_only_its_name(self):
         self.initialize()
@@ -375,9 +698,9 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertEqual(self.config.property("profilesJSON"), raw)
         self.assertEqual(writes.count(), 0)
 
-    def owned_item(self, name):
+    def owned_item(self, name, within=None):
         source = "(function find(item) { if (item.objectName === " + json.dumps(name) + ") return item; for (let child of item.children) { const result = find(child); if (result) return result; } return null; })(this)"
-        return self.evaluate(source, self.window.contentItem())
+        return self.evaluate(source, within or self.window.contentItem())
 
     def focus(self, control):
         control.forceActiveFocus(Qt.TabFocusReason)
@@ -488,12 +811,24 @@ class ProfilesDockTests(unittest.TestCase):
             # The ListView itself can be ignored; query only this fixture app's
             # public windows, including native-style popup windows.
             windows = [self.window] + [window for window in self.app.topLevelWindows()
-                                      if window != self.window]
+                                      if window != self.window and window.isVisible()]
             pending = [interface for window in windows
                        if (interface := QAccessible.queryAccessibleInterface(window)) is not None]
-            matches, visited = [], 0
+            if selector.objectName() == "profileRemoveDestination":
+                # KDE ignores the popup ListView itself. Query its real named
+                # delegate instead of traversing unrelated settings surfaces.
+                identity = self.evaluate("model.find(choice => choice.name === " + json.dumps(text) + ").id", selector)
+                menu = self.evaluate("popup.contentItem", selector)
+                option = self.owned_item("profileRemoveOption-" + identity, menu)
+                interface = QAccessible.queryAccessibleInterface(option) if option else None
+                pending = [interface] if interface else []
+            matches, visited, seen = [], 0, set()
             while pending:
                 item = pending.pop()
+                identity = QAccessible.uniqueId(item)
+                if identity in seen:
+                    continue
+                seen.add(identity)
                 visited += 1
                 self.assertLess(visited, 1024)
                 if (item.role() == QAccessible.Role.ListItem
@@ -512,6 +847,9 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertIsNotNone(actions)
         press = QAccessibleActionInterface.pressAction()
         self.assertIn(press, actions.actionNames(), "The real delegate must advertise Press")
+        if selector.objectName() == "profileRemoveDestination":
+            names = actions.actionNames()
+            self.assertEqual(len(names), len(set(names)), f"Destination delegate actions must be unique: {names}")
         actions.doAction(press)
         self.settle(lambda: not self.evaluate("popup.visible", selector))
 

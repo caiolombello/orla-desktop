@@ -275,6 +275,96 @@ class Gallery:
             window.close()
             engine.deleteLater()
 
+    def profile_remove(self, host: str) -> None:
+        """Captured impact, last profile and recovery in the existing short popup."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "ProfilesDockHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        popup = window.findChild(QQuickItem, "settingsPopup")
+        config = window.findChild(QObject, "configuration")
+        context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+
+        def evaluate(source, target=dock):
+            expression = QQmlExpression(context if target is dock else QQmlEngine.contextForObject(target), target, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+
+        def control(name):
+            item = window.findChild(QQuickItem, name)
+            if item is None:
+                raise RuntimeError("Missing removal gallery control: " + name)
+            return item
+
+        def focus(item):
+            item.forceActiveFocus(Qt.TabFocusReason)
+            QTest.qWait(60)
+            assert window.activeFocusItem() == item
+            viewport = control("profileControls").property("contentItem")
+            point = item.mapToItem(viewport, QPointF(0, 0))
+            assert point.y() - 3 >= 0 and point.y() + item.height() + 3 <= viewport.height()
+
+        try:
+            window.setWidth(900)
+            window.setHeight(900)
+            popup.setProperty("popupType", 0)
+            popup.setProperty("heightBudget", 420)
+            evaluate("anchors.centerIn=undefined;x=40;y=24;profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);profiles.select('work',profiles.activeProfileId,profiles.revision)")
+            base = json.loads(config.property("profilesJSON"))
+            bindings = {"formatVersion": "0.1-experimental", "activityBindings": [
+                {"contextId": "activity-work", "lastKnownName": "Foco", "profileId": "work"},
+                {"contextId": "activity-old", "lastKnownName": "Anterior", "profileId": "work"}],
+                "desktopBindings": [{"contextId": "desktop-old", "lastKnownName": "Antiga", "profileId": "work"}]}
+            for width in (350, 420):
+                for state in ("default", "last", "orphan", "stale"):
+                    document = json.loads(json.dumps(base))
+                    if state == "last":
+                        document["profiles"] = [profile for profile in document["profiles"] if profile["id"] == "work"]
+                    config.setProperty("autoContextEnabled", False)
+                    config.setProperty("profilesJSON", json.dumps(document))
+                    config.setProperty("contextsJSON", json.dumps(bindings))
+                    config.setProperty("autoContextDefaultProfile", "work")
+                    config.setProperty("autoContextEnabled", state != "last")
+                    popup.setProperty("width", width)
+                    popup.open()
+                    control("settingsTabs").setProperty("currentIndex", 2)
+                    focus(control("profileRemoveToggle"))
+                    QTest.keyClick(window, Qt.Key_Space)
+                    destination = control("profileRemoveDestination")
+                    assert destination.property("currentIndex") == -1
+                    focus(destination)
+                    if state == "last":
+                        self.save(f"profiles-remove-{host}-{state}-{width}", window, self.scene_rect(popup))
+                        popup.close()
+                        QTest.qWait(300)
+                        continue
+                    QTest.keyClick(window, Qt.Key_Down)
+                    assert destination.property("currentIndex") == 0
+                    focus(control("profileRemoveConfirm"))
+                    if state == "stale":
+                        config.setProperty("autoContextPolicy", "desktop")
+                        focus(control("profileRemoveCancel"))
+                        assert "mudou" in control("profileRemoveStatus").property("text")
+                    elif state == "orphan":
+                        QTest.keyClick(window, Qt.Key_Space)
+                        control("settingsTabs").setProperty("currentIndex", 3)
+                        QTest.qWait(60)
+                        orphan = control("orphanProfileBindings")
+                        controls = control("contextControls")
+                        viewport = controls.property("contentItem")
+                        point = orphan.mapToItem(viewport, QPointF(0, 0))
+                        viewport.setProperty("contentY", viewport.property("contentY") + point.y())
+                    self.save(f"profiles-remove-{host}-{state}-{width}", window, self.scene_rect(popup))
+                    popup.close()
+                    QTest.qWait(300)
+                    config.setProperty("autoContextPolicy", "activity-desktop")
+        finally:
+            popup.close()
+            window.close()
+            engine.deleteLater()
+
     def appearance_catalog(self, host: str) -> None:
         """Compact and expanded preset states in the unchanged short popup."""
         engine = self.engine()
@@ -929,6 +1019,7 @@ def render(host: str, output: Path) -> int:
     gallery.dock(host)
     gallery.auto_contexts(host)
     gallery.profile_rename(host)
+    gallery.profile_remove(host)
     gallery.appearance_catalog(host)
     gallery.appearance_advanced(host)
     gallery.widget_order(host)

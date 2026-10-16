@@ -8,6 +8,8 @@ Controls.ScrollView {
     objectName: "profileControls"
     required property var profiles
     required property var appearance
+    required property var configuration
+    required property var contextBindings
     property var preset: null
     property bool sessionOpen: true
     readonly property bool dirty: appearance.dirty || (preset !== null && preset.dirty)
@@ -27,6 +29,22 @@ Controls.ScrollView {
         : renameStale ? qsTr("O perfil mudou. Cancele esta edição e abra Renomear novamente; seu rascunho foi mantido.")
         : !profiles.writable ? qsTr("Não é possível renomear enquanto a configuração estiver protegida.")
         : renameError
+    property var removal: null
+    property string removeDestination: ""
+    property string removeError: ""
+    property int removeEpoch: 0
+    property int destinationEpoch: 0
+    property int impactEpoch: 0
+    property bool removing: false
+    readonly property bool removeOpen: removal !== null
+    readonly property string removeProblem: !removal ? ""
+        : dirty ? qsTr("Aplique ou cancele a prévia na aba Aparência antes de remover.")
+        : removal.impactError ? removal.impactError
+        : !profiles.writable ? qsTr("A configuração está protegida. Cancele esta confirmação e confira os perfis.")
+        : !removalCurrent(removal) ? qsTr("A configuração mudou. Cancele esta confirmação e abra Remover novamente.")
+        : !removeDestination ? qsTr("Escolha o perfil que o dock usará após a remoção.") : removeError
+    readonly property bool canRemove: Boolean(removal && !dirty && !renameOpen && !removal.impactError
+        && removalCurrent(removal) && removal.choices.some(choice => choice.id === removeDestination))
     contentWidth: availableWidth
     clip: true
     function reveal(control) {
@@ -54,7 +72,7 @@ Controls.ScrollView {
         });
     }
     function beginRename() {
-        if (!sessionOpen || !visible || !profiles.writable || !activeProfile) return;
+        if (!sessionOpen || !visible || removeOpen || !profiles.writable || !activeProfile) return;
         renameEpoch++;
         renameOwner = profiles;
         renameScope = profiles.activeProfileId;
@@ -101,7 +119,119 @@ Controls.ScrollView {
                 && (owner.revision === revision || owner.revision === revision + 1)) cancelRename(focused);
         else renameError = owner.error || qsTr("Não foi possível renomear. Cancele e abra a edição novamente.");
     }
-    onSessionOpenChanged: if (!sessionOpen) resetRename()
+    function sameImpact(intent) {
+        return Boolean(configuration && contextBindings && configuration === intent.configuration && profiles === intent.profiles
+            && contextBindings === intent.bindings && impactEpoch === intent.impactEpoch
+            && profiles.configuration === configuration && contextBindings.configuration === configuration
+            && contextBindings.profiles === profiles && contextBindings.writable
+            && contextBindings.revision === intent.bindingRevision && contextBindings.savedJSON === intent.bindingRaw
+            && configuration.autoContextDefaultProfile === intent.defaultId
+            && configuration.autoContextEnabled === intent.enabled && configuration.autoContextPolicy === intent.policy);
+    }
+    function removalCurrent(intent) {
+        return Boolean(intent && sameImpact(intent) && profiles.writable && profiles.activeProfileId === intent.scope
+            && profiles.revision === intent.revision && profiles.savedJSON === intent.raw);
+    }
+    function beginRemoval() {
+        if (!sessionOpen || !visible || renameOpen || !profiles.writable || !activeProfile) return;
+        let count = 0, impactError = "";
+        if (!configuration || !contextBindings || profiles.configuration !== configuration || contextBindings.configuration !== configuration
+                || contextBindings.profiles !== profiles)
+            impactError = qsTr("Não foi possível conferir os donos da configuração. Cancele e abra Remover novamente.");
+        else if (!contextBindings.writable)
+            impactError = qsTr("As associações estão inválidas ou indisponíveis. Confira Contextos antes de remover.");
+        else count = contextBindings.bindings.activityBindings.concat(contextBindings.bindings.desktopBindings)
+            .filter(binding => binding.profileId === profiles.activeProfileId).length;
+        removeEpoch++;
+        removeDestination = "";
+        removeError = "";
+        removal = {profiles: profiles, configuration: configuration, bindings: contextBindings,
+            scope: profiles.activeProfileId, name: activeProfile.name, revision: profiles.revision, raw: profiles.savedJSON,
+            bindingRevision: contextBindings ? contextBindings.revision : -1, bindingRaw: contextBindings ? contextBindings.savedJSON : undefined, impactEpoch: impactEpoch,
+            defaultId: configuration ? configuration.autoContextDefaultProfile : undefined, enabled: configuration ? configuration.autoContextEnabled : undefined,
+            policy: configuration ? configuration.autoContextPolicy : undefined, count: count, impactError: impactError,
+            choices: [{id: "legacy", name: qsTr("Preferências anteriores")}]
+                .concat(profiles.profiles.filter(profile => profile.id !== profiles.activeProfileId))};
+        // A newly populated native ComboBox selects row zero; destination is always explicit.
+        removeSelector.currentIndex = -1;
+        revealRemoval(removeToggle);
+    }
+    function resetRemoval() { removeEpoch++; removal = null; removeDestination = ""; removeError = ""; }
+    function cancelRemoval() {
+        const window = controls.Window.window;
+        const focused = window ? window.activeFocusItem : null;
+        const owned = focused === removeSelector || focused === removeConfirm || focused === removeCancel;
+        const epoch = removeEpoch;
+        resetRemoval();
+        if (sessionOpen && visible && removeEpoch === epoch + 1 && !removeOpen && owned
+                && window.activeFocusItem === focused && removeToggle.enabled)
+            removeToggle.forceActiveFocus(Qt.TabFocusReason);
+    }
+    function confirmRemoval() {
+        if (removing || !sessionOpen || !appearance.editing || !visible || !removeConfirm.visible || !canRemove) return;
+        const intent = removal, destination = removeDestination, epoch = removeEpoch, destinationTicket = destinationEpoch;
+        const window = controls.Window.window;
+        const focused = window ? window.activeFocusItem : null;
+        const valid = () => Boolean(sessionOpen && appearance.editing && visible && removal === intent && removeEpoch === epoch
+            && destinationEpoch === destinationTicket && removeDestination === destination && !dirty && !renameOpen && removalCurrent(intent));
+        let accepted = false;
+        removing = true;
+        try { accepted = intent.profiles.removeCurrent(destination, intent.scope, intent.revision, valid) === true; }
+        catch (_) { accepted = false; }
+        finally { removing = false; }
+        if (!sessionOpen || !visible || removal !== intent || removeEpoch !== epoch || destinationEpoch !== destinationTicket || removeDestination !== destination
+                || profiles !== intent.profiles || configuration !== intent.configuration || contextBindings !== intent.bindings) return;
+        if (accepted && sameImpact(intent) && profiles.revision === intent.revision + 1
+                && profiles.activeProfileId === destination && !profiles.profiles.some(profile => profile.id === intent.scope)) {
+            resetRemoval();
+            if (sessionOpen && visible && removeEpoch === epoch + 1 && !removeOpen && controls.Window.window === window
+                    && window && (window.activeFocusItem === focused || window.activeFocusItem === activeProfileCard)
+                    && (focused === removeSelector || focused === removeConfirm || focused === removeCancel))
+                selector.forceActiveFocus(Qt.TabFocusReason);
+        } else {
+            removeError = profiles.error || qsTr("Não foi possível remover. Confira o perfil ativo e abra a confirmação novamente.");
+            if (window && window.activeFocusItem === focused && focused === removeConfirm && !removeConfirm.enabled)
+                removeCancel.forceActiveFocus(Qt.TabFocusReason);
+        }
+    }
+    function revealRemoval(control) {
+        const owner = controls, epoch = removeEpoch;
+        Qt.callLater(() => {
+            if (!Qt.isQtObject(owner) || !Qt.isQtObject(control) || !owner.sessionOpen || !owner.visible
+                    || owner.removeEpoch !== epoch || !control.visible || !control.activeFocus) return;
+            const viewport = owner.contentItem, rim = Style.space.xs;
+            const target = control === removeConfirm || control === removeCancel ? removeRecovery : control;
+            const item = target.height + rim * 2 <= viewport.height ? target : control;
+            const point = item.mapToItem(viewport, 0, 0);
+            if (point.y - rim < 0) viewport.contentY += point.y - rim;
+            else if (point.y + item.height + rim > viewport.height)
+                viewport.contentY += point.y + item.height + rim - viewport.height;
+        });
+    }
+    onSessionOpenChanged: if (!sessionOpen) { resetRename(); resetRemoval(); }
+    onRemoveDestinationChanged: destinationEpoch++
+    Keys.onEscapePressed: event => {
+        if (removeOpen) {
+            if (removeSelector.popup.visible) removeSelector.popup.close(); else cancelRemoval();
+            event.accepted = true;
+        } else if (renameOpen) { cancelRename(); event.accepted = true; }
+        else event.accepted = false;
+    }
+    onConfigurationChanged: impactEpoch++
+    onContextBindingsChanged: impactEpoch++
+    onProfilesChanged: impactEpoch++
+    Connections {
+        target: controls.configuration || null
+        function onAutoContextDefaultProfileChanged() { controls.impactEpoch++; }
+        function onAutoContextEnabledChanged() { controls.impactEpoch++; }
+        function onAutoContextPolicyChanged() { controls.impactEpoch++; }
+    }
+    Connections { target: controls.profiles; function onConfigurationChanged() { controls.impactEpoch++; } }
+    Connections {
+        target: controls.contextBindings || null
+        function onConfigurationChanged() { controls.impactEpoch++; }
+        function onProfilesChanged() { controls.impactEpoch++; }
+    }
     Connections { target: controls.profiles; function onActiveProfileIdChanged() { controls.pendingId = controls.profiles.activeProfileId; } }
     Connections {
         target: controls.contentItem
@@ -109,6 +239,9 @@ Controls.ScrollView {
             if (controls.renameOpen)
                 for (const control of [renameName, renameSave, renameCancel])
                     if (control.activeFocus) controls.revealRename(control);
+            if (controls.removeOpen)
+                for (const control of [removeToggle, removeSelector, removeConfirm, removeCancel])
+                    if (control.activeFocus) controls.revealRemoval(control);
         }
     }
     ColumnLayout {
@@ -164,6 +297,7 @@ Controls.ScrollView {
             onClicked: controls.profiles.select(controls.pendingId, controls.profiles.activeProfileId, controls.profiles.revision)
         }
         Card {
+            id: activeProfileCard
             Layout.fillWidth: true
             contentItem: ColumnLayout {
                 spacing: Style.space.sm
@@ -175,20 +309,171 @@ Controls.ScrollView {
                     textFormat: Text.PlainText
                     wrapMode: Text.WordWrap
                 }
-                OrlaButton {
-                    id: renameToggle
-                    objectName: "profileRenameToggle"
-                    text: qsTr("Renomear")
-                    variant: "ghost"
-                    checkable: true
-                    checked: controls.renameOpen
-                    enabled: Boolean(controls.activeProfile) && controls.profiles.writable
-                    Accessible.name: qsTr("Renomear perfil ativo")
-                    onClicked: {
-                        if (!enabled || !visible || !controls.sessionOpen) return;
-                        if (controls.renameOpen) controls.cancelRename(); else controls.beginRename();
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space.sm
+                    OrlaButton {
+                        id: renameToggle
+                        objectName: "profileRenameToggle"
+                        text: qsTr("Renomear")
+                        variant: "ghost"
+                        checkable: true
+                        checked: controls.renameOpen
+                        enabled: Boolean(controls.activeProfile) && controls.profiles.writable && !controls.removeOpen
+                        Accessible.name: qsTr("Renomear perfil ativo")
+                        onClicked: {
+                            if (!enabled || !visible || !controls.sessionOpen) return;
+                            if (controls.renameOpen) controls.cancelRename(); else controls.beginRename();
+                        }
+                        onActiveFocusChanged: if (activeFocus) controls.revealRename(this)
                     }
-                    onActiveFocusChanged: if (activeFocus) controls.revealRename(this)
+                    OrlaButton {
+                        id: removeToggle
+                        objectName: "profileRemoveToggle"
+                        text: qsTr("Remover…")
+                        variant: "ghost"
+                        checkable: true
+                        checked: controls.removeOpen
+                        enabled: Boolean(controls.activeProfile) && controls.profiles.writable && !controls.renameOpen
+                        Accessible.name: qsTr("Preparar remoção do perfil ativo")
+                        onClicked: {
+                            if (!enabled || !visible || !controls.sessionOpen) return;
+                            if (controls.removeOpen) controls.cancelRemoval(); else controls.beginRemoval();
+                        }
+                        onActiveFocusChanged: if (activeFocus) controls.revealRemoval(this)
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space.sm
+                    visible: controls.removeOpen
+                    onHeightChanged: {
+                        for (const control of [removeToggle, removeSelector, removeConfirm, removeCancel])
+                            if (control.activeFocus) controls.revealRemoval(control);
+                    }
+                    Controls.Label {
+                        objectName: "profileRemoveQuestion"
+                        Layout.fillWidth: true
+                        text: controls.removal ? qsTr("Remover “%1”?").arg(controls.removal.name) : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.bold: true
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Remove as preferências salvas deste perfil, sem Desfazer. Apps instalados e Pomodoro são preservados.")
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        visible: controls.removal && controls.removal.choices.length === 1
+                        text: qsTr("Este é o último perfil. Escolha Preferências anteriores para continuar.")
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                    }
+                    Controls.Label { text: qsTr("Após remover, usar"); textFormat: Text.PlainText }
+                    Controls.ComboBox {
+                        id: removeSelector
+                        objectName: "profileRemoveDestination"
+                        Layout.fillWidth: true
+                        model: controls.removal ? controls.removal.choices : []
+                        textRole: "name"
+                        popup.focus: false
+                        currentIndex: -1
+                        displayText: currentIndex < 0 ? qsTr("Escolha o perfil de destino") : currentText
+                        Accessible.name: qsTr("Perfil a usar após remover")
+                        Accessible.onPressAction: {
+                            if (!enabled || !visible || !controls.sessionOpen) return;
+                            forceActiveFocus(Qt.OtherFocusReason);
+                            if (popup.visible) popup.close(); else popup.open();
+                        }
+                        onActivated: index => {
+                            if (enabled && visible && controls.removal && index >= 0 && index < controls.removal.choices.length)
+                                controls.removeDestination = controls.removal.choices[index].id;
+                        }
+                        onActiveFocusChanged: if (activeFocus) controls.revealRemoval(this)
+                        Keys.onEscapePressed: event => {
+                            if (popup.visible) popup.close(); else controls.cancelRemoval();
+                            event.accepted = true;
+                        }
+                        delegate: Controls.ItemDelegate {
+                            id: removeOption
+                            required property var modelData
+                            objectName: "profileRemoveOption-" + modelData.id
+                            width: removeSelector.width
+                            text: modelData.name
+                            Accessible.onPressAction: {
+                                if (enabled && visible && removeSelector.popup.visible) click();
+                            }
+                            contentItem: Text { text: parent.text; textFormat: Text.PlainText; color: removeSelector.palette.text; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: -Style.space.xxs
+                            color: "transparent"
+                            radius: Style.radius.control
+                            border.width: removeSelector.activeFocus ? 2 : 0
+                            border.color: removeSelector.palette.highlight
+                        }
+                    }
+                    ColumnLayout {
+                        id: removeRecovery
+                        Layout.fillWidth: true
+                        spacing: Style.space.sm
+                        Controls.Label {
+                            id: removeImpact
+                            objectName: "profileRemoveImpact"
+                            Layout.fillWidth: true
+                            text: !controls.removal || controls.removal.impactError ? ""
+                                : qsTr("%1 associações de Activity/área serão mantidas por ID e ficarão indisponíveis. Revise em Contextos.").arg(controls.removal.count)
+                                    + (controls.removal.defaultId === controls.removal.scope
+                                        ? (controls.removal.enabled ? qsTr("\nÉ o padrão do automático ligado. A alternância aguardará um novo padrão válido.")
+                                            : qsTr("\nÉ o padrão do automático desligado. Escolha um novo padrão antes de ativá-lo.")) : "")
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.space.sm
+                            OrlaButton {
+                                id: removeCancel
+                                objectName: "profileRemoveCancel"
+                                variant: "ghost"
+                                text: qsTr("Cancelar")
+                                Accessible.name: qsTr("Cancelar remoção do perfil")
+                                onClicked: if (visible && controls.sessionOpen) controls.cancelRemoval()
+                                onActiveFocusChanged: if (activeFocus) controls.revealRemoval(this)
+                                Keys.onEscapePressed: event => { controls.cancelRemoval(); event.accepted = true; }
+                            }
+                            OrlaButton {
+                                id: removeConfirm
+                                objectName: "profileRemoveConfirm"
+                                text: qsTr("Remover perfil")
+                                enabled: controls.canRemove
+                                Accessible.name: controls.removal ? qsTr("Confirmar remoção de %1").arg(controls.removal.name) : qsTr("Confirmar remoção")
+                                Accessible.description: removeImpact.text + (removeSelector.currentIndex < 0 ? "" : qsTr(" Após remover, usar %1.").arg(removeSelector.currentText))
+                                onClicked: controls.confirmRemoval()
+                                onEnabledChanged: {
+                                    const window = controls.Window.window;
+                                    if (!enabled && !controls.removing && controls.removeOpen && controls.visible
+                                            && window && window.activeFocusItem === removeConfirm)
+                                        removeCancel.forceActiveFocus(Qt.TabFocusReason);
+                                }
+                                onActiveFocusChanged: if (activeFocus) controls.revealRemoval(this)
+                                Keys.onEscapePressed: event => { controls.cancelRemoval(); event.accepted = true; }
+                            }
+                        }
+                        Controls.Label {
+                            objectName: "profileRemoveStatus"
+                            Layout.fillWidth: true
+                            visible: text.length > 0
+                            text: controls.removeProblem
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                            Accessible.role: Accessible.AlertMessage
+                        }
+                    }
                 }
                 ColumnLayout {
                     id: renameEditor
