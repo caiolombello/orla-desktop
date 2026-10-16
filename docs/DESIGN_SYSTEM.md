@@ -190,6 +190,8 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   settings discards them. A changed owner, profile or revision makes the draft
   stale instead of redirecting it. Reveal the focused editor with its whole focus
   ring at 350/420 px. Preserve newer input and focus after synchronous saves.
+  Use inherited button accessibility actions; redundant Press handlers duplicate
+  the exported action list. Test the public action interface.
 - **Automatic profiles.** Keep the default-profile and context-input selectors,
   native opt-in and plain status in one rounded Contexts module. Choosing either
   selector must not enable automation. Keep an unknown context policy visible as

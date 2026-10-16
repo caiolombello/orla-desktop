@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
 from PySide6.QtGui import QAccessible, QAccessibleActionInterface, QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlExpression
+from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy, QTest
 
@@ -82,13 +82,12 @@ class ProfilesDockTests(unittest.TestCase):
         actions = interface.actionInterface()
         self.assertIsNotNone(actions)
         press = QAccessibleActionInterface.pressAction()
-        self.assertIn(press, actions.actionNames())
+        names = actions.actionNames()
+        self.assertIn(press, names)
+        if control.objectName().startswith("profileRename"):
+            self.assertEqual(len(names), len(set(names)), f"Button actions must be unique: {names}")
+            self.assertEqual(names.count(press), 1)
         actions.doAction(press)
-
-    def local_press(self, control):
-        expression = QQmlExpression(QQmlEngine.contextForObject(control), control, "Accessible.pressAction()")
-        expression.evaluate()
-        self.assertFalse(expression.hasError(), expression.error().toString())
 
     def configuration_snapshot(self):
         meta = self.config.metaObject()
@@ -159,20 +158,38 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertEqual(self.owned_item("profileActiveName").property("text"), "Trabalho")
         saved = json.loads(self.config.property("profilesJSON"))
         writes = QSignalSpy(self.config.profilesJSONChanged)
-        self.press(self.owned_item("profileRenameToggle"))
+        disclosure = self.owned_item("profileRenameToggle")
+        save = self.owned_item("profileRenameSave")
+        cancel = self.owned_item("profileRenameCancel")
+        disclosure_clicks = QSignalSpy(disclosure.clicked)
+        save_clicks = QSignalSpy(save.clicked)
+        cancel_clicks = QSignalSpy(cancel.clicked)
+        self.press(disclosure)
+        self.assertEqual(disclosure_clicks.count(), 1)
         field = self.owned_item("profileRenameName")
         self.assertEqual(field.property("text"), "Trabalho")
         field.setProperty("text", "Equipe")
         # Press can start from another control; the native Button takes focus before clicking.
         other = self.owned_item("profileName")
         self.focus(other)
-        self.local_press(self.owned_item("profileRenameSave"))
+        self.press(save)
         self.assertEqual(self.window.activeFocusItem(), self.owned_item("profileRenameToggle"))
         next(profile for profile in saved["profiles"] if profile["id"] == "work")["name"] = "Equipe"
         self.assertEqual(json.loads(self.config.property("profilesJSON")), saved)
         self.assertEqual(writes.count(), 1)
+        self.assertEqual(save_clicks.count(), 1)
+        self.assertEqual(cancel_clicks.count(), 0)
         self.assertEqual(selector.property("currentText"), "Pessoal")
         self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.press(disclosure)
+        field.setProperty("text", "Descartar este nome")
+        self.press(cancel)
+        self.assertFalse(field.isVisible())
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), saved)
+        self.assertEqual(writes.count(), 1, "Cancel after explicit Save contributes zero writes")
+        self.assertEqual(disclosure_clicks.count(), 2)
+        self.assertEqual(save_clicks.count(), 1)
+        self.assertEqual(cancel_clicks.count(), 1)
 
     def test_rename_invalid_duplicate_and_same_name_are_zero_write_actions(self):
         self.initialize()

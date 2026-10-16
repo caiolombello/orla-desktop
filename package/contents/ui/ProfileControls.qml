@@ -184,7 +184,6 @@ Controls.ScrollView {
                     checked: controls.renameOpen
                     enabled: Boolean(controls.activeProfile) && controls.profiles.writable
                     Accessible.name: qsTr("Renomear perfil ativo")
-                    Accessible.onPressAction: if (enabled && visible && controls.sessionOpen) click()
                     onClicked: {
                         if (!enabled || !visible || !controls.sessionOpen) return;
                         if (controls.renameOpen) controls.cancelRename(); else controls.beginRename();
@@ -228,7 +227,6 @@ Controls.ScrollView {
                             text: qsTr("Renomear")
                             enabled: controls.profiles.writable && !controls.dirty && !controls.renameStale
                             onClicked: controls.saveRename()
-                            Accessible.onPressAction: if (enabled && visible) click()
                             onActiveFocusChanged: if (activeFocus) controls.revealRename(this)
                             Keys.onEscapePressed: event => { controls.cancelRename(); event.accepted = true; }
                         }
@@ -238,7 +236,6 @@ Controls.ScrollView {
                             text: qsTr("Cancelar")
                             variant: "ghost"
                             onClicked: if (visible && controls.sessionOpen) controls.cancelRename()
-                            Accessible.onPressAction: if (enabled && visible) click()
                             onActiveFocusChanged: if (activeFocus) controls.revealRename(this)
                             Keys.onEscapePressed: event => { controls.cancelRename(); event.accepted = true; }
                         }
