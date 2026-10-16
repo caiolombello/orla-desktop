@@ -604,6 +604,98 @@ separate from installing or exercising this new policy in KDE.
 | Contexts composition, KDE | `ae6c19f60f60cd8df8f219d77ab003d36bfc6d824cbd5c6cfce11e1c85f59230` |
 | Final appearance/profile consumers, both styles | `7275df00bd5354de628ce206d8ae23a6081c83bb19ba5760deb95f815d9ecf4d` |
 
+## Desktop-only development package installation
+
+The 72-entry development archive `de59d4c58099edad3eaaa36205fe2ed0249f9421bf25c64dddce1fe2e14c4a15`
+was installed with one controlled Plasma stop/start. Only the schema, automatic
+controller, automatic controls and Contexts explanation changed within the
+package. The old package has a new read-only durable backup and a verified
+rollback archive preserving its original modes. No rollback was needed.
+
+A fresh independent postcheck confirmed Source/archive/installed equality,
+the complete original main configuration plus the previously declared 810/630
+dialog overlay, inventory, bar roles and bytes, launcher and original layout
+banks. Automation stayed OFF; all five profile/automation disk keys, including
+`autoContextPolicy`, remain absent. The typed runtime read is paired with the
+pinned new String schema default `activity-desktop`; a caller fallback before
+the upgrade was explicitly recorded only as a fallback. Cache membership is
+not used as evidence of disk presence. Autolock remains false, the screen was
+unlocked and automatic shell restarts stayed zero. This installation check does
+not itself qualify the new policy UI or automatic behavior.
+
+| Installation evidence | SHA-256 |
+| --- | --- |
+| Controlled installation | `f43d26403b36d98d3f42596f8fc58ffe0b6d6aafed5d973d516307ffb86a0290` |
+| Fresh package/backup/main-preservation check | `efb9b0cbae65735e35d49bff0e41828ad13c2658939a28e58fbe3c823c8cef67` |
+
+## Desktop-only private KDE attempt R1
+
+The first attempt failed at the unchanged eight-second `choose_policy` phase
+deadline. It reached two public Press actions and one SetFocus: the policy
+control became visible/showing after focus, but the reader stopped before
+pressing it. The sole completed milestone was the initial strict-policy/OFF
+state. A real owned ActivityManager reported an empty Activity list and current
+Activity. This attempt did not select the new policy, enable automation or
+qualify desktop switching; it does not demonstrate a production defect.
+
+The outer result retained `namespace_exit`, and the reader retained
+`reader_phase_deadline`. The nested lifecycle also retained
+`reader_cleanup_AssertionError`: its already-failed reader exited with code 1.
+Every recorded direct child was nevertheless reaped without forced cleanup,
+the accessibility daemon exit was confirmed, and private sockets were absent.
+A fresh independent postcheck confirmed the main session, installed package,
+configuration and five absent keys were preserved. That preservation PASS does
+not change the failed journey result.
+
+The R2 reader replaces redundant full accessibility-tree traversals with one
+fresh frame per checkpoint. It discards the pre-focus frame after SetFocus and
+retains a separate fresh eligibility check before Press. Source, actions,
+deadlines, disk/context guards and cleanup are unchanged. Individual R1 scan
+durations were not measured, so the structural reduction is not a measured
+speedup or a conclusive explanation of every elapsed millisecond.
+
+| R1 evidence | SHA-256 |
+| --- | --- |
+| Failed outer episode | `1f233de0927f75313b6085125e34b67157cc192e6b2993871cece63ea24987ae` |
+| Failed reader | `09e8a9246597bafb78755e6d4561a7baa3d15adac0d80360ba73908833eb7544` |
+| Fresh main-session preservation | `dff7a618c5e61a3cc42fc425f7ca70e9df609c2179dcc936ac732109bcee53d3` |
+
+## Desktop-only private KDE attempt R2
+
+The first host completed all six reader milestones in 15.369 seconds with
+seven public Press actions and one SetFocus. With the same live empty
+ActivityManager, selecting **Somente áreas** kept automation OFF and the legacy
+profile unchanged. Explicitly enabling it while Settings was open still kept
+that profile. Closing Settings then selected Work on D0; real KWin transitions
+selected Personal on D1 and Work on D0. The host exited normally and its saved
+document, raw bindings, default, thirteen flat flags and six timer fields met
+the strict fixture checks. The complete 72-entry package stayed unchanged.
+This qualifies that bounded public UI and single-host automatic journey.
+
+With the host absent, changing only the desktop to D1 left the saved profile
+at Work, confirming the restart test was non-vacuous. The second host reached
+the `private-host-discovery` stage, whose implementation also waits for the
+expected saved profile before starting the accessibility reader. That stage
+failed with `TimeoutExpired` / `owned_wait_deadline`; no second-reader receipt
+exists. The post-cleanup document still selected Work. The record does not
+identify the exact timed-out configuration read or the second host's in-memory
+state. It therefore leaves this policy's restart gate open; the overall R2
+result remains FAILED despite the completed first-host journey.
+
+All recorded children were reaped without forced cleanup; accessibility daemon
+exits and socket removal were confirmed, with no lifecycle cleanup errors.
+A fresh independent postcheck again confirmed the complete declared main
+session and package were preserved, automation OFF, five disk keys absent,
+autolock false, screen unlocked and zero automatic shell restarts. It records
+the missing second reader as `ABSENT`, without manufacturing a completion.
+
+| R2 evidence | SHA-256 |
+| --- | --- |
+| Failed overall episode | `9bf2c9ff02ffddbf23fb1013b27f4d260fc2737c842e41bd7f62959d3a83a550` |
+| Passed first-host reader | `107440c33db992e033c6ff617ecd8703f816375d05d6c7c813cfa08d2995a8a4` |
+| Session lifecycle and restart failure | `8fb1a38e3af59f1aca7b4419b5a854365128894eb3d7c5eade73df5e8cd42e71` |
+| Fresh main-session preservation | `df98cbcedf6edd33626ceb98b6d25720b1fd0ee4c4281cb8507833b664694902` |
+
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,
@@ -616,11 +708,11 @@ does not reinterpret that earlier negative result.
 
 The bounded desktop and Activity rename/removal/recreation and active Pomodoro
 journeys are now qualified in the private KDE fixture on the preceding installed
-package. The new desktop-only policy has Source/UI/tests; its installation and
-corresponding real KDE journey remain separate gates. Require a live owned
-ActivityManager reporting no current Activity and an empty list, real desktop
-transitions, public opt-in and a restart using the same saved configuration.
-No Activity creation or snapshot override can stand in for this case.
+package. The new desktop-only policy has Source/UI/tests, the guarded local
+installation and the first-host empty-Activity/public-opt-in/desktop journey
+above. Its restart using the same saved configuration remains open after R2.
+Diagnose the second-host wait before changing Source or retrying; neither a
+larger timeout nor the first-host PASS can substitute for a verified restart.
 Other interaction drafts, the user's panel, focus/seat and monitor behavior also
 remain open. Persisted timerRemaining alone is not the running countdown; the
 Pomodoro qualification above required the original deadline and real counts.
