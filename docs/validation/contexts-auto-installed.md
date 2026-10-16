@@ -786,6 +786,53 @@ separate gates; P2 is not complete.
 | Session lifecycle | `ea7b3a5021e1b8355ff90729c5ca524bc5430547081f7bd4e5c29f83865ef673` |
 | Fresh main-session preservation | `89260646661b522228a3a8dcdb88232ea52c8ccce650e5089cd92020d92d7ddc` |
 
+## Saved association cleanup — Source, 16 October 2026
+
+The experimental **Associações salvas** section starts collapsed and unselected.
+It lists validated Activity and desktop entries, including unavailable contexts
+and orphan profiles. Selecting captures the domain, full ID and saved target;
+explicit confirmation removes only that association. Cancel is passive, tabs
+preserve the question and closing Settings discards it. Invalid/future documents
+remain protected. No context or profile is deleted and no format is migrated.
+
+The additive synchronous guard on `unbind` checks captured owners, documents,
+revisions and newer intent immediately before the single binding assignment.
+The UI separately checks ownership of the expected result after callbacks.
+Regressions cover equal cross-domain IDs, stale/ABA changes, reentrant newer
+questions/focus, cancellation, orphan/empty profiles, literal markup and a
+256-character ID. Composition checks deferred automatic fallback, preserved
+manual choice and an invalid default that stays paused.
+
+Final affected suites passed **193 tests plus two existing TaskManager skips
+per style**, Fusion and `org.kde.desktop`: bindings 22, automatic composition
+60, Contexts UI 45 +1 skip, profiles UI 45 +1 skip and appearance 21. Final UI
+runs emitted no QML warnings and completed cleanup. Design check found zero
+issues; all seven design guards passed. Independent static reviews approved
+the frozen core and UI within their stated scope.
+
+Twenty-four new final captures cover empty, 128-entry list, long details,
+confirmation, stale and protected states at 350/420 px in both schemes. The
+review found and corrected a clipped retained focus and overlapping native-menu
+rows, without changing popup budgets. The final delegate uses native MenuItem
+actions. Representative confirmation: [dark](../screenshots/contexts-saved/contexts-saved-dark-confirm-420.png)
+/ [light](../screenshots/contexts-saved/contexts-saved-light-confirm-420.png);
+protected state: [dark](../screenshots/contexts-saved/contexts-saved-dark-protected-350.png)
+/ [light](../screenshots/contexts-saved/contexts-saved-light-protected-350.png).
+
+One development probe aborted in Shiboken; its exclusive cause remains unknown.
+The final full suites exited cleanly. A separate artifact mistake overwrote
+partial PNGs from an earlier failed contrast. Their custody is lost; original
+failure logs and other captures remain. They are excluded from acceptance.
+The final 24 captures use fresh destinations, matching Source bookends and
+individual hashes; they do not reconstruct that lost historical evidence.
+
+The new deterministic archive `7a06d76e…` retains 72 paths and changes only
+ContextBindingsState, ContextControls and the Settings wiring, with no metadata
+or published-release asset changes. At this Source checkpoint it is not yet
+installed; installation and a new private KDE persistence journey are separate
+gates. The user's actual associations have not been removed. P1/P2 stay partial.
+Private Source receipts: `.runtime/context-binding-cleanup-20261016/`.
+
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,

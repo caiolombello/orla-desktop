@@ -210,6 +210,15 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   popup. If “Retomar automático agora” disappears while focused, transfer that
   existing focus to an available control without a deferred focus reclaim. Status in the profile
   summary may elide; the full status remains in Contexts. Review 350/420 px in both schemes.
+- **Saved context associations.** Keep review in an initially collapsed rounded
+  module with a native, initially unselected ComboBox. Selecting one entry opens
+  its inline confirmation; Cancel permits another choice. Show domain and full
+  ID in bounded plain text that wraps, including when names match or discovery
+  is unavailable. Never infer deletion or auto-clean missing contexts. Keep
+  cancel/stale recovery and the complete focused control visible at 350/420 px;
+  tabs preserve the question, Settings close discards it. Native menu Escape
+  closes the menu before inline cancellation. Preserve newer intent/focus after
+  a save; test unique public accessibility actions and both schemes.
 - **Bar settings.** Keep content choices together and appearance in a second rounded
   module. Menu customization and panel-composition help start collapsed; opening them
   must not change any `cfg_*` value. Keep aliased native controls instantiated while

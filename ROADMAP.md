@@ -1381,6 +1381,19 @@ persistência e postcheck passaram, preservando a sessão principal. A precedên
 do backend privado está qualificada; UI, painel do usuário e foco/seat continuam
 abertos. [Evidência](docs/validation/contexts-auto-installed.md#private-kde-activity-precedence).
 
+**P2/UX — revisão de associações salvas (Source, 16/10):** a seção recolhida
+**Associações salvas** lista Activity/área por domínio + ID, inclusive contextos
+antigos e perfis indisponíveis. Uma confirmação explícita remove só a entrada
+escolhida; Cancelar, abas, fechamento e mudanças externas preservam a intenção
+mais recente. O automático continua respeitando edição e escolha manual.
+Passaram 193 testes e dois skips esperados por estilo, Fusion/KDE, design sem
+problemas e sete guardas; 24 capturas finais cobrem claro/escuro e 350/420 px.
+Foram corrigidos foco cortado na reabertura e sobreposição no menu longo.
+O contrato visual entrou no design system e o guia foi atualizado para futuras
+contribuições. Pacote de 72 arquivos gerado; instalação e prova privada de
+persistência desta fatia ainda pendentes. P1/P2 continuam parciais.
+[Evidência e limites](docs/validation/contexts-auto-installed.md#saved-association-cleanup--source-16-october-2026).
+
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.
 O seletor fornece URL; não fornece bytes validados. A próxima implementação deve
