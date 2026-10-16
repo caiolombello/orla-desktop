@@ -126,20 +126,20 @@ Publicado significa que o incremento integra os assets indicados; Source signifi
 
 | Área | Entregas publicadas e incrementos Source | Lacuna a fechar |
 |---|---|---|
-| Aplicativos e janelas | Fixar apps, ativar/minimizar/restaurar, menu de contexto, reorganização pelo menu e entrada de arquivos `.desktop` | Arrastar para reorganizar, agrupamento opcional, teste prolongado no painel e em vários monitores |
-| Personalização | Três temas, editor com prévia/Aplicar/Cancelar/desfazer e ordem/visibilidade por perfil; persistência em KConfig privado | Qualificar popup/foco/grab por gesto real, presets, exportação/importação e composição completa dos perfis |
+| Aplicativos e janelas | Fixar apps, ativar/minimizar/restaurar, menu de contexto, reorganização pelo menu e entrada de arquivos `.desktop`; arraste de apps/widgets implementado, com provas delimitadas descritas abaixo | Completar a qualificação dos gestos no painel, agrupamento opcional, teste prolongado e vários monitores |
+| Personalização | Três temas, quatro presets, editor com prévia/Aplicar/Cancelar/desfazer e organização por perfil; exportação/importação de JSON de aparência/widgets; importação de arquivo com prévia/Cancelar em Wayland isolado e instalação local | Qualificar composição com DockView/DockPopup, persistência nativa, popup/foco/grab, ida/volta completa da organização e composição dos perfis; as provas delimitadas não encerram C1 |
 | Spotify | Modelo MPRIS compartilhado, preferência inicial pelo Spotify, seleção manual, faixa/artista e controles por capacidade | Capa/progresso, abrir cliente e qualificar Spotify real/áudio com segundo player |
 | Bateria | Widget opcional do agregado UPower, percentual/estado/energia/tempo quando informados; PeriGauge separado | Matriz real de notebook/desktop/múltiplas baterias/UPS/transições, alertas e uso humano no painel |
-| Ambientes e áreas de trabalho | Perfis manuais e filtro de janelas; 0.2.8 publica associações explícitas de Activity/desktop a perfis existentes | Admissão nativa/KConfig da associação, seleção automática de perfil (P2 completo), escolha de superfícies e troca de contexto (W1) |
+| Ambientes e áreas de trabalho | Perfis manuais, filtro de janelas, associações e automático opt-in com política explícita; seletor de áreas e provas KDE privadas de transição, precedência e reinício | Completar P1/P2/W1: demais interações/rascunhos, escolha de superfícies, painel do usuário, foco/seat e monitores; provas privadas não qualificam toda a sessão do usuário |
 | Steam | CLI experimental no ZIP 0.2.8; provedor Source com busca, ação por ID e descoberta opcional de pastas conhecidas, sem leitura ao abrir o painel | Qualificar descoberta e ações no KDE real, distribuir o launcher e testar nativo/Flatpak/disco externo; instalação, conta e favoritos seguem abertos |
-| Projetos próprios | Adaptadores locais para QuotaLantern, PeriGauge e estado salvo do FalaTrace | Validar os coletores reais, comunicar a idade da leitura e comprovar gravação ativa antes de indicá-la como ao vivo |
+| Projetos próprios | Adaptadores locais opcionais, desligados por padrão, para QuotaLantern, PeriGauge e estado salvo do FalaTrace; detalhes e leitura granular por módulo no Source | Qualificar cache/coletores reais e idade da leitura, comprovar gravação ativa antes de indicá-la como ao vivo; pacotes externos e catálogo seguem futuros |
 | Calendário | Calendário e acesso ao KOrganizer; leitura PIM lazy experimental no Source, com prontidão do backend desconhecida | Conectar Google pelo fluxo nativo e validar seleção, sincronização, fuso e recorrência |
 | Notificações | Toast local opt-in 0.2.7 do Pomodoro; HUD de áudio Source opt-in por perfil, com confirmação, agrupamento e expiração | Ilha/HUD global, outros eventos, regras completas e qualificação nativa sem duplicar notificações/OSD do KDE |
-| Barra superior | Menu Orla experimental somente no fonte: menu do sistema e nome do app ativo, Plasma 6.7.x | Qualificar ações/painel/foco, composição com Menu Global/relógio/bandeja nativos, preset reversível e Central de Controle |
-| Launcher estilo Raycast | Componente experimental no fonte, com build separado; KRunner/Milou como fallback | Interface por teclado, comandos compartilhados, painel de ações e integração com perfis/projetos |
+| Barra superior | Menu Orla e composição gerenciada com módulos KDE; Central de Controle compartilhada e configuração da barra implementadas, com instalação e provas locais delimitadas | Completar T1–T4: composição acessível ao usuário, ações/confirmações, matriz de apps/Menu Global/status, escalas e monitores; a barra continua fora dos assets públicos 0.2.9 |
+| Launcher estilo Raycast | Busca por apps/cálculos, teclado, painel de ações, aliases e favoritos; build separado, gestão local de instalação/serviço/recuperação e provas Wayland delimitadas | Catálogo compartilhado L1/L3, integração com perfis/projetos, matriz completa de execução/foco e distribuição qualificada; L0/L2 permanecem abertos e o launcher não integra os assets públicos 0.2.9 |
 | Updates e distribuição | Repositório MIT, landing bilíngue, releases alpha e instalação do dock; launcher com nove CTests, bundle real verificado e calculadora Wayland isolada; instalação, recuperação e atualização/reversão de payload no fonte | Gestão completa de versões/ferramentas, migração do legado, autenticidade, distribuição qualificada, matriz nativa e UI/cache de updates |
-| UX/UI e DX | Identidade Orla, temas, tokens/componentes compartilhados e galeria sintética no Source; documentação de contribuição e testes por ambiente | Completar estados/fluxos, editor/exportação, acessibilidade e qualificação nativa; onboarding e autoria guiada |
-| Ecossistema | Contribuições ao código pelo GitHub | Formato declarativo, SDK, compatibilidade, catálogo e plugins com isolamento comprovado |
+| UX/UI e DX | Identidade Orla, editor/presets, exportação parcial, tokens/componentes compartilhados e galeria sintética; documentação de contribuição e testes por ambiente | Completar os fluxos e exportação de toda a organização, acessibilidade/qualificação nativa, onboarding e autoria guiada; galeria não substitui prova de uso |
+| Ecossistema | Contribuições ao código; formato experimental de temas declarativos, schema, exemplos, CLI de validação/empacotamento e consumidor no Source | Corpus/compatibilidade e autoria externa guiada, distribuição/remoção/rollback de temas, SDK/catálogo e isolamento comprovado antes de código comunitário; marketplace transacional depende de viabilidade |
 | IA | Detecção explícita de CLI e compatibilidade anônima do Codex (PR 20); contratos/parsers offline (PR 28), lifecycle com fakes (PR 30), adaptadores privados Ollama/OpenAI e integração operacional Ollama numérico nesta mudança Source com UI, streaming/cancelamento e fixtures privadas. O entrypoint T1/T2 direto continua `unsupported_transport`; OpenAI HTTPS permanece sem ligação operacional | Empacotar helpers de forma relocável e qualificar Ollama/modelo, semântica, clipboard/acessibilidade e uso nativo; credenciais/auth e backend API opt-in de A1 continuam abertos |
 
 Evidência local: `package/metadata.json`, `package/contents/config/main.xml`, os componentes em `package/contents/ui/`, `package/contents/code/integrations.py`, `scripts/caiodock.py` e `tests/`. O recibo histórico do smoke nativo registra fixar/abrir/ativar/minimizar/restaurar em uma janela de teste nativa; isso ainda não comprova os fluxos prolongados no painel. O Google Agenda ainda não foi conectado, conforme informado pelo usuário. Os incrementos entregues e seus limites estão registrados acima; os checklists abaixo mantêm os critérios de aceite completos, incluindo funcionalidades ainda não implementadas.
@@ -275,7 +275,7 @@ P1 está parcialmente implementado no dock; falta escolher barra/launcher/evento
 
 **Composição experimental no Source:** o preset [mac-inspired-topbar.json](layouts/mac-inspired-topbar.json) e a CLI `layout status/plan/apply/disable/restore` compõem Menu Orla, Menu Global, espaçador, bandeja e relógio KDE. Exigem Plasma 6.7.5, serviço verificado, conector do monitor e IDs explícitos dos painéis a substituir. O helper recusa remover o dock independente: `dock-plus-bar` cria a barra e `dock-only` usa `disable`, que remove somente a barra própria. `restore` recupera separadamente o layout original; `restore --recover` é para transações interrompidas. Não há modo `bar-only`, instalação automática dos applets ou tomada de atalho Meta. Consulte os [comandos e limites](bar/README.md).
 
-**T1/T2 continuam parciais; T3/T4 permanecem abertos.** O applet isolado e o ciclo gerenciado aplicar/desativar/restaurar/reaplicar receberam prova nativa delimitada em uma tela, com código final sem modificações. Isso não encerra fluxos de sessão/confirmação, ações de menus de aplicativos reais, áudio/rede, outras escalas/ambientes ou dois monitores. A bandeja usa controles KDE nativos; uma Central de Controle própria compartilhada pela barra está aberta. Aplicativos recentes e o aceite completo dos marcos abaixo também permanecem pendentes. O componente e helper não integram os assets 0.2.5–0.2.9.
+**T1/T2 continuam parciais; T3/T4 permanecem abertos.** O applet isolado e o ciclo gerenciado aplicar/desativar/restaurar/reaplicar receberam prova nativa delimitada em uma tela, com código final sem modificações. Isso não encerra fluxos de sessão/confirmação, ações de menus de aplicativos reais, áudio/rede, outras escalas/ambientes ou dois monitores. A bandeja usa controles KDE nativos; a Central de Controle compartilhada pela barra já está implementada e tem provas locais delimitadas de abertura/foco e áudio, registradas abaixo. O restante de CC0/CC1/T1 segue aberto. Aplicativos recentes e o aceite completo dos marcos abaixo também permanecem pendentes. O componente e helper não integram os assets 0.2.5–0.2.9.
 
 - [ ] **T1: painel superior opcional.** Habilitar barra, escolher monitor, altura, aparência, posição/ordem e visibilidade dos módulos. Aceite: apenas dock, dock + barra e barra com módulos selecionados funcionam; desativar remove apenas a barra Orla e preserva o dock; restaurar recupera o layout original verificado.
 - [ ] **T2: menu do sistema à esquerda.** Equivalente funcional ao Apple Menu, com ícone configurável, sobre o sistema/Orla Desktop, configurações, aplicativos recentes, bloquear, suspender, sair, reiniciar e desligar. Usar os fluxos e confirmações nativos de sessão. Aceite: ações abrem o fluxo correto e não são executadas ao apenas navegar pelo menu.
@@ -323,7 +323,7 @@ Para eventos próprios, decidir um único caminho visual por evento. Antes de as
 
 ### 0.9 — Updates e beta pública
 
-**Consulta experimental no código e no ZIP 0.2.6:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes; cache, preferências/interface no desktop e recuperação continuam pendentes. O ZIP 0.2.6 inclui `scripts/updates.py`; o `.plasmoid` sozinho não contém CLI nem UI de updates. U1/U2 permanecem abertos.
+**Consulta experimental no código e no ZIP 0.2.6:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes; cache e preferências/interface no desktop continuam pendentes. O gerenciador separado do launcher já oferece update/rollback de payload e recuperação no Source; isso não conclui o updater da família em U2. O ZIP 0.2.6 inclui `scripts/updates.py`; o `.plasmoid` sozinho não contém CLI nem UI de updates. U1/U2 permanecem abertos.
 
 - [ ] **U1: avisos de versão.** Fonte oficial de releases do Orla, versão instalada/disponível, canal estável/beta, última consulta, cache e estado indisponível. Aceite: offline, falha e limite de consultas não parecem “já atualizado”; consultar não instala.
 - [ ] **U2: atualizar com recuperação.** Download verificado, compatibilidade, cópia da configuração, instalação iniciada pelo usuário e retorno ao pacote anterior. Definir autenticidade dos artefatos e origem confiável antes de distribuir o updater. Aceite: pacote inválido é recusado e uma atualização interrompida preserva uma versão utilizável e os perfis.
@@ -334,7 +334,7 @@ U1/U2 dependem de R2/R4 e de uma fonte de releases definida. Para updates de jog
 
 ### Trilha opcional — Launcher inspirado no Raycast
 
-**Incremento experimental no código:** `launcher/` oferece janela Qt Quick própria, busca por apps/cálculos, navegação e proteção contra seleção antiga. Build/CTest e revisão Source não encerram o aceite nativo. A verificação atual de `43905da` descrita no início comprova atalho, busca e Escape em uma tela; Enter/dispatch, outros monitores e integração completa continuam abertos. Meta é configurável pela CLI `search-shortcut`; a prova local de 13/10 está descrita abaixo. As releases 0.2.5–0.2.9 não incluem o launcher. Consulte o [guia do componente](launcher/README.md); L0/L2 continuam abertos.
+**Incrementos experimentais no código:** `launcher/` oferece janela Qt Quick própria, busca por apps/cálculos, navegação, painel de ações, aliases/favoritos e proteção contra seleção antiga. Gestão de instalação/serviço/recuperação e update/rollback está no Source. Build/CTest e revisão não encerram o aceite nativo: as provas históricas de atalho/busca/Escape foram ampliadas por fluxos delimitados de Enter/dispatch e persistência descritos nos registros; outros monitores e integração completa continuam abertos. Meta permanece opt-in pela CLI `search-shortcut`. As releases 0.2.5–0.2.9 não incluem o launcher. Consulte o [guia do componente](launcher/README.md); L0/L2 continuam abertos.
 
 **L2/UX2 — painel de ações completo (14/10):** Ações/Ctrl+K agora apresenta todas as ações anunciadas, sua origem, rolagem e foco visível. Doze ações sintéticas passaram por teclado/clique e callbacks antigos são recusados; oito CTests passaram nos estilos Fusion/KDE, com toda a cobertura preservada em duas suítes de interface. A atualização local do launcher preservou Meta, painéis e configurações. A prova Wayland inicial confirmou busca do Dolphin, menu real da calculadora e os dois Escapes com retorno à fixture própria. Uma nova prova com KWrite real, perfil XDG e D-Bus privados confirmou Meta → `1-1` → Ctrl+K/↓ → Escape do menu → Escape do launcher, retornando ao mesmo UUID em janela comum e fullscreen; dois marcadores distintos foram salvos uma vez no arquivo sintético após os retornos. Limpeza e guards protegidos ficaram exatos. Não encerra L0/L2/UX2, dispatch real, clipboard, perfil normal, T3 ou múltiplos monitores; avisos do KWrite são UNKNOWN. Autohide/popups do dock têm aceite separado, e R1/W1 permanecem parciais. Consulte as [capturas, verificação e próximos aceites](docs/validation/launcher-actions-source.md).
 
@@ -390,7 +390,7 @@ Começar por dados declarativos, depois contratos de dados/ações com UI render
 | ID | Entrega | Gate principal |
 |---|---|---|
 | **X0** | Personalização nativa, 0.4 | C1/UX1 reversíveis e acessíveis |
-| **X1** | Formato de temas/presets, 0.4–0.5 | Primeiro consumidor por colagem e prévia experimental existem; completar schema/compatibilidade, importação segura de arquivo e corpus de consumidores; sem executar código |
+| **X1** | Formato de temas/presets, 0.4–0.5 | Schema experimental, CLI e consumidor por colagem/arquivo existem; seleção/prévia/Cancelar dos componentes passaram em Wayland isolado e o pacote foi instalado localmente; completar compatibilidade/corpus, composição no painel e persistência nativa; sem executar código |
 | **X2** | SDK de conteúdo e autoria, 0.4–0.5 | Template, validador, preview e pacote reproduzível; nova pessoa cria tema sem conhecer o núcleo |
 | **X3** | Distribuição de temas, 0.6–0.7 | Origem, licença, compatibilidade, instalação/rollback e revogação local claros |
 | **X4** | Widgets hospedados, 0.7 | Adaptadores internos têm detalhes e estados na aba Widgets, com ativação por perfil e defaults desligados; leitura granular por módulo implementada; faltam pacotes externos e catálogo; executar provedor comunitário depende de X5 |
@@ -428,7 +428,7 @@ Um primeiro tema, bug reproduzível ou tradução deve ser possível sem API pag
 |---|---|---|
 | **DX0** | 0.3 | Comandos/dependências e limites da CI conferidos por nova pessoa; triagem clara |
 | **DX1** | 0.3–0.4 | Fronteiras internas, fixtures sintéticas, erros e estados sem serviço real |
-| **DX2** | 0.4–0.5 | Preview de tema por colagem sem código/API foi iniciado; galeria de estados, autoria guiada e qualificação nativa continuam pendentes |
+| **DX2** | 0.4–0.5 | Schema/CLI, preview por colagem/arquivo e galeria sintética existem; ampliar corpus de estados, exercer autoria guiada externa e concluir qualificação nativa; sem código ou API paga |
 | **DX3** | 0.5 | Kit de autoria com validador, templates, empacotamento e exemplos testados |
 | **DX4** | 0.7–0.9 | Contrato experimental de dados/ações, mocks e matriz host/SDK/protocolo/addon |
 | **DX5** | Após X5 | Runtime de terceiros e ferramentas de compatibilidade/isolamento, revisão e revogação |
@@ -482,6 +482,31 @@ Spotify Web API, playlists remotas e Steam Web API/achievements ficam para uma e
 Revisar prioridades ao concluir cada marco ou invalidar uma prova técnica. A métrica é o fluxo real funcionando, com dados corretos e módulos opcionais preservados; publicar um pacote sozinho não encerra a validação. Registrar baseline de UX/DX antes de otimizar: primeiro uso bem-sucedido, recuperar falha/desfazer, tempo até primeiro teste/tema e incompatibilidades. Os números atuais de usuários, colaboradores, receita e retenção são desconhecidos; não usá-los como evidência de demanda.
 
 ## Próxima execução em incrementos
+
+**Próximos resultados:** seleção por clique, leitura real e prévia/Cancelar dos
+componentes passaram em Wayland isolado, e o pacote foi atualizado localmente
+com backup. A [validação](docs/validation/theme-file-import-0.2.9.md) separa esse
+aceite da composição no painel e da persistência nativa ainda abertas.
+C1/X1/X2/DX2 continuam parciais. A sequência de produto é:
+
+1. **Montar e desfazer a composição Orla (R2/T1/UX2):** começar por uma entrada
+   optativa Só dock ↔ Dock + barra, mostrando o plano e reutilizando o helper e
+   os bancos existentes; preservar painéis não selecionados. A opção de launcher
+   continua independente e sujeita ao seu gate de pacote/instalação.
+2. **Saber a versão e consultar updates no desktop (U1):** versão instalada/em
+   execução com origem definida, canal, última consulta/cache e falhas explícitas;
+   reutilizar a CLI limitada em processo próprio. Consultar não instala, e U2
+   mantém autenticidade, compatibilidade, backup e recuperação como gates próprios.
+3. **Executar um primeiro comando Orla útil pelo launcher (L1/I1):** uma leitura
+   passiva de módulo explicitamente habilitado, por exemplo quota local, com ID,
+   origem, idade, indisponibilidade e dono/instância definidos; pesquisar não
+   executa nem inicia coletor. Ampliar para L3 só com os provedores qualificados.
+
+Temas/autoria, integrações reais e IA opcional continuam ativos em suas trilhas.
+QuotaLantern/PeriGauge e outros projetos seguem opcionais no futuro catálogo;
+provedores de IA usam rotas oficiais revalidadas ao implementar. Código comunitário
+continua dependendo de X5; marketplace transacional depende de COM3/viabilidade.
+
 
 **Prontidão de foco medida em 13/10:** o [baseline de 15 tentativas](docs/validation/launcher-focus-baseline.md)
 registrou mediana/máximo de 15,15/23,50 ms até o callback de atividade com foco
@@ -1442,10 +1467,16 @@ Passaram 71 testes Python, 129 no Fusion (3 skips existentes) e 95 dos component
 afetados no estilo KDE, além do design check e da galeria claro/escuro em 350/420
 px. O bridge QML/D-Bus real passou por leitura → prévia → aplicar → desfazer em
 configuração sintética, com ativação privada e cleanup confirmado.
-O prototype Wayland confirmou parent modal e cancelamento preservando a prévia;
-aceitar um arquivo por input real e o fluxo completo do produto ainda precisam
-da próxima prova. A instalação Main deste incremento não foi feita. Uma falha de
-áudio KDE foi reproduzida também na base anterior e permanece separada. Consulte
-o [registro e as capturas](docs/validation/theme-file-import-0.2.9.md).
-C1/X1/X2 e DX2 continuam parciais; próximos passos são input privado, aceite
-nativo integrado e atualização local com backup, antes de avançar o catálogo.
+Após o prototype inicial, os componentes exatos de produção passaram em uma
+fixture Wayland privada: parent modal, seleção por clique com cursor conferido,
+aceite, leitura real → prévia → Cancelar, sem gravar configuração e com cleanup
+confirmado. O foco público revelou o botão recortado pela rolagem antes do Press.
+O pacote de 78 arquivos foi instalado localmente com backup e um stop/start
+controlado do Plasma; configuração, barra, launcher e bancos foram preservados,
+com apenas o registro lazy de temas acrescentado. Uma falha de áudio KDE foi
+reproduzida também na base anterior e permanece separada. Consulte o
+[registro e as capturas](docs/validation/theme-file-import-0.2.9.md).
+C1/X1/X2 e DX2 continuam parciais: composição com DockView/DockPopup, Escape,
+seat físico, diálogo de plataforma KDE e Aplicar/persistência no Wayland seguem
+abertos. As próximas entregas de produto estão na sequência de execução acima;
+este resultado não conclui o catálogo ou a distribuição pública da família.

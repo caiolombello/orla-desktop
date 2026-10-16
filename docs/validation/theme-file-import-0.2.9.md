@@ -1,7 +1,8 @@
 # Importação local de temas — 16/10/2026
 
 Escopo: checkout de desenvolvimento, com versão do pacote ainda `0.2.9`.
-Nenhuma release foi publicada ou instalação Main alterada neste incremento.
+O pacote de desenvolvimento foi instalado localmente após as verificações abaixo.
+Nenhuma release nova foi publicada.
 
 ## Comportamento
 
@@ -37,7 +38,41 @@ Os testes causais corrigiram publicação após cancelamento, timeout com owner
 destruído, prévia antiga apagando entrada mais recente, encerramento de stdout
 excessivo e retry do registro após perda de dependência ou downgrade.
 
-## Limites nativos e falha preexistente
+## Wayland isolado e atualização local
+
+Os componentes de produção `AppearanceState`, `AppearanceEditor`,
+`ThemeFilePicker` e `ThemeFileTransport` passaram juntos em uma janela de teste
+com configuração sintética em memória, KWin/Wayland e D-Bus privados. A cópia
+dos 78 arquivos do pacote permaneceu idêntica ao Source.
+
+O seletor Qt Quick abriu como filho da janela original. Um clique no arquivo
+sintético foi enviado somente ao compositor privado, após conferir os
+retângulos do cliente e do item, escala 1 e posição real do cursor. O aceite
+acionou o serviço lazy real: JSON pendente sem mudar a aparência → **Usar na
+prévia** com metadados e aparência efetiva alterados → **Cancelar** com retorno
+ao estado inicial. Todas as observações mantiveram zero gravações.
+
+O roteiro usou sete ações Press, quatro SetFocus e um clique de ponteiro.
+O botão de prévia inicialmente estava abaixo da rolagem; sua ação pública de
+foco fez o próprio editor revelá-lo. Visibilidade, habilitação e foco foram
+conferidos antes do Press. Nenhum método de produção foi substituído. O host
+terminou sem warnings; serviço, helper, processos e sockets privados foram
+encerrados, sem erros de limpeza.
+
+A instalação local atualizou somente o dock e acrescentou o registro exato
+`org.orla.Themes.service`. Houve um stop/start controlado do Plasma e backup
+do pacote anterior, sem necessidade de rollback. O inventário de painéis,
+configuração, barra, launcher, integrações opcionais e bancos originais foram
+preservados. As cinco chaves de perfis/automação continuaram ausentes no disco,
+com automação efetivamente OFF; sessão desbloqueada e bloqueio automático
+desativado foram conferidos após a recarga.
+
+Esse aceite é dos componentes na fixture Wayland. A composição completa com
+`DockView`/`DockPopup`, Escape, seat físico, diálogo de plataforma KDE e
+persistência de Aplicar no Wayland mantêm gates próprios. Aplicar/Desfazer
+continuam comprovados pelo bridge real em execução offscreen descrito acima.
+
+## Tentativas preservadas e falha preexistente
 
 Um prototype instrumentado, em KWin/Wayland e D-Bus isolados, abriu o seletor
 Qt Quick como filho da janela original. Cancelar preservou janela, draft e
@@ -45,11 +80,12 @@ configuração; os processos próprios terminaram normalmente. Os bookends Main
 confirmaram o mesmo processo Plasma, bancos/configuração/launcher preservados,
 automação OFF e sessão desbloqueada. Não houve input no compositor Main.
 
-O aceite de arquivo não foi qualificado: a lista expõe somente SetFocus pelo
-AT-SPI, e focar o item não habilitou Aceitar. O teste encerrou pelo Cancelar
-normal, mantendo o erro original. Escape, o diálogo de plataforma KDE e o fluxo
-completo do produto no Wayland seguem abertos. Não há alegação de instalação ou
-validação nativa completa baseada nos testes offscreen.
+Esse primeiro roteiro não qualificou o aceite: a lista expõe somente SetFocus
+pelo AT-SPI, e focar o item não habilitou Aceitar. O teste encerrou pelo Cancelar
+normal, mantendo o erro original. Os roteiros posteriores corrigiram somente
+premissas do teste sobre decoração da janela e visibilidade de controles
+recortados pela rolagem. As tentativas e seus primeiros erros foram preservados;
+o aceite atual por clique está delimitado na seção anterior.
 
 O teste de áudio KDE `test_audio_output_pointer_failures_restore_confirmed_presentation`
 falhou em `pendingKind` tanto no checkout atual quanto na base `8d74a055` em
