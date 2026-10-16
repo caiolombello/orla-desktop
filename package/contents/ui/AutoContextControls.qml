@@ -42,6 +42,7 @@ Card {
             objectName: "autoContextDefaultProfile"
             Layout.fillWidth: true
             enabled: controls.profiles && controls.profiles.initialized && controls.profiles.writable
+                && controls.choices.length > 0
             model: controls.choices
             textRole: "name"
             // Keep keyboard ownership on the ComboBox with KDE's Menu popup.
@@ -85,9 +86,20 @@ Card {
             }
         }
         Controls.Label {
+            objectName: "autoContextProfileHint"
             Layout.fillWidth: true
-            visible: !controls.profiles || !controls.profiles.initialized
-            text: qsTr("Crie seus perfis na aba Perfis para configurar o automático.")
+            visible: text.length > 0
+            text: controls.profiles && !controls.profiles.writable
+                ? qsTr("Os perfis salvos estão protegidos. Confira o aviso na aba Perfis.")
+                : !controls.profiles || !controls.profiles.initialized
+                    ? qsTr("Crie seus perfis na aba Perfis para configurar o automático.")
+                    : controls.choices.length === 0
+                        ? qsTr("Nenhum perfil disponível. Crie um perfil na aba Perfis e escolha-o como padrão.")
+                        : controls.automation && controls.choices.some(profile => profile.id === controls.automation.defaultProfileId)
+                            ? ""
+                            : controls.automation && controls.automation.defaultProfileId.length > 0
+                                ? qsTr("O perfil padrão não está disponível. Escolha outro perfil padrão.")
+                                : qsTr("Escolha um perfil padrão para configurar o automático.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }
