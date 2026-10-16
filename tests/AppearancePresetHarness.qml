@@ -46,6 +46,7 @@ Controls.ApplicationWindow {
         property alias profiles: profileState
         property alias appearance: appearanceState
         property alias appearancePreset: presetState
+        property var sourceContextSnapshot: null
         readonly property var presentation: profileState.effective
         readonly property var displayWidgets: presetState.previewWidgets || presentation.widgets
         DockUI.ProfileState {
@@ -63,7 +64,7 @@ Controls.ApplicationWindow {
             }
         }
         DockUI.AppearancePresetState { id: presetState; profiles: profileState; appearance: appearanceState }
-        DockUI.ContextState { id: contexts; sourceSnapshot: null }
+        DockUI.ContextState { id: contexts; sourceSnapshot: fixture.sourceContextSnapshot }
         DockUI.ContextBindingsState { id: bindings; configuration: config; profiles: profileState; contexts: contexts }
         DockUI.AutoContextProfileState {
             id: automaticProfiles

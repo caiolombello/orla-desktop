@@ -283,6 +283,57 @@ This qualifies the bounded private UI journey, not physical keyboard input,
 Wayland seat/focus restoration, the user's panel, dirty appearance drafts,
 Pomodoro continuity or multiple monitors. P2 remains partial.
 
+## Private appearance drafts during desktop transitions
+
+Two portable composition regressions exercise the actual profile, appearance,
+context and automation states through public accessible theme/footer actions.
+Their only new fixture input supplies a normalized context snapshot; popup
+visibility supplies the real busy state. The complete appearance suite passed
+**42 tests in Fusion and 42 in KDE**, without QML warnings; design check found
+zero issues. No production UI or installed package changed in this follow-up.
+
+The installed 72-entry package then passed a private real KWin/Wayland journey:
+**16 Press actions, one public SetFocus, 11 configuration milestones and a final
+normal-exit/flush check**. With Settings open, changing the real desktop preserved
+the selected Paper preview and the saved profile document byte for byte. The
+Contexts tab's public current-desktop feedback confirmed that the same Source
+observer had consumed each new desktop before returning to Appearance. The
+feedback label was read through accessibility; its rendered visibility is not
+claimed.
+
+Cancel discarded Work's draft and allowed automatic Personal. In Personal,
+another desktop change kept the draft and owner while Settings remained open.
+Apply saved only Personal's appearance JSON, Undo restored it, and Paper/Apply
+saved the same result again. Closing Settings allowed automatic Work; reopening
+showed Glass with no carried draft. The full document persisted after normal
+exit. Other profile fields, associations, global preferences, all 13 disabled
+legacy flags and the zero timer remained exact. No external configuration/profile
+writer ran after host launch. The reader took 35.633 s within its unchanged 40 s
+budget; outer runtime and cleanup took 39.788 s. Cleanup completed without errors
+or forced termination, and a fresh independent check preserved the main session.
+
+This episode explicitly seeded a private KWin rule before compositor startup to
+keep the exact `org.kde.plasmawindowed` class on all desktops. The versioned
+[host app ID](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/plasma-windowed/main.cpp)
+and [KWin desktop rule](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/rules.cpp)
+define that fixture; actual visible/enabled controls and Source desktop feedback
+remained required. It neither changes the user's window rules nor disables
+Orla's popup deactivation/cancellation behavior.
+
+The first episode remains FAILED: after two Press actions, one SetFocus and two
+milestones, the Contexts action target was ineligible following the desktop
+change. Its exact false visibility/enabled flag and the subsequent profile state
+were not recorded. Host residency/focus loss and popup cancellation are a
+plausible explanation, not a proven retrospective cause. All children were
+reaped without force and the main session was preserved; the inherited cleanup
+assertion still reported the reader's failed exit. A separate fresh preservation
+helper initially failed on its project import path, before any native check;
+only that import path changed in the successful independent postcheck.
+
+These results qualify the bounded private draft/Cancel/Apply/Undo journey.
+Physical keyboard/focus/seat, the user's panel, active timer continuity, native
+setter counts and monitor behavior remain open. P2 is not complete.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -328,19 +379,28 @@ or logs. These hashes identify the records summarized above:
 | Private full UI journey PASS | `34b45b19c6b4ce427219babb2bb4a03510d8d4e65d27e87306ec9625bebd9055` |
 | Private UI actions/configuration milestones | `78a515e9659d1df1168f914f9e1e7755871fe399bc5649d5123f379d41cbf7b7` |
 | Fresh full UI journey postcheck | `b651d123c41f27cfb28a16b4849972582282c490cf18ddb70f231af58a04635d` |
+| Complete portable appearance composition suite | `f22f4b4bf4b33582fd9d36c101e4f41b59b2dde360124a03c737fca425272330` |
+| First private appearance journey FAILED | `8c51ea5d7d2c17de340308bab024b4e5221ffd7ca6281b314147373976350323` |
+| Failed appearance journey main preservation | `61fd13ed1d1cbdb1f7aee010ab83615aeff77f934df46558e6daf5729984f9cf` |
+| Private appearance journey PASS | `d04fd0b3dc4e6088f78625d8ac8a3b04679eebf4d6939deff29fabc6aaa826c9` |
+| Appearance actions/configuration milestones | `9bbf75d19b3f9920137ab7dbf64748e57372a3794aefaab7ebe0cfdef1b18bed` |
+| Fresh appearance journey postcheck | `de515e43bb61e45c288d70cd2567bf3a26944b8aa9076df9141f2131d8f21357` |
 
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,
-plus the bounded private UI opt-in/manual/Resume journey, are now qualified;
+plus the bounded private UI opt-in/manual/Resume and appearance draft journeys,
+are now qualified;
 the earlier main-session
 experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-Next qualify dirty appearance/Cancel/Apply, rename/removal of
-associated contexts, Pomodoro continuity, the user's panel, focus/seat and monitor
-behavior. Private backend desktop transitions do not establish these behaviors
+Next qualify rename/removal of associated contexts: retain association by ID on
+rename, preserve manual choice, and ensure a new ID with the old name does not
+inherit a removed association. Pomodoro continuity, other interaction drafts,
+the user's panel, focus/seat and monitor behavior also remain open.
+Private backend desktop transitions do not establish these behaviors
 in the user's panel. A private XDG directory alone does not isolate the
 `plasmawindowed` session-bus singleton; the successful episode used a private bus
 ([Plasma 6.7.5 implementation](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/plasma-windowed/main.cpp)).

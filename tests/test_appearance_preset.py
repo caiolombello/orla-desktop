@@ -5,7 +5,7 @@ from pathlib import Path
 
 import test_profiles_dock as fixtures
 from PySide6.QtCore import Qt, QObject, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QAccessible, QAccessibleActionInterface, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy, QTest
@@ -60,6 +60,133 @@ class AppearancePresetTests(unittest.TestCase):
             self.settle(lambda: disclosure.property('checked'))
         self.assertTrue(self.owned_item('appearancePresetCatalog-essencial').isVisible())
         return disclosure
+
+    def appearance_context_snapshot(self, desktop):
+        snapshot = {
+            'outputName': 'Synthetic-output',
+            'activity': {'status': 'ready', 'currentId': 'activity',
+                         'ids': ['activity'], 'names': ['Synthetic activity']},
+            'desktop': {'status': 'ready', 'currentId': desktop,
+                        'ids': ['d0', 'd1'], 'names': ['Synthetic zero', 'Synthetic one']},
+        }
+        self.assertNotEqual(self.dock.metaObject().indexOfProperty('sourceContextSnapshot'), -1)
+        # ContextState accepts plain data properties, matching its QML source adapter.
+        self.evaluate('sourceContextSnapshot = ' + json.dumps(snapshot))
+
+    def prepare_automatic_appearance(self, desktop):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.initialize()
+        self.config.setProperty('contextsJSON', json.dumps({
+            'formatVersion': '0.1-experimental', 'activityBindings': [],
+            'desktopBindings': [{'contextId': 'd1', 'lastKnownName': 'Synthetic one', 'profileId': 'personal'}],
+        }))
+        self.appearance_context_snapshot(desktop)
+        self.config.setProperty('autoContextDefaultProfile', 'work')
+        self.config.setProperty('autoContextEnabled', True)
+        self.settle(lambda: self.evaluate('profiles.activeProfileId') == ('work' if desktop == 'd0' else 'personal'))
+        self.popup.setProperty('heightBudget', 420)
+        self.evaluate('open()', self.popup)
+        self.settle(lambda: self.popup.property('visible'))
+
+    def press_appearance_control(self, object_name, checked=None):
+        control = self.owned_item(object_name)
+        self.assertIsNotNone(control)
+        self.focus(control)  # Public focus also reveals a footer below the viewport.
+        interface = QAccessible.queryAccessibleInterface(control)
+        self.assertIsNotNone(interface)
+        self.assertFalse(interface.state().disabled)
+        self.assertFalse(interface.state().invisible)
+        self.assertFalse(interface.state().offscreen)
+        if checked is not None:
+            self.assertEqual(interface.role(), QAccessible.Role.CheckBox)
+            self.assertEqual(interface.state().checked, checked)
+        actions = interface.actionInterface()
+        self.assertIsNotNone(actions)
+        press = QAccessibleActionInterface.pressAction()
+        self.assertIn(press, actions.actionNames())
+        actions.doAction(press)
+
+    def test_automatic_context_waits_for_public_theme_preview_then_cancel(self):
+        self.prepare_automatic_appearance('d0')
+        before = self.config.property('profilesJSON')
+        flat = self.flat()
+        timer = {key: self.config.property(key) for key in
+                 ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus')}
+        self.press_appearance_control('appearanceThemepaper', checked=False)
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.appearance_context_snapshot('d1')
+        QTest.qWait(40)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'work')
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.assertTrue(self.owned_item('appearanceApply').isEnabled())
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible') and self.evaluate('profiles.activeProfileId') == 'personal')
+        expected = json.loads(before)
+        expected['activeProfileId'] = 'personal'
+        self.assertEqual(json.loads(self.config.property('profilesJSON')), expected)
+        self.evaluate('open()', self.popup)
+        self.settle(lambda: self.popup.property('visible'))
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemeglass')).state().checked)
+        self.assertFalse(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible'))
+        self.assertEqual(self.flat(), flat)
+        self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+        self.assertEqual(self.warnings, [])
+
+    def test_public_theme_apply_undo_stays_scoped_until_automatic_context_close(self):
+        self.prepare_automatic_appearance('d1')
+        before_raw = self.config.property('profilesJSON')
+        before = json.loads(before_raw)
+        flat = self.flat()
+        timer = {key: self.config.property(key) for key in
+                 ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus')}
+        self.press_appearance_control('appearanceThemepaper', checked=False)
+        self.appearance_context_snapshot('d0')
+        QTest.qWait(40)
+        self.assertEqual(self.config.property('profilesJSON'), before_raw)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'personal')
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.press_appearance_control('appearanceApply')
+        self.assertTrue(self.popup.property('visible'))
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'personal')
+        applied = json.loads(self.config.property('profilesJSON'))
+        personal = next(profile for profile in applied['profiles'] if profile['id'] == 'personal')
+        appearance = json.loads(personal['appearance']['appearanceJSON'])
+        original_appearance = next(profile for profile in before['profiles'] if profile['id'] == 'personal')['appearance']
+        self.assertEqual(appearance, {
+            'formatVersion': '0.1-experimental', 'baseTheme': 'paper',
+            'tokens': {'foreground': '#252b35', 'muted': '#606c79', 'accent': '#167361',
+                       'surface': '#f4f0e8', 'border': '#cec9bf', 'radius': 21, 'spacing': 5,
+                       'opacity': 1, 'iconSize': original_appearance['iconSize'],
+                       'reducedMotion': not original_appearance['animations']},
+        })
+        expected = json.loads(before_raw)
+        next(profile for profile in expected['profiles'] if profile['id'] == 'personal')['appearance']['appearanceJSON'] = personal['appearance']['appearanceJSON']
+        self.assertEqual(applied, expected, 'Apply changes only the selected profile appearance JSON')
+        self.press_appearance_control('appearanceUndo')
+        self.assertEqual(json.loads(self.config.property('profilesJSON')), before)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'personal')
+        self.assertFalse(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.press_appearance_control('appearanceThemepaper', checked=False)
+        self.press_appearance_control('appearanceApply')
+        self.assertEqual(json.loads(self.config.property('profilesJSON')), applied)
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible') and self.evaluate('profiles.activeProfileId') == 'work')
+        expected['activeProfileId'] = 'work'
+        self.assertEqual(json.loads(self.config.property('profilesJSON')), expected)
+        self.evaluate('open()', self.popup)
+        self.settle(lambda: self.popup.property('visible'))
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemeglass')).state().checked)
+        self.assertFalse(QAccessible.queryAccessibleInterface(self.owned_item('appearanceThemepaper')).state().checked)
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible'))
+        self.assertEqual(self.flat(), flat)
+        self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+        self.assertEqual(self.warnings, [])
 
     def test_collapsed_catalog_skips_choices_and_space_enters_first_choice(self):
         self.initialize()
