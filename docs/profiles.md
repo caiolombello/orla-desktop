@@ -60,6 +60,12 @@ TaskManager skips per style requiring Wayland/X11. Design checks found no issues
 seven design guards passed. Removal has 16 final captures at 350/420 px in both
 schemes. These checks do not qualify an installed Plasma panel or native removal.
 
+The 72-file development package is installed locally with a verified backup and
+main-session preservation. Native R2 passed confirmation, persistence and recovery
+in a private real KDE/Wayland host using synthetic data. R1 remains failed in its
+observer's immediate disk check. This does not qualify the user's physical panel
+or keyboard focus. See the [installation, attempts and remaining gates](validation/profiles-0.2.5.md#active-profile-removal-development-16-october-2026).
+
 | Confirmation / Confirmação | Recovery / Recuperação |
 | --- | --- |
 | ![Dark removal confirmation](screenshots/profiles-remove/profiles-remove-dark-default-350.png) | ![Light last-profile destination](screenshots/profiles-remove/profiles-remove-light-last-350.png) |
