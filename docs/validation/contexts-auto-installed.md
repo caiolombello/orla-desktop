@@ -334,6 +334,43 @@ These results qualify the bounded private draft/Cancel/Apply/Undo journey.
 Physical keyboard/focus/seat, the user's panel, active timer continuity, native
 setter counts and monitor behavior remain open. P2 is not complete.
 
+## Private desktop rename, removal and recreation
+
+The same installed package passed a private KWin/Wayland lifecycle journey:
+**13 public Press actions, no SetFocus, ten configuration checkpoints and a final
+normal-exit persistence check**. The existing owned host/all-desktop fixture and
+unchanged runtime limits were reused. The reader took 25.812 s; outer runtime
+and cleanup took 30.029 s.
+
+Renaming D1 retained its ID and automatic Personal. Selecting Work through the
+real ComboBox remained pending until **Usar perfil**. A second rename retained
+manual Work and its exact saved JSON; closing Settings kept that choice in D1.
+Removing the current D1 left only D0 and made it current, confirmed by real
+readback without a corrective desktop setter. Work at this point alone does
+not prove release of manual authority.
+
+Creating D2 reused D1's final name, also equal to the association's saved name,
+but produced a different ID. Entering D2 selected default Games, distinguishing
+it from both associated Personal and manual Work. The public Contexts feedback
+reported one old association preserved by ID. Source name feedback confirmed
+both renames; no direct Source-ID read or rendered visibility of these labels
+is claimed. The versioned [KWin interface](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
+defines the public rename/remove/create calls used in this episode.
+
+All profile data remained exact; only the intended active ID changed.
+Association JSON stayed byte-identical throughout, including the removed D1
+binding. Other global preferences, disabled legacy flags and zero timer stayed
+unchanged. Games persisted after normal host exit. Only then was D0 restored
+and the owned D2 removed, with the original single-desktop readback and Games
+still persisted. Cleanup and a fresh main-session preservation check passed.
+
+The matching portable public-control case also covers an unavailable interval
+and repeats the same-name contrast against the saved association name. The
+complete appearance/composition suite passed **43 tests per style**, Fusion and
+KDE, without warnings. No production package changed. Active timer continuity,
+Activity rename/removal, other interaction drafts, the user's panel, focus/seat,
+monitor behavior and native setter counts remain open; P2 is still partial.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -385,6 +422,10 @@ or logs. These hashes identify the records summarized above:
 | Private appearance journey PASS | `d04fd0b3dc4e6088f78625d8ac8a3b04679eebf4d6939deff29fabc6aaa826c9` |
 | Appearance actions/configuration milestones | `9bbf75d19b3f9920137ab7dbf64748e57372a3794aefaab7ebe0cfdef1b18bed` |
 | Fresh appearance journey postcheck | `de515e43bb61e45c288d70cd2567bf3a26944b8aa9076df9141f2131d8f21357` |
+| Complete portable lifecycle composition suite | `0676f8c1f7c0b7013fc66da49486d636a9fe78092dddfe2bd6490b05c9f2efc3` |
+| Private desktop lifecycle journey PASS | `fc53af663ba40bc460a290ac4845761b69176847d6f76e073d39f3cd8a6f54ee` |
+| Lifecycle actions/configuration milestones | `f55782a159ae91083a1e84592f9a460068aee97233be7bb16640895e6851f860` |
+| Fresh lifecycle journey postcheck | `634cadd047e3cc1f688f8158f3b25632f654007d3fccdfad99e3046215837773` |
 
 ## Next native gates
 
@@ -396,9 +437,11 @@ experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-Next qualify rename/removal of associated contexts: retain association by ID on
-rename, preserve manual choice, and ensure a new ID with the old name does not
-inherit a removed association. Pomodoro continuity, other interaction drafts,
+The bounded desktop rename/removal/recreation journey is now qualified in the
+private KDE fixture. Next qualify an active Pomodoro across automatic profile
+changes and normal process restart, using its original deadline and a real
+decreasing public countdown without resetting it. Persisted timerRemaining alone
+is not the running countdown. Activity rename/removal, other interaction drafts,
 the user's panel, focus/seat and monitor behavior also remain open.
 Private backend desktop transitions do not establish these behaviors
 in the user's panel. A private XDG directory alone does not isolate the

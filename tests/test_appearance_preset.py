@@ -188,6 +188,119 @@ class AppearancePresetTests(unittest.TestCase):
         self.assertEqual({key: self.config.property(key) for key in timer}, timer)
         self.assertEqual(self.warnings, [])
 
+    def test_desktop_lifecycle_preserves_manual_choice_and_binding_identity(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.initialize()
+        bindings = json.dumps({
+            'formatVersion': '0.1-experimental', 'activityBindings': [],
+            'desktopBindings': [
+                {'contextId': 'd0', 'lastKnownName': 'Synthetic zero', 'profileId': 'work'},
+                {'contextId': 'd1', 'lastKnownName': 'Synthetic one', 'profileId': 'personal'},
+            ],
+        }, indent=2)
+        self.config.setProperty('contextsJSON', bindings)
+
+        def snapshot(current, ids, names, status='ready'):
+            self.evaluate('sourceContextSnapshot = ' + json.dumps({
+                'outputName': 'Synthetic-output',
+                'activity': {'status': 'ready', 'currentId': 'activity-a',
+                             'ids': ['activity-a'], 'names': ['Synthetic activity']},
+                'desktop': {'status': status, 'currentId': current, 'ids': ids, 'names': names},
+            }))
+
+        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic one'])
+        self.config.setProperty('autoContextDefaultProfile', 'games')
+        self.config.setProperty('autoContextEnabled', True)
+        self.settle(lambda: self.evaluate('profiles.activeProfileId') == 'personal')
+        original = json.loads(self.config.property('profilesJSON'))
+        flat = self.flat()
+        timer = {key: self.config.property(key) for key in
+                 ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus')}
+
+        def preserved(profile):
+            expected = json.loads(json.dumps(original))
+            expected['activeProfileId'] = profile
+            self.assertEqual(json.loads(self.config.property('profilesJSON')), expected)
+            self.assertEqual(self.config.property('contextsJSON'), bindings)
+            self.assertEqual(self.flat(), flat)
+            self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+            self.assertTrue(self.config.property('autoContextEnabled'))
+            self.assertEqual(self.config.property('autoContextDefaultProfile'), 'games')
+
+        def tab(name):
+            interface = self.accessible_named(name)
+            self.assertEqual(interface.role(), QAccessible.Role.PageTab)
+            self.assertFalse(interface.state().disabled)
+            self.assertFalse(interface.state().invisible)
+            self.assertFalse(interface.state().offscreen)
+            actions = interface.actionInterface()
+            self.assertIsNotNone(actions)
+            press = QAccessibleActionInterface.pressAction()
+            self.assertIn(press, actions.actionNames())
+            actions.doAction(press)
+            self.settle(lambda: self.accessible_named(name).state().checked)
+
+        self.popup.setProperty('heightBudget', 420)
+        self.evaluate('open()', self.popup)
+        self.settle(lambda: self.popup.property('visible'))
+        tab('Perfis')
+        self.press_appearance_control('profileSelector')
+        selector = self.owned_item('profileSelector')
+        self.settle(lambda: self.evaluate('popup.visible', selector))
+        self.accessible_press_combo_option(selector, 'Trabalho')
+        preserved('personal')  # Navigation is pending until the actual Use action.
+        self.press_appearance_control('profileUse')
+        self.settle(lambda: self.evaluate('profiles.activeProfileId') == 'work')
+        preserved('work')
+        tab('Aparência')
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible'))
+        QTest.qWait(40)
+        preserved('work')
+        manual_raw = self.config.property('profilesJSON')
+
+        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic renamed'])
+        QTest.qWait(40)
+        self.assertEqual(self.config.property('profilesJSON'), manual_raw)
+        preserved('work')
+        snapshot('d1', ['d0', 'd1'], ['Synthetic zero', 'Synthetic one'])
+        QTest.qWait(40)
+        self.assertEqual(self.config.property('profilesJSON'), manual_raw)
+        preserved('work')
+        snapshot('', [], [], status='unavailable')
+        QTest.qWait(40)
+        self.assertEqual(self.config.property('profilesJSON'), manual_raw)
+        preserved('work')
+        snapshot('d0', ['d0'], ['Synthetic zero'])
+        QTest.qWait(40)
+        preserved('work')
+        snapshot('d0', ['d0', 'd2'], ['Synthetic zero', 'Synthetic one'])
+        QTest.qWait(40)
+        preserved('work')
+        snapshot('d2', ['d0', 'd2'], ['Synthetic zero', 'Synthetic one'])
+        self.settle(lambda: self.evaluate('profiles.activeProfileId') == 'games')
+        preserved('games')  # Distinguishes both a leaked manual Work and name-bound Personal.
+
+        self.evaluate('open()', self.popup)
+        self.settle(lambda: self.popup.property('visible'))
+        tab('Contextos')
+        current = self.owned_item('desktopContextName')
+        stale = self.owned_item('staleDesktopBindings')
+        self.assertIsNotNone(current)
+        self.assertIsNotNone(stale)
+        self.assertTrue(current.isVisible())
+        self.assertEqual(current.property('text'), 'Synthetic one')
+        self.assertTrue(stale.isVisible())
+        self.assertEqual(stale.property('text'), '1 associação antiga preservada por ID')
+        preserved('games')
+        tab('Aparência')
+        self.press_appearance_control('appearanceCancel')
+        self.settle(lambda: not self.popup.property('visible'))
+        preserved('games')
+        self.assertEqual(self.warnings, [])
+
     def test_collapsed_catalog_skips_choices_and_space_enters_first_choice(self):
         self.initialize()
         self.popup.setProperty('heightBudget', 420)
