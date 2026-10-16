@@ -193,6 +193,52 @@ restart and desktop transitions for the private backend on the current runtime
 bytes. It does not qualify UI opt-in, manual override/Resume, Activity precedence,
 the new waiting message in a native popup, the user's panel or focus/seat.
 
+## Private KDE Activity precedence
+
+The same current runtime also passed private Activity precedence. One Activity
+was associated with work, the original desktop with personal, and the default
+was games. Six confirmed real context pairs produced work, work, games,
+personal, work, work in one host, without an external profile/config writer
+after launch. This distinguishes the Activity rule from both desktop and default,
+then exercises both fallbacks. Returning to the first Activity restored its last
+desktop through KWin; the following desktop change was an explicit public setter.
+The host exited normally with work persisted, no cleanup errors and a fresh
+main-session preservation check. This is private backend precedence, not UI or
+user-panel qualification.
+
+## Accessible profile selectors and installed update
+
+A subsequent private Wayland accessibility visit passed five public navigation
+actions without changing preferences. It found that both real profile ComboBoxes
+offered only SetFocus, and neither offered an action to open its list. Their real
+list delegates also lacked Press in the portable regression. The controls now
+expose Press explicitly: the ComboBox opens/closes its existing popup, and each
+option calls its own native button `click()`. The ComboBox's normal activation
+path still owns selection. Disabled/hidden controls remain inactive.
+
+The regression first failed on the missing action, then passed for opening,
+closing, focus acquisition and real option selection in Fusion and KDE styles.
+Choosing a manual option only updates the pending choice until **Usar perfil**;
+choosing a default does not enable automation or change the active profile.
+Eight affected suites passed **170 tests, with two expected TaskManager skips,
+per style**. The design check found zero issues. The complete gallery and
+additional selector captures were reviewed in both schemes, without QML warnings.
+These are synthetic captures, not screenshots of the user's session:
+[profiles dark](../screenshots/profiles-selector-dark-350.png) /
+[light](../screenshots/profiles-selector-light-350.png),
+[contexts dark](../screenshots/contexts-selector-dark-350.png) /
+[light](../screenshots/contexts-selector-light-350.png).
+
+The two-file correction is installed locally. One controlled stop/start and a
+new read-only backup preserved the complete declared configuration, bar,
+launcher, inventory and original banks. A fresh check verified all 72 installed
+entries against Source and archive
+`ad5328ee89893f70d9ba6f5f4ad7c8c40d453e14bd8cef03fb649968db2df883`.
+Automation remains off, all four profile/automation disk keys remain absent,
+autolock is false and the screen is unlocked. The public release is unchanged.
+The new selector behavior still needs the full private native UI journey below;
+the earlier backend episodes tested the preceding runtime.
+
 ## Evidence identifiers
 
 Private execution records are retained locally; they are not shipped as fixtures
@@ -221,16 +267,27 @@ or logs. These hashes identify the records summarized above:
 | Fresh waiting explanation install/backup check | `d0737518cbb76e91fb8ebe45a4d0db273ac17d4e88c50fcddf86e1e7140bafb7` |
 | Private KDE enabled-restart result | `73cb29e3b6c542e051c61fabbc97d4b0b1fc1319d82da9a0c143daf2297b1c21` |
 | Fresh enabled-restart postcheck | `66b3a707e741d854032b328d167d684c501b58d127e4f3fc4f638f1953933b25` |
+| Private KDE Activity-precedence result | `8b26643e15bcefe02013970bf18c38f80f1ef5958e71eb9abdae231d13b74cd7` |
+| Fresh Activity-precedence postcheck | `628e2c4a76750839c47820918e4a75da5241c8257fb53af4c1e1641de74c8c5f` |
+| Private native accessibility discovery | `2ac91e8b0bab17fcc1ba75a101c943f06b401724b0f3bf5b478a795e17773e34` |
+| Fresh accessibility-discovery postcheck | `e8f0a52a18dffa22265648347e030b4f4f8e4ef185d8e965a260ec703bc0f5aa` |
+| Selector missing-Press RED | `713d736c56caaf87dfa74c7f86978a0f1d3bbda5abf6ac25ecfa6251a2af2f8c` |
+| Selector final affected suites | `4da7270d5c1c2a3f991e24400e559c62ccbe6953ab434caa55f827551dc97a2a` |
+| Selector related suites | `b9b94a65ed1a79110499f5d10bd0e3e617267606f6c70e5ea2ea6f07cf8425b2` |
+| Final selector gallery/captures manifest | `286021fb842d1c64a2450c6caa8c44cd72fe248414535e82083c6c2e8fcf7f92` |
+| Selector installation result | `7a0ea058f451e06c8b789a14da04554bb9b16a5b3f4f4a11d6accb1262a3e2ea` |
+| Fresh selector installation/backup check | `b18783ab35df5d13c3d57eec9902d32a91786d3f217e7ad871811273ed801087` |
 
 ## Next native gates
 
-The private backend transition and enabled-restart gates above are now qualified;
+The private backend transition, enabled-restart and Activity-precedence gates
+above are now qualified;
 the earlier main-session
 experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-Next qualify UI opt-in, manual override and Resume, Activity precedence, dirty
+Next qualify UI opt-in, manual override and Resume, dirty
 appearance/Cancel/Apply, rename/removal of
 associated contexts, Pomodoro continuity, the user's panel, focus/seat and monitor
 behavior. Private backend desktop transitions do not establish these behaviors

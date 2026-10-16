@@ -12,6 +12,8 @@ Controls.ApplicationWindow {
         objectName: "configuration"
         property string profilesJSON: ""
         property string contextsJSON: ""
+        property bool autoContextEnabled: false
+        property string autoContextDefaultProfile: ""
         property bool showLocalToasts: false
         property bool showControlCenter: false
         property var launchers: ["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]
@@ -63,6 +65,15 @@ Controls.ApplicationWindow {
         DockUI.AppearancePresetState { id: presetState; profiles: profileState; appearance: appearanceState }
         DockUI.ContextState { id: contexts; sourceSnapshot: null }
         DockUI.ContextBindingsState { id: bindings; configuration: config; profiles: profileState; contexts: contexts }
+        DockUI.AutoContextProfileState {
+            id: automaticProfiles
+            configuration: config
+            profiles: profileState
+            contexts: contexts
+            bindingsState: bindings
+            active: true
+            interactionBusy: popup.visible
+        }
         Controls.Popup {
             id: popup
             objectName: "settingsPopup"
@@ -82,6 +93,7 @@ Controls.ApplicationWindow {
                 profiles: profileState
                 contexts: contexts
                 contextBindings: bindings
+                automation: automaticProfiles
                 resetTimer: () => {}
                 onAppearanceCanceled: popup.close()
             }

@@ -223,7 +223,7 @@ C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incr
 ### 0.5 — Perfis, Activities e áreas de trabalho
 
 - [ ] **P1: perfis manuais.** Trabalho, Pessoal, Jogos e perfis próprios com apps fixados, aparência, ordem/visibilidade dos widgets e escolha de dock/barra/launcher/eventos. Aceite: alternar e reiniciar restaura cada perfil; o Pomodoro continua com o prazo correto ao trocar de perfil.
-- [ ] **P2: associação a contexto KDE.** A alpha 0.2.8 publicou associações explícitas. O Source atual acrescenta automático opcional por instância: Activity → área → padrão gerenciado, com escolha manual até novo contexto confirmado/retomada e preservação de interações. O pacote desse incremento foi instalado e a tela desligada passou uma visita nativa sem edição, incluindo revelar/recolher a dock e fechar com Escape; isso não qualifica a automação ligada. P2 segue parcial até a jornada nativa com persistência/reinício e comportamento por monitor. Próxima fatia: comprovar seleção com os modelos KDE reais numa instância isolada, antes da transição real de contexto e dos gates restantes. Aceite: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil. [Regras e limites](docs/contexts.md), [prova instalada e próximos gates](docs/validation/contexts-auto-installed.md).
+- [ ] **P2: associação a contexto KDE.** A alpha 0.2.8 publicou associações explícitas. O Source atual acrescenta automático opcional por instância: Activity → área → padrão gerenciado, com escolha manual até novo contexto confirmado/retomada e preservação de interações. O pacote está instalado com automático desligado na sessão principal; a visita sem edição passou. No KDE privado real, foram qualificadas transições de área, precedência de Activity/área/padrão, persistência e reinício habilitado. Os seletores de perfil agora oferecem abertura e seleção acessíveis, com regressões nos dois estilos e correção instalada. P2 segue parcial: faltam UI de ativar/manual/Retomar, interações e rascunhos, renomear/remover contexto, painel do usuário, foco/seat e monitores. Próxima fatia: qualificar esses controles pela interface real isolada. Aceite: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil. [Regras e limites](docs/contexts.md), [prova instalada e próximos gates](docs/validation/contexts-auto-installed.md).
 - [ ] **W1: seletor de contexto.** Mostrar Activity e área atuais; permitir trocar por clique ou atalho, com resposta de erro se o serviço não estiver disponível. Diferenciar trocar o perfil e trocar o contexto do KDE. Aceite: nome e destaque acompanham a troca real, inclusive com comportamento por monitor qualificado.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
@@ -1316,6 +1316,14 @@ a sessão principal, ainda com o automático desligado. Isso qualifica esse
 reinício no KDE privado; UI de opt-in, escolha manual/Retomar, precedência de
 Activity, painel do usuário, foco/seat e monitores continuam abertos.
 [Registro](docs/validation/contexts-auto-installed.md#private-kde-enabled-restart).
+
+**P2 — precedência no KDE privado (15/10):** seis pares reais confirmados de
+Activity/área distinguiram Activity associada → área associada → padrão no mesmo
+host íntegro, sem writer externo após o lançamento. A volta à Activity restaurou
+sua última área pelo KWin; o ajuste seguinte da área foi explícito. Saída normal,
+persistência e postcheck passaram, preservando a sessão principal. A precedência
+do backend privado está qualificada; UI, painel do usuário e foco/seat continuam
+abertos. [Evidência](docs/validation/contexts-auto-installed.md#private-kde-activity-precedence).
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.

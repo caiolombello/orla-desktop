@@ -46,12 +46,23 @@ Card {
                 ? controls.choices.findIndex(entry => entry.id === controls.automation.defaultProfileId) : -1
             displayText: currentIndex < 0 ? qsTr("Escolha um perfil padrão") : currentText
             Accessible.name: qsTr("Perfil padrão do modo automático")
+            Accessible.onPressAction: {
+                if (!defaultSelector.enabled || !defaultSelector.visible) return;
+                defaultSelector.forceActiveFocus(Qt.OtherFocusReason);
+                if (defaultSelector.popup.visible) defaultSelector.popup.close();
+                else defaultSelector.popup.open();
+            }
             onActivated: index => controls.automation.setDefaultProfile(controls.choices[index].id)
             onActiveFocusChanged: if (activeFocus) controls.revealFocused(this)
             delegate: Controls.ItemDelegate {
+                id: defaultOption
                 required property var modelData
                 width: defaultSelector.width
                 text: modelData.name
+                Accessible.onPressAction: {
+                    if (defaultOption.enabled && defaultOption.visible && defaultSelector.popup.visible)
+                        defaultOption.click();
+                }
                 contentItem: Text {
                     text: parent.text
                     textFormat: Text.PlainText
