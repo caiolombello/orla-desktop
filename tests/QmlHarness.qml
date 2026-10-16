@@ -5,11 +5,15 @@ import "../package/contents/ui" as DockUI
 Window {
     property string fixtureProfilesJSON: ""
     property string fixtureContextsJSON: ""
+    property bool fixtureAutoContextEnabled: false
+    property string fixtureAutoContextDefaultProfile: ""
+    property string fixtureAutoContextPolicy: "activity-desktop"
+    property string fixtureContextSnapshotJSON: ""
     property int contextWriteCount: 0
     property int profileWriteCount: 0
     property var contextTimerWitness: dockView.pomodoro
     readonly property bool contextTimerIdentity: contextTimerWitness === dockView.pomodoro
-    property var contextSnapshot: ({
+    property var contextSnapshot: fixtureContextSnapshotJSON.length ? JSON.parse(fixtureContextSnapshotJSON) : ({
         outputName: "DP-1",
         activity: {status: "ready", currentId: "activity-work", ids: ["activity-work"], names: ["Foco"]},
         desktop: {status: "ready", currentId: "desktop-1", ids: ["desktop-1"], names: ["Área 1"]}
@@ -28,9 +32,9 @@ Window {
         property string profilesJSON: fixtureProfilesJSON
         onProfilesJSONChanged: profileWriteCount++
         property string contextsJSON: fixtureContextsJSON
-        property bool autoContextEnabled: false
-        property string autoContextDefaultProfile: ""
-        property string autoContextPolicy: "activity-desktop"
+        property bool autoContextEnabled: fixtureAutoContextEnabled
+        property string autoContextDefaultProfile: fixtureAutoContextDefaultProfile
+        property string autoContextPolicy: fixtureAutoContextPolicy
         onContextsJSONChanged: contextWriteCount++
         property int iconSize: 42
         property bool animations: false

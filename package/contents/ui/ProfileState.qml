@@ -8,6 +8,8 @@ QtObject {
     readonly property string activeProfileId: internal.document ? internal.document.activeProfileId : "legacy"
     readonly property int revision: internal.revision
     readonly property bool initialized: internal.document !== null
+    // Initial restoration is not a choice; nested command loads have their own provenance.
+    readonly property alias hydratingInitial: internalState.hydratingInitial
     readonly property bool writable: internal.savedError.length === 0
     // Detached read snapshot. Consumers must not mutate it; Qt's freeze is best effort.
     readonly property var effective: Profiles.freeze(Profiles.copy(internal.presentation))
@@ -19,6 +21,8 @@ QtObject {
     readonly property var legacyPresentation: Profiles.flat(configuration)
 
     property QtObject internal: QtObject {
+        id: internalState
+        property bool hydratingInitial: false
         property bool completed: false
         property var document: null
         property var presentation: Profiles.flat(state.configuration)
@@ -47,15 +51,21 @@ QtObject {
             return fail(qsTr("A configuração mudou. Abra novamente antes de salvar."));
         return true;
     }
-    function load() {
-        const result = Profiles.parse(savedJSON);
-        internal.revision++;
-        internal.commandError = "";
-        internal.message = "";
-        internal.savedError = result.error;
-        if (result.error) return;
-        internal.document = result.value ? Profiles.freeze(result.value) : null;
-        refresh();
+    function load(initial = false) {
+        const previous = internal.hydratingInitial;
+        internal.hydratingInitial = initial === true;
+        try {
+            const result = Profiles.parse(savedJSON);
+            internal.revision++;
+            internal.commandError = "";
+            internal.message = "";
+            internal.savedError = result.error;
+            if (result.error) return;
+            internal.document = result.value ? Profiles.freeze(result.value) : null;
+            refresh();
+        } finally {
+            internal.hydratingInitial = previous;
+        }
     }
     function refresh() {
         internal.presentation = Profiles.freeze(Profiles.copy(activeProfileId === "legacy" ? Profiles.flat(configuration)
@@ -176,5 +186,5 @@ QtObject {
         internal.revision++;
         refresh();
     }
-    Component.onCompleted: { internal.completed = true; load(); }
+    Component.onCompleted: { internal.completed = true; load(true); }
 }

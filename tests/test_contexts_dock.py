@@ -49,16 +49,18 @@ class ContextsDockTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
-    def create(self, contexts_json="", profiles_json=""):
+    def create(self, contexts_json="", profiles_json="", *, initial_properties=None, settle=True):
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(
             lambda warnings: self.warnings.extend(warning.toString() for warning in warnings)
         )
-        self.engine.setInitialProperties({
+        properties = {
             "fixtureContextsJSON": contexts_json,
             "fixtureProfilesJSON": profiles_json,
-        })
+        }
+        properties.update(initial_properties or {})
+        self.engine.setInitialProperties(properties)
         self.engine.load(QUrl.fromLocalFile(str(ROOT / "tests" / "ContextsDockHarness.qml")))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.window = self.engine.rootObjects()[0]
@@ -67,7 +69,8 @@ class ContextsDockTests(unittest.TestCase):
         self.popup = self.window.findChild(QObject, "settingsPopup")
         self.popup.setProperty("popupType", 0)
         self.popup.setProperty("y", 0)
-        QTest.qWait(40)
+        if settle:
+            QTest.qWait(40)
 
     def setUp(self):
         self.create()
@@ -108,6 +111,90 @@ class ContextsDockTests(unittest.TestCase):
         meta = self.config.metaObject()
         names = [meta.property(index).name() for index in range(meta.propertyOffset(), meta.propertyCount())]
         return {name: self.evaluate("JSON.stringify(configuration[" + json.dumps(name) + "])") for name in names}
+
+    def create_persisted_desktop_dock(self, enabled=True):
+        self.initialize_profiles()
+        flat = self.configuration_snapshot()
+        document = json.loads(self.config.property("profilesJSON"))
+        document["activeProfileId"] = "work"
+        profiles_raw = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
+        contexts_raw = json.dumps({
+            "formatVersion": "0.1-experimental", "activityBindings": [],
+            "desktopBindings": [{"contextId": "d1", "lastKnownName": "Área 1", "profileId": "personal"}],
+        }, ensure_ascii=False, indent=2)
+        self.dispose()
+        self.create(contexts_raw, profiles_raw, initial_properties={
+            "fixtureAutoContextEnabled": enabled,
+            "fixtureAutoContextDefaultProfile": "work",
+            "fixtureAutoContextPolicy": "desktop",
+            "fixtureContextSnapshotJSON": json.dumps({"outputName": "Fixture",
+                "activity": {"status": "unavailable", "currentId": "", "ids": [], "names": []},
+                "desktop": {"status": "ready", "currentId": "d1", "ids": ["d0", "d1"], "names": ["Área 0", "Área 1"]}}),
+        }, settle=False)
+        current = self.configuration_snapshot()
+        seeded = {"profilesJSON", "contextsJSON", "autoContextEnabled", "autoContextDefaultProfile", "autoContextPolicy"}
+        self.assertEqual({key: value for key, value in current.items() if key not in seeded},
+                         {key: value for key, value in flat.items() if key not in seeded})
+        self.assertEqual(self.config.property("profilesJSON"), profiles_raw)
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.assertEqual(self.config.property("contextsJSON"), contexts_raw)
+        snapshot = json.loads(self.evaluate("JSON.stringify(contexts.snapshot)"))
+        self.assertEqual(snapshot["desktop"]["status"], "ready")
+        self.assertEqual(snapshot["desktop"]["id"], "d1")
+        self.assertEqual(snapshot["activity"]["status"], "unavailable")
+        self.assertEqual(self.config.property("autoContextPolicy"), "desktop")
+        self.assertEqual(self.config.property("autoContextEnabled"), enabled)
+        return document, profiles_raw, contexts_raw
+
+    def test_automatic_desktop_cold_start_selects_from_persisted_configuration(self):
+        document, _, _ = self.create_persisted_desktop_dock()
+        before = self.configuration_snapshot()
+        profile_writes = QSignalSpy(self.config.profilesJSONChanged)
+        context_writes = QSignalSpy(self.config.contextsJSONChanged)
+        self.wait_profile("personal")
+        self.assertEqual(profile_writes.count(), 1)
+        self.assertEqual(context_writes.count(), 0)
+        expected = dict(document, activeProfileId="personal")
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        after = self.configuration_snapshot()
+        self.assertEqual({key: value for key, value in after.items() if key != "profilesJSON"},
+                         {key: value for key, value in before.items() if key != "profilesJSON"})
+        self.assertFalse(self.evaluate("autoContextProfiles.manualOverride"))
+        self.assertTrue(self.window.property("contextTimerIdentity"))
+        self.assertFalse(self.dock.property("nativeContextSourceLoaded"))
+
+    def test_automatic_desktop_cold_start_off_preserves_all_configuration(self):
+        _, profiles_raw, contexts_raw = self.create_persisted_desktop_dock(enabled=False)
+        before = self.configuration_snapshot()
+        profile_writes = QSignalSpy(self.config.profilesJSONChanged)
+        context_writes = QSignalSpy(self.config.contextsJSONChanged)
+        QTest.qWait(150)
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "work")
+        self.assertFalse(self.evaluate("autoContextProfiles.enabled"))
+        self.assertFalse(self.evaluate("autoContextProfiles.observing"))
+        self.assertEqual(profile_writes.count(), 0)
+        self.assertEqual(context_writes.count(), 0)
+        self.assertEqual(self.config.property("profilesJSON"), profiles_raw)
+        self.assertEqual(self.config.property("contextsJSON"), contexts_raw)
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.assertTrue(self.window.property("contextTimerIdentity"))
+
+    def test_automatic_desktop_cold_start_preserves_a_new_manual_selection(self):
+        document, _, _ = self.create_persisted_desktop_dock()
+        before = self.configuration_snapshot()
+        profile_writes = QSignalSpy(self.config.profilesJSONChanged)
+        context_writes = QSignalSpy(self.config.contextsJSONChanged)
+        self.assertTrue(self.evaluate("profiles.select('games',profiles.activeProfileId,profiles.revision)"))
+        QTest.qWait(150)
+        self.assertEqual(self.evaluate("profiles.activeProfileId"), "games")
+        self.assertTrue(self.evaluate("autoContextProfiles.manualOverride"))
+        self.assertEqual(profile_writes.count(), 1)
+        self.assertEqual(context_writes.count(), 0)
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), dict(document, activeProfileId="games"))
+        after = self.configuration_snapshot()
+        self.assertEqual({key: value for key, value in after.items() if key != "profilesJSON"},
+                         {key: value for key, value in before.items() if key != "profilesJSON"})
+        self.assertTrue(self.window.property("contextTimerIdentity"))
 
     def test_automatic_policy_changes_only_its_key_and_keeps_automatic_off(self):
         self.initialize_profiles()

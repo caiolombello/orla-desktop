@@ -3,11 +3,20 @@ import "../package/contents/ui" as DockUI
 
 Item {
     id: harness
+    property string initialProfilesJSON: ""
+    property string initialBindingsJSON: ""
+    property bool initialEnabled: false
+    property string initialDefaultProfile: ""
+    property var initialPolicy: "activity-desktop"
+    property bool initialActive: false
+    property string initialSourceJSON: ""
+    property var hydrationHook: null
+    property var hydrationTrace: []
     property alias configuration: config
     property alias profileState: profiles
     property alias contextState: contexts
     property alias bindingsState: bindings
-    property bool running: false
+    property bool running: initialActive
     property bool busy: false
     property bool previewDirty: false
     property var transitionHook: null
@@ -26,16 +35,16 @@ Item {
     property var selectionResults: []
     property int writes: 0
     property var selections: []
-    property var sourceSnapshot: ({outputName:"", activity:{status:"loading",currentId:"",ids:[],names:[]},
+    property var sourceSnapshot: initialSourceJSON.length ? JSON.parse(initialSourceJSON) : ({outputName:"", activity:{status:"loading",currentId:"",ids:[],names:[]},
         desktop:{status:"loading",currentId:"",ids:[],names:[]}})
     QtObject {
         id: config
         objectName: "configuration"
-        property string profilesJSON: ""
-        property string contextsJSON: ""
-        property bool autoContextEnabled: false
-        property string autoContextDefaultProfile: ""
-        property var autoContextPolicy: "activity-desktop"
+        property string profilesJSON: harness.initialProfilesJSON
+        property string contextsJSON: harness.initialBindingsJSON
+        property bool autoContextEnabled: harness.initialEnabled
+        property string autoContextDefaultProfile: harness.initialDefaultProfile
+        property var autoContextPolicy: harness.initialPolicy
         onAutoContextPolicyChanged: if (harness.policyHook) harness.policyHook()
         property var launchers: ["applications:org.example.fixture.desktop"]
         property string theme: "glass"
@@ -81,9 +90,16 @@ Item {
             if (harness.selectionHook) harness.selectionHook();
         }
     }
+    Connections {
+        target: profiles
+        function onHydratingInitialChanged() {
+            if (harness.hydrationHook) harness.hydrationHook();
+        }
+    }
     QtObject {
         id: selectionAdapter
         readonly property alias initialized: profiles.initialized
+        readonly property alias hydratingInitial: profiles.hydratingInitial
         readonly property alias writable: profiles.writable
         readonly property alias activeProfileId: profiles.activeProfileId
         readonly property alias revision: profiles.revision

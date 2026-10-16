@@ -134,7 +134,7 @@ QtObject {
         }
     }
     function selected() {
-        if (!internal.completed) return;
+        if (!internal.completed || (profiles && profiles.hydratingInitial === true)) return;
         // A snapshot observer can select before ContextState publishes its revision.
         reconcilePolicy();
         observeContext();

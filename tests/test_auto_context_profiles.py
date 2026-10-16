@@ -20,9 +20,14 @@ class AutoContextProfilesTests(unittest.TestCase):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
     def setUp(self):
+        self.create()
+
+    def create(self, properties=None):
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
+        if properties:
+            self.engine.setInitialProperties(properties)
         self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("AutoContextProfilesHarness.qml").resolve())))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.root = self.engine.rootObjects()[0]
@@ -552,6 +557,81 @@ class AutoContextProfilesTests(unittest.TestCase):
         self.evaluate("restartController()")
         self.assertEqual(self.selected(), "work")
         self.assertFalse(self.override())
+
+    def cold_start(self, policy):
+        self.initialize()
+        document = json.loads(self.config.property("profilesJSON"))
+        document["activeProfileId"] = "work"
+        bindings = {"formatVersion": "0.1-experimental", "activityBindings": [], "desktopBindings": []}
+        bindings["desktopBindings"] = [{"contextId": "d1", "lastKnownName": "Synthetic one", "profileId": "personal"}]
+        frame = {"outputName": "Synthetic-output",
+                 "activity": {"status": "unavailable" if policy == "desktop" else "ready", "currentId": "a1",
+                              "ids": ["a1"], "names": ["Synthetic activity"]},
+                 "desktop": {"status": "ready", "currentId": "d1", "ids": ["d1", "d2"],
+                             "names": ["Synthetic one", "Synthetic two"]}}
+        self.tearDown()
+        self.create({"initialProfilesJSON": json.dumps(document), "initialBindingsJSON": json.dumps(bindings),
+                     "initialEnabled": True, "initialDefaultProfile": "games", "initialPolicy": policy,
+                     "initialActive": True, "initialSourceJSON": json.dumps(frame)})
+        self.settle()
+        return document
+
+    def test_cold_start_desktop_policy_recomputes_saved_work_without_manual_selection(self):
+        original = self.cold_start("desktop")
+        self.assertEqual(self.selected(), "personal")
+        self.assertFalse(self.override())
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), dict(original, activeProfileId="personal"))
+
+    def test_cold_start_strict_policy_recomputes_saved_work_without_manual_selection(self):
+        original = self.cold_start("activity-desktop")
+        self.assertEqual(self.selected(), "personal")
+        self.assertFalse(self.override())
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), dict(original, activeProfileId="personal"))
+
+    def test_initial_load_provenance_suspends_for_nested_real_selection(self):
+        self.prepare()
+        self.enable("games")
+        self.evaluate("let fired=false;hydrationHook=() => {hydrationTrace=hydrationTrace.concat([profileState.hydratingInitial]);"
+            "if(profileState.hydratingInitial && !fired){fired=true;"
+            "if(!profileState.select('personal',profileState.activeProfileId,profileState.revision))throw new Error('nested_select_refused');}}")
+        self.evaluate("profileState.load(true)")
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(hydrationTrace)")), [True, False, True, False])
+        self.assertFalse(self.evaluate("profileState.hydratingInitial"))
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.context(desktop="d2")
+        self.assertEqual(self.selected(), "games")
+        self.assertFalse(self.override())
+
+    def test_manual_selection_during_initial_load_unwind_remains_authoritative(self):
+        self.prepare()
+        self.enable("games")
+        self.evaluate("let fired=false;hydrationHook=() => {if(!profileState.hydratingInitial && !fired){fired=true;"
+            "if(!profileState.select('personal',profileState.activeProfileId,profileState.revision))throw new Error('unwind_select_refused');}}")
+        self.evaluate("profileState.load(true)")
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.assertFalse(self.evaluate("profileState.hydratingInitial"))
+
+    def test_external_profile_load_after_startup_remains_manual(self):
+        self.cold_start("desktop")
+        document = json.loads(self.config.property("profilesJSON"))
+        document["activeProfileId"] = "work"
+        raw = json.dumps(document)
+        self.config.setProperty("profilesJSON", raw)
+        self.settle()
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.selected(), "work")
+        self.assertTrue(self.override())
+
+    def test_initial_load_error_restores_provenance_without_repairing_raw(self):
+        self.prepare()
+        raw = 'FUTURE-PROFILES'
+        self.config.setProperty('profilesJSON', raw)
+        self.evaluate('profileState.load(true)')
+        self.assertFalse(self.evaluate('profileState.hydratingInitial'))
+        self.assertFalse(self.profiles.property('writable'))
+        self.assertEqual(self.config.property('profilesJSON'), raw)
 
     def test_real_timer_ticks_across_automatic_profiles_and_recreation(self):
         self.initialize()
