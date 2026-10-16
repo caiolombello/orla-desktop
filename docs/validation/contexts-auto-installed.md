@@ -236,8 +236,52 @@ entries against Source and archive
 `ad5328ee89893f70d9ba6f5f4ad7c8c40d453e14bd8cef03fb649968db2df883`.
 Automation remains off, all four profile/automation disk keys remain absent,
 autolock is false and the screen is unlocked. The public release is unchanged.
-The new selector behavior still needs the full private native UI journey below;
-the earlier backend episodes tested the preceding runtime.
+The earlier backend episodes tested the preceding runtime. The subsequent UI
+journey below uses this installed selector correction.
+
+## Private native opt-in, manual choice and Resume
+
+The corrected installed package passed a complete public accessibility journey
+in a private real Wayland/KWin session: **19 Press actions, one SetFocus and nine
+strict configuration milestones**. The same applet process and real
+Activity/desktop pair remained alive throughout:
+
+- Choosing work as the default kept automation off and the prior profile active.
+- Enabling automation kept that prior profile while Settings was open; work
+  became active after closing Settings.
+- Choosing personal only changed the pending choice. **Usar perfil** committed
+  personal, which remained active after closing Settings in the same context.
+- A public SetFocus revealed the clipped Resume button. Fresh visibility,
+  enabled state and manual/configuration witnesses were revalidated before Press.
+  Resume kept personal while Settings was open, then work returned after closure.
+
+The final document persisted after normal host exit. Profiles, associations,
+legacy fields and timer were checked semantically at each milestone; only the
+intended active profile and two automation preferences changed. No external
+profile/configuration writer ran after launch. This does not measure native
+setter counts. All owned children exited without forced termination or cleanup
+errors; the private accessibility daemon exited and its socket disappeared.
+A fresh independent check preserved the main shell process, packages, complete
+declared configuration, bar, launcher and original banks. The user's dock remains
+off, with its four profile/automation disk keys absent and autolock disabled.
+
+Two earlier full-journey attempts remain FAILED. The first exhausted a shared
+deadline without enough timing detail to distinguish total and phase limits.
+The second stopped at the Resume eligibility guard without recording which flag
+was false. Qt 6.11.2 sets AT-SPI VISIBLE and SHOWING together, so the visitor's
+assumption that an offscreen control could have only VISIBLE was incorrect
+([version-matched mapping](https://raw.githubusercontent.com/qt/qtbase/v6.11.2/src/gui/accessible/linux/qspi_constant_mappings.cpp)).
+The successful independent episode explicitly allowed one focus navigation to
+the exact enabled/focusable Resume control after positive manual-state witnesses,
+then required fresh VISIBLE and SHOWING before activation. It recorded both
+flags false before reveal and true afterward. This does not retroactively identify
+the missing flags in the failed attempt. Reader allowance was explicitly 40 s;
+the 8 s phase limit, 60 s outer limit and cleanup bounds remained enforced. The
+successful reader took 29.358 s. No production patch followed those visitor fixes.
+
+This qualifies the bounded private UI journey, not physical keyboard input,
+Wayland seat/focus restoration, the user's panel, dirty appearance drafts,
+Pomodoro continuity or multiple monitors. P2 remains partial.
 
 ## Evidence identifiers
 
@@ -277,18 +321,24 @@ or logs. These hashes identify the records summarized above:
 | Final selector gallery/captures manifest | `286021fb842d1c64a2450c6caa8c44cd72fe248414535e82083c6c2e8fcf7f92` |
 | Selector installation result | `7a0ea058f451e06c8b789a14da04554bb9b16a5b3f4f4a11d6accb1262a3e2ea` |
 | Fresh selector installation/backup check | `b18783ab35df5d13c3d57eec9902d32a91786d3f217e7ad871811273ed801087` |
+| First full UI journey FAILED | `a07086790490ea56cae55db74ff8a9561138e9d896075032db02d6bd520e8a08` |
+| First failed-journey main preservation | `926c20613ce1e8bdf04a372c9005f6434b3df2764eb660ed6815c9efcabb7a43` |
+| Second full UI journey FAILED | `0ef76addbd80828b3a1c32df51d8377443fe63cd1b3828efabc3e66a9a86a670` |
+| Second failed-journey main preservation | `9db759fe293416aa07024c37794d6a9dfde081d18137128e80c39704fdfb2c02` |
+| Private full UI journey PASS | `34b45b19c6b4ce427219babb2bb4a03510d8d4e65d27e87306ec9625bebd9055` |
+| Private UI actions/configuration milestones | `78a515e9659d1df1168f914f9e1e7755871fe399bc5649d5123f379d41cbf7b7` |
+| Fresh full UI journey postcheck | `b651d123c41f27cfb28a16b4849972582282c490cf18ddb70f231af58a04635d` |
 
 ## Next native gates
 
-The private backend transition, enabled-restart and Activity-precedence gates
-above are now qualified;
+The private backend transition, enabled-restart and Activity-precedence gates,
+plus the bounded private UI opt-in/manual/Resume journey, are now qualified;
 the earlier main-session
 experiment still lacks a current Activity and remains a preserved negative
 case. Desktop-only automation needs an explicit policy for stable absence versus
 transient unavailability before code or fallback rules change.
 
-Next qualify UI opt-in, manual override and Resume, dirty
-appearance/Cancel/Apply, rename/removal of
+Next qualify dirty appearance/Cancel/Apply, rename/removal of
 associated contexts, Pomodoro continuity, the user's panel, focus/seat and monitor
 behavior. Private backend desktop transitions do not establish these behaviors
 in the user's panel. A private XDG directory alone does not isolate the
