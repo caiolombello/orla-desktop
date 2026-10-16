@@ -183,6 +183,15 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   buttons, glyphs and focus rings to the allocated height; keep the preferred
   28/32 px sizes and the 20 px menu mark. Adapt vertical padding within the panel
   budget while preserving the system font. Review the short-host gallery in both schemes.
+- **Profile names.** Show the active name in its own rounded module below the
+  pending profile selector. Keep “Renomear” initially collapsed; use a native
+  text field and explicit save/cancel actions. The pending selector is never the
+  rename target. Preserve drafts across tabs and on validation failure; closing
+  settings discards them. A changed owner, profile or revision makes the draft
+  stale instead of redirecting it. Reveal the focused editor with its whole focus
+  ring at 350/420 px. Preserve newer input and focus after synchronous saves.
+  Use inherited button accessibility actions; redundant Press handlers duplicate
+  the exported action list. Test the public action interface.
 - **Automatic profiles.** Keep the default-profile and context-input selectors,
   native opt-in and plain status in one rounded Contexts module. Choosing either
   selector must not enable automation. Keep an unknown context policy visible as

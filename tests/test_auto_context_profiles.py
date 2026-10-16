@@ -127,6 +127,56 @@ class AutoContextProfilesTests(unittest.TestCase):
         self.assertEqual(self.root.property("writes"), writes)
         self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
 
+    def test_rename_keeps_profile_identity_and_manual_override_until_context_changes(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.context("a2")
+        self.bind("activity", "personal")
+        self.context()
+        self.enable("games")
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+        fields = ("contextsJSON", "autoContextEnabled", "autoContextDefaultProfile", "autoContextPolicy",
+                  "launchers", "theme", "appearanceJSON", "iconSize", "animations", "showClock", "showMusic",
+                  "showSystemBattery", "showPomodoro", "showQuota", "showPeripherals", "showRecording",
+                  "showAudioHud", "calendarEvents", "currentDesktopOnly", "timerDeadline", "timerRemaining",
+                  "timerBreak", "focusMinutes", "breakMinutes", "completedFocus")
+        def preferences():
+            return json.loads(self.evaluate("JSON.stringify(" + json.dumps(list(fields))
+                                            + ".map(key=>configuration[key]))"))
+        baseline = preferences()
+        expected = json.loads(self.config.property("profilesJSON"))
+        selections = QSignalSpy(self.profiles.activeProfileIdChanged)
+        for name, manual in (("Novo trabalho", False), ("Trabalho manual", True)):
+            if manual:
+                self.manual("personal")
+                self.assertTrue(self.override())
+                expected["activeProfileId"] = "personal"
+            count = selections.count()
+            writes = self.root.property("writes")
+            profile_id = self.selected()
+            self.assertTrue(self.evaluate("rename(" + json.dumps(name) + ",activeProfileId,revision)", self.profiles))
+            next(profile for profile in expected["profiles"] if profile["id"] == profile_id)["name"] = name
+            self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+            self.assertEqual(self.root.property("writes"), writes + 1)
+            self.assertEqual(selections.count(), count)
+            self.assertEqual(self.override(), manual)
+            self.assertEqual(preferences(), baseline)
+            self.assertIn(name, self.evaluate("automatic.statusText") if not manual else
+                          self.evaluate("JSON.stringify(profileState.profiles)"))
+        # The next confirmed identity still resolves the same stored ID under its new name.
+        self.context("a2")
+        self.assertEqual(self.selected(), "personal")
+        self.assertFalse(self.override())
+        self.assertIn("Trabalho manual", self.evaluate("automatic.statusText"))
+        self.context()
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+        self.assertIn("Novo trabalho", self.evaluate("automatic.statusText"))
+        expected["activeProfileId"] = "work"
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(preferences(), baseline)
+
     def test_enabled_ready_context_automatically_selects_default_once(self):
         self.initialize()
         self.context()

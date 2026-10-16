@@ -198,6 +198,83 @@ class Gallery:
             window.close()
             engine.deleteLater()
 
+    def profile_rename(self, host: str) -> None:
+        """Active-name editing and its error in the unchanged short settings popup."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "ProfilesDockHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        popup = window.findChild(QQuickItem, "settingsPopup")
+        context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+
+        def evaluate(source):
+            expression = QQmlExpression(context, dock, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+
+        def control(name):
+            item = window.findChild(QQuickItem, name)
+            if item is None:
+                raise RuntimeError("Missing profile gallery control: " + name)
+            return item
+
+        def focus(item):
+            item.forceActiveFocus(Qt.TabFocusReason)
+            QTest.qWait(60)
+            assert window.activeFocusItem() == item
+            viewport = control("profileControls").property("contentItem")
+            point = item.mapToItem(viewport, QPointF(0, 0))
+            rim = 2 if item.objectName() == "profileRenameName" else 3
+            assert point.x() - rim >= 0 and point.y() - rim >= 0
+            assert point.x() + item.width() + rim <= viewport.width()
+            assert point.y() + item.height() + rim <= viewport.height()
+
+        try:
+            window.setWidth(900)
+            window.setHeight(900)
+            popup.setProperty("popupType", 0)
+            popup.setProperty("heightBudget", 420)
+            evaluate("anchors.centerIn=undefined;x=40;y=24;"
+                     "profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);"
+                     "profiles.select('work',profiles.activeProfileId,profiles.revision)")
+            for width in (350, 420):
+                popup.setProperty("width", width)
+                popup.open()
+                window.findChild(QQuickItem, "settingsTabs").setProperty("currentIndex", 2)
+                QTest.qWait(60)
+                disclosure = control("profileRenameToggle")
+                field = control("profileRenameName")
+                save = control("profileRenameSave")
+                focus(disclosure)
+                self.save(f"profiles-rename-{host}-compact-{width}", window, self.scene_rect(popup))
+                QTest.keyClick(window, Qt.Key_Space)
+                field.setProperty("text", "Trabalho e projetos compartilhados")
+                focus(field)
+                self.save(f"profiles-rename-{host}-editing-{width}", window, self.scene_rect(popup))
+                field.setProperty("text", "Pessoal")
+                focus(save)
+                QTest.keyClick(window, Qt.Key_Space)
+                assert field.isVisible()
+                assert "Já existe" in control("profileRenameStatus").property("text")
+                self.save(f"profiles-rename-{host}-error-{width}", window, self.scene_rect(popup))
+                QTest.keyClick(window, Qt.Key_Tab)
+                assert window.activeFocusItem() == control("profileRenameCancel")
+                self.save(f"profiles-rename-{host}-cancel-focus-{width}", window, self.scene_rect(popup))
+                field.setProperty("text", "Projetos pessoais" if width == 350 else "Trabalho em equipe")
+                focus(save)
+                QTest.keyClick(window, Qt.Key_Space)
+                assert not field.isVisible()
+                assert window.activeFocusItem() == disclosure
+                self.save(f"profiles-rename-{host}-saved-{width}", window, self.scene_rect(popup))
+                popup.close()
+                QTest.qWait(300)
+        finally:
+            popup.close()
+            window.close()
+            engine.deleteLater()
+
     def appearance_catalog(self, host: str) -> None:
         """Compact and expanded preset states in the unchanged short popup."""
         engine = self.engine()
@@ -851,6 +928,7 @@ def render(host: str, output: Path) -> int:
     gallery = Gallery(output)
     gallery.dock(host)
     gallery.auto_contexts(host)
+    gallery.profile_rename(host)
     gallery.appearance_catalog(host)
     gallery.appearance_advanced(host)
     gallery.widget_order(host)

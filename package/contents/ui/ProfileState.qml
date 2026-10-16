@@ -112,6 +112,24 @@ QtObject {
         internal.message = captured.message;
         return true;
     }
+    function rename(name, expectedScope, expectedRevision) {
+        if (!check(expectedScope, expectedRevision, true)) return false;
+        if (activeProfileId === "legacy") return fail(qsTr("Escolha um perfil para renomear."));
+        if (typeof name !== "string") return fail(qsTr("Escolha um nome de perfil válido."));
+        name = name.trim();
+        if (!Profiles.validName(name)) return fail(qsTr("Use um nome de perfil com até 48 caracteres."));
+        if (internal.document.profiles.some(profile => profile.id !== activeProfileId && profile.name === name))
+            return fail(qsTr("Já existe um perfil com esse nome."));
+        // Keep optional fields absent in older valid documents; rename is a name-only edit.
+        const raw = savedJSON;
+        const document = JSON.parse(raw);
+        const beforeWrite = () => writable && expectedScope === activeProfileId
+            && expectedRevision === revision && savedJSON === raw;
+        const profile = document.profiles.find(profile => profile.id === activeProfileId);
+        if (profile.name === name) return beforeWrite();
+        profile.name = name;
+        return store(document, beforeWrite);
+    }
     function select(id, expectedScope, expectedRevision, continuationGuard) {
         if (continuationGuard !== undefined && typeof continuationGuard !== "function") return false;
         if (!check(expectedScope, expectedRevision, true)) return false;
