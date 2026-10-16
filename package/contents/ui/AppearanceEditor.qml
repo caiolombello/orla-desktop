@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import QtQuick.Templates as Templates
@@ -9,6 +10,7 @@ ColumnLayout {
     id: editor
     required property var appearance
     property var preset: null
+    property var themeFileWindow: null
     readonly property bool importing: preset !== null && preset.dirty
     signal profilesRequested()
     signal canceled()
@@ -27,7 +29,7 @@ ColumnLayout {
         }
         return "";
     }
-    readonly property bool themeIssue: !!appearance && (appearance.themePending || appearance.themeError.length > 0)
+    readonly property bool themeIssue: !!appearance && (appearance.busy || appearance.themePending || appearance.themeError.length > 0)
     readonly property bool themeAttention: themeIssue || (importing && appearance.themeText.length > 0)
     readonly property bool advancedIssue: advancedColorField.length > 0 || themeAttention
     onAdvancedColorFieldChanged: if (advancedColorField.length) showAdvancedIssue()
@@ -38,6 +40,12 @@ ColumnLayout {
     Connections {
         target: editor.appearance
         function onEditingChanged() { editor.resetSections(); editor.showAdvancedIssue(); }
+    }
+    ThemeFilePicker {
+        id: themeFilePicker
+        appearance: editor.appearance
+        parentWindow: editor.themeFileWindow || editor.Window.window
+        active: editor.visible && editor.appearance.editing && editor.themeOpen && !editor.importing
     }
     function restoreSectionFocus(section, target) {
         const captured = focusReveal;
@@ -297,7 +305,7 @@ ColumnLayout {
                     checkable: true
                     Accessible.name: text
                     Accessible.description: checked ? qsTr("Seção expandida") : qsTr("Seção recolhida")
-                    KeyNavigation.tab: editor.themeOpen ? themeInput : null
+                    KeyNavigation.tab: editor.themeOpen ? themeFileImport : null
                     onCheckedChanged: editor.setThemeOpen(checked)
                     Keys.onReturnPressed: event => { toggle(); event.accepted = true; }
                     onActiveFocusChanged: if (activeFocus) editor.reveal(this)
@@ -306,9 +314,28 @@ ColumnLayout {
                     id: themeFields
                     Layout.fillWidth: true
                     visible: editor.themeOpen
+                    OrlaButton {
+                        id: themeFileImport
+                        objectName: "appearanceThemeFileImport"
+                        Layout.fillWidth: true
+                        text: qsTr("Importar arquivo…")
+                        enabled: editor.appearance.editing && !editor.appearance.stale && !editor.importing && !editor.appearance.busy
+                        KeyNavigation.tab: themeInput
+                        KeyNavigation.backtab: themeDisclosure
+                        onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                        onClicked: themeFilePicker.open()
+                    }
+                    Controls.Label {
+                        objectName: "appearanceThemeFileStatus"
+                        Layout.fillWidth: true
+                        visible: editor.appearance.busy
+                        text: editor.appearance.themeFileSelecting ? qsTr("Escolha um arquivo de tema.") : qsTr("Lendo tema…")
+                        wrapMode: Text.WordWrap
+                        textFormat: Text.PlainText
+                    }
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("Cole o JSON de um tema 0.1-experimental. Usar na prévia substitui os ajustes desta prévia; Aplicar salva neste perfil.")
+                        text: qsTr("Importe ou cole um tema JSON 0.1-experimental. Usar na prévia substitui os ajustes desta prévia; Aplicar salva neste perfil.")
                         wrapMode: Text.WordWrap
                         textFormat: Text.PlainText
                     }
@@ -340,7 +367,7 @@ ColumnLayout {
                             enabled: editor.appearance.editing && !editor.importing
                             KeyNavigation.priority: KeyNavigation.BeforeItem
                             KeyNavigation.tab: themePreview
-                            KeyNavigation.backtab: themeDisclosure
+                            KeyNavigation.backtab: themeFileImport
                             onTextChanged: if (text !== editor.appearance.themeText) editor.appearance.setThemeText(text)
                             onActiveFocusChanged: if (activeFocus) editor.reveal(themeScroll, themeInput)
                             onCursorRectangleChanged: {
@@ -358,7 +385,7 @@ ColumnLayout {
                             id: themePreview
                             objectName: "appearanceThemePreview"
                             text: qsTr("Usar na prévia")
-                            enabled: editor.appearance.editing && !editor.importing && !editor.appearance.stale && editor.appearance.themeText.length > 0
+                            enabled: editor.appearance.editing && !editor.importing && !editor.appearance.stale && !editor.appearance.busy && editor.appearance.themeText.length > 0
                             onActiveFocusChanged: if (activeFocus) editor.reveal(this)
                             onClicked: {
                                 if (!editor.appearance.previewTheme()) themeInput.forceActiveFocus();

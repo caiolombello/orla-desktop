@@ -188,14 +188,14 @@ class PackageCliTests(unittest.TestCase):
         caiodock.build(self.root, self.root)
         archive.write_bytes((self.root / "orla-dock-1.2.3.plasmoid").read_bytes())
         data = self.root / "data"
-        with mock.patch.object(caiodock, "dependency_status", return_value={"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}), mock.patch.object(caiodock, "_plasma_version", return_value=None):
+        with mock.patch.object(caiodock, "dependency_status", return_value={"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}), mock.patch.object(caiodock, "_plasma_version", return_value=None), mock.patch.object(caiodock, "_session_bus_available", return_value=False):
             self.assertEqual(caiodock.install(archive, data), "--install")
             (data / "plasma/plasmoids" / caiodock.PACKAGE_ID).mkdir(parents=True)
             self.assertEqual(caiodock.install(archive, data), "--upgrade")
         self.assertEqual([call.args[0][3] for call in run.call_args_list], ["--install", "--upgrade"])
         self.assertEqual(run.call_args_list[0].args[1]["XDG_DATA_HOME"], str(data))
 
-    def test_default_install_does_not_register_integrations_or_refresh_bus(self):
+    def test_default_install_preserves_integrations_and_refreshes_available_bus(self):
         archive = caiodock.build(self.root, self.root)
         data = self.root / "default-data"
         installed = data / "plasma/plasmoids" / caiodock.PACKAGE_ID
@@ -209,11 +209,12 @@ class PackageCliTests(unittest.TestCase):
             return mock.Mock(returncode=0)
 
         statuses = {"Python 3": True, "kpackagetool6": True, "busctl": True, "PySide6.QtDBus": True, "sessão D-Bus do usuário": True}
-        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock, "_session_bus_available", return_value=True), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
         self.assertTrue((installed / "contents/ui/main.qml").is_file())
         self.assertFalse((data / "dbus-1/services" / caiodock.SERVICE_NAME).exists())
-        self.assertEqual(len(commands), 1)
+        self.assertEqual(len(commands), 2)
+        self.assertEqual(commands[-1][-1], "ReloadConfig")
 
         service = data / "dbus-1/services" / caiodock.SERVICE_NAME
         service.parent.mkdir(parents=True)
@@ -228,21 +229,23 @@ class PackageCliTests(unittest.TestCase):
         cache = self.root / "state/project-cache"
         cache.parent.mkdir()
         cache.write_text("saved project state")
-        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(settings.parent), "XDG_STATE_HOME": str(cache.parent)}), contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock, "_session_bus_available", return_value=True), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(settings.parent), "XDG_STATE_HOME": str(cache.parent)}), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(caiodock.main(["install", str(archive), "--data-home", str(data)]), 0)
-        self.assertEqual([command[3] for command in commands], ["--install", "--upgrade"])
+        self.assertEqual([command[3] for command in commands if command[0].endswith("kpackagetool6")], ["--install", "--upgrade"])
+        self.assertEqual([command[-1] for command in commands if command[0].endswith("busctl")], ["ReloadConfig", "ReloadConfig"])
         self.assertEqual(service.read_text(), original_service)
         self.assertEqual(service.stat().st_mtime_ns, before_service.st_mtime_ns)
         self.assertEqual(service.stat().st_mode, before_service.st_mode)
         self.assertEqual(settings.read_text(), saved_opt_in)
         self.assertEqual(cache.read_text(), "saved project state")
 
-    def test_default_install_skips_optional_dependency_probes(self):
+    def test_default_install_skips_integration_probes_and_checks_bus_for_refresh(self):
         archive = caiodock.build(self.root, self.root)
-        with mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: "/usr/bin/kpackagetool6" if name == "kpackagetool6" else None), mock.patch.object(caiodock, "_plasma_version", return_value=None), mock.patch.object(caiodock.importlib.util, "find_spec") as find_spec, mock.patch.object(caiodock, "_session_bus_available") as bus, mock.patch.object(caiodock, "run_checked"), contextlib.redirect_stderr(io.StringIO()) as errors:
+        with mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: "/usr/bin/kpackagetool6" if name == "kpackagetool6" else None), mock.patch.object(caiodock, "_plasma_version", return_value=None), mock.patch.object(caiodock.importlib.util, "find_spec") as find_spec, mock.patch.object(caiodock, "_session_bus_available", return_value=False) as bus, mock.patch.object(caiodock, "run_checked"), mock.patch.object(caiodock.subprocess, "run") as refresh, contextlib.redirect_stderr(io.StringIO()) as errors:
             self.assertEqual(caiodock.install(archive, self.root / "data"), "--install")
         find_spec.assert_not_called()
-        bus.assert_not_called()
+        bus.assert_called_once_with()
+        refresh.assert_not_called()
         self.assertEqual(errors.getvalue(), "")
 
     def test_install_validates_archive_and_foreign_service_before_package_mutation(self):
@@ -290,15 +293,18 @@ class PackageCliTests(unittest.TestCase):
                 actions = []
 
                 def run(command, **kwargs):
-                    self.assertEqual(command[:3], ["/usr/bin/kpackagetool6", "--type", "Plasma/Applet"])
                     self.assertEqual(kwargs["env"]["XDG_DATA_HOME"], str(data))
+                    if command[0] == "/usr/bin/busctl":
+                        self.assertEqual(command[-1], "ReloadConfig")
+                        return mock.Mock(returncode=0)
+                    self.assertEqual(command[:3], ["/usr/bin/kpackagetool6", "--type", "Plasma/Applet"])
                     actions.append(command[3])
                     with zipfile.ZipFile(command[4]) as package:
                         package.extractall(installed)
                     return mock.Mock(returncode=0)
 
                 errors = io.StringIO()
-                with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock.shutil, "which", return_value="/usr/bin/kpackagetool6"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(caiodock, "dependency_status", return_value=statuses), mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)), mock.patch.object(caiodock, "_session_bus_available", return_value=missing == "PySide6.QtDBus"), mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"), mock.patch.object(caiodock.subprocess, "run", side_effect=run), contextlib.redirect_stderr(errors), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(caiodock.main(["install", str(archive), "--with-integrations", "--data-home", str(data)]), 0)
                     self.assertTrue((installed / "contents/ui/main.qml").is_file())
                     self.assertFalse(service.exists())
@@ -461,6 +467,288 @@ class PackageCliTests(unittest.TestCase):
             caiodock.preview(self.root, 2)
         self.assertEqual(len(created), 1)
         self.assertFalse(created[0].exists())
+
+
+class ThemeServiceInstallTests(unittest.TestCase):
+    setUp = PackageCliTests.setUp
+    tearDown = PackageCliTests.tearDown
+    def theme_archive(self):
+        for name in ("theme_service.py", "theme_file.py", "theme_format.py"):
+            (self.root / "package/contents/code" / name).write_text("# thematic runtime")
+        return caiodock.build(self.root, self.root)
+
+    def service_path(self, data):
+        return data / "dbus-1/services/org.orla.Themes.service"
+
+    def fake_install(self, command, env=None):
+        installed = Path(env["XDG_DATA_HOME"]) / "plasma/plasmoids" / caiodock.PACKAGE_ID
+        if command[3] == "--remove":
+            shutil.rmtree(installed)
+        else:
+            with zipfile.ZipFile(command[4]) as package:
+                package.extractall(installed)
+
+    def runtime(self):
+        return contextlib.ExitStack()
+
+    def prepare_runtime(self, stack, dependencies=True):
+        stack.enter_context(mock.patch.object(caiodock, "_require_install_runtime", return_value=False))
+        stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", return_value=object() if dependencies else None))
+        stack.enter_context(mock.patch.object(caiodock, "_session_bus_available", return_value=dependencies))
+        stack.enter_context(mock.patch.object(caiodock, "require_tool", side_effect=lambda name: "/fake/" + name))
+        stack.enter_context(mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: "/fake/" + name))
+        stack.enter_context(mock.patch.object(caiodock.subprocess, "run", return_value=mock.Mock(returncode=0)))
+        return stack.enter_context(mock.patch.object(caiodock, "run_checked", side_effect=self.fake_install))
+
+    def test_theme_default_install_update_spaces_and_uninstall(self):
+        import shlex
+        archive = self.theme_archive()
+        data = self.root / "data with spaces"
+        with self.runtime() as stack:
+            run = self.prepare_runtime(stack)
+            self.assertEqual(caiodock.install(archive, data), "--install")
+            service = self.service_path(data)
+            text = service.read_text()
+            self.assertIn("Name=org.orla.Themes\n", text)
+            command = next(line[5:] for line in text.splitlines() if line.startswith("Exec="))
+            self.assertEqual(shlex.split(command), [sys.executable, str(data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/code/theme_service.py"), "--serve"])
+            before = (service.read_bytes(), service.stat().st_mtime_ns)
+            self.assertEqual(caiodock.install(archive, data), "--upgrade")
+            self.assertEqual((service.read_bytes(), service.stat().st_mtime_ns), before)
+            self.assertFalse((data / "dbus-1/services" / caiodock.SERVICE_NAME).exists())
+            self.assertTrue(caiodock.uninstall(data))
+            self.assertFalse(service.exists())
+            self.assertEqual(run.call_count, 3)
+
+    def test_theme_foreign_edited_exec_and_symlink_refuse_before_package_mutation(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        with self.runtime() as stack:
+            run = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            service = self.service_path(data)
+            owned = service.read_text()
+            for foreign in ("# foreign\n", owned.replace("--serve", "--foreign"), owned.replace("Name=org.orla.Themes", "Name=org.foreign")):
+                service.write_text(foreign)
+                run.reset_mock()
+                for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                    with self.assertRaises(caiodock.PackageError): operation()
+                run.assert_not_called()
+                self.assertEqual(service.read_text(), foreign)
+            service.unlink()
+            target = self.root / "foreign"
+            target.write_text(owned)
+            service.symlink_to(target)
+            run.reset_mock()
+            with self.assertRaises(caiodock.PackageError): caiodock.install(archive, data)
+            with self.assertRaises(caiodock.PackageError): caiodock.uninstall(data)
+            run.assert_not_called()
+            self.assertEqual(target.read_text(), owned)
+
+    def test_theme_dependency_loss_disables_only_owned_mapping(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        with self.runtime() as stack:
+            self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+        integration = data / "dbus-1/services" / caiodock.SERVICE_NAME
+        integration.write_text(caiodock.SERVICE_MARKER + "legacy")
+        with self.runtime() as stack, contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.prepare_runtime(stack, dependencies=False)
+            self.assertEqual(caiodock.install(archive, data), "--upgrade")
+        self.assertFalse(self.service_path(data).exists())
+        self.assertEqual(integration.read_text(), caiodock.SERVICE_MARKER + "legacy")
+        self.assertIn("temas", errors.getvalue())
+        self.assertIn("PySide6.QtCore", errors.getvalue())
+
+    def test_theme_package_failure_preserves_mapping_and_no_fake_rollback(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        with self.runtime() as stack:
+            run = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            service = self.service_path(data)
+            original = service.read_bytes()
+            run.side_effect = caiodock.PackageError("package failed")
+            for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                with self.assertRaisesRegex(caiodock.PackageError, "package failed"): operation()
+                self.assertEqual(service.read_bytes(), original)
+
+    def test_theme_rechecks_collision_after_package_mutation(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        service = self.service_path(data)
+        def collision(command, env=None):
+            self.fake_install(command, env)
+            service.parent.mkdir(parents=True, exist_ok=True)
+            service.write_text("foreign appeared during package installation")
+        with self.runtime() as stack:
+            run = self.prepare_runtime(stack)
+            run.side_effect = collision
+            with self.assertRaisesRegex(caiodock.PackageError, "dock instalado"):
+                caiodock.install(archive, data)
+        self.assertEqual(service.read_text(), "foreign appeared during package installation")
+        self.assertTrue((data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/ui/main.qml").exists())
+
+    def test_theme_legacy_archive_removes_obsolete_owned_mapping(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        with self.runtime() as stack:
+            self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            for name in ("theme_service.py", "theme_file.py", "theme_format.py"):
+                (self.root / "package/contents/code" / name).unlink()
+            legacy = caiodock.build(self.root, self.root)
+            caiodock.install(legacy, data)
+            self.assertFalse(self.service_path(data).exists())
+
+
+    def test_theme_reader_only_archive_does_not_probe_or_register(self):
+        for name in ("theme_file.py", "theme_format.py"):
+            (self.root / "package/contents/code" / name).write_text("# reader-only predecessor")
+        archive = caiodock.build(self.root, self.root)
+        with self.runtime() as stack:
+            self.prepare_runtime(stack)
+            probe = stack.enter_context(mock.patch.object(caiodock, "_theme_dependencies"))
+            caiodock.install(archive, self.root / "data")
+            probe.assert_not_called()
+        self.assertFalse(self.service_path(self.root / "data").exists())
+
+    def test_theme_incomplete_service_archive_refuses_before_mutation(self):
+        (self.root / "package/contents/code/theme_service.py").write_text("# missing siblings")
+        archive = caiodock.build(self.root, self.root)
+        with mock.patch.object(caiodock, "run_checked") as run:
+            with self.assertRaisesRegex(caiodock.PackageError, "incomplete theme runtime"):
+                caiodock.install(archive, self.root / "data")
+            run.assert_not_called()
+
+    def test_theme_dependency_losses_are_independent_and_warn_without_mapping(self):
+        archive = self.theme_archive()
+        for absent in ("PySide6.QtCore", "PySide6.QtDBus", "sessão D-Bus do usuário"):
+            data = self.root / absent
+            with self.runtime() as stack, contextlib.redirect_stderr(io.StringIO()) as errors:
+                self.prepare_runtime(stack)
+                stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", side_effect=lambda name: None if name == absent else object()))
+                stack.enter_context(mock.patch.object(caiodock, "_session_bus_available", return_value=absent != "sessão D-Bus do usuário"))
+                caiodock.install(archive, data)
+                self.assertFalse(self.service_path(data).exists())
+                self.assertIn(absent, errors.getvalue())
+                self.assertTrue((data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/ui/main.qml").is_file())
+
+    def test_theme_and_integrations_share_only_one_reload_and_never_start(self):
+        archive = self.theme_archive()
+        with self.runtime() as stack:
+            self.prepare_runtime(stack)
+            stack.enter_context(mock.patch.object(caiodock, "_require_install_runtime", return_value=True))
+            bus = stack.enter_context(mock.patch.object(caiodock.subprocess, "run", return_value=mock.Mock(returncode=0)))
+            caiodock.install(archive, self.root / "data", with_integrations=True)
+        self.assertEqual(bus.call_count, 1)
+        self.assertEqual(bus.call_args.args[0][-1], "ReloadConfig")
+        self.assertNotIn("StartServiceByName", bus.call_args.args[0])
+
+    def test_theme_service_marker_only_directory_and_parent_symlink_refuse(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        service = self.service_path(data)
+        service.parent.mkdir(parents=True)
+        for content in ("# Managed by Orla Dock theme import\n", "[D-BUS Service]\nName=org.orla.Themes\nExec=foreign\n"):
+            service.write_text(content)
+            with mock.patch.object(caiodock, "run_checked") as run:
+                with self.assertRaises(caiodock.PackageError): caiodock.install(archive, data)
+                run.assert_not_called()
+        service.unlink()
+        service.mkdir()
+        with mock.patch.object(caiodock, "run_checked") as run:
+            with self.assertRaises(caiodock.PackageError): caiodock.install(archive, data)
+            run.assert_not_called()
+        service.rmdir()
+        service.parent.rmdir()
+        target = self.root / "elsewhere"
+        target.mkdir()
+        service.parent.symlink_to(target, target_is_directory=True)
+        with mock.patch.object(caiodock, "run_checked") as run:
+            with self.assertRaises(caiodock.PackageError): caiodock.install(archive, data)
+            run.assert_not_called()
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_theme_foreign_mapping_after_successful_uninstall_is_preserved(self):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        service = self.service_path(data)
+        with self.runtime() as stack:
+            run = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            def collision(command, env=None):
+                self.fake_install(command, env)
+                service.write_text("foreign appeared during removal")
+            run.side_effect = collision
+            with self.assertRaisesRegex(caiodock.PackageError, "pacote removido ou ausente"):
+                caiodock.uninstall(data)
+        self.assertEqual(service.read_text(), "foreign appeared during removal")
+        self.assertFalse((data / "plasma/plasmoids" / caiodock.PACKAGE_ID).exists())
+
+
+    def test_theme_reinstall_retries_failed_refresh_without_rewriting_mapping(self):
+        archive = self.theme_archive()
+        data = self.root / "data with spaces"
+        with self.runtime() as stack, contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.prepare_runtime(stack)
+            refresh = stack.enter_context(mock.patch.object(caiodock.subprocess, "run",
+                side_effect=[mock.Mock(returncode=1), mock.Mock(returncode=0)]))
+            caiodock.install(archive, data)
+            service = self.service_path(data)
+            before = (service.read_bytes(), service.stat().st_mtime_ns, service.stat().st_mode)
+            self.assertIn("reinstale", errors.getvalue())
+            caiodock.install(archive, data)
+            self.assertEqual(refresh.call_count, 2)
+            self.assertEqual([call.args[0][-1] for call in refresh.call_args_list], ["ReloadConfig", "ReloadConfig"])
+            self.assertEqual((service.read_bytes(), service.stat().st_mtime_ns, service.stat().st_mode), before)
+            self.assertFalse((data / "dbus-1/services" / caiodock.SERVICE_NAME).exists())
+
+    def assert_removed_mapping_refresh_retry(self, *, downgrade):
+        archive = self.theme_archive()
+        data = self.root / "data"
+        with self.runtime() as stack:
+            self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+        self.assertTrue(self.service_path(data).exists())
+        if downgrade:
+            for name in ("theme_service.py", "theme_file.py", "theme_format.py"):
+                (self.root / "package/contents/code" / name).unlink()
+            archive = caiodock.build(self.root, self.root)
+        with self.runtime() as stack, contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.prepare_runtime(stack)
+            stack.enter_context(mock.patch.object(caiodock, "_theme_dependencies",
+                return_value=[] if downgrade else ["PySide6.QtDBus"]))
+            refresh = stack.enter_context(mock.patch.object(caiodock.subprocess, "run",
+                side_effect=[mock.Mock(returncode=1), mock.Mock(returncode=0)]))
+            caiodock.install(archive, data)
+            self.assertFalse(self.service_path(data).exists())
+            self.assertEqual(refresh.call_count, 1)
+            self.assertIn("reinstale para temas", errors.getvalue())
+            caiodock.install(archive, data)
+            self.assertEqual(refresh.call_count, 2)
+            self.assertEqual([call.args[0][-1] for call in refresh.call_args_list],
+                             ["ReloadConfig", "ReloadConfig"])
+            self.assertFalse(self.service_path(data).exists())
+            self.assertFalse((data / "dbus-1/services" / caiodock.SERVICE_NAME).exists())
+
+    def test_theme_dependency_loss_reinstall_retries_removed_mapping_refresh(self):
+        self.assert_removed_mapping_refresh_retry(downgrade=False)
+
+    def test_theme_legacy_downgrade_reinstall_retries_removed_mapping_refresh(self):
+        self.assert_removed_mapping_refresh_retry(downgrade=True)
+
+    def test_legacy_without_registrations_refresh_failure_is_silent(self):
+        archive = caiodock.build(self.root, self.root)
+        with self.runtime() as stack, contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.prepare_runtime(stack)
+            refresh = stack.enter_context(mock.patch.object(caiodock.subprocess, "run",
+                return_value=mock.Mock(returncode=1)))
+            caiodock.install(archive, self.root / "data")
+        self.assertEqual(refresh.call_count, 1)
+        self.assertEqual(refresh.call_args.args[0][-1], "ReloadConfig")
+        self.assertEqual(errors.getvalue(), "")
 
 
 if __name__ == "__main__":

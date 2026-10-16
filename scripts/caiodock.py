@@ -20,6 +20,10 @@ import zipfile
 PACKAGE_ID = "org.caiodock.dock"
 SERVICE_NAME = "org.caiodock.Integrations.service"
 SERVICE_MARKER = "# Managed by CaioDock\n"
+THEME_SERVICE_NAME = "org.orla.Themes.service"
+THEME_SERVICE_MARKER = "# Managed by Orla Dock theme import\n"
+THEME_RUNTIME_FILES = {"contents/code/" + name for name in
+                       ("theme_service.py", "theme_file.py", "theme_format.py")}
 MINIMUM_PLASMA = (6, 7)
 OPTIONAL_INTEGRATION_DEPENDENCIES = {"busctl", "PySide6.QtDBus", "sessão D-Bus do usuário"}
 
@@ -104,6 +108,80 @@ def _check_service_path(data_home: Path) -> Path:
     if service.exists() and not service.read_text(encoding="utf-8").startswith(SERVICE_MARKER):
         raise PackageError(f"preserving an existing service not managed by Orla Dock: {service}")
     return service
+
+
+def _theme_service(data_home: Path) -> tuple[Path, bytes]:
+    bridge = data_home.resolve() / "plasma/plasmoids" / PACKAGE_ID / "contents/code/theme_service.py"
+    if any(character in str(bridge) + sys.executable for character in ("\n", "\r", "\x00")):
+        raise PackageError("theme activation path contains unsupported characters")
+    command = shlex.join([sys.executable, str(bridge), "--serve"])
+    content = THEME_SERVICE_MARKER + "[D-BUS Service]\nName=org.orla.Themes\nExec=" + command + "\n"
+    return data_home / "dbus-1/services" / THEME_SERVICE_NAME, content.encode("utf-8")
+
+
+def _check_theme_service(data_home: Path) -> tuple[Path, bytes]:
+    service, expected = _theme_service(data_home)
+    for parent in (data_home / "dbus-1", service.parent):
+        if parent.is_symlink():
+            raise PackageError("refusing symbolic-link theme service directory")
+    try:
+        descriptor = os.open(service, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return service, expected
+    except OSError as exc:
+        raise PackageError("preserving an unreadable or symbolic-link theme service") from exc
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        os.close(descriptor)
+        raise PackageError("preserving a non-regular theme service")
+    with os.fdopen(descriptor, "rb") as stream:
+        if stream.read(len(expected) + 1) != expected:
+            raise PackageError("preserving an existing theme service not exactly managed by Orla Dock")
+    return service, expected
+
+
+def _theme_dependencies() -> list[str]:
+    missing = []
+    for name in ("PySide6.QtCore", "PySide6.QtDBus"):
+        try:
+            available = importlib.util.find_spec(name) is not None
+        except (ImportError, ModuleNotFoundError, ValueError):
+            available = False
+        if not available:
+            missing.append(name)
+    if not _session_bus_available():
+        missing.append("sessão D-Bus do usuário")
+    return missing
+
+
+def _configure_theme_service(data_home: Path, *, available: bool) -> bool:
+    # Revalidate after kpackagetool: a collision must never be overwritten.
+    service, expected = _check_theme_service(data_home)
+    if not available:
+        if service.exists():
+            service.unlink()
+            return True
+        return False
+    for name in THEME_RUNTIME_FILES:
+        member = data_home / "plasma/plasmoids" / PACKAGE_ID / name
+        if member.is_symlink() or not member.is_file():
+            raise PackageError("installed theme runtime is incomplete")
+    if service.exists():
+        return False  # Exact mapping already exists: preserve mode and mtime.
+    service.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(service, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    identity = os.fstat(descriptor)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(expected)
+    except BaseException:
+        try:
+            current = service.lstat()
+            if (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino):
+                service.unlink()
+        except OSError:
+            pass  # Preserve the publication error; never remove a replacement.
+        raise
+    return True
 
 
 def _archive_metadata(package: Path) -> tuple[dict, set[str]]:
@@ -207,28 +285,43 @@ def run_checked(command: list[str], env: dict[str, str] | None = None) -> None:
 
 
 def install(package: Path, data_home: Path | None = None, *, with_integrations: bool = False) -> str:
-    _archive_metadata(package)
+    _, members = _archive_metadata(package)
+    thematic = "contents/code/theme_service.py" in members
+    if thematic and not THEME_RUNTIME_FILES.issubset(members):
+        raise PackageError("package archive has an incomplete theme runtime")
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
     _check_service_path(home)
+    _check_theme_service(home)
+    theme_missing = _theme_dependencies() if thematic else []
     integrations_available = _require_install_runtime(with_integrations=with_integrations)
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
     action = "--upgrade" if installed.exists() else "--install"
     env = environment_with(XDG_DATA_HOME=str(home))
     run_checked([require_tool("kpackagetool6"), "--type", "Plasma/Applet", action, str(package.resolve())], env)
-    if integrations_available and (installed / "contents/code/integrations.py").is_file():
+    try:
+        theme_changed = _configure_theme_service(home, available=bool(thematic) and not theme_missing)
+    except (OSError, PackageError) as exc:
+        raise PackageError("dock instalado; registro de temas falhou; pacote não foi revertido: " + str(exc)) from exc
+    if theme_missing:
+        print("orla: importação de temas indisponível: " + ", ".join(theme_missing)
+              + "; dock instalado; somente o registro de temas próprio anterior foi removido, se existia. "
+                "Instale as dependências e reinstale o pacote para ativar a importação.", file=sys.stderr)
+    integration_registered = integrations_available and (installed / "contents/code/integrations.py").is_file()
+    if integration_registered:
         enable_integrations(home)
-        # dbus-broker may not watch a services directory that did not exist
-        # when the login session started. Reloading discovers the new mapping.
-        busctl = require_tool("busctl")
+    refresh_needed = integration_registered or theme_changed or (thematic and not theme_missing)
+    if refresh_needed or _session_bus_available():
+        # Only refresh lazy activation mappings; never start either service.
+        busctl = shutil.which("busctl")
         try:
             result = subprocess.run([busctl, "--user", "--timeout=8s", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
-                                     "org.freedesktop.DBus", "ReloadConfig"], env=env, capture_output=True, timeout=10)
-            refreshed = result.returncode == 0
+                                     "org.freedesktop.DBus", "ReloadConfig"], env=env, capture_output=True, timeout=10) if busctl else None
+            refreshed = result is not None and result.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             refreshed = False
-        if not refreshed:
-            print("orla: dock instalado; a sessão D-Bus não atualizou as integrações locais opcionais. "
-                  "O serviço foi preservado. Execute doctor na sessão KDE e reinstale com --with-integrations para tentar ativar as integrações novamente.", file=sys.stderr)
+        if not refreshed and refresh_needed:
+            print("orla: dock instalado; a sessão D-Bus não atualizou os registros locais de temas e integrações locais opcionais. "
+                  "Execute doctor na sessão KDE e reinstale para temas; reinstale com --with-integrations para integrações locais opcionais.", file=sys.stderr)
     return action
 
 
@@ -249,11 +342,17 @@ def enable_integrations(data_home: Path) -> Path:
 def uninstall(data_home: Path | None = None) -> bool:
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
     service = _check_service_path(home)
+    _check_theme_service(home)
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
     tool = require_tool("kpackagetool6") if installed.exists() else None
     if tool:
         env = environment_with(XDG_DATA_HOME=str(home))
         run_checked([tool, "--type", "Plasma/Applet", "--remove", PACKAGE_ID], env)
+    # A failed package removal leaves both activation mappings intact.
+    try:
+        _configure_theme_service(home, available=False)
+    except (OSError, PackageError) as exc:
+        raise PackageError("pacote removido ou ausente; registro de temas preservado: " + str(exc)) from exc
     if service.exists():
         service.unlink()
     # Do not remove Plasma configuration or any project cache/state.

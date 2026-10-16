@@ -34,7 +34,7 @@ jobs:
       - name: Install offscreen Qt GUI library
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libegl1
+          sudo apt-get install --no-install-recommends -y libegl1 dbus-daemon libglib2.0-bin
 
       - name: Verify private D-Bus runner
         run: command -v dbus-run-session
@@ -47,6 +47,7 @@ jobs:
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_panel_layout*.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_themes.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_theme_file.py' -v
+          $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_theme_service.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_updates.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_steam.py' -v
@@ -80,7 +81,7 @@ jobs:
           QT_QPA_PLATFORMTHEME: ""
           PYTHONPATH: tests
         run: |
-          $ORLA_CI_PYTHON -B -m unittest test_theme_consumer test_appearance_preset_parser test_appearance_preset test_local_modules test_integration_state -v
+          $ORLA_CI_PYTHON -B -m unittest test_theme_consumer test_theme_file_state test_theme_file_picker test_appearance_preset_parser test_appearance_preset test_local_modules test_integration_state -v
           $ORLA_CI_PYTHON -B -m unittest \
             test_appearance.AppearanceTests.test_collapsed_advanced_skips_technical_fields_and_common_preview_cancels \
             test_appearance.AppearanceTests.test_keyboard_expands_and_collapsing_focused_color_returns_to_disclosure \
