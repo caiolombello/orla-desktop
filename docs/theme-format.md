@@ -2,25 +2,25 @@
 
 **PT-BR:** `0.1-experimental` é a versão deste formato de dados, independente da
 versão do Orla. Pode mudar antes da estabilização. O applet agora aceita JSON
-colado explicitamente no painel recolhível **Tema JSON experimental** e permite
+colado ou importado de um arquivo local no painel recolhível **Tema JSON experimental** e permite
 usar os dez tokens na prévia. Isso não instala um tema: aplicar salva somente a
 aparência normal do perfil atual, sem documento ou metadados externos. O kit de
 CLI continua validando e empacotando arquivos. Seção abaixo descreve o consumidor
-no applet. Importação de arquivo, galeria, autoria guiada e qualificação nativa
+no applet. Galeria, autoria guiada e qualificação nativa completa
 de contraste/foco continuam pendentes. C1, X1 e DX2 seguem parciais.
 
 **EN:** `0.1-experimental` versions this data format independently of the Orla app.
-It may change before stabilization. The applet now accepts explicitly pasted JSON
+It may change before stabilization. The current source applet accepts pasted or locally imported JSON
 in a collapsible **Experimental JSON theme** section and previews its ten tokens.
 This does not install a theme: Apply saves only the current profile's ordinary
 appearance, without the external document or metadata. The CLI kit still
-validates and packs files. File import, gallery, guided authoring and native
+validates and packs files. Gallery, guided authoring and full native
 contrast/focus qualification remain pending. C1, X1 and DX2 remain partial.
 
 ## Applet preview / Prévia no applet
 
-In Appearance settings, expand **Experimental JSON theme**, paste a complete
-`0.1-experimental` document and choose **Use in preview**. Parsing is explicit;
+In Appearance settings, expand **Experimental JSON theme**, choose **Import file…**
+or paste a complete `0.1-experimental` document, then choose **Use in preview**. Parsing is explicit;
 editing the text alone never previews it. The imported ten tokens replace the
 current temporary appearance draft while retaining its valid base preset. You
 can continue editing tokens, then use the existing Apply, Undo, Cancel or Escape
@@ -31,15 +31,40 @@ pending text/error while retaining that preview.
 
 Declared name, author, version and license are shown as plain text. They are
 unverified claims: identity, ownership and redistribution rights are not checked.
-The document and metadata are not saved, installed or exported. The field accepts
-pasted text only; there is no file chooser, URL, download, catalog or executable
-content. The text widget can temporarily receive a larger clipboard paste; the
+The document and metadata are not saved, installed or exported. File import accepts
+one local JSON file; downloads, remote URLs, catalogs and executable content are
+unsupported. The text widget can temporarily receive a larger clipboard paste; the
 parser bounds its own work using a 65,536-byte-equivalent UTF-8 limit. Because Qt
 has already decoded the text, this does not prove an original file's encoding or
 strictly bound native clipboard memory.
 
+### Importar arquivo / Import file
+
+**PT-BR:** no checkout atual, o instalador registra a leitura de temas separadamente
+dos plugins de projetos. Ela requer PySide6 QtCore/QtDBus e a sessão D-Bus do usuário;
+o dock e o JSON colado continuam disponíveis sem isso. Depois de instalar essas
+dependências, reinstale o pacote para registrar a ação. O serviço só inicia ao
+aceitar um arquivo no seletor; não é necessário `--with-integrations`.
+
+Importar preenche o JSON e bloqueia **Aplicar** até **Usar na prévia**. Uma falha
+preserva a última prévia válida. Cancelar o seletor não muda a prévia; mudar de aba,
+fechar o editor ou fazer uma edição mais recente descarta respostas pendentes.
+A leitura tem prazo limitado e aceita somente arquivo regular local, UTF-8 e o
+schema abaixo. Não há escrita em configuração durante seleção ou leitura.
+
+**EN:** the current installer registers theme-file import independently of project
+plugins, using optional PySide6 QtCore/QtDBus and the user's D-Bus session. Reinstall
+after adding dependencies. The service starts lazily after file selection;
+`--with-integrations` is unnecessary. Loading only fills pending input: explicit
+preview and Apply remain required. Cancel, tab changes and newer edits revoke the
+pending result. Failures preserve the last good preview. Native file acceptance,
+Escape and the complete shipping flow still require their separate Wayland gate;
+offscreen tests and the isolated chooser prototype do not qualify that behavior.
+
 See the [consumer validation record](validation/theme-consumer-0.2.6.md) for the
 synthetic evidence and unqualified native behavior.
+The [file-import validation record](validation/theme-file-import-0.2.9.md) covers
+the new service, editor, captures and remaining Wayland gates.
 
 ## Aparência portátil / Portable appearance
 

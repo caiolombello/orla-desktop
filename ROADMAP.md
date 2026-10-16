@@ -1433,3 +1433,19 @@ leitor, paridade JS, CLI, pacote e kit extraído, incluindo execução isolada d
 dois módulos distribuídos. A CI ganhou a suíte do leitor. Esse incremento ainda
 não oferece o botão de importação: serviço lazy, seletor, prévia integrada e prova
 de foco no Wayland são as próximas fatias. C1/X1/X2 e DX2 continuam parciais.
+
+**X1/X2 — importação local no editor, incremento Source de 16/10:** o botão
+**Importar arquivo…** preenche o JSON pendente; prévia e aplicação continuam
+explícitas. Serviço lazy independente das integrações, leitura limitada,
+cancelamento por owner/aba/edição e recuperação do registro estão implementados.
+Passaram 71 testes Python, 129 no Fusion (3 skips existentes) e 95 dos componentes
+afetados no estilo KDE, além do design check e da galeria claro/escuro em 350/420
+px. O bridge QML/D-Bus real passou por leitura → prévia → aplicar → desfazer em
+configuração sintética, com ativação privada e cleanup confirmado.
+O prototype Wayland confirmou parent modal e cancelamento preservando a prévia;
+aceitar um arquivo por input real e o fluxo completo do produto ainda precisam
+da próxima prova. A instalação Main deste incremento não foi feita. Uma falha de
+áudio KDE foi reproduzida também na base anterior e permanece separada. Consulte
+o [registro e as capturas](docs/validation/theme-file-import-0.2.9.md).
+C1/X1/X2 e DX2 continuam parciais; próximos passos são input privado, aceite
+nativo integrado e atualização local com backup, antes de avançar o catálogo.

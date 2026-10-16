@@ -297,6 +297,8 @@ class AppearanceTests(unittest.TestCase):
         self.assertTrue(self.evaluate("textFormat === 0", summary))
         self.focus_control(self.window, field)
         QTest.keyClick(self.window, Qt.Key_Backtab, Qt.ShiftModifier)
+        self.assertEqual(self.window.activeFocusItem().objectName(), "appearanceThemeFileImport")
+        QTest.keyClick(self.window, Qt.Key_Backtab, Qt.ShiftModifier)
         self.assertEqual(self.window.activeFocusItem().objectName(), "appearanceThemeJSON")
         self.focus_control(self.window, self.visual_item("appearanceThemeClear"))
         QTest.keyClick(self.window, Qt.Key_Space)
