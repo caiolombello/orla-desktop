@@ -187,6 +187,281 @@ class AutoContextProfilesTests(unittest.TestCase):
         self.assertEqual(self.root.property("writes"), before)
         self.assertIn("padrão", self.evaluate("automatic.statusText"))
 
+    def test_desktop_policy_resolves_without_activity_and_preserves_associations(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.bind("desktop", "personal")
+        bindings = self.config.property("contextsJSON")
+        original = json.loads(self.config.property("profilesJSON"))
+        timer = {key: self.config.property(key) for key in
+                 ("timerDeadline", "timerRemaining", "timerBreak", "completedFocus", "focusMinutes", "breakMinutes")}
+        self.config.setProperty("autoContextPolicy", "desktop")
+        self.context(activity_status="unavailable")
+        self.enable("games")
+        self.assertEqual(self.selected(), "personal")
+        self.assertIn("pela área", self.evaluate("automatic.statusText"))
+        self.context(desktop="d2", activity_status="loading")
+        self.assertEqual(self.selected(), "games")
+        self.context()
+        self.assertEqual(self.selected(), "personal", "Activity binding must be ignored, not removed")
+        expected = dict(original, activeProfileId="personal")
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.config.property("contextsJSON"), bindings)
+        self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+
+    def test_policy_invalid_raw_pauses_and_legacy_undefined_or_missing_stays_strict(self):
+        self.prepare()
+        self.enable("work")
+        for value in ("", "future-policy", None, 17, False, {"policy": "desktop"}):
+            with self.subTest(raw=value):
+                self.evaluate("configuration.autoContextPolicy=" + json.dumps(value))
+                before = self.config.property("profilesJSON")
+                writes = self.root.property("writes")
+                self.assertFalse(self.evaluate("automatic.policyValid"))
+                self.assertFalse(self.evaluate("automatic.observing"))
+                self.assertEqual(self.evaluate("JSON.stringify(automatic.policy)"), json.dumps(value, separators=(',', ':')))
+                self.assertEqual(self.evaluate("automatic.statusText"), "Escolha como o automático deve usar os contextos.")
+                self.context("a2", "d2")
+                self.assertEqual(self.config.property("profilesJSON"), before)
+                self.assertEqual(self.root.property("writes"), writes)
+                self.assertEqual(self.evaluate("JSON.stringify(configuration.autoContextPolicy)"), json.dumps(value, separators=(',', ':')))
+        self.evaluate("configuration.autoContextPolicy=undefined")
+        self.assertEqual(self.evaluate("automatic.policy"), "activity-desktop")
+        self.assertTrue(self.evaluate("automatic.policyValid && configuration.autoContextPolicy===undefined"))
+        self.evaluate("const real=configuration; automatic.configuration={"
+            "get autoContextEnabled(){return real.autoContextEnabled},"
+            "get autoContextDefaultProfile(){return real.autoContextDefaultProfile}}")
+        self.assertEqual(self.evaluate("automatic.policy"), "activity-desktop")
+        self.assertTrue(self.evaluate("automatic.policyValid"))
+        self.context(activity_status="unavailable")
+        self.assertIn("Activity atual indisponível", self.evaluate("automatic.statusText"))
+
+    def test_policy_repair_ignores_invalid_documents_and_same_value_never_writes(self):
+        self.config.setProperty("profilesJSON", "FUTURE-PROFILES")
+        self.config.setProperty("contextsJSON", "FUTURE-BINDINGS")
+        self.evaluate("configuration.autoContextPolicy='future';spyPreferenceSetters()")
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(self.root.property("preferenceSetters"), 1)
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        for value in ("", "future", None, 2, False):
+            self.assertFalse(self.evaluate("automatic.setPolicy(" + json.dumps(value) + ")"))
+        self.assertEqual(self.root.property("preferenceSetters"), 1)
+        self.assertEqual(self.config.property("autoContextPolicy"), "desktop")
+        self.assertFalse(self.evaluate("automatic.enabled"))
+        self.assertEqual(self.config.property("profilesJSON"), "FUTURE-PROFILES")
+        self.assertEqual(self.config.property("contextsJSON"), "FUTURE-BINDINGS")
+
+    def test_desktop_policy_waits_for_required_desktop_and_missing_target(self):
+        self.prepare()
+        self.bind("desktop", "personal")
+        self.evaluate("configuration.autoContextPolicy='desktop';"
+            "configuration.profilesJSON=JSON.stringify(Object.assign({},JSON.parse(configuration.profilesJSON),"
+            "{profiles:JSON.parse(configuration.profilesJSON).profiles.filter(p=>p.id!=='personal')}))")
+        before = self.config.property("profilesJSON")
+        self.enable("work")
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.assertIn("perfil associado", self.evaluate("automatic.statusText"))
+        for status in ("loading", "unavailable"):
+            self.context(activity_status="unavailable", desktop_status=status)
+            self.assertEqual(self.config.property("profilesJSON"), before)
+            message = self.evaluate("automatic.statusText")
+            self.assertNotIn("Activity", message)
+            self.assertIn("área de trabalho", message)
+        self.context(desktop="not-in-list", activity_status="unavailable")
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.assertFalse(self.override())
+
+    def test_desktop_manual_identity_ignores_activity_and_survives_same_desktop_recovery(self):
+        self.prepare()
+        self.bind("desktop", "personal")
+        self.evaluate("configuration.autoContextPolicy='desktop'")
+        self.enable("games")
+        self.assertEqual(self.selected(), "personal")
+        self.manual("work")
+        before = self.config.property("profilesJSON")
+        for activity, status in (("a2", "ready"), ("a1", "loading"), ("a3", "unavailable"), ("a1", "ready")):
+            self.context(activity, activity_status=status)
+            self.assertEqual(self.config.property("profilesJSON"), before)
+            self.assertTrue(self.override())
+        self.evaluate("sourceSnapshot=Object.assign({},sourceSnapshot,{outputName:'Other synthetic output',"
+            "desktop:Object.assign({},sourceSnapshot.desktop,{names:['Renamed','Dois','Três']})})")
+        self.context(desktop_status="loading")
+        self.context()
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.assertTrue(self.override())
+        raw = self.config.property("contextsJSON")
+        self.config.setProperty("contextsJSON", "FUTURE-BYTES")
+        self.context(desktop="d2", settle=False)
+        self.context(desktop="d1", settle=False)
+        self.config.setProperty("contextsJSON", raw)
+        self.settle()
+        self.assertFalse(self.override())
+        self.assertEqual(self.selected(), "personal")
+
+    def test_committed_policy_waits_while_busy_and_same_policy_keeps_manual(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.bind("desktop", "personal")
+        self.enable("games")
+        self.manual("games")
+        self.evaluate("busy=true")
+        before = self.config.property("profilesJSON")
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(self.config.property("profilesJSON"), before)
+        self.assertFalse(self.override())
+        self.evaluate("busy=false")
+        self.assertEqual(self.selected(), "personal")
+        self.manual("work")
+        self.evaluate("spyPreferenceSetters()")
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(self.root.property("preferenceSetters"), 0)
+        self.assertTrue(self.override())
+        self.assertEqual(self.selected(), "work")
+
+    def test_policy_raw_callback_manual_selection_precedes_controller_reconciliation(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.enable("games")
+        self.manual("games")
+        self.context(desktop_status="loading")
+        self.evaluate("busy=true;policyHook=() => { policyTrace=policyTrace.concat([{raw:configuration.autoContextPolicy,"
+            "manualBefore:automatic.manualOverride}]);profileState.select('personal',profileState.activeProfileId,profileState.revision); }")
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(policyTrace)")), [{"raw": "desktop", "manualBefore": True}])
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.evaluate("policyHook=null;busy=false")
+        self.context()
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.context("a2")
+        self.assertEqual(self.selected(), "personal")
+        self.context("a2", "d2")
+        self.assertEqual(self.selected(), "games")
+        self.assertFalse(self.override())
+        self.evaluate("busy=true;policyHook=() => {profileState.select('personal',profileState.activeProfileId,profileState.revision);}")
+        self.evaluate("configuration.autoContextPolicy='activity-desktop';policyHook=null;busy=false")
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+
+    def test_manual_before_first_ready_identity_attaches_without_losing_choice(self):
+        self.initialize()
+        self.enable("work")
+        self.manual("personal")
+        self.assertTrue(self.override())
+        self.context()
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.context("a2")
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+
+    def test_policy_change_then_manual_before_first_desktop_attaches_and_resume_releases(self):
+        self.initialize()
+        self.enable("work")
+        self.assertTrue(self.evaluate("automatic.setPolicy('desktop')"))
+        self.manual("personal")
+        self.assertTrue(self.override())
+        self.context(activity_status="unavailable")
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.assertTrue(self.evaluate("automatic.resume()"))
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+
+    def test_failed_policy_writes_cannot_release_manual_or_claim_success(self):
+        self.prepare()
+        self.enable("work")
+        self.manual("personal")
+        self.evaluate("spyPreferenceSetters();policyWriteHook=() => {throw new Error('synthetic_refusal')}")
+        self.assertFalse(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(self.config.property("autoContextPolicy"), "activity-desktop")
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.evaluate("policyWriteHook=() => {}")
+        self.assertFalse(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertTrue(self.override())
+        self.evaluate("spyPreferenceSetters(true)")
+        self.assertFalse(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertTrue(self.override())
+        self.assertEqual(self.selected(), "personal")
+
+    def test_reentrant_policy_writer_cannot_publish_false_success(self):
+        self.prepare()
+        self.enable("work")
+        self.manual("personal")
+        self.evaluate("spyPreferenceSetters();policyWriteHook=value => { configuration.autoContextPolicy=value;"
+            "configuration.autoContextPolicy='activity-desktop'; }")
+        self.assertFalse(self.evaluate("automatic.setPolicy('desktop')"))
+        self.assertEqual(self.config.property("autoContextPolicy"), "activity-desktop")
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+        self.manual("personal")
+        self.evaluate("policyWriteHook=value => {configuration.autoContextPolicy=value;"
+            "configuration.autoContextPolicy='activity-desktop';configuration.autoContextPolicy=value;}")
+        self.assertFalse(self.evaluate("automatic.setPolicy('desktop')"), "ABA must not publish the outer write as owned")
+        self.assertEqual(self.config.property("autoContextPolicy"), "desktop")
+        self.assertEqual(self.selected(), "work")
+        self.assertFalse(self.override())
+
+    def test_policy_aba_revokes_old_profile_intent_and_commits_latest_once(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.bind("desktop", "personal")
+        self.evaluate("useSelectionAdapter=true")
+        self.enable("games")
+        for middle in ("desktop", "unknown"):
+            with self.subTest(middle=middle):
+                self.context("a3", "d3")
+                self.assertEqual(self.selected(), "games")
+                self.evaluate("busy=true;selectionResults=[]")
+                self.context()
+                before = self.root.property("writes")
+                self.evaluate("transitionHook=() => {transitionHook=null;configuration.autoContextPolicy=" + json.dumps(middle)
+                    + ";configuration.autoContextPolicy='activity-desktop';return true;};busy=false")
+                results = json.loads(self.evaluate("JSON.stringify(selectionResults)"))
+                self.assertEqual(results[0], {"target": "work", "accepted": False})
+                self.assertEqual(results[-1], {"target": "work", "accepted": True})
+                self.assertEqual(self.selected(), "work")
+                self.assertEqual(self.root.property("writes"), before + 1)
+                self.assertFalse(self.override())
+
+    def test_old_false_result_cannot_mark_new_policy_epoch_manual(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.bind("desktop", "personal")
+        self.evaluate("useSelectionAdapter=true;rejectSelectionResult=true;"
+            "selectionHook=() => {if(profileState.activeProfileId==='work')configuration.autoContextPolicy='desktop';"
+            "else if(profileState.activeProfileId==='personal')rejectSelectionResult=false;}")
+        self.enable("games")
+        self.assertEqual(self.selected(), "personal")
+        self.assertFalse(self.override())
+        results = json.loads(self.evaluate("JSON.stringify(selectionResults)"))
+        self.assertEqual(results[0], {"target": "work", "accepted": False})
+        self.assertEqual(results[-1], {"target": "personal", "accepted": True})
+
+    def test_invalid_nan_policy_reconciliation_becomes_idle_without_rewriting(self):
+        self.evaluate("const probe={reads:0,raw:NaN};policyProbe=probe;const real=configuration;"
+            "automatic.configuration={get autoContextEnabled(){return real.autoContextEnabled},"
+            "get autoContextDefaultProfile(){return real.autoContextDefaultProfile},"
+            "get autoContextPolicy(){probe.reads++;return probe.raw}}")
+        self.assertFalse(self.evaluate("automatic.policyValid"))
+        self.assertTrue(self.evaluate("Number.isNaN(automatic.policy) && Number.isNaN(policyProbe.raw)"))
+        QTest.qWait(30)
+        reads = self.evaluate("policyProbe.reads")
+        QTest.qWait(30)
+        self.assertEqual(self.evaluate("policyProbe.reads"), reads, "Invalid policy must not reschedule itself while OFF")
+
+    def test_new_policy_manual_choice_matching_old_admitted_target_is_manual(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.bind("desktop", "personal")
+        self.evaluate("useSelectionAdapter=true;afterGuardHook=() => {afterGuardHook=null;"
+            "automatic.setPolicy('desktop');profileState.select('work',profileState.activeProfileId,profileState.revision);}")
+        self.enable("games")
+        self.assertEqual(self.selected(), "work")
+        self.assertTrue(self.override())
+
     def test_observing_does_not_depend_on_ready_and_both_domains_are_required(self):
         self.initialize()
         self.enable("work")

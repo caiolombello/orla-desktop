@@ -10,12 +10,16 @@ Card {
     required property var profiles
     signal focusRequested(var control)
     readonly property var choices: profiles ? profiles.profiles : []
+    readonly property var policyChoices: [
+        {id: "activity-desktop", name: qsTr("Activity e áreas")},
+        {id: "desktop", name: qsTr("Somente áreas")}
+    ]
     function revealFocused(control) {
         // Layout can change when the status or the help expands. Never reclaim focus.
         const owner = controls;
         Qt.callLater(() => {
             if (Qt.isQtObject(owner) && Qt.isQtObject(control) && control.visible && control.activeFocus)
-                owner.focusRequested(control);
+                owner.focusRequested(control === policySelector ? policyFocusRing : control);
         });
     }
     function revealDetails() {
@@ -87,6 +91,57 @@ Card {
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }
+        Controls.Label { text: qsTr("Usar no automático"); textFormat: Text.PlainText }
+        Controls.ComboBox {
+            id: policySelector
+            objectName: "autoContextPolicy"
+            Layout.fillWidth: true
+            enabled: Boolean(controls.automation)
+            model: controls.policyChoices
+            textRole: "name"
+            popup.focus: false
+            currentIndex: controls.automation
+                ? controls.policyChoices.findIndex(choice => choice.id === controls.automation.policy) : -1
+            displayText: currentIndex < 0 ? qsTr("Escolha uma opção") : currentText
+            Accessible.name: qsTr("Base da alternância automática")
+            Accessible.onPressAction: {
+                if (!policySelector.enabled || !policySelector.visible) return;
+                policySelector.forceActiveFocus(Qt.OtherFocusReason);
+                if (policySelector.popup.visible) policySelector.popup.close();
+                else policySelector.popup.open();
+            }
+            onActivated: index => {
+                if (enabled && visible && index >= 0 && index < controls.policyChoices.length)
+                    controls.automation.setPolicy(controls.policyChoices[index].id);
+            }
+            onActiveFocusChanged: if (activeFocus) controls.revealFocused(this)
+            delegate: Controls.ItemDelegate {
+                id: policyOption
+                required property var modelData
+                width: policySelector.width
+                text: modelData.name
+                Accessible.onPressAction: {
+                    if (policyOption.enabled && policyOption.visible && policySelector.popup.visible)
+                        policyOption.click();
+                }
+                contentItem: Text {
+                    text: parent.text
+                    textFormat: Text.PlainText
+                    color: policySelector.palette.text
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            Rectangle {
+                id: policyFocusRing
+                anchors.fill: parent
+                anchors.margins: -Style.space.xxs
+                color: "transparent"
+                radius: Style.radius.control
+                border.width: policySelector.activeFocus ? 2 : 0
+                border.color: policySelector.palette.highlight
+            }
+        }
         Controls.CheckBox {
             id: enabledToggle
             objectName: "autoContextEnabled"
@@ -128,6 +183,8 @@ Card {
             OrlaButton {
                 id: detailsToggle
                 objectName: "autoContextHelpToggle"
+                // Keep the focus rim inside an oversized group's revealed bounds.
+                Layout.topMargin: Style.space.xs
                 variant: "ghost"
                 text: checked ? qsTr("Ocultar detalhes") : qsTr("Como funciona")
                 checkable: true
@@ -138,7 +195,12 @@ Card {
                 objectName: "autoContextHelp"
                 Layout.fillWidth: true
                 visible: detailsToggle.checked
-                text: qsTr("Prioridade: Activity, área de trabalho e perfil padrão. Associe os perfis abaixo.\n\nUma escolha manual vale até mudar de contexto ou retomar aqui. Ao reiniciar, o automático volta. Com o contexto indisponível, o perfil atual fica mantido.\n\nAs opções são salvas na hora. A troca aguarda o fim de edições e interações, inclusive o fechamento destas opções. Não troca a Activity nem a área de trabalho.")
+                text: (controls.automation && controls.automation.policy === "desktop"
+                    ? qsTr("Usa a área de trabalho e o perfil padrão. Ignora Activity, mesmo quando estiver indisponível.")
+                    : controls.automation && controls.automation.policyValid
+                        ? qsTr("Usa Activity, área de trabalho e perfil padrão. Aguarda os dois contextos.")
+                        : qsTr("Escolha como o automático deve usar os contextos."))
+                    + qsTr("\n\nAssocie os perfis abaixo. Mudar esta opção não ativa o automático. Se já estiver ativo, retoma a regra ao fechar as configurações; uma escolha manual posterior prevalece.\n\nA escolha manual vale até mudar o contexto usado pela regra ou retomar aqui. Ao reiniciar, o automático volta. Sem o contexto necessário, o perfil atual fica mantido.\n\nAs opções são salvas na hora. A troca aguarda o fim de edições e interações, inclusive o fechamento destas opções. Não troca a Activity nem a área de trabalho.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }

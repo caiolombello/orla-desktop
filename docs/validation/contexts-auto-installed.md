@@ -563,6 +563,47 @@ or logs. These hashes identify the records summarized above:
 | Activity actions/configuration checkpoints | `7ecc6825c2a3be5c54599daf80d7634450d275ea9f963afd8c618dd5dc2b2849` |
 | Fresh Activity lifecycle postcheck | `64a94e571b6be984cca648f3365299ecf750672ca68b99b3fb2981a692277c9e` |
 
+## Explicit desktop-only policy in Source
+
+The current Source adds a per-dock `autoContextPolicy` String preference. Its
+`activity-desktop` default preserves the existing both-ready rule. Choosing
+**Somente áreas** explicitly uses desktop bindings and the default while ignoring
+Activity availability; retained Activity associations are unchanged. This is a
+user choice, not outage classification. Selecting the policy never enables
+automation. Unknown saved values pause without rewriting them; the selector stays
+repairable. `undefined` is the legacy absence sentinel for portable callers.
+
+A committed policy change resumes the rule after existing interaction barriers
+clear. A newer manual choice wins, including a selection from the raw preference
+notification before the controller handles it. With no confirmed required
+identity yet, the first ready identity attaches that choice; only a later
+different identity, Resume or another committed policy change releases it. This
+deliberate startup rule also applies to the combined mode.
+
+Causal regressions first refused the previous Source. Review also reproduced and
+fixed a newer matching-target manual selection being mistaken for an older
+automatic commit, and an invalid `NaN` policy repeatedly scheduling work while
+off. Public selector tests cover accessible actions, actual option clicks,
+keyboard selection/Escape/Tab, invalid-value repair, one-key-only writes and
+short-viewport focus. The new row and expanded help both keep their full focus
+rings visible; no popup budget or design token changed.
+
+The final controller suite passed 47/47 per style. Contexts composition passed
+27 tests with one expected TaskManager skip per style. Appearance composition
+passed 44/44, and manual-profile composition passed 31 tests with one expected
+TaskManager skip per style. Total: **149 passed and two expected skips per style**,
+in Fusion and `org.kde.desktop`, without QML warnings. Design check and all seven
+design guards passed. The synthetic gallery was rendered in both schemes;
+350/420 px menus, help and focus were reviewed. These are offscreen results,
+separate from installing or exercising this new policy in KDE.
+
+| Source verification | SHA-256 |
+| --- | --- |
+| Controller suite, Fusion | `30c8b8a6fcb10b72134ff3695c71df29801f6fd145dd711c19f3fb53d2ff410b` |
+| Controller suite, KDE | `6df28d7c163a707844f4634f26f46c7684506993fd700f9bd15fbdad02bdf048` |
+| Contexts composition, KDE | `ae6c19f60f60cd8df8f219d77ab003d36bfc6d824cbd5c6cfce11e1c85f59230` |
+| Final appearance/profile consumers, both styles | `7275df00bd5354de628ce206d8ae23a6081c83bb19ba5760deb95f815d9ecf4d` |
+
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,
@@ -570,16 +611,16 @@ plus the bounded private UI opt-in/manual/Resume and appearance draft journeys,
 are now qualified;
 the earlier main-session
 experiment still lacks a current Activity and remains a preserved negative
-case. Desktop-only automation needs an explicit policy for stable absence versus
-transient unavailability before code or fallback rules change.
+case under the combined policy. The explicit desktop-only Source choice above
+does not reinterpret that earlier negative result.
 
 The bounded desktop and Activity rename/removal/recreation and active Pomodoro
-journeys are now qualified in the private KDE fixture. Next define an explicit
-desktop-only opt-in for sessions without a current Activity, preserving the
-existing both-ready default. That explicit choice would ignore Activity
-availability; it must not infer absence from a transient outage.
-That policy needs Source/UI/tests before a corresponding native journey; no
-fallback or configuration change is delivered by the lifecycle evidence.
+journeys are now qualified in the private KDE fixture on the preceding installed
+package. The new desktop-only policy has Source/UI/tests; its installation and
+corresponding real KDE journey remain separate gates. Require a live owned
+ActivityManager reporting no current Activity and an empty list, real desktop
+transitions, public opt-in and a restart using the same saved configuration.
+No Activity creation or snapshot override can stand in for this case.
 Other interaction drafts, the user's panel, focus/seat and monitor behavior also
 remain open. Persisted timerRemaining alone is not the running countdown; the
 Pomodoro qualification above required the original deadline and real counts.

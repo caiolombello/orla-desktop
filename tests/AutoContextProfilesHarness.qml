@@ -18,6 +18,10 @@ Item {
     property var afterGuardHook: null
     property var second: null
     property var timerState: null
+    property var policyHook: null
+    property var policyWriteHook: null
+    property var policyTrace: []
+    property var policyProbe: null
     property int preferenceSetters: 0
     property var selectionResults: []
     property int writes: 0
@@ -31,6 +35,8 @@ Item {
         property string contextsJSON: ""
         property bool autoContextEnabled: false
         property string autoContextDefaultProfile: ""
+        property var autoContextPolicy: "activity-desktop"
+        onAutoContextPolicyChanged: if (harness.policyHook) harness.policyHook()
         property var launchers: ["applications:org.example.fixture.desktop"]
         property string theme: "glass"
         property string appearanceJSON: ""
@@ -94,12 +100,13 @@ Item {
             return result;
         }
     }
-    function spyPreferenceSetters() {
+    function spyPreferenceSetters(readOnlyPolicy) {
         const spy = {};
-        for (const key of ["autoContextEnabled", "autoContextDefaultProfile"]) {
-            Object.defineProperty(spy, key, {get:() => config[key], set:value => {
+        for (const key of ["autoContextEnabled", "autoContextDefaultProfile", "autoContextPolicy"]) {
+            Object.defineProperty(spy, key, {get:() => config[key], set:readOnlyPolicy && key === "autoContextPolicy" ? undefined : value => {
                 harness.preferenceSetters++;
-                config[key] = value;
+                if (key === "autoContextPolicy" && harness.policyWriteHook) harness.policyWriteHook(value);
+                else config[key] = value;
             }});
         }
         automatic.configuration = spy;

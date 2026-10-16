@@ -1236,6 +1236,18 @@ até o próximo par confirmado de IDs, mesmo após renomeação ou reconexão; r
 explicitamente também libera o automático. Ao reiniciar com a opção
 habilitada, o primeiro par completo retoma a regra.
 
+**Incremento atual — base explícita da regra:** o Source acrescenta **Usar no
+automático**, com **Activity e áreas** como padrão e **Somente áreas** como opção.
+A segunda usa área → padrão, ignorando Activity por escolha explícita e
+preservando suas associações. Escolher a base não ativa o automático. Mudar a
+base retoma a regra após as interações; uma escolha manual posterior prevalece,
+inclusive antes do primeiro contexto confirmado. Valores desconhecidos pausam
+sem reescrita. As quatro suítes afetadas passaram 149 testes e dois skips
+esperados de TaskManager por estilo, em Fusion/KDE; design check, sete guardas e
+galeria claro/escuro também passaram. Os controles mantêm o foco visível em
+350/420 px. Instalação e jornada nativa desta política são gates separados;
+P2 continua parcial. Consulte o [registro](docs/validation/contexts-auto-installed.md#explicit-desktop-only-policy-in-source).
+
 A troca aguarda edição, arraste, popups em fechamento, transferência da
 Central e pedidos de áudio, então recalcular somente o contexto mais recente.
 Não fecha rascunhos nem troca a Activity/área KDE. Antes da única escrita,

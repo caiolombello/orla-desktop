@@ -106,9 +106,12 @@ Controls.ScrollView {
             onFocusRequested: control => controls.reveal(control)
         }
         Controls.Label {
+            objectName: "contextBindingsExplanation"
             Layout.fillWidth: true
             text: controls.automation !== null
-                ? qsTr("Associações por ID. Com o automático ativado, a Activity tem prioridade sobre a área de trabalho.")
+                ? controls.automation.policy === "desktop"
+                    ? qsTr("Associações por ID. Em Somente áreas, as associações de Activity ficam preservadas e são ignoradas pelo automático.")
+                    : qsTr("Associações por ID. Com o automático ativado, a Activity tem prioridade sobre a área de trabalho.")
                 : qsTr("Associar organiza suas preferências. As associações não trocam a Activity ou a área de trabalho.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap

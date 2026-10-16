@@ -14,6 +14,7 @@ Controls.ApplicationWindow {
         property string contextsJSON: ""
         property bool autoContextEnabled: false
         property string autoContextDefaultProfile: ""
+        property string autoContextPolicy: "activity-desktop"
         property bool showLocalToasts: false
         property bool showControlCenter: false
         property var launchers: ["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]

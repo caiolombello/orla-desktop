@@ -12,18 +12,24 @@ QtObject {
     readonly property bool enabled: configuration && configuration.autoContextEnabled === true
     readonly property string defaultProfileId: configuration && typeof configuration.autoContextDefaultProfile === "string"
         ? configuration.autoContextDefaultProfile : ""
-    readonly property bool canEnable: Boolean(profiles && profiles.initialized && profiles.writable
+    readonly property var policy: readPolicy()
+    readonly property bool policyValid: validPolicy(policy)
+    readonly property bool canEnable: Boolean(policyValid && profiles && profiles.initialized && profiles.writable
         && bindingsState && bindingsState.writable && managedProfile(defaultProfileId))
     readonly property bool observing: active && enabled && canEnable
     readonly property bool manualOverride: internal.manual
     readonly property string statusText: {
         if (!enabled) return qsTr("Alternância automática desativada.");
         if (!active) return qsTr("Aguardando a dock ficar pronta.");
+        if (!policyValid) return qsTr("Escolha como o automático deve usar os contextos.");
         if (!canEnable) return qsTr("Confira os perfis, as associações e o perfil padrão.");
         if (manualOverride) return qsTr("Seleção manual até mudar de contexto ou reiniciar a dock.");
         if (!readyPair()) {
             const snapshot = contexts && contexts.snapshot;
             if (!snapshot) return qsTr("Aguardando contexto KDE.");
+            if (policy === "desktop") return snapshot.desktop.status === "unavailable"
+                ? qsTr("Aguardando contexto KDE: área de trabalho atual indisponível.")
+                : qsTr("Aguardando a área de trabalho carregar.");
             const activityUnavailable = snapshot.activity.status === "unavailable";
             const desktopUnavailable = snapshot.desktop.status === "unavailable";
             if (activityUnavailable && desktopUnavailable)
@@ -48,6 +54,10 @@ QtObject {
         property int generation: 0
         property int epoch: 0
         property string pair: ""
+        property string lastDesktop: ""
+        property string lastCombined: ""
+        property var policy: undefined
+        property int policyEpoch: 0
         property bool manual: false
         property string problem: ""
         property var attempt: null
@@ -57,11 +67,44 @@ QtObject {
         return typeof id === "string" && id !== "legacy" && id.length > 0 && profiles
             && Array.isArray(profiles.profiles) && profiles.profiles.some(entry => entry.id === id);
     }
+    function readPolicy() {
+        if (!configuration) return null;
+        const raw = configuration.autoContextPolicy;
+        // Undefined is the legacy absence sentinel, including an old fixture without this property.
+        return raw === undefined ? "activity-desktop" : raw;
+    }
+    function validPolicy(value) { return value === "activity-desktop" || value === "desktop"; }
     function readyPair() {
-        if (!contexts || !contexts.snapshot) return "";
+        const current = readPolicy();
+        if (!validPolicy(current) || !contexts || !contexts.snapshot) return "";
         const snapshot = contexts.snapshot;
+        if (current === "desktop") return snapshot.desktop.status === "ready"
+            ? JSON.stringify([current, snapshot.desktop.id]) : "";
         return snapshot.activity.status === "ready" && snapshot.desktop.status === "ready"
-            ? JSON.stringify([snapshot.activity.id, snapshot.desktop.id]) : "";
+            ? JSON.stringify([current, snapshot.activity.id, snapshot.desktop.id]) : "";
+    }
+    function rememberContext() {
+        if (!contexts || !contexts.snapshot) return;
+        const snapshot = contexts.snapshot;
+        if (snapshot.desktop.status === "ready")
+            internal.lastDesktop = JSON.stringify(["desktop", snapshot.desktop.id]);
+        if (snapshot.activity.status === "ready" && snapshot.desktop.status === "ready")
+            internal.lastCombined = JSON.stringify(["activity-desktop", snapshot.activity.id, snapshot.desktop.id]);
+    }
+    function reconcilePolicy() {
+        if (!internal || !internal.completed) return;
+        const current = readPolicy();
+        if (current === internal.policy || (Number.isNaN(current) && Number.isNaN(internal.policy))) return;
+        internal.policy = current;
+        internal.policyEpoch++;
+        internal.epoch++;
+        internal.generation++;
+        if (active && enabled) rememberContext();
+        // Preserve the last required identity through loading; the first-ever one attaches a newer choice.
+        internal.pair = current === "desktop" ? internal.lastDesktop
+            : current === "activity-desktop" ? internal.lastCombined : "";
+        internal.manual = false;
+        schedule();
     }
     function schedule() {
         if (!internal || !internal.completed || internal.queued) return;
@@ -79,28 +122,32 @@ QtObject {
     }
     function observeContext() {
         if (!internal || !internal.completed || !active || !enabled) return;
+        reconcilePolicy();
+        rememberContext();
         const pair = readyPair();
         // Observe every confirmed pair synchronously: coalescing must not erase ABA.
         if (pair && pair !== internal.pair) {
+            const known = internal.pair.length > 0;
             internal.epoch++;
             internal.pair = pair;
-            internal.manual = false;
+            if (known) internal.manual = false;
         }
     }
     function selected() {
         if (!internal.completed) return;
         // A snapshot observer can select before ContextState publishes its revision.
+        reconcilePolicy();
         observeContext();
         const attempt = internal.attempt;
         // Admission is recorded only by the final select guard, not before transitionGuard.
-        const own = attempt && attempt.admitted && attempt.profiles === profiles
+        const own = attempt && attempt.admitted && attempt.policyEpoch === internal.policyEpoch && attempt.profiles === profiles
             && profiles.activeProfileId === attempt.target
             && profiles.revision === attempt.expectedRevision && profiles.savedJSON === attempt.expectedJSON;
         if (own) {
             attempt.ownEvents++;
             attempt.ownEpoch = internal.epoch;
         }
-        else if (active && enabled && internal.pair) {
+        else if (active && enabled) {
             internal.manual = true;
             internal.generation++;
         }
@@ -108,13 +155,16 @@ QtObject {
     }
     function resolveTarget() {
         const snapshot = contexts.snapshot, bindings = bindingsState.bindings;
-        const activity = bindings.activityBindings.find(entry => entry.contextId === snapshot.activity.id);
+        const activity = readPolicy() === "activity-desktop"
+            && bindings.activityBindings.find(entry => entry.contextId === snapshot.activity.id);
         if (activity) return {id:activity.profileId, reason:"activity"};
         const desktop = bindings.desktopBindings.find(entry => entry.contextId === snapshot.desktop.id);
         return desktop ? {id:desktop.profileId, reason:"desktop"} : {id:defaultProfileId, reason:"default"};
     }
     function valid(intent) {
+        reconcilePolicy();
         return internal.attempt === intent && observing && !interactionBusy && !manualOverride
+            && intent.policy === readPolicy() && intent.policyEpoch === internal.policyEpoch
             && intent.generation === internal.generation && intent.epoch === internal.epoch
             && intent.configuration === configuration && intent.profiles === profiles
             && intent.contexts === contexts && intent.bindingsState === bindingsState
@@ -125,6 +175,7 @@ QtObject {
             && intent.profileJSON === profiles.savedJSON && managedProfile(intent.target);
     }
     function evaluate() {
+        reconcilePolicy();
         if (!observing || interactionBusy || manualOverride || !readyPair()) return;
         internal.problem = "";
         const target = resolveTarget().id;
@@ -135,6 +186,7 @@ QtObject {
         document.activeProfileId = target;
         const intent = {configuration:configuration, profiles:profiles, contexts:contexts, bindingsState:bindingsState,
             generation:internal.generation, epoch:internal.epoch, pair:readyPair(), contextRevision:contexts.revision,
+            policy:readPolicy(), policyEpoch:internal.policyEpoch,
             bindingRevision:bindingsState.revision, bindingJSON:bindingsState.savedJSON, defaultId:defaultProfileId,
             scope:profiles.activeProfileId, profileRevision:profiles.revision, profileJSON:profiles.savedJSON,
             target:target, expectedJSON:JSON.stringify(document), expectedRevision:-1, admitted:false, ownEvents:0, ownEpoch:-1};
@@ -153,7 +205,8 @@ QtObject {
             if (internal.attempt === intent) internal.attempt = null;
         }
         if (!accepted) {
-            if (intent.ownEvents && intent.ownEpoch === internal.epoch && intent.profiles === profiles
+            if (intent.ownEvents && intent.ownEpoch === internal.epoch && intent.policyEpoch === internal.policyEpoch
+                    && intent.profiles === profiles
                     && active && enabled && internal.pair) {
                 internal.manual = true;
                 internal.generation++;
@@ -168,6 +221,16 @@ QtObject {
         try { configuration.autoContextDefaultProfile = id; }
         catch (_) { return false; }
         return defaultProfileId === id;
+    }
+    function setPolicy(value) {
+        if (!validPolicy(value) || !configuration) return false;
+        reconcilePolicy();
+        if (value === readPolicy()) return true;
+        const target = configuration, epoch = internal.policyEpoch;
+        try { target.autoContextPolicy = value; }
+        catch (_) { return false; }
+        reconcilePolicy();
+        return configuration === target && readPolicy() === value && internal.policyEpoch === epoch + 1;
     }
     function setEnabled(value) {
         if (typeof value !== "boolean") return false;
@@ -186,19 +249,20 @@ QtObject {
     onEnabledChanged: {
         if (internal && internal.completed) {
             internal.manual = false;
-            if (!enabled) internal.pair = "";
+            if (!enabled) { internal.pair = ""; internal.lastDesktop = ""; internal.lastCombined = ""; }
             observeContext();
             invalidate();
         }
     }
     onActiveChanged: {
         if (internal && internal.completed) {
-            if (!active) { internal.manual = false; internal.pair = ""; }
+            if (!active) { internal.manual = false; internal.pair = ""; internal.lastDesktop = ""; internal.lastCombined = ""; }
             observeContext();
             invalidate();
         }
     }
     onObservingChanged: { observeContext(); invalidate(); }
+    onPolicyChanged: { reconcilePolicy(); observeContext(); invalidate(); }
     onInteractionBusyChanged: invalidate()
     onDefaultProfileIdChanged: invalidate()
     onConfigurationChanged: invalidate()
@@ -221,5 +285,5 @@ QtObject {
         function onWritableChanged() { state.invalidate(); }
         function onInitializedChanged() { state.invalidate(); }
     }
-    Component.onCompleted: { internal.completed = true; observeContext(); invalidate(); }
+    Component.onCompleted: { internal.completed = true; reconcilePolicy(); observeContext(); invalidate(); }
 }

@@ -30,6 +30,7 @@ Window {
         property string contextsJSON: fixtureContextsJSON
         property bool autoContextEnabled: false
         property string autoContextDefaultProfile: ""
+        property string autoContextPolicy: "activity-desktop"
         onContextsJSONChanged: contextWriteCount++
         property int iconSize: 42
         property bool animations: false
