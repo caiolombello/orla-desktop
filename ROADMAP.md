@@ -239,10 +239,18 @@ normal. R1 continua FAILED em seu registro. A sessão principal foi preservada;
 isso não qualifica seu painel físico nem completa P1/P2.
 [Evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-rename-development-16-october-2026).
 
-**Próximo incremento de P1/UX:** planejar a remoção de perfil com confirmação e
-destino explícitos. Decidir antes como
-tratar perfil ativo, padrão automático e associações por ID. Importar/exportar
-perfis e escolher barra/launcher/eventos permanecem separados.
+**P1/UX — remover perfil (Source):** a confirmação identifica o perfil ativo,
+exige um destino explícito e informa associações e padrão automático afetados.
+Uma gravação remove o perfil e seleciona o destino; referências permanecem por ID,
+com recuperação em Contextos. Remover o padrão pausa o automático; o último perfil
+deixa um documento vazio inicializado `0.2-experimental`, sem recriar IDs antigos.
+A leitura de `0.1-experimental` continua disponível sem migração passiva. Escape,
+alterações reentrantes de destino e confirmações desatualizadas têm proteção própria.
+O design system registra o fluxo e a galeria cobre 350/420 px em claro/escuro.
+Instalação e prova nativa desta remoção ainda aguardam execução; os testes
+portáteis não as substituem. [Uso e compatibilidade](docs/profiles.md#remove-the-active-profile--remover-o-perfil-ativo).
+Próximos gates: qualificar a remoção instalada e persistida; importar/exportar
+perfis e escolher barra/launcher/eventos continuam abertos. P1/P2 permanecem parciais.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 
