@@ -696,6 +696,96 @@ the missing second reader as `ABSENT`, without manufacturing a completion.
 | Session lifecycle and restart failure | `8fb1a38e3af59f1aca7b4419b5a854365128894eb3d7c5eade73df5e8cd42e71` |
 | Fresh main-session preservation | `df98cbcedf6edd33626ceb98b6d25720b1fd0ee4c4281cb8507833b664694902` |
 
+## Cold-start profile hydration correction
+
+Commit `bb625f71b460d2ac084798225ade2d99e95ce12e` fixes a separately reproduced
+Source bug: starting with saved Work and automation already enabled could mark
+the initial restoration as a new manual selection, leaving Work despite a
+ready desktop bound to Personal. Both the controller and complete DockView
+reproduced this without an actor selecting a profile. This is not an inferred
+diagnosis of the uninstrumented second-host timeout in R2.
+
+ProfileState now scopes read-only provenance to its initial load and restores
+it in `finally`. Ordinary and nested command-triggered loads suspend that
+marker; automation ignores only the initial restoration. Cold startup under
+both policies, nested manual selection, a selection on unwind, later external
+loads and invalid-document preservation are covered. The complete dock also
+checks OFF behavior and a genuine newer manual choice, exact document delta,
+unchanged bindings/flat settings/timer and one profile notification.
+
+The first composition probe incorrectly supplied a Python QVariantMap that
+normalized to an unavailable desktop. Those original failures remain recorded
+as `INVALID_FIXTURE`. The corrected fixture passes JSON text through QML
+`JSON.parse` and asserts ready D1 before testing selection: it fails against
+the old archive and passes against the correction. Warning-producing probes
+from computed initial selection properties remain unqualified; accepted
+nested tests exercise stable hydration boundaries.
+
+Five affected suites passed **181 tests plus two expected TaskManager skips
+per style**, Fusion and KDE: automatic controller 53, Contexts 30 +1 skip,
+profiles 23, appearance 44, profiles dock 31 +1 skip. QML warning checks,
+design check and seven design guards passed. Presentation files and the
+reviewed light/dark captures are unchanged.
+
+The new deterministic 72-entry archive
+`8091e4c17f4da5a022a5e80c6e7e1ccae7b2fc5d7a922eb284bbcb84563e7419`
+changes only ProfileState and AutoContextProfileState. It was installed with
+a separate read-only backup and one controlled stop/start. Fresh independent
+checks confirmed Source/archive/installed equality, backup/rollback modes,
+the complete declared main configuration, inventory, bar, launcher and original
+banks. Automation remains OFF with five disk keys absent; autolock is false,
+the screen was unlocked and automatic shell restarts stayed zero. This local
+installation alone does not qualify a new native restart journey.
+
+| Correction evidence | SHA-256 |
+| --- | --- |
+| Controller, Fusion | `84285fb835b52bd61fc70265bd1496d4490612e89e6ca26237480a4f4159740a` |
+| Controller, KDE | `89e78c48942b2e0f3423be79eabcfed8ca20ff902b6ab21b5c66e3319ffdc458` |
+| Corrected ready-context RED on old package | `0c5746db8241a2647b094e2591f78495b95b84e8e72908a50c9a2dfdf3ebe148` |
+| Full composition, Fusion | `51dace53089875c14dd202f63eb0a3e61394f39b02f9017546f0f16333f511e5` |
+| Full composition, KDE | `5efab1c6e9961aa2b27d73beea04b1272d43e0c035c1623ee1c853dc05ce7370` |
+| Profiles/appearance consumers, both styles | `b7207f2dc6a06684f5f08fc62874be86a5308d2e90daacb68820a965a761d3d9` |
+| Controlled correction installation | `d7235301d69ef99e034ee9e5652e189519e2b4877a9dff9098264341a999e4d7` |
+| Fresh package/backup/main-preservation check | `5dbe979d89b4e823aad0d50461eca90cfe6e2ea5f4620a922644931bc5848193` |
+
+## Desktop-only private KDE attempt R3
+
+The installed correction passed a new complete bounded journey in 20.814
+seconds, using the same eight operative visitor scripts, actions and deadlines
+as R2. Both hosts used the pristine new 72-entry package and the same saved
+configuration, with a live owned ActivityManager reporting an empty list and
+current Activity throughout. No snapshot override or external profile writer
+was used after launch.
+
+Host 1 completed six milestones with seven public Press actions and one
+SetFocus: choosing desktop-only kept automation OFF, explicit enable stayed
+deferred while Settings was open, closing it selected Work, and real desktop
+changes selected Personal then Work. Normal exit persisted Work. With the host
+absent, changing only to D1 kept Work on disk. A new host process/owner then
+selected Personal without actions; its reader confirmed that seventh milestone
+in 0.632 seconds, and normal exit persisted Personal. This qualifies the
+desktop-only policy's bounded private KDE opt-in, transitions and restart.
+
+The owned extra desktop was removed only after both hosts exited. All recorded
+direct children were reaped without forced cleanup; accessibility daemon exits
+and socket removal were confirmed. First errors and cleanup error lists were
+empty. The fresh postcheck confirmed the main session, installed package and
+configuration were preserved, with automation OFF, five disk keys absent,
+autolock false, screen unlocked and zero automatic shell restarts.
+
+R1 and R2 remain FAILED with their original receipts. R3 does not retrospectively
+identify R2's exact uninstrumented timeout cause. Physical seat/focus, the user's
+panel, monitors, native setter counts and other interaction drafts remain
+separate gates; P2 is not complete.
+
+| R3 evidence | SHA-256 |
+| --- | --- |
+| Complete private KDE journey | `da2c4ef0ce8d5faa213199803622fdd0a62cf0b4e74ff45f9a59d407c47d9b12` |
+| First-host reader | `beaeb991b4c6dd5e6501fe3619c657369c8f9d06a3d5f56b9be6f8667d944f8a` |
+| Restart reader, no actions | `e68028a525a5fe15cb1f858486f0a41ffa695e4f5b8f2ee495b9f2a6a3280159` |
+| Session lifecycle | `ea7b3a5021e1b8355ff90729c5ca524bc5430547081f7bd4e5c29f83865ef673` |
+| Fresh main-session preservation | `89260646661b522228a3a8dcdb88232ea52c8ccce650e5089cd92020d92d7ddc` |
+
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,
@@ -708,11 +798,9 @@ does not reinterpret that earlier negative result.
 
 The bounded desktop and Activity rename/removal/recreation and active Pomodoro
 journeys are now qualified in the private KDE fixture on the preceding installed
-package. The new desktop-only policy has Source/UI/tests, the guarded local
-installation and the first-host empty-Activity/public-opt-in/desktop journey
-above. Its restart using the same saved configuration remains open after R2.
-Diagnose the second-host wait before changing Source or retrying; neither a
-larger timeout nor the first-host PASS can substitute for a verified restart.
+package. The new desktop-only policy now has Source/UI/tests, the guarded local
+installation and the complete empty-Activity/public-opt-in/desktop/restart
+journey in R3. Its earlier failed attempts retain their separate results.
 Other interaction drafts, the user's panel, focus/seat and monitor behavior also
 remain open. Persisted timerRemaining alone is not the running countdown; the
 Pomodoro qualification above required the original deadline and real counts.
