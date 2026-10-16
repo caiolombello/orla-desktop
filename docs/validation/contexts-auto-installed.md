@@ -833,6 +833,107 @@ installed; installation and a new private KDE persistence journey are separate
 gates. The user's actual associations have not been removed. P1/P2 stay partial.
 Private Source receipts: `.runtime/context-binding-cleanup-20261016/`.
 
+## Saved association cleanup — local installation
+
+The new `7a06d76e…` package was subsequently installed with one proven stop and
+one direct start of the shell. The installer returned a clean PASS, with no
+rollback, secondary errors or configuration/bank repair. A durable read-only
+backup preserves the old `4ad866d3…` package and rollback archive modes.
+
+A separate fresh postcheck confirmed Source/archive/installed equality for all
+72 files, exact backup contents/modes, complete main configuration with only
+the previously declared 810/630 dialog-size footprint, inventory, bar roles,
+launcher and protected layout banks. Automatic mode remains OFF with five disk
+keys absent and the strict policy default; the timer is idle. The screen was
+unlocked, autolock false and automatic shell restarts zero. The verification
+also checks process identity again after its final observations.
+
+Installation receipt: `f8240310…`; fresh postcheck: `befb4f5a…`.
+This establishes installation and preservation, not the new removal journey.
+No association in the user's main session was removed. Published 0.2.9 assets
+remain unchanged.
+
+## Saved association cleanup — private KDE attempt R1
+
+The first new private journey remains FAILED. Six public Press actions and two
+SetFocus calls reached confirmation, with zero EditableText calls or physical
+input. Initial, open-unselected and selected-without-write checkpoints passed.
+After Confirm, two observations still saw the exact old saved data; the next
+failed the complete-map assertion, 0.589 seconds into that checkpoint.
+The failed observation's before/after maps were not recorded.
+
+The final private file contains exactly the expected Activity-only removal.
+Replacing only its `contextsJSON` value with the encoded original seed
+reconstructs the complete prehost hash; profiles and all other raw values match.
+The visitor's multiple reads can cross the expected save transition, but the
+unrecorded failed frames prevent an exclusive cause claim. No product Source
+fix follows from this attempt.
+
+The reader's error, its secondary cleanup assertion and the outer namespace
+failure remain separate. Host exit zero occurred during failure cleanup; it
+does not qualify the planned normal-exit/flush checkpoint. All eight recorded
+direct children exited without forced termination and owned runtime sockets
+were absent. A separate fresh postcheck confirmed the same main process,
+complete configuration, installed package, bar, launcher and protected banks,
+automation OFF/five absent keys, unlocked screen, autolock false and zero
+automatic shell restarts. Preservation does not promote the journey to PASS.
+
+R1 episode: `2bd7c34d…`; reader: `c1862f18…`; main preservation: `eb0533f0…`.
+The correction below changes only the visitor. R1 remains FAILED, with its
+exclusive cause UNKNOWN. P1/P2 remain partial.
+
+## Saved association cleanup — private KDE attempt R2
+
+R2 passed with the same pristine installed `7a06d76e…` package. No product Source
+change or shell reload occurred between attempts. The new visitor validates
+each individually stable complete map against exact old or Source-derived
+final bytes, including `contextsJSON` and every other known/unknown key. Its
+before-map → decoded-read → after-map observations may advance monotonically
+from old to final only during the existing first post-Confirm wait. Mixed
+states remain pending; only a stable final triple completes it. Regressions,
+unrecognized bytes and unrelated changes still fail. Later checkpoints require
+final state strictly; actions, phase/reader/namespace deadlines and cleanup
+remain unchanged.
+
+Before execution, an isolated offline proof checked actual Qt Source
+`Contexts.unbind`/JSON.stringify output and the pinned KConfig tools on one
+private file. It qualifies only the safe UUID/fixed-text fixture, including
+Unicode. The actual new reader functions extracted by AST passed controlled
+truth-table, latch and invalid-state tests. This does not establish the cause
+of R1's unrecorded failed observation. The new candidate received an exact
+static review and a separate fresh Root runtime decision.
+
+The real private KDE/Wayland journey completed eight public Press actions,
+two SetFocus calls and zero EditableText/physical-input calls. Five reader
+checkpoints passed: initial, open unselected, selected without writing,
+Activity-only removal persisted and Settings closed. The save wait observed
+old/old/old twice, then old/old/final, then final/final/final within 0.826 seconds
+of the checkpoint. This demonstrates the bounded transition in R2 without
+retrospectively proving R1's exclusive cause.
+
+The selected Activity association and a desktop association shared the same
+ID and name. Only the Activity entry was removed; both desktop entries retained
+their IDs, names, targets and order. Empty initialized profiles remained
+byte-identical. The complete private map preserved all other raw values,
+including preferences and idle timer fields. A live empty ActivityManager and
+constant real private desktop were checked; no context mutation or external
+configuration writer ran after launch.
+
+Normal host exit zero and the parent flush check confirmed persistence.
+The namespace and cleanup completed in 15.451 seconds with no first or cleanup
+errors. A fresh separate postcheck confirmed the same main process, Source/
+archive/installed equality, original configuration plus only the declared
+810/630 footprint, bar roles, launcher and protected banks. Automation remained
+OFF with five absent disk keys; autolock false, screen unlocked and automatic
+shell restarts zero. All eight recorded direct children exited without forced
+termination, accessibility daemon exits were confirmed and runtime sockets
+were absent.
+
+R2 episode: `827790eb…`; reader: `5e0bc1ce…`; fresh main postcheck: `846264bb…`.
+This qualifies one private public-accessibility journey with synthetic data.
+The user's physical panel/seat, native setter counts, other monitors and active
+timer completion remain separate; P1/P2 are not complete.
+
 ## Next native gates
 
 The private backend transition, enabled-restart and Activity-precedence gates,

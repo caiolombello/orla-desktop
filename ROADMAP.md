@@ -258,8 +258,11 @@ gravação e saída normal, preservando todos os demais campos. O postcheck conf
 a sessão principal intacta. Isso não qualifica painel físico, foco/seat ou monitores.
 [Uso e compatibilidade](docs/profiles.md#remove-the-active-profile--remover-o-perfil-ativo),
 [evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-removal-development-16-october-2026).
-Próxima entrega: revisão e remoção individual de associações salvas, inclusive
-antigas, com confirmação e identidade por domínio/ID. Importar/exportar
+O incremento seguinte já implementa revisão e remoção individual de associações
+salvas, inclusive antigas, com confirmação e identidade por domínio/ID. Está
+instalado com preservação verificada; a jornada R2 no KDE privado passou remoção
+de uma Activity, preservação das duas associações de área e saída normal. R1
+permanece FAILED, com causa exclusiva desconhecida. Importar/exportar
 perfis e escolher barra/launcher/eventos continuam abertos. P1/P2 permanecem parciais.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
@@ -1381,7 +1384,7 @@ persistência e postcheck passaram, preservando a sessão principal. A precedên
 do backend privado está qualificada; UI, painel do usuário e foco/seat continuam
 abertos. [Evidência](docs/validation/contexts-auto-installed.md#private-kde-activity-precedence).
 
-**P2/UX — revisão de associações salvas (Source, 16/10):** a seção recolhida
+**P2/UX — revisão de associações salvas (instalado, 16/10):** a seção recolhida
 **Associações salvas** lista Activity/área por domínio + ID, inclusive contextos
 antigos e perfis indisponíveis. Uma confirmação explícita remove só a entrada
 escolhida; Cancelar, abas, fechamento e mudanças externas preservam a intenção
@@ -1390,8 +1393,14 @@ Passaram 193 testes e dois skips esperados por estilo, Fusion/KDE, design sem
 problemas e sete guardas; 24 capturas finais cobrem claro/escuro e 350/420 px.
 Foram corrigidos foco cortado na reabertura e sobreposição no menu longo.
 O contrato visual entrou no design system e o guia foi atualizado para futuras
-contribuições. Pacote de 72 arquivos gerado; instalação e prova privada de
-persistência desta fatia ainda pendentes. P1/P2 continuam parciais.
+contribuições. O pacote de 72 arquivos foi instalado com backup e uma recarga;
+o postcheck confirmou preservação da sessão e automático desligado. R1 permaneceu
+FAILED na leitura após confirmar; a causa exclusiva não foi identificada.
+Com um visitante que valida os estados completos antigo/final em ordem, R2 passou
+oito Press públicos, gravação, fechamento e saída normal em KDE privado, sem
+alterar o produto ou recarregar novamente. O mesmo ID/nome nos dois domínios
+preservou a associação de área ao remover a de Activity. Painel físico, foco/seat,
+setters nativos e monitores continuam abertos; P1/P2 permanecem parciais.
 [Evidência e limites](docs/validation/contexts-auto-installed.md#saved-association-cleanup--source-16-october-2026).
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
