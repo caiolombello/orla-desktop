@@ -365,6 +365,104 @@ class Gallery:
             window.close()
             engine.deleteLater()
 
+    def saved_contexts(self, host: str) -> None:
+        """Saved identities, protected documents and explicit inline cleanup."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "ContextsDockHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        popup = window.findChild(QQuickItem, "settingsPopup")
+        config = window.findChild(QObject, "configuration")
+
+        def evaluate(source, target=dock):
+            expression = QQmlExpression(QQmlEngine.contextForObject(target), target, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+
+        def control(name):
+            item = window.findChild(QQuickItem, name)
+            if item is None:
+                raise RuntimeError("Missing saved association control: " + name)
+            return item
+
+        def focus(item):
+            # Reused popup fixtures can retain the same focused object after close.
+            # Enter through the existing tab control to exercise an actual focus change.
+            if window.activeFocusItem() == item:
+                control("settingsTabs").forceActiveFocus(Qt.TabFocusReason)
+            item.forceActiveFocus(Qt.TabFocusReason)
+            QTest.qWait(100)
+            viewport = control("contextControls").property("contentItem")
+            point = item.mapToItem(viewport, QPointF(0,0))
+            assert window.activeFocusItem() == item
+            assert point.y()-3 >= 0 and point.y()+item.height()+3 <= viewport.height(), (item.objectName(),point.y(),item.height(),viewport.height(),control("contextControls").property("sessionOpen"))
+
+        try:
+            window.setWidth(1000)
+            window.setHeight(900)
+            popup.setProperty("popupType", 0)
+            popup.setProperty("heightBudget", 420)
+            evaluate("anchors.centerIn=undefined;x=40;y=24;profiles.initializeDefaults(profiles.activeProfileId,profiles.revision)")
+            base = {"formatVersion":"0.1-experimental", "activityBindings":[
+                {"contextId":"activity-old", "lastKnownName":"Contexto anterior", "profileId":"missing"}],
+                "desktopBindings":[{"contextId":"activity-old", "lastKnownName":"Contexto anterior", "profileId":"work"}]}
+            for width in (350,420):
+                for state in ("empty", "list", "details", "confirm", "stale", "protected"):
+                    document = json.loads(json.dumps(base))
+                    if state == "empty":
+                        document["activityBindings"] = []
+                        document["desktopBindings"] = []
+                    elif state == "list":
+                        for kind in ("activityBindings", "desktopBindings"):
+                            document[kind] = [{"contextId":str(i), "lastKnownName":"Contexto sintético " + str(i+1), "profileId":"work"} for i in range(64)]
+                    elif state == "details":
+                        document["activityBindings"][0]["contextId"] = ("contexto-" + "x"*256)[:256]
+                        document["activityBindings"][0]["lastKnownName"] = "<b>Nome salvo literal</b>"
+                    config.setProperty("contextsJSON", '{"formatVersion":"future","owned":true}' if state == "protected" else json.dumps(document))
+                    config.setProperty("autoContextPolicy", "activity-desktop")
+                    popup.setProperty("width", width)
+                    popup.open()
+                    control("settingsTabs").setProperty("currentIndex", 3)
+                    QTest.qWait(300)
+                    focus(control("savedContextToggle"))
+                    QTest.keyClick(window, Qt.Key_Space)
+                    selector = control("savedContextSelector")
+                    assert selector.property("currentIndex") == -1
+                    rect = self.scene_rect(popup)
+                    if state == "list":
+                        focus(selector)
+                        QTest.keyClick(window, Qt.Key_Space)
+                        QTest.qWait(150)
+                        assert evaluate("popup.visible", selector)
+                        menu = evaluate("popup.contentItem", selector)
+                        rect = rect.united(self.scene_rect(menu))
+                    elif state in ("details", "confirm", "stale"):
+                        focus(selector)
+                        QTest.keyClick(window, Qt.Key_Down)
+                        QTest.keyClick(window, Qt.Key_Return)
+                        QTest.qWait(100)
+                        if state == "stale":
+                            config.setProperty("autoContextPolicy", "desktop")
+                            focus(control("savedContextCancel"))
+                        elif state == "confirm":
+                            focus(control("savedContextRemove"))
+                        else:
+                            # A reading position, with no hidden focused control.
+                            window.contentItem().forceActiveFocus(Qt.OtherFocusReason)
+                            details = control("savedContextDetails")
+                            viewport = control("contextControls").property("contentItem")
+                            point = details.mapToItem(viewport, QPointF(0,0))
+                            viewport.setProperty("contentY", viewport.property("contentY") + point.y())
+                    self.save(f"contexts-saved-{host}-{state}-{width}", window, rect)
+                    popup.close()
+                    QTest.qWait(300)
+        finally:
+            popup.close()
+            window.close()
+            engine.deleteLater()
+
     def appearance_catalog(self, host: str) -> None:
         """Compact and expanded preset states in the unchanged short popup."""
         engine = self.engine()
@@ -1020,6 +1118,7 @@ def render(host: str, output: Path) -> int:
     gallery.auto_contexts(host)
     gallery.profile_rename(host)
     gallery.profile_remove(host)
+    gallery.saved_contexts(host)
     gallery.appearance_catalog(host)
     gallery.appearance_advanced(host)
     gallery.widget_order(host)

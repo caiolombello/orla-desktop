@@ -409,6 +409,8 @@ ColumnLayout {
             automation: settings.automation
             contexts: settings.contexts
             bindingsState: settings.contextBindings
+            configuration: settings.configuration
+            sessionOpen: settings.visible && settings.appearance.editing
             profiles: settings.profiles
             active: settings.contextsTabActive
         }
