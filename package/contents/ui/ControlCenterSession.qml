@@ -14,6 +14,11 @@ Item {
     property Item host: owner
     property QtObject client: null
     readonly property bool dockOrigin: !_external
+    readonly property bool interactionBusy: Boolean(popup && (popup.interactionBusy !== undefined
+            ? popup.interactionBusy : popup.visible)) || _pending || _closing || !_closed
+        || _retiringBackend !== null || _commitPending || commitQueue.running || focusQueue.running
+        || _restoreGeneration >= 0 || _requestDepth > 0
+        || Boolean(_nativeDialog && (_nativeDialog.visible || _nativeFocusHeld))
     property string error: ""
     property QtObject lastErrorClient: null
 
@@ -24,6 +29,9 @@ Item {
             ? _nativeDialog.activeFocusItem !== null : _nativeDialog.active === true) : false
     readonly property QtObject _hostWindow: host ? host.Window.window : null
     readonly property QtObject _pendingWindow: _pendingHost ? _pendingHost.Window.window : null
+    property int _requestDepth: 0
+    property bool _commitPending: false
+    property int _commitGeneration: 0
     property bool _external: false
     property Item _anchor: null
     property bool _pending: false
@@ -41,6 +49,11 @@ Item {
     property Item _closingFocus: null
     property int _restoreGeneration: -1
 
+    function queueCommit() {
+        _commitGeneration++;
+        _commitPending = true;
+        commitQueue.restart();
+    }
     function validHost(candidateHost, candidateAnchor) {
         const h = candidateHost as Item;
         const a = candidateAnchor as Item;
@@ -110,34 +123,39 @@ Item {
             if (!alreadyClosing) popup.close();
             if (_generation !== generation) return;
         }
-        commitQueue.restart();
+        queueCommit();
     }
     function request(candidate, candidateHost, candidateAnchor, external) {
         const beforeValidation = _generation;
-        const valid = !_stopped && owner && popup && typeof performOpen === "function"
-            && validHost(candidateHost, candidateAnchor) && (!external || validClient(candidate));
-        if (_generation !== beforeValidation) return false;
-        if (!valid) {
-            setError(candidate, qsTr("A Central de Controle está indisponível."), beforeValidation);
-            return false;
+        _requestDepth++;
+        try {
+            const valid = !_stopped && owner && popup && typeof performOpen === "function"
+                && validHost(candidateHost, candidateAnchor) && (!external || validClient(candidate));
+            if (_generation !== beforeValidation) return false;
+            if (!valid) {
+                setError(candidate, qsTr("A Central de Controle está indisponível."), beforeValidation);
+                return false;
+            }
+            const generation = _generation + 1;
+            _generation = generation;
+            if (!clearPending(generation)) return true;
+            _pendingExternal = external;
+            if (_generation !== generation) return true;
+            _pendingClient = candidate;
+            if (_generation !== generation) return true;
+            _pendingHost = candidateHost;
+            if (_generation !== generation) return true;
+            _pendingAnchor = candidateAnchor;
+            if (_generation !== generation) return true;
+            _pendingGeneration = generation;
+            if (_generation !== generation) return true;
+            _pending = true;
+            if (_generation !== generation || !setError(candidate, "", generation)) return true;
+            beginClose(generation);
+            return true;
+        } finally {
+            _requestDepth--;
         }
-        const generation = _generation + 1;
-        _generation = generation;
-        if (!clearPending(generation)) return true;
-        _pendingExternal = external;
-        if (_generation !== generation) return true;
-        _pendingClient = candidate;
-        if (_generation !== generation) return true;
-        _pendingHost = candidateHost;
-        if (_generation !== generation) return true;
-        _pendingAnchor = candidateAnchor;
-        if (_generation !== generation) return true;
-        _pendingGeneration = generation;
-        if (_generation !== generation) return true;
-        _pending = true;
-        if (_generation !== generation || !setError(candidate, "", generation)) return true;
-        beginClose(generation);
-        return true;
     }
     function openFromDock(anchor) { return request(null, owner, anchor, false); }
     function openFromClient(candidate, candidateHost, anchor) { return request(candidate, candidateHost, anchor, true); }
@@ -168,6 +186,8 @@ Item {
         _stopped = true;
         close();
         commitQueue.stop();
+        _commitGeneration++;
+        _commitPending = false;
         focusQueue.stop();
     }
     function pendingLost() {
@@ -177,7 +197,7 @@ Item {
         const cancellation = generation + 1;
         _generation = cancellation;
         if (!clearPending(cancellation) || !clearRestore(cancellation)) return;
-        commitQueue.restart();
+        queueCommit();
     }
     function checkPending() {
         if (_pending && (!validHost(_pendingHost, _pendingAnchor)
@@ -194,9 +214,9 @@ Item {
     on_PendingAnchorChanged: checkPending()
     on_PendingClientChanged: checkPending()
     onOwnerChanged: if (!owner) shutdown()
-    on_NativeDialogChanged: commitQueue.restart()
-    on_NativeFocusHeldChanged: if (!_nativeFocusHeld) commitQueue.restart()
-    on_RetiringBackendChanged: if (!_retiringBackend && !_stopped) commitQueue.restart()
+    on_NativeDialogChanged: queueCommit()
+    on_NativeFocusHeldChanged: if (!_nativeFocusHeld) queueCommit()
+    on_RetiringBackendChanged: if (!_retiringBackend && !_stopped) queueCommit()
 
     function pendingMatches(request) {
         return !_stopped && owner && popup && _pending && _generation === request.generation
@@ -245,7 +265,15 @@ Item {
             if (setError(request.client, qsTr("Não foi possível abrir a Central de Controle."), request.generation)) close();
         }
     }
-    Timer { id: commitQueue; interval: 0; onTriggered: root.drain() }
+    Timer {
+        id: commitQueue
+        interval: 0
+        onTriggered: {
+            const generation = root._commitGeneration;
+            try { root.drain(); }
+            finally { if (generation === root._commitGeneration) root._commitPending = false; }
+        }
+    }
     Timer {
         id: focusQueue
         interval: 0
@@ -291,16 +319,16 @@ Item {
         function onClosed() {
             root.popup.anchorControl = null;
             root._closed = true;
-            commitQueue.restart();
+            root.queueCommit();
         }
     }
     Connections {
         target: root._nativeDialog
-        function onVisibleChanged() { if (!target.visible) commitQueue.restart(); }
+        function onVisibleChanged() { if (!target.visible) root.queueCommit(); }
     }
     Connections {
         target: root._nativeDialog && root._nativeDialog.active !== undefined ? root._nativeDialog : null
-        function onActiveChanged() { if (!target.active) commitQueue.restart(); }
+        function onActiveChanged() { if (!target.active) root.queueCommit(); }
     }
     Connections {
         target: root.host

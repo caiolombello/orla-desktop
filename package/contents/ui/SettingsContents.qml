@@ -15,6 +15,7 @@ ColumnLayout {
     required property var profiles
     required property var contexts
     property var desktopSwitch: null
+    property var automation: null
     property var integrations: null
     required property var contextBindings
     readonly property bool contextsTabActive: tabs.currentIndex === 3
@@ -196,8 +197,11 @@ ColumnLayout {
     }
     Controls.Label {
         Layout.fillWidth: true
-        text: qsTr("Perfil: %1").arg(settings.profiles.activeProfileId === "legacy" ? qsTr("Preferências anteriores")
+        readonly property string profileCaption: qsTr("Perfil: %1").arg(settings.profiles.activeProfileId === "legacy" ? qsTr("Preferências anteriores")
             : (settings.profiles.profiles.find(profile => profile.id === settings.profiles.activeProfileId)?.name || ""))
+        text: settings.automation && settings.automation.enabled
+            ? profileCaption + " · " + settings.automation.statusText : profileCaption
+        Accessible.description: settings.automation && settings.automation.enabled ? settings.automation.statusText : ""
         textFormat: Text.PlainText
         font.pixelSize: Style.type.caption
         opacity: 0.72
@@ -399,6 +403,7 @@ ColumnLayout {
         ContextControls {
             objectName: "contextControls"
             desktopSwitch: settings.desktopSwitch
+            automation: settings.automation
             contexts: settings.contexts
             bindingsState: settings.contextBindings
             profiles: settings.profiles

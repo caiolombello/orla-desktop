@@ -13,6 +13,13 @@ Item {
     property var anchorControl: dock
     property bool nativeOpenActive: false
     property int _focusRestoreGeneration: 0
+    property int _restoreTicket: 0
+    property bool _restorePending: false
+    readonly property bool _nativeFocusHeld: nativeDialog
+        ? (nativeDialog.activeFocusItem !== undefined
+            ? nativeDialog.activeFocusItem !== null : nativeDialog.active === true) : false
+    readonly property bool interactionBusy: visible || nativeOpenActive || _restorePending
+        || Boolean(nativeDialog && nativeDialog.visible) || _nativeFocusHeld
     onAnchorControlChanged: _focusRestoreGeneration++
     onDockChanged: _focusRestoreGeneration++
     readonly property bool nativeBackend: Boolean(dock && dock.nativePopups)
@@ -95,6 +102,8 @@ Item {
     onVisibleChanged: {
         const generation = ++_focusRestoreGeneration;
         if (!nativeBackend || visible || !nativeOpenActive) return;
+        const ticket = ++_restoreTicket;
+        _restorePending = true;
         nativeOpenActive = false;
         // Keep the shared content owned by this facade while its host is hidden.
         surface.parent = popup;
@@ -102,15 +111,19 @@ Item {
         const ownerWindow = control ? control.Window.window : null;
         closed();
         Qt.callLater(() => {
-            // Close observers may cancel, reopen, rehost or choose a newer control.
-            if (generation !== _focusRestoreGeneration || visible || nativeOpenActive
-                || anchorControl !== control || !Qt.isQtObject(control) || !Qt.isQtObject(ownerWindow)
-                || control.Window.window !== ownerWindow || !ownerWindow.visible || !ownerWindow.active
-                || !control.visible || !control.enabled) return;
-            const focused = ownerWindow.activeFocusItem;
-            if (focused && focused !== ownerWindow.contentItem && focused !== control
-                && focused.visible && focused.enabled) return;
-            control.forceActiveFocus(Qt.PopupFocusReason);
+            try {
+                // Close observers may cancel, reopen, rehost or choose a newer control.
+                if (generation !== _focusRestoreGeneration || visible || nativeOpenActive
+                    || anchorControl !== control || !Qt.isQtObject(control) || !Qt.isQtObject(ownerWindow)
+                    || control.Window.window !== ownerWindow || !ownerWindow.visible || !ownerWindow.active
+                    || !control.visible || !control.enabled) return;
+                const focused = ownerWindow.activeFocusItem;
+                if (focused && focused !== ownerWindow.contentItem && focused !== control
+                    && focused.visible && focused.enabled) return;
+                control.forceActiveFocus(Qt.PopupFocusReason);
+            } finally {
+                if (ticket === _restoreTicket) _restorePending = false;
+            }
         });
     }
     Loader {

@@ -17,6 +17,7 @@ Window {
     readonly property var session: ownerItem ? ownerItem.session : null
     property var receipts: []
     property var openedHosts: []
+    property var busyAtOpen: []
     property bool clientsValid: true
     property QtObject backendLifetimeFixture: null
     property alias popup: boundary
@@ -45,6 +46,7 @@ Window {
                 backendLifetime: fixture.backendLifetimeFixture
                 validateClient: candidate => fixture.clientsValid && (candidate === fixture.firstClient || candidate === fixture.secondClient)
                 performOpen: (host, anchor) => {
+                    fixture.busyAtOpen = fixture.busyAtOpen.concat([state.interactionBusy === true]);
                     boundary.anchorControl = anchor;
                     fixture.openedHosts = fixture.openedHosts.concat([host === ownerRoot ? "dock" : "bar"]);
                     boundary.open();
@@ -61,6 +63,8 @@ Window {
         property Item anchorControl: null
         property Item capturedAnchorAfterClosed: null
         property bool asynchronousClose: false
+        property bool holdInteraction: false
+        readonly property bool interactionBusy: visible || holdInteraction
         property bool holdNativeVisible: false
         property bool closing: false
         property int closeCount: 0

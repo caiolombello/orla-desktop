@@ -24,6 +24,13 @@ Este documento detalha como o Orla pode crescer de um dock alpha para um espaço
 
 O setup pergunta o mínimo e não é um wizard obrigatório: escolher **Só dock**, **Dock + barra**, **Dock + launcher** ou **Montar depois** cria uma prévia. Presets são pontos de partida editáveis. Antes de aplicá-los, Orla descreve os painéis que criará; nunca apaga ou reposiciona painéis preexistentes sem ação separada explícita. Oferecer restauração em um clique.
 
+No Source atual, **Contextos → Perfis automáticos** é opcional e desligado por padrão.
+Escolher o padrão não ativa o modo. Activity tem prioridade sobre área e padrão;
+uma escolha manual dura até um novo contexto confirmado ou retomada explícita.
+O texto explica que reiniciar retoma o automático. Preferências do modo salvam na
+hora; aparência mantém sua prévia. Uma interação aberta adia a troca sem ser
+encerrada pela automação. [Comportamento e limites nativos](contexts.md).
+
 ## Sistema visual
 
 Preservar a marca costeira existente e evoluí-la com tokens semânticos; os valores são ponto inicial de design, não substituem verificação de contraste nem o esquema Plasma.
