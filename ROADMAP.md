@@ -1410,3 +1410,15 @@ usar uma fronteira temática estreita e independente das integrações opcionais
 reutilizar o parser limitado/UTF-8 estrito e qualificar o ciclo seletor/popup no
 Wayland antes de afirmar suporte. Colagem permanece disponível; nenhum leitor,
 SDK, catálogo ou runtime foi acrescentado por essa análise.
+
+**DX2 — diagnóstico de teardown, incremento de 16/10:** a guarda de runners dos
+testes agora registra ordem observada, joins e orçamento somente na falha, com
+saída limitada, sem ampliar os 500 ms ou mudar o cleanup. A suíte local completa
+de comportamento passou 16 testes, com dois skips esperados. Um novo caso
+privado provocou a janela `quit()`/conexão tardia no ELF KRunner fixado: conservou
+a falha original e a barreira do próximo proprietário, com seis linhas de
+diagnóstico. A primeira preparação falhou por cinco helpers ausentes no snapshot,
+antes de compilar ou executar testes; uma nova preparação incluiu esses arquivos.
+Esse resultado qualifica os registros, sem identificar a causa exclusiva da CI
+anterior ou corrigir o framework. A importação de temas segue no próximo
+incremento; seletor, serviço instalado e foco Wayland continuam pendentes.
