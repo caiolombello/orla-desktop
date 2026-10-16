@@ -192,6 +192,12 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   ring at 350/420 px. Preserve newer input and focus after synchronous saves.
   Use inherited button accessibility actions; redundant Press handlers duplicate
   the exported action list. Test the public action interface.
+  Keep removal in this same module as a separate disclosure. Name the captured
+  target, require an unselected native destination choice and explicit confirmation,
+  and explain retained references and the last-profile outcome. Do not discard a
+  rename draft to open removal. Changed impact makes the confirmation stale; keep
+  its recovery reachable. Oversized editors reveal the focused control and its
+  complete ring instead of scrolling back to the group's start.
 - **Automatic profiles.** Keep the default-profile and context-input selectors,
   native opt-in and plain status in one rounded Contexts module. Choosing either
   selector must not enable automation. Keep an unknown context policy visible as

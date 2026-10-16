@@ -1,5 +1,6 @@
 import QtQuick
 import "../code/Profiles.js" as Profiles
+import "../code/Contexts.js" as Contexts
 
 QtObject {
     id: state
@@ -103,11 +104,17 @@ QtObject {
         if (captured.error) return fail(captured.error);
         const document = internal.document ? Profiles.copy(internal.document)
             : {formatVersion: Profiles.formatVersion, activeProfileId: "legacy", profiles: []};
-        let id;
-        do { id = "custom-" + Date.now().toString(36) + "-" + (++internal.idCounter).toString(36); }
-        while (document.profiles.some(profile => profile.id === id));
-        document.profiles.push(Object.assign(captured.value, {id: id, name: name}));
-        document.activeProfileId = id;
+        const reserved = document.profiles.map(profile => profile.id);
+        if (typeof configuration.autoContextDefaultProfile === "string") reserved.push(configuration.autoContextDefaultProfile);
+        const bindings = Contexts.parse(configuration.contextsJSON === undefined ? "" : configuration.contextsJSON);
+        if (!bindings.error) {
+            bindings.value.activityBindings.concat(bindings.value.desktopBindings)
+                .forEach(binding => reserved.push(binding.profileId));
+        }
+        const next = Profiles.nextCustomId(Date.now(), internal.idCounter, reserved);
+        internal.idCounter = next.counter;
+        document.profiles.push(Object.assign(captured.value, {id: next.id, name: name}));
+        document.activeProfileId = next.id;
         if (!store(document)) return false;
         internal.message = captured.message;
         return true;
@@ -128,6 +135,28 @@ QtObject {
         const profile = document.profiles.find(profile => profile.id === activeProfileId);
         if (profile.name === name) return beforeWrite();
         profile.name = name;
+        return store(document, beforeWrite);
+    }
+    function removeCurrent(replacementId, expectedScope, expectedRevision, continuationGuard) {
+        if (typeof continuationGuard !== "function") return false;
+        const owner = configuration, raw = savedJSON;
+        if (!check(expectedScope, expectedRevision, true)) return false;
+        if (activeProfileId === "legacy") return fail(qsTr("Escolha um perfil para remover."));
+        const document = JSON.parse(raw);
+        if (typeof replacementId !== "string" || replacementId === expectedScope
+                || (replacementId !== "legacy" && !document.profiles.some(profile => profile.id === replacementId)))
+            return fail(qsTr("Escolha outro perfil ou as preferências anteriores como destino."));
+        document.profiles = document.profiles.filter(profile => profile.id !== expectedScope);
+        document.activeProfileId = replacementId;
+        if (document.profiles.length === 0) document.formatVersion = Profiles.formatVersion;
+        const current = () => configuration === owner && writable && savedJSON === raw
+            && activeProfileId === expectedScope && revision === expectedRevision;
+        const beforeWrite = () => {
+            if (!current()) return false;
+            try { if (continuationGuard() !== true) return false; }
+            catch (_) { return false; }
+            return current();
+        };
         return store(document, beforeWrite);
     }
     function select(id, expectedScope, expectedRevision, continuationGuard) {
