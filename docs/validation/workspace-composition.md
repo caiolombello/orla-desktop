@@ -88,9 +88,11 @@ Fusion e 60 em KDE; 177 do backend; 50 de CLI/release/design; design check sem
 problemas. Os processos das suítes Qt registraram um `ResourceWarning` de sete
 objetos Python não coletáveis ao terminar; não houve falha de teste. Nenhum QML
 foi alterado neste incremento; a galeria anterior continua sendo a referência visual.
-A revisão independente inicial do bundle executou 37 testes focados, incluindo
-Source oculto e Python sem Qt; a correção de colisão de pacotes foi submetida a
-uma nova rodada antes de publicar.
+A revisão independente final não encontrou bloqueadores: 96 testes focados
+passaram, além de cinco variantes de colisão com pacotes instalados. Remover
+qualquer um dos dois marcadores de pacote em cópias privadas reproduziu a falha;
+no bundle final, todos os helpers inspecionados vieram da árvore local. Esse
+resultado substitui o aceite inicial, que não havia detectado a colisão.
 
 Não foram instalados bundle, atalho ou serviço na sessão do usuário. O ZIP não
 inclui Qt ou widgets; hashes do manifesto não autenticam o autor. O instalador
