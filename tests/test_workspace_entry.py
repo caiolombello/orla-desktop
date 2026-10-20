@@ -134,16 +134,50 @@ class EntryTests(unittest.TestCase):
             self.assertFalse(report["serviceContacted"])
             self.assertFalse(report["nativeValidated"])
 
+    def collision_python(self, root):
+        venv.EnvBuilder(with_pip=False, system_site_packages=True).create(root / "python")
+        python = root / "python/bin/python"
+        location = subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                                  check=True, capture_output=True, text=True, timeout=10)
+        site = Path(location.stdout.strip())
+        # A nested venv inherits base Python's packages, not the invoking venv's Qt.
+        import PySide6
+        import shiboken6
+        runtime = {str(Path(module.__file__).resolve().parent.parent) for module in (PySide6, shiboken6)}
+        (site / "orla-test-qt.pth").write_text("\n".join(sorted(runtime)) + "\n", encoding="utf-8")
+        return python, site
+
+    def test_collision_fixture_keeps_parent_venv_dependencies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outer = root / "parent"
+            venv.EnvBuilder(with_pip=False).create(outer)
+            python = outer / "bin/python"
+            location = subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                                      check=True, capture_output=True, text=True, timeout=10)
+            for name in ("PySide6", "shiboken6"):
+                stub = Path(location.stdout.strip()) / name
+                stub.mkdir()
+                (stub / "__init__.py").write_text("fixture_origin = 'parent-only'\n")
+            child = root / "child"; child.mkdir()
+            program = """import importlib.util, pathlib, subprocess, sys
+spec = importlib.util.spec_from_file_location('entry_fixture', sys.argv[1])
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+python, _ = module.EntryTests().collision_python(pathlib.Path(sys.argv[2]))
+raise SystemExit(subprocess.run([str(python), '-I', '-B', '-c',
+    "import PySide6, shiboken6; assert PySide6.fixture_origin == shiboken6.fixture_origin == 'parent-only'"]).returncode)
+"""
+            result = subprocess.run([str(python), "-I", "-B", "-c", program, str(Path(__file__).resolve()), str(child)],
+                                    cwd=root, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_installed_packages_cannot_replace_bundle_imports(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             moved = self.bundle(directory)
-            venv.EnvBuilder(with_pip=False, system_site_packages=True).create(root / "python")
-            python = root / "python/bin/python"
-            location = subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
-                                      check=True, capture_output=True, text=True, timeout=10)
+            python, location = self.collision_python(root)
             for name in ("workspace", "scripts"):
-                installed = Path(location.stdout.strip()) / name
+                installed = location / name
                 installed.mkdir()
                 (installed / "__init__.py").write_text("")
             result = subprocess.run([str(python), "-I", "-B", str(moved / "workspace/main.py"), "--diagnose"],
