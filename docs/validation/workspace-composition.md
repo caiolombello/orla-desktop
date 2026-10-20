@@ -3,7 +3,8 @@
 20/10/2026. PySide6/Qt 6.11.2, renderização offscreen/software. Este registro
 qualifica a janela e a ligação ao gerenciador existente com runtime sintético.
 O incremento do bundle abaixo qualifica também a carga sem checkout. Não qualifica
-o comportamento nativo de Plasma/Wayland ou instalação gerenciada.
+o comportamento nativo de Plasma/Wayland. A instalação gerenciada privada tem
+um incremento separado ao final, ainda em revisão independente.
 
 ## Comportamento verificado
 
@@ -58,7 +59,7 @@ Não foram executados NativeRuntime, IPC real, recarga de plasmashell ou ciclo
 completo desta janela na sessão do usuário. Os gates próprios anteriores de
 SIGINT/SIGTERM/Window.close exercitaram o controller com uma Session bloqueada e
 loop Qt real em filhos privados; não provam o ciclo nativo. Entrada instalada no
-desktop, criação aditiva e reativação direta permanecem no
+desktop na sessão do usuário, criação aditiva e reativação direta permanecem no
 [roadmap](../../ROADMAP.md). Reativação atual exige restore → novo plano/apply.
 
 ## Incremento de distribuição: ZIP relocável
@@ -97,4 +98,55 @@ resultado substitui o aceite inicial, que não havia detectado a colisão.
 Não foram instalados bundle, atalho ou serviço na sessão do usuário. O ZIP não
 inclui Qt ou widgets; hashes do manifesto não autenticam o autor. O instalador
 com ownership, seletor de geração, update/rollback e barreira de fechamento
-permanece o próximo gate de distribuição, separado do ciclo nativo completo.
+é tratado no incremento abaixo, separado do ciclo nativo completo.
+
+## Incremento de distribuição: instalação própria
+
+O gerenciador experimental oferece install/status/doctor/launch/update/rollback/
+recover/uninstall, ferramentas locais fixadas, wrappers e entrada no menu. A
+implementação passou em 59 testes focados de instalação, pacote e entrada. Os
+casos incluem colisões e drift, checkpoints de recuperação, histórico imutável,
+update com uma geração anterior, quoting de caminhos e sinais/lease com filhos
+sintéticos. A revisão independente encontrou uma falha reproduzida em escrita
+parcial de registros imutáveis. A correção publica somente registros completos
+e sincronizados, sem substituir histórico existente; falhas parciais de recibo,
+intent e conclusão passaram em recuperação/retry ou replay conforme a fase.
+Os 69 testes focados passaram após a correção. Root executou também a descoberta
+completa `test_workspace*.py`: 100 testes em Fusion passaram, sem falhas ou skips,
+com XDG privado e barramentos ausentes. A nova revisão independente aprovou o
+contrato delimitado, sem achados restantes: repetiu os 69 testes focados e
+acrescentou três testes com dez cenários de falha, além da prova instalada sem
+Source/Qt. Registros finais realmente corrompidos continuam sendo recusados.
+
+Root instalou o ZIP real do commit `5b0ab82b023ad1d2ef4b12c2bc63f288454c29ea`
+em diretórios privados dentro de Bubblewrap, com Source oculto, rede ausente e
+barramentos ausentes. Após remover bootstrap e ZIP, os comandos instalados
+status, doctor, recover sem pendência e uninstall passaram. Doctor carregou a
+interface real offscreen em Qt/PySide6 6.11.2; informou runtime ready,
+serviceContacted=false e nativeValidated=false. Configuração, bancos e auditoria
+sintéticos preservaram conteúdo, modo e identidade. Esse fluxo foi repetido com
+as ferramentas corrigidas e passou novamente. O teste de release passou
+com a nova suíte excluída do arquivo específico do plasmoid.
+
+Duas tentativas anteriores do harness foram preservadas: a primeira recusou um
+ancestral com UID remapeado pelo namespace; a segunda não criou um mountpoint
+sobre a raiz somente leitura. A execução final usou um bind privado sobre um
+mountpoint existente, sem relaxar verificações do instalador ou mudar o produto.
+
+Não há promessa de recuperar toda instrução interrompida: criação anterior ao
+checkpoint de identidade recusa adoção, e remoção parcial das ferramentas exige
+o par confiável original. Não foram testados falta de energia, filesystem remoto
+ou execução em Python mínimo. Não houve instalação na sessão do usuário, recarga
+de Plasma ou validação do fechamento real da janela instalada.
+
+O ciclo nativo da composição tem preparação isolada em VM, ainda sem boot. A
+revisão do driver/provision não encontrou bloqueadores em seu escopo, com 28 testes
+privados e 101 hashes de Source conferidos. O supervisor teve três falhas corrigidas
+nas rodadas de revisão: agora exige EOF da saída terminal, registra falhas de
+preparação do transporte e valida registros de conclusão a cada leitura. Registros
+malformados/incompletos são recusados, e uma falha recebida permanece primária
+diante de timeout, limite de bytes ou falha posterior de log. Os 46 testes sintéticos
+passaram, incluindo os casos que reproduziram os achados. A revisão seguinte
+encontrou um caso de saída não zero da VM cuja causa pode ser substituída por
+timeout posterior; a correção desse registro primário segue pendente.
+Esses resultados não constituem aceite nativo ou sucesso da preparação.

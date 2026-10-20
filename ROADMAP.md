@@ -496,12 +496,18 @@ C1/X1/X2/DX2 continuam parciais. A sequência de produto é:
    A primeira [janela de composição](docs/workspace-composition.md) já liga
    seleção, revisão, apply/disable/restore e recuperação ao helper no checkout,
    com testes sintéticos, foco e temas claro/escuro. O bundle experimental separado
-   já oferece entrada relocável e diagnóstico passivo da interface sem checkout;
-   não fornece ainda instalação gerenciada ou entrada no menu do desktop.
+   já oferece entrada relocável e diagnóstico passivo da interface sem checkout.
+   O instalador experimental adiciona entrada no menu, recibos próprios, seletor
+   de geração e barreira de fechamento. A falha de escrita parcial encontrada
+   na revisão foi corrigida; 100 testes de Workspace passaram, e o instalador
+   foi aprovado na revisão independente dentro do contrato delimitado. O bundle
+   real passou em instalação/diagnóstico/remoção privados com Source oculto,
+   preservando configuração e bancos sintéticos. Isso não é instalação na sessão.
    Continua exigindo serviço explícito, Plasma 6.7.5 e widgets instalados.
-   Falta qualificar o fluxo nativo completo. A próxima fatia de distribuição é
-   instalar/atualizar/restaurar somente gerações próprias, com recibo e barreira de
-   fechamento; não copiar o instalador inteiro do launcher. Reativar
+   Falta concluir o aceite do instalador e qualificar o fluxo nativo completo.
+   A VM descartável tem imagem assinada e inputs preparados; driver/provision
+   passaram na revisão, e o supervisor corrigido está em nova revisão. Nenhum
+   boot ou ciclo nativo dessa composição foi executado. Reativar
    após desativar exige restaurar e revisar um novo plano; criação aditiva e
    reativação direta continuam pendentes, sem um toggle que prometa essas transições.
 2. **Saber a versão e consultar updates no desktop (U1):** versão instalada/em
