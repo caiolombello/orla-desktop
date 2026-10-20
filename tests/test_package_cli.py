@@ -16,6 +16,32 @@ from scripts import caiodock
 
 
 class PackageCliTests(unittest.TestCase):
+    def test_optional_composition_help_does_not_import_qt_or_touch_layout(self):
+        args = caiodock.parser().parse_args(["layout", "setup", "--service", "plasma-fixture.service"])
+        self.assertEqual(args.layout_action, "setup")
+        self.assertEqual(args.service, "plasma-fixture.service")
+
+    def test_composition_entry_forwards_explicit_service_without_constructing_native_runtime(self):
+        from types import SimpleNamespace
+        import scripts
+        from scripts import panel_layout
+        launch = mock.Mock(return_value=0)
+        module = SimpleNamespace(launch=launch)
+        with mock.patch.object(scripts, "workspace_setup", module, create=True), \
+                mock.patch.dict(sys.modules, {"scripts.workspace_setup": module}), \
+                mock.patch.object(panel_layout, "NativeRuntime", side_effect=AssertionError("must remain lazy")):
+            self.assertEqual(caiodock.main(["layout", "setup", "--service", "plasma-fixture.service"]), 0)
+        launch.assert_called_once_with("plasma-fixture.service")
+
+    def test_composition_incomplete_kit_refuses_before_qt_or_native_startup(self):
+        from scripts import panel_layout
+        error = io.StringIO()
+        with mock.patch.object(panel_layout, "__file__", str(self.root / "scripts/panel_layout.py")), \
+                mock.patch.object(panel_layout, "NativeRuntime", side_effect=AssertionError("must remain inert")), \
+                contextlib.redirect_stderr(error):
+            self.assertEqual(caiodock.main(["layout", "setup", "--service", "plasma-fixture.service"]), 1)
+        self.assertIn("complete source checkout", error.getvalue())
+
     def test_script_and_module_entrypoints_show_layout_help(self):
         import subprocess
         import sys

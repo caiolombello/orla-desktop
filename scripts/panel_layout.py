@@ -1177,7 +1177,7 @@ def _restore_layout_v1(receipt, runtime, store, *, recover=False, clock=None, pa
 def add_parser(subparsers):
     parser = subparsers.add_parser("layout", help="enable/disable a managed top bar; dock is managed independently")
     actions = parser.add_subparsers(dest="layout_action", required=True)
-    for action in ("plan", "plan-update", "status", "apply", "update", "disable", "restore"):
+    for action in ("setup", "plan", "plan-update", "status", "apply", "update", "disable", "restore"):
         child = actions.add_parser(action)
         child.add_argument("--service", required=True, help="explicit current-user Plasma dbus service unit")
         if action == "plan":
@@ -1197,6 +1197,19 @@ def add_parser(subparsers):
 
 def cli(args):
     import os
+    if args.layout_action == "setup":
+        root = Path(__file__).resolve().parents[1]
+        if not all((root / name).is_file() for name in (
+                "workspace/Workspace.qml", "workspace/CompositionView.qml", "layouts/mac-inspired-topbar.json")):
+            raise LayoutError("composition setup requires the complete source checkout (workspace/ and layouts/)")
+        try:
+            if __package__:
+                from . import workspace_setup
+            else:
+                import workspace_setup
+        except ImportError as exc:
+            raise LayoutError("composition setup requires PySide6 6.11 or newer with Qt Quick") from exc
+        return workspace_setup.launch(args.service)
     runtime = NativeRuntime(args.service)
     caller_config = os.environ.get("XDG_CONFIG_HOME", "")
     config = Path(caller_config) if caller_config.startswith("/") else Path.home()/".config"

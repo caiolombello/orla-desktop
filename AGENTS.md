@@ -16,6 +16,8 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
   The dock owns the single view/audio state; bar clients borrow a popup host only.
 - `bar/` — Menu Orla top bar (`org.orla.bar`), source-only.
 - `launcher/` — Orla Launcher (C++/Qt Quick), its own CMake build and CTests.
+- `workspace/` — optional checkout-only composition window, launched through
+  `layout setup --service UNIT`; its Python worker owns the existing transactions.
 - `scripts/` — `orla.py` (doctor/build/install/preview/layout), `release.py`, `design.py`, helpers.
 - `tests/` — Python unittest suites plus `*Harness.qml` fixtures; `design_gallery.py` renders captures.
 - `docs/` — product, UX, brand, design system and validation records. `.runtime/` is scratch (gitignored).
@@ -32,6 +34,7 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 - Design guards: `python3 -B -m unittest discover -s tests -p 'test_design_system.py'`
 - Build the applet: `python3 scripts/orla.py build`; release bundle: `python3 scripts/release.py`
 - Managed layout, including update/recovery: `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software python3 -B -m unittest discover -s tests -p 'test_panel_layout*.py'`
+- Composition host/view: `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion python3 -B -m unittest discover -s tests -p 'test_workspace*.py'` (also run with `org.kde.desktop` locally).
 - Portable CI list: `.github/workflows/ci.yml`. Run the QML suites with both `Fusion` and
   `org.kde.desktop` styles when touching shared controls.
 
