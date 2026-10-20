@@ -139,14 +139,23 @@ o par confiável original. Não foram testados falta de energia, filesystem remo
 ou execução em Python mínimo. Não houve instalação na sessão do usuário, recarga
 de Plasma ou validação do fechamento real da janela instalada.
 
-O ciclo nativo da composição tem preparação isolada em VM, ainda sem boot. A
-revisão do driver/provision não encontrou bloqueadores em seu escopo, com 28 testes
-privados e 101 hashes de Source conferidos. O supervisor teve três falhas corrigidas
-nas rodadas de revisão: agora exige EOF da saída terminal, registra falhas de
-preparação do transporte e valida registros de conclusão a cada leitura. Registros
-malformados/incompletos são recusados, e uma falha recebida permanece primária
-diante de timeout, limite de bytes ou falha posterior de log. Os 46 testes sintéticos
-passaram, incluindo os casos que reproduziram os achados. A revisão seguinte
-encontrou um caso de saída não zero da VM cuja causa pode ser substituída por
-timeout posterior; a correção desse registro primário segue pendente.
-Esses resultados não constituem aceite nativo ou sucesso da preparação.
+O driver/provision passou em revisão independente com 28 testes privados. O
+supervisor foi corrigido e aprovado após 69 testes simulados: exige EOF, valida
+registros a cada leitura e preserva a primeira falha diante de problemas posteriores
+de transporte, log e limpeza. Os 101 arquivos de Source e os 110 arquivos do ISO
+foram reconferidos; imagem Fedora e checksum assinado também passaram antes do boot.
+
+O primeiro boot de preparação da VM foi executado. O provisionamento falhou com
+status 153 após a conferência do payload, e o supervisor preservou a falha e encerrou
+seu próprio processo QEMU. A tentativa levou 15,551 s; a imagem resultante e os logs
+foram mantidos, sem retry ou reparo dessa tentativa. A causa ainda depende do log
+interno de provisionamento. Não foram executados NativeRuntime nem a interface de
+composição dentro da VM. Não há aceite nativo ou preparação bem-sucedida.
+
+A CI do PR do instalador revelou uma condição da fixture de colisão: o Qt estava
+somente no venv que executava os testes e não era herdado pelo venv aninhado. A
+fixture passou a fornecer explicitamente os caminhos do runtime ativo. Uma regressão
+reproduziu a falha antes da correção; os nove testes de entrada passaram depois,
+assim como a revisão independente e os dois controles de colisão por remoção de
+marcadores. O código de produção e as exigências de diagnóstico não foram alterados.
+O resultado da nova CI permanece separado desses testes locais.

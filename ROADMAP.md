@@ -505,9 +505,10 @@ C1/X1/X2/DX2 continuam parciais. A sequência de produto é:
    preservando configuração e bancos sintéticos. Isso não é instalação na sessão.
    Continua exigindo serviço explícito, Plasma 6.7.5 e widgets instalados.
    Falta concluir o aceite do instalador e qualificar o fluxo nativo completo.
-   A VM descartável tem imagem assinada e inputs preparados; driver/provision
-   passaram na revisão, e o supervisor corrigido está em nova revisão. Nenhum
-   boot ou ciclo nativo dessa composição foi executado. Reativar
+   A VM descartável teve imagem assinada, inputs e supervisor revisados. O primeiro
+   boot de preparação falhou com status 153; imagem e primeira falha foram
+   preservadas para diagnóstico. NativeRuntime e o ciclo da composição não foram
+   executados. Reativar
    após desativar exige restaurar e revisar um novo plano; criação aditiva e
    reativação direta continuam pendentes, sem um toggle que prometa essas transições.
 2. **Saber a versão e consultar updates no desktop (U1):** versão instalada/em
