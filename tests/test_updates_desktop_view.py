@@ -201,7 +201,7 @@ class ViewTests(process.ProcessFixture):
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.qWait(40)
         self.assertTrue(unknowns.isVisible())
-        self.assertEqual(unknowns.property('text'), 'Dock instalada: não verificada\nDock em execução: não verificada')
+        self.assertEqual(unknowns.property('text'), 'Dock instalada: não encontrada para este usuário\nDock em execução: não verificada')
         self.assertTrue(details.hasActiveFocus())
         self.assertIn('Não confirma a versão carregada no Plasma', self.item('updatesComponentScope').property('text'))
         self.assertEqual(self.argv, [])
@@ -211,7 +211,7 @@ class ViewTests(process.ProcessFixture):
         self.assertEqual(reference.property('text'), '1.2.3')
         self.assertIn('esta cópia do Workspace', self.item('updatesReferenceOrigin').property('text'))
         self.assertIn('bundle verificado', self.item('updatesReferenceOrigin').property('text'))
-        self.assertEqual(unknowns.property('text'), 'Dock instalada: não verificada\nDock em execução: não verificada')
+        self.assertEqual(unknowns.property('text'), 'Dock instalada: não encontrada para este usuário\nDock em execução: não verificada')
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.qWait(40)
         self.assertFalse(unknowns.isVisible())
@@ -219,6 +219,24 @@ class ViewTests(process.ProcessFixture):
         QTest.keyClick(self.window, Qt.Key_Backtab)
         QTest.qWait(35)
         self.assertTrue(self.item('updatesChannel').hasActiveFocus())
+        self.assertEqual(self.argv, [])
+
+    def test_installed_dock_becomes_the_reference_with_its_origin(self):
+        package = self.path / 'data/plasma/plasmoids/org.caiodock.dock'
+        package.mkdir(parents=True)
+        (package / 'metadata.json').write_text(json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9'}}))
+        self.host.resolve_reference()
+        self.host.changed.emit()
+        QTest.qWait(30)
+        self.assertEqual(self.item('updatesReference').property('text'), '0.2.9')
+        self.assertEqual(self.item('updatesReferenceOrigin').property('text'), 'dock instalada para este usuário')
+        self.focus(self.item('updatesDetails'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(40)
+        versions = self.item('updatesComponentVersions')
+        self.assertTrue(versions.isVisible())
+        self.assertEqual(versions.property('text'), 'Dock instalada: 0.2.9 · metadados deste usuário\n'
+                         'Dock em execução: não verificada\nPacote fonte do dock: 1.2.3')
         self.assertEqual(self.argv, [])
 
     def test_future_saved_clock_stays_unreliable_after_formatting(self):

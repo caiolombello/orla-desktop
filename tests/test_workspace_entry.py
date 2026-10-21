@@ -294,7 +294,8 @@ class UpdatesEntryTests(unittest.TestCase):
         self.assertIn('bundle verificado',result['origin'])
         self.assertFalse(result['scopeInitiallyVisible'])
         self.assertTrue(result['scopeVisible'])
-        self.assertEqual(result['components'],'Dock instalada: não verificada\nDock em execução: não verificada')
+        # Isolated XDG data has no dock package: the bundle never stands in for it.
+        self.assertEqual(result['components'],'Dock instalada: não encontrada para este usuário\nDock em execução: não verificada')
         self.assertEqual(result['record'],{})
         for path,data in before.items():self.assertEqual(path.read_bytes(),data)
         for key in ('XDG_CONFIG_HOME','XDG_CACHE_HOME'):

@@ -84,6 +84,84 @@ print(json.dumps(dict(status=status,elapsed=time.monotonic()-started,alive=Path(
             p.symlink_to(ROOT / 'package/metadata.json')
             self.assertIsNone(source_reference(root))
 
+    def test_installed_dock_reads_only_bounded_user_metadata(self):
+        import hashlib
+        import os
+        from scripts.updates_desktop_state import installed_dock, valid_reference
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory) / 'data'
+            self.assertEqual(installed_dock(data), ('absent', None))
+            self.assertFalse(data.exists())
+            package = data / 'plasma/plasmoids/org.caiodock.dock'
+            package.mkdir(parents=True)
+            self.assertEqual(installed_dock(data), ('absent', None))
+            meta = package / 'metadata.json'
+            raw = json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9'}}).encode()
+            meta.write_bytes(raw)
+            status, ref = installed_dock(data)
+            self.assertEqual(status, 'found')
+            self.assertEqual(ref, dict(role='installed', component='dock', origin='user-plasmoid-metadata',
+                                       version='0.2.9', commit=None, digest=hashlib.sha256(raw).hexdigest()))
+            self.assertTrue(valid_reference(ref))
+            self.assertFalse(valid_reference(dict(ref, commit='c' * 40)))
+            invalid = [json.dumps({'KPlugin': {'Id': 'org.other', 'Version': '0.2.9'}}),
+                       json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2'}}),
+                       json.dumps({'KPlugin': {'Id': 'org.caiodock.dock'}}), '{"KPlugin":{}', '[]',
+                       json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9', 'x': 'y' * 17000}})]
+            for text in invalid:
+                with self.subTest(text=text[:40]):
+                    meta.write_text(text)
+                    self.assertEqual(installed_dock(data), ('invalid', None))
+            meta.unlink()
+            meta.symlink_to(ROOT / 'package/metadata.json')
+            self.assertEqual(installed_dock(data), ('invalid', None))
+            meta.unlink()
+            meta.mkdir()
+            self.assertEqual(installed_dock(data), ('invalid', None))
+            meta.rmdir()
+            # A linked package directory is refused instead of being followed.
+            other = Path(directory) / 'elsewhere'
+            other.mkdir()
+            (other / 'metadata.json').write_bytes(raw)
+            package.rmdir()
+            os.symlink(other, package)
+            self.assertEqual(installed_dock(data), ('invalid', None))
+
+    def test_controller_prefers_installed_dock_and_rereads_before_query(self):
+        from PySide6.QtGui import QGuiApplication
+        from test_updates_desktop_process import REF
+        from scripts.updates_desktop import UpdatesController
+        QGuiApplication.instance() or QGuiApplication([])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / 'data/plasma/plasmoids/org.caiodock.dock'
+            calls = []
+
+            def runner(project, reference, channel):
+                calls.append(dict(reference))
+                raise OSError('no child in this test')
+            host = UpdatesController(ROOT, REF, runner=runner, storage_root=root)
+            self.assertEqual((host.state['role'], host.state['installedStatus']), ('source', 'absent'))
+            package.mkdir(parents=True)
+            (package / 'metadata.json').write_text(json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.8'}}))
+            host = UpdatesController(ROOT, REF, runner=runner, storage_root=root)
+            state = host.state
+            self.assertEqual((state['role'], state['version'], state['installedStatus'], state['installedVersion']),
+                             ('installed', '0.2.8', 'found', '0.2.8'))
+            self.assertEqual((state['otherRole'], state['otherVersion']), ('source', REF['version']))
+            # An update between opening and the query is picked up by the query.
+            (package / 'metadata.json').write_text(json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9'}}))
+            host.check()
+            self.assertEqual([(c['role'], c['version']) for c in calls], [('installed', '0.2.9')])
+            self.assertEqual(host.state['record']['result']['installed_version'], '0.2.9')
+            self.assertEqual(host.state['record']['result']['status'], 'unavailable')
+            # Broken metadata falls back to the explicit copy and says why.
+            (package / 'metadata.json').write_text('{}')
+            host.check()
+            self.assertEqual([(c['role'], c['version']) for c in calls][-1], ('source', REF['version']))
+            self.assertEqual((host.state['role'], host.state['installedStatus'], host.state['otherRole']),
+                             ('source', 'invalid', ''))
+
     def test_open_is_passive_actual_ui_and_invalid_reference_disables_check(self):
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import QGuiApplication

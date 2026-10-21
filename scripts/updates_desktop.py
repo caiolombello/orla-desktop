@@ -188,10 +188,11 @@ class UpdatesController(QObject):
     def __init__(self, root, reference=_UNSET, *, runner=None, storage_root=None, opener=None, watchdog_ms=15000, parent=None):
         super().__init__(parent)
         self.root = Path(root).resolve()
-        self.reference = source_reference(self.root) if reference is _UNSET else dict(reference) if isinstance(reference, dict) else None
-        if not valid_reference(self.reference):
-            self.reference = None
         self._source = reference is _UNSET
+        self._explicit = None if self._source else dict(reference) if isinstance(reference, dict) else None
+        self._fallback = None
+        self._installed_status = 'absent'
+        self.reference = None
         self._runner = runner or cli_command
         self._opener = opener
         self._watchdog_ms = watchdog_ms
@@ -204,6 +205,7 @@ class UpdatesController(QObject):
         self._status = 'idle'
         self._record = {}
         self._store = Store(storage_root)
+        self.resolve_reference()
         self._records, self._channel, self._storage_warning = self._store.load()
         self._historical = True
         self._last_completed = {}
@@ -225,9 +227,18 @@ class UpdatesController(QObject):
     def canCheck(self):
         return self.reference is not None and (not self._busy) and (not self._closing)
 
+    def resolve_reference(self):
+        """Prefer the dock installed for this user; otherwise the source or bundle copy."""
+        fallback = source_reference(self.root) if self._source else self._explicit
+        self._fallback = fallback if valid_reference(fallback) else None
+        self._installed_status, installed = self._store.installed_dock()
+        self.reference = installed if installed and valid_reference(installed) else self._fallback
+
     @Property('QVariantMap', notify=changed)
     def state(self):
-        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record())
+        installed = self.reference if self.reference and self.reference['role'] == 'installed' else None
+        other = self._fallback if installed else None
+        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', installedStatus=self._installed_status, installedVersion=installed['version'] if installed else '', otherRole=other['role'] if other else '', otherVersion=other['version'] if other else '', record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record())
 
     def restore_record(self):
         entry = self._records.get(self._channel, {})
@@ -256,13 +267,12 @@ class UpdatesController(QObject):
     def check(self):
         if not self.canCheck:
             return
-        if self._source:
-            self.reference = source_reference(self.root)
-            if not self.reference:
-                self.restore_record()
-                self.changed.emit()
-                return
-            self.restore_record()
+        # Re-read right before the query: an update may have replaced either copy.
+        self.resolve_reference()
+        self.restore_record()
+        if not self.reference:
+            self.changed.emit()
+            return
         self._busy = True
         self._status = 'checking'
         self._opening_failed = False

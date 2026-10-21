@@ -42,4 +42,8 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(host.state['version'], '1.2.3')
             reference['version'] = '9.9.9'
             self.assertEqual(host.state['version'], '1.2.3')
-            self.assertFalse(any(('installed' in key or 'running' in key for key in host.state)))
+            # Installed fields come only from the user's own package metadata,
+            # never from the injected bundle reference; nothing claims the running dock.
+            self.assertEqual((host.state['installedStatus'], host.state['installedVersion']), ('absent', ''))
+            self.assertEqual((host.state['otherRole'], host.state['otherVersion']), ('', ''))
+            self.assertFalse(any(('running' in key for key in host.state)))

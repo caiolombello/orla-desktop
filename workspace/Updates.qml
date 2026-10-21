@@ -78,6 +78,16 @@ Controls.ApplicationWindow {
         if (result.status === "unavailable") return qsTr("A consulta não produziu um resultado válido. Você pode tentar novamente.");
         return "";
     }
+    function componentText() {
+        const status = window.state.installedStatus;
+        let text = status === "found" ? qsTr("Dock instalada: %1 · metadados deste usuário").arg(window.state.installedVersion)
+            : status === "invalid" ? qsTr("Dock instalada: metadados inválidos")
+            : qsTr("Dock instalada: não encontrada para este usuário");
+        text += "\n" + qsTr("Dock em execução: não verificada");
+        if (window.state.otherRole === "source") text += "\n" + qsTr("Pacote fonte do dock: %1").arg(window.state.otherVersion);
+        else if (window.state.otherRole === "bundle") text += "\n" + qsTr("Esta cópia do Workspace: %1").arg(window.state.otherVersion);
+        return text;
+    }
     function displayDate(value) {
         return new Date(value).toLocaleString(Qt.locale(), Locale.ShortFormat);
     }
@@ -128,7 +138,8 @@ Controls.ApplicationWindow {
                     Copy {
                         objectName: "updatesReferenceOrigin"
                         visible: !!window.state.version
-                        text: window.state.role === "source" ? qsTr("pacote fonte do dock") : qsTr("esta cópia do Workspace · bundle verificado")
+                        text: window.state.role === "installed" ? qsTr("dock instalada para este usuário")
+                            : window.state.role === "source" ? qsTr("pacote fonte do dock") : qsTr("esta cópia do Workspace · bundle verificado")
                         color: window.ui.textMuted
                     }
                 }
@@ -207,7 +218,7 @@ Controls.ApplicationWindow {
                 spacing: Style.space.sm
                 Copy {
                     objectName: "updatesComponentVersions"
-                    text: qsTr("Dock instalada: não verificada") + "\n" + qsTr("Dock em execução: não verificada")
+                    text: window.componentText()
                 }
                 Copy {
                     objectName: "updatesComponentScope"
@@ -215,7 +226,7 @@ Controls.ApplicationWindow {
                     color: window.ui.textMuted
                 }
                 Copy {
-                    text: qsTr("Dock, Menu Orla, Launcher e Workspace são componentes distintos. Esta referência não comprova suas versões instaladas ou em execução. Uma release da família não garante arquivos compatíveis para cada componente. Histórico e hashes não autenticam o publicador.")
+                    text: qsTr("Dock, Menu Orla, Launcher e Workspace são componentes distintos. A versão da dock não comprova a dos demais, e uma dock instalada para todo o sistema não é lida. Uma release da família não garante arquivos compatíveis para cada componente. Histórico e hashes não autenticam o publicador.")
                     color: window.ui.textMuted
                 }
                 Copy {
