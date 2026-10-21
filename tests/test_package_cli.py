@@ -786,5 +786,442 @@ class ThemeServiceInstallTests(unittest.TestCase):
         self.assertEqual(errors.getvalue(), "")
 
 
+class AddonServiceInstallTests(unittest.TestCase):
+    setUp = PackageCliTests.setUp
+    tearDown = PackageCliTests.tearDown
+    runtime_names = ("addon_service.py", "addon_worker.py", "addon_format.py", "addon_io.py", "addon_store.py")
+
+    def addon_archive(self):
+        for name in self.runtime_names:
+            (self.root / "package/contents/code" / name).write_text("# inert trusted-host fixture\n")
+        return caiodock.build(self.root, self.root)
+
+    def service_path(self, data):
+        return data / "dbus-1/services/org.orla.Addons.service"
+
+    def fake_command(self, command, **kwargs):
+        if command[0] == "/fake/kpackagetool6":
+            installed = Path(kwargs["env"]["XDG_DATA_HOME"]) / "plasma/plasmoids" / caiodock.PACKAGE_ID
+            if command[3] == "--remove":
+                shutil.rmtree(installed)
+            else:
+                with zipfile.ZipFile(command[4]) as archive:
+                    archive.extractall(installed)
+        else:
+            self.assertEqual(command, ["/fake/busctl", "--user", "--timeout=8s", "call",
+                "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReloadConfig"])
+        return mock.Mock(returncode=0)
+
+    def prepare_runtime(self, stack):
+        stack.enter_context(mock.patch.object(caiodock.shutil, "which", side_effect=lambda name: "/fake/" + name))
+        stack.enter_context(mock.patch.object(caiodock, "_plasma_version", return_value=(6, 7, 5)))
+        stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", return_value=object()))
+        stack.enter_context(mock.patch.object(caiodock, "_session_bus_available", return_value=True))
+        return stack.enter_context(mock.patch.object(caiodock.subprocess, "run", side_effect=self.fake_command))
+
+    def test_addon_default_install_is_isolated_lazy_and_keeps_exact_mapping_on_upgrade(self):
+        import shlex
+        archive = self.addon_archive()
+        data = self.root / "data with spaces"
+        service = self.service_path(data)
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            self.assertEqual(caiodock.install(archive, data), "--install")
+            bridge = data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/code/addon_service.py"
+            expected = ("# Managed by Orla Dock addon host\n[D-BUS Service]\nName=org.orla.Addons\nExec="
+                        + shlex.join([sys.executable, "-I", "-B", str(bridge), "--serve"]) + "\n").encode()
+            self.assertEqual(service.read_bytes(), expected)
+            service.chmod(0o600)
+            before = service.stat()
+            self.assertEqual(caiodock.install(archive, data), "--upgrade")
+            self.assertEqual(service.read_bytes(), expected)
+            self.assertEqual((service.stat().st_mtime_ns, service.stat().st_mode), (before.st_mtime_ns, before.st_mode))
+        self.assertEqual([call.args[0][3] for call in commands.call_args_list if call.args[0][0].endswith("kpackagetool6")],
+                         ["--install", "--upgrade"])
+        self.assertEqual([call.args[0][-1] for call in commands.call_args_list if call.args[0][0].endswith("busctl")],
+                         ["ReloadConfig", "ReloadConfig"])
+        self.assertFalse((service.parent / "org.caiodock.Integrations.service").exists())
+        self.assertFalse((data / "orla-desktop").exists())
+
+    def test_addon_partial_archives_refuse_before_dependencies_or_any_mutation(self):
+        archive = self.addon_archive()
+        with zipfile.ZipFile(archive) as source:
+            entries = {name: source.read(name) for name in source.namelist()}
+        for missing in self.runtime_names:
+            with self.subTest(missing=missing):
+                partial = self.root / (missing + ".zip")
+                with zipfile.ZipFile(partial, "w") as output:
+                    for name, content in entries.items():
+                        if name != "contents/code/" + missing:
+                            output.writestr(name, content)
+                data = self.root / missing
+                with contextlib.ExitStack() as stack:
+                    commands = self.prepare_runtime(stack)
+                    probe = stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", side_effect=AssertionError("too early")))
+                    with self.assertRaisesRegex(caiodock.PackageError, "incomplete addon runtime"):
+                        caiodock.install(partial, data)
+                    commands.assert_not_called()
+                    probe.assert_not_called()
+                self.assertFalse(data.exists())
+
+    def test_addon_archive_special_runtime_entries_refuse_before_package_command(self):
+        import stat
+        archive = self.addon_archive()
+        with zipfile.ZipFile(archive) as source:
+            entries = {name: source.read(name) for name in source.namelist()}
+        target = "contents/code/addon_worker.py"
+        for kind in (stat.S_IFDIR, stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFLNK, "duplicate"):
+            with self.subTest(kind=kind):
+                malformed = self.root / (str(kind) + ".zip")
+                with zipfile.ZipFile(malformed, "w") as output:
+                    for name, content in entries.items():
+                        info = zipfile.ZipInfo(name)
+                        info.create_system = 3
+                        info.external_attr = ((kind if isinstance(kind, int) and name == target else stat.S_IFREG) | 0o644) << 16
+                        output.writestr(info, content)
+                    if kind == "duplicate":
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", UserWarning)
+                            output.writestr(target, "# alternate runtime")
+                with contextlib.ExitStack() as stack:
+                    commands = self.prepare_runtime(stack)
+                    with self.assertRaises(caiodock.PackageError):
+                        caiodock.install(malformed, self.root / str(kind))
+                    commands.assert_not_called()
+
+    def test_addon_unsafe_mapping_refuses_even_without_runtime_or_dependencies(self):
+        archive = caiodock.build(self.root, self.root)
+        data = self.root / "data"
+        service = self.service_path(data)
+        service.parent.mkdir(parents=True)
+        sentinel = self.root / "foreign"
+        sentinel.write_text("foreign target")
+        for kind in ("marker", "foreign", "oversize", "directory", "fifo", "symlink", "dangling", "hardlink"):
+            with self.subTest(kind=kind), contextlib.ExitStack() as stack:
+                if kind == "directory":
+                    service.mkdir()
+                    stack.callback(service.rmdir)
+                elif kind == "fifo":
+                    os.mkfifo(service)
+                    stack.callback(service.unlink)
+                elif kind in ("symlink", "dangling"):
+                    service.symlink_to(sentinel if kind == "symlink" else self.root / "absent")
+                    stack.callback(service.unlink)
+                elif kind == "hardlink":
+                    os.link(sentinel, service)
+                    stack.callback(service.unlink)
+                else:
+                    service.write_bytes({"marker": b"# Managed by Orla Dock addon host\n",
+                                         "foreign": b"[D-BUS Service]\nName=org.orla.Addons\nExec=foreign\n",
+                                         "oversize": b"x" * 100000}[kind])
+                    stack.callback(service.unlink)
+                commands = self.prepare_runtime(stack)
+                probe = stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", side_effect=AssertionError("dependency probe must follow ownership")))
+                for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                    with self.assertRaises(caiodock.PackageError):
+                        operation()
+                commands.assert_not_called()
+                probe.assert_not_called()
+                self.assertTrue(service.exists() or service.is_symlink())
+                self.assertEqual(sentinel.read_text(), "foreign target")
+
+    def test_addon_unsafe_service_parents_refuse_before_package_or_dependency_probes(self):
+        archive = self.addon_archive()
+        for component in ("data", "dbus-1", "services"):
+            for kind in ("symlink", "file"):
+                with self.subTest(component=component, kind=kind):
+                    data = self.root / (component + kind) / "data"
+                    parent = {"data": data, "dbus-1": data / "dbus-1", "services": data / "dbus-1/services"}[component]
+                    parent.parent.mkdir(parents=True)
+                    target = self.root / (component + kind + "-target")
+                    target.mkdir()
+                    if kind == "symlink":
+                        parent.symlink_to(target, target_is_directory=True)
+                    else:
+                        parent.write_text("preserved parent")
+                    with contextlib.ExitStack() as stack:
+                        commands = self.prepare_runtime(stack)
+                        for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                            with self.assertRaises(caiodock.PackageError):
+                                operation()
+                        commands.assert_not_called()
+                    self.assertEqual(list(target.iterdir()), [])
+
+    def test_addon_missing_dependencies_remove_only_exact_owned_mapping_after_commit(self):
+        archive = self.addon_archive()
+        for absent in ("PySide6.QtCore", "PySide6.QtDBus", "sessão D-Bus do usuário"):
+            with self.subTest(absent=absent), contextlib.ExitStack() as stack:
+                commands = self.prepare_runtime(stack)
+                data = self.root / absent
+                caiodock.install(archive, data)
+                service = self.service_path(data)
+                legacy = service.parent / "org.caiodock.Integrations.service"
+                legacy.write_text("# Managed by CaioDock\nlegacy opt-in preserved\n")
+                preserved = [data / "orla-desktop/addons/registry.json", data / "config/preferences", data / "producer/state"]
+                for path in preserved:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("untouched sentinel")
+                commands.reset_mock()
+                stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", side_effect=lambda name: None if name == absent else object()))
+                stack.enter_context(mock.patch.object(caiodock, "_session_bus_available", return_value=absent != "sessão D-Bus do usuário"))
+                with contextlib.redirect_stderr(io.StringIO()) as errors:
+                    caiodock.install(archive, data)
+                self.assertFalse(service.exists())
+                self.assertIn(absent, errors.getvalue())
+                self.assertIn("dock instalado", errors.getvalue())
+                self.assertIn("reinstale", errors.getvalue())
+                self.assertLess(len(errors.getvalue()), 1000)
+                self.assertEqual(legacy.read_text(), "# Managed by CaioDock\nlegacy opt-in preserved\n")
+                for path in preserved:
+                    self.assertEqual(path.read_text(), "untouched sentinel")
+                self.assertEqual(commands.call_args_list[0].args[0][3], "--upgrade")
+
+    def test_addon_source_only_bundle_does_not_probe_or_register_and_drops_old_owned_mapping(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        with contextlib.ExitStack() as stack:
+            self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            for name in ("addon_service.py", "addon_worker.py"):
+                (self.root / "package/contents/code" / name).unlink()
+            source_only = caiodock.build(self.root, self.root)
+            probe = stack.enter_context(mock.patch.object(caiodock.importlib.util, "find_spec", side_effect=AssertionError("old bundle must not probe Qt")))
+            caiodock.install(source_only, data)
+            self.assertFalse(self.service_path(data).exists())
+            caiodock.install(source_only, self.root / "old-fresh")
+            self.assertFalse(self.service_path(self.root / "old-fresh").exists())
+            probe.assert_not_called()
+
+    def test_addon_failed_package_operations_preserve_all_mappings_and_user_state(self):
+        ThemeServiceInstallTests.theme_archive(self)
+        archive = self.addon_archive()
+        data = self.root / "data"
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            caiodock.install(archive, data, with_integrations=True)
+            services = list(self.service_path(data).parent.iterdir())
+            self.assertEqual(len(services), 3)
+            before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in services}
+            commands.side_effect = lambda *args, **kwargs: mock.Mock(returncode=1)
+            for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                commands.reset_mock()
+                with self.assertRaisesRegex(caiodock.PackageError, "command failed"):
+                    operation()
+                self.assertEqual({path: (path.read_bytes(), path.stat().st_mtime_ns) for path in services}, before)
+                self.assertEqual(commands.call_count, 1)
+
+    def test_addon_uninstall_preserves_registry_preferences_and_producer_data_even_when_package_absent(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        sentinels = [data / "orla-desktop/addons/registry.json", data / "config/profile", data / "producer/exports/data"]
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            owned = self.service_path(data).read_bytes()
+            for path in sentinels:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("preserve")
+            self.assertTrue(caiodock.uninstall(data))
+            self.assertFalse(self.service_path(data).exists())
+            self.service_path(data).write_bytes(owned)
+            commands.reset_mock()
+            self.assertFalse(caiodock.uninstall(data))
+            commands.assert_not_called()
+            self.assertFalse(self.service_path(data).exists())
+        for path in sentinels:
+            self.assertEqual(path.read_text(), "preserve")
+
+    def test_addon_themes_and_opt_in_legacy_combine_one_reload_after_all_mappings(self):
+        ThemeServiceInstallTests.theme_archive(self)
+        archive = self.addon_archive()
+        data = self.root / "data"
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            def run(command, **kwargs):
+                if command[0] == "/fake/busctl":
+                    self.assertEqual({path.name for path in self.service_path(data).parent.iterdir()},
+                        {"org.orla.Addons.service", "org.orla.Themes.service", "org.caiodock.Integrations.service"})
+                return self.fake_command(command, **kwargs)
+            commands.side_effect = run
+            caiodock.install(archive, data, with_integrations=True)
+        self.assertEqual(len(commands.call_args_list), 2)
+        self.assertEqual(commands.call_args_list[-1].args[0][-1], "ReloadConfig")
+
+    def test_addon_bad_activation_paths_refuse_before_package_mutation(self):
+        archive = self.addon_archive()
+        for bad in ("relative-python", "/python\nExec=foreign", "/python\r", "/python\x00"):
+            with self.subTest(executable=bad), contextlib.ExitStack() as stack:
+                commands = self.prepare_runtime(stack)
+                stack.enter_context(mock.patch.object(caiodock.sys, "executable", bad))
+                with self.assertRaisesRegex(caiodock.PackageError, "addon activation"):
+                    caiodock.install(archive, self.root / "data")
+                commands.assert_not_called()
+        for bad in ("data\nExec=foreign", "data\r", "data\x00"):
+            with self.subTest(data=bad), contextlib.ExitStack() as stack:
+                commands = self.prepare_runtime(stack)
+                with self.assertRaisesRegex(caiodock.PackageError, "addon activation"):
+                    caiodock.install(archive, self.root / bad)
+                commands.assert_not_called()
+
+    def test_addon_installed_runtime_checked_before_even_reusing_exact_mapping(self):
+        archive = self.addon_archive()
+        for missing in self.runtime_names:
+            for kind in ("missing", "symlink", "directory"):
+                with self.subTest(member=missing, kind=kind), contextlib.ExitStack() as stack:
+                    commands = self.prepare_runtime(stack)
+                    data = self.root / (missing + kind)
+                    caiodock.install(archive, data)
+                    service = self.service_path(data)
+                    before = service.read_bytes()
+                    def incomplete(command, **kwargs):
+                        result = self.fake_command(command, **kwargs)
+                        member = data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/code" / missing
+                        member.unlink()
+                        if kind == "symlink":
+                            member.symlink_to(self.root / "package/contents/code" / missing)
+                        elif kind == "directory":
+                            member.mkdir()
+                        return result
+                    commands.side_effect = incomplete
+                    commands.reset_mock()
+                    with self.assertRaisesRegex(caiodock.PackageError, "dock instalado; registro de addons falhou"):
+                        caiodock.install(archive, data)
+                    self.assertEqual(service.read_bytes(), before)
+                    self.assertEqual(commands.call_count, 1)
+
+    def test_addon_registration_collision_after_commit_reports_installed_and_preserves_foreign(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        service = self.service_path(data)
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            def collision(command, **kwargs):
+                result = self.fake_command(command, **kwargs)
+                service.parent.mkdir(parents=True, exist_ok=True)
+                service.write_text("foreign during package commit")
+                return result
+            commands.side_effect = collision
+            with self.assertRaisesRegex(caiodock.PackageError, "dock instalado; registro de addons falhou; pacote não foi revertido"):
+                caiodock.install(archive, data)
+            self.assertEqual(commands.call_count, 1)
+        self.assertEqual(service.read_text(), "foreign during package commit")
+        self.assertTrue((data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/ui/main.qml").is_file())
+
+    def test_addon_mapping_edited_exec_name_mode_and_marker_are_not_adopted(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            service = self.service_path(data)
+            original = service.read_text()
+            for content in (original.replace("--serve", "--other"), original.replace("Name=org.orla.Addons", "Name=org.foreign"),
+                            original.replace("# Managed by Orla Dock addon host", "# foreign"), original + "extra\n"):
+                service.write_text(content)
+                commands.reset_mock()
+                for operation in (lambda: caiodock.install(archive, data), lambda: caiodock.uninstall(data)):
+                    with self.assertRaises(caiodock.PackageError):
+                        operation()
+                commands.assert_not_called()
+                self.assertEqual(service.read_text(), content)
+            service.write_text(original)
+            service.chmod(0o666)
+            commands.reset_mock()
+            with self.assertRaises(caiodock.PackageError):
+                caiodock.install(archive, data)
+            commands.assert_not_called()
+
+    def test_addon_runtime_parent_symlink_after_package_commit_cannot_register(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        target = self.root / "elsewhere-code"
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            def linked(command, **kwargs):
+                result = self.fake_command(command, **kwargs)
+                code = data / "plasma/plasmoids" / caiodock.PACKAGE_ID / "contents/code"
+                code.rename(target)
+                code.symlink_to(target, target_is_directory=True)
+                return result
+            commands.side_effect = linked
+            with self.assertRaisesRegex(caiodock.PackageError, "dock instalado; registro de addons falhou"):
+                caiodock.install(archive, data)
+            self.assertEqual(commands.call_count, 1)
+        self.assertFalse(self.service_path(data).exists())
+        self.assertEqual(len(list(target.glob("addon_*.py"))), 5)
+
+    def test_addon_foreign_mapping_appearing_during_uninstall_is_preserved(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        service = self.service_path(data)
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            caiodock.install(archive, data)
+            def collision(command, **kwargs):
+                result = self.fake_command(command, **kwargs)
+                service.write_text("foreign during removal")
+                return result
+            commands.side_effect = collision
+            commands.reset_mock()
+            with self.assertRaisesRegex(caiodock.PackageError, "pacote removido ou ausente; registro de addons preservado"):
+                caiodock.uninstall(data)
+            self.assertEqual(commands.call_count, 1)
+        self.assertEqual(service.read_text(), "foreign during removal")
+        self.assertFalse((data / "plasma/plasmoids" / caiodock.PACKAGE_ID).exists())
+
+    def test_addon_mapping_publication_is_complete_exclusive_and_cleans_failed_temp(self):
+        archive = self.addon_archive()
+        actual_link = os.link
+        for collision in (False, True):
+            with self.subTest(collision=collision), contextlib.ExitStack() as stack:
+                commands = self.prepare_runtime(stack)
+                data = self.root / str(collision)
+                service = self.service_path(data)
+                def publish(source, destination, **kwargs):
+                    self.assertFalse(service.exists())
+                    content = Path(source).read_bytes()
+                    self.assertIn(b"Name=org.orla.Addons\nExec=", content)
+                    self.assertTrue(content.endswith(b"addon_service.py --serve\n") or content.endswith(b"addon_service.py' --serve\n"))
+                    if collision:
+                        service.write_text("foreign before publication")
+                    result = actual_link(source, destination, **kwargs)
+                    self.assertEqual(service.read_bytes(), content)
+                    return result
+                stack.enter_context(mock.patch.object(caiodock.os, "link", side_effect=publish))
+                if collision:
+                    with self.assertRaisesRegex(caiodock.PackageError, "dock instalado; registro de addons falhou"):
+                        caiodock.install(archive, data)
+                    self.assertEqual(service.read_text(), "foreign before publication")
+                    self.assertEqual(commands.call_count, 1)
+                else:
+                    caiodock.install(archive, data)
+                    self.assertEqual(service.stat().st_nlink, 1)
+                self.assertEqual(list(service.parent.glob(".org.orla.Addons-*")), [])
+
+    def test_addon_retry_refresh_failure_keeps_mapping_and_does_not_start_any_service(self):
+        archive = self.addon_archive()
+        data = self.root / "data"
+        with contextlib.ExitStack() as stack:
+            commands = self.prepare_runtime(stack)
+            def failed_refresh(command, **kwargs):
+                if command[0] == "/fake/busctl":
+                    self.assertEqual(command[-1], "ReloadConfig")
+                    raise subprocess.TimeoutExpired("busctl", 10)
+                return self.fake_command(command, **kwargs)
+            commands.side_effect = failed_refresh
+            with contextlib.redirect_stderr(io.StringIO()) as errors:
+                caiodock.install(archive, data)
+            self.assertIn("dock instalado", errors.getvalue())
+            self.assertIn("addons", errors.getvalue())
+            service = self.service_path(data)
+            before = (service.read_bytes(), service.stat().st_mtime_ns)
+            commands.side_effect = self.fake_command
+            commands.reset_mock()
+            caiodock.install(archive, data)
+            self.assertEqual((service.read_bytes(), service.stat().st_mtime_ns), before)
+            self.assertEqual(commands.call_count, 2)
+            self.assertEqual(commands.call_args.args[0][-1], "ReloadConfig")
+
 if __name__ == "__main__":
     unittest.main()
