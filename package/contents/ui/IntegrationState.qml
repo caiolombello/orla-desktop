@@ -79,7 +79,7 @@ Item {
         const parts = [];
         if (peripherals.source === "addon") parts.push(qsTr("exportação local"));
         if (typeof peripherals.generatedAt === "number" && isFinite(peripherals.generatedAt))
-            parts.push(qsTr("atualizado em %1").arg(Qt.formatDateTime(new Date(peripherals.generatedAt * 1000), "d MMM, HH:mm")));
+            parts.push(qsTr("atualizado em %1").arg(new Date(peripherals.generatedAt * 1000).toLocaleString(Qt.locale(), "d MMM, HH:mm")));
         if (peripherals.limited === true) parts.push(qsTr("modelo limitado"));
         return parts.join(" · ");
     }

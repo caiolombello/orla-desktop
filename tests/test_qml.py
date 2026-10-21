@@ -272,6 +272,18 @@ Item {
         self.assertTrue(bounds.contains(top_left), (bounds, top_left))
         self.assertTrue(bounds.contains(bottom_right), (bounds, bottom_right))
 
+    def test_calendar_title_uses_the_user_locale(self):
+        from PySide6.QtCore import QDate, QDateTime, QLocale, QTime
+        previous = QLocale()
+        self.addCleanup(QLocale.setDefault, previous)
+        QLocale.setDefault(QLocale("pt_BR"))
+        moment = QDateTime(QDate(2026, 10, 21), QTime(12, 0))
+        self.assertTrue(self.dock.setProperty("now", moment))
+        title = self.window.findChild(QObject, "calendarPopup").property("title")
+        expected = QLocale("pt_BR").toString(moment.date(), "MMMM yyyy")
+        self.assertEqual(title, expected[:1].upper() + expected[1:])
+        self.assertNotIn("October", title)
+
     def test_native_label_remaps_to_each_hovered_slot(self):
         # A visible Wayland popup keeps its first anchor; the label must re-map
         # for a new slot instead of only changing its text.
