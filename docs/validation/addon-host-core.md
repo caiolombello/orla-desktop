@@ -247,7 +247,9 @@ Achados desta rodada:
    `8c169cb` mantém 100 ms só durante um worker, usa 5 s de reserva parado e
    encerra o host por evento de arquivo: 10 ms a cada 20 s, e saída 34 ms após
    alterar um módulo. O bloco portátil do CI passou localmente em Qt 6.12 com
-   286 testes. Essa correção ainda não foi instalada na sessão de uso.
+   286 testes. Instalada depois na sessão de uso, sem recarregar o Plasma: o
+   host antigo saiu ao ver o código novo e o seguinte gastou 0 ms de CPU em
+   30 s parado, contra 270 ms antes.
 
 Fora do escopo de complementos, a mesma rodada observou dois defeitos anteriores
 da dock. O rótulo de hover troca o texto, mas permanece onde apareceu enquanto
