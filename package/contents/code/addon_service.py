@@ -12,6 +12,10 @@ import time
 BUS = 'org.orla.Addons'
 OBJECT = '/org/orla/Addons'
 INTERFACE = 'org.orla.Addons1'
+# A periodic dock reader keeps the host alive, so idle checks must stay cheap.
+# File events retire it after an update; the slow check is only a fallback.
+FLIGHT_WATCH_MS = 100
+IDLE_WATCH_MS = 5000
 
 
 def create_service(app, bus, *, base=None, process_factory=None, clock=time.monotonic,
@@ -21,7 +25,7 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
     Explicit dependencies permit owned QCore/QProcess tests with a fake bus.
     Runtime source pins expire with this object; they are never written to disk.
     """
-    from PySide6.QtCore import QObject, QProcess, QTimer, Slot
+    from PySide6.QtCore import QFileSystemWatcher, QObject, QProcess, QTimer, Slot
     from PySide6.QtDBus import QDBusMessage
 
     base = Path(__file__).absolute().parent if base is None else Path(base).absolute()
@@ -65,7 +69,11 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
             self.reap_timer.timeout.connect(lambda: self.cleanup_failed())
             self.watch = QTimer(self)
             self.watch.timeout.connect(lambda: self.watch_identity())
-            self.watch.start(100)
+            self.watch.start(IDLE_WATCH_MS)
+            self.sources = QFileSystemWatcher(self)
+            self.sources.addPaths([str(base), *(str(base / name) for name in worker.SOURCE_NAMES)])
+            self.sources.fileChanged.connect(lambda path: self.watch_identity())
+            self.sources.directoryChanged.connect(lambda path: self.watch_identity())
             self.idle.start(30000)
 
         def unchanged(self):
@@ -149,6 +157,7 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
                 self.process_error(error) if self.process is process else None)
             self.deadline = clock() + 3.0
             self.work.start(3000)
+            self.watch.setInterval(FLIGHT_WATCH_MS)
             self.dispatched = True
             process.start()
             return ''
@@ -281,6 +290,7 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
                 self.watch.stop()
                 app.quit()
             else:
+                self.watch.setInterval(IDLE_WATCH_MS)
                 self.idle.start(30000)
 
         def watch_identity(self):
