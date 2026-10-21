@@ -7,10 +7,11 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 import threading
 import time
 import unittest
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QCoreApplication, QEvent, QThread
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtTest import QSignalSpy, QTest
 from scripts.workspace_setup import WorkspaceController
+from scripts.panel_layout import LayoutError
 
 
 class Session:
@@ -23,6 +24,8 @@ class Session:
     def read(self, connector=""):
         self.calls.append(("read", connector, QThread.currentThread()))
         self.gate.wait(5)
+        if isinstance(self.failure, Exception):
+            raise self.failure
         if self.failure:
             raise ValueError("private path /private/person/calendar")
         return dict(phase="UNMANAGED", shellRunning=True, inventory=None, recordPresent=False)
@@ -109,6 +112,189 @@ class HostTests(unittest.TestCase):
         self.assertTrue(self.host.problem)
         self.assertNotIn("private", self.host.problem)
         self.assertEqual(self.host.state["phase"], "UNKNOWN")
+
+    def test_initial_read_failure_facts_survive_join_and_worker_deletion(self):
+        self.session.failure = LayoutError("synthetic private payload", code="COMMAND_EXIT",
+                                           operation="UNIT_SHOW", returncode=6,
+                                           hashes={"expectedSha256": "a" * 64, "actualSha256": "b" * 64})
+        self.assertTrue(self.host.refresh(""))
+        job = self.host.findChild(QThread)
+        destroyed = QSignalSpy(job.destroyed)
+        self.wait()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.assertEqual(destroyed.count(), 1)
+        expected = {"code": "COMMAND_EXIT", "operation": "UNIT_SHOW", "returncode": 6,
+                    "expectedSha256": "a" * 64, "actualSha256": "b" * 64}
+        self.assertEqual(self.host.failureDiagnostics, expected)
+        self.assertEqual(self.host.property("failureDiagnostics"), expected)
+        self.assertEqual(self.host.state, {"phase": "UNKNOWN"})
+        self.assertEqual(self.host.problem, "Não foi possível concluir a operação. Atualize a leitura para verificar o layout e a recuperação.")
+        self.assertEqual(len(self.session.calls), 1)
+
+    def test_failure_facts_are_copied_before_delivery_and_on_every_property_read(self):
+        error = LayoutError("synthetic private payload", code="INVENTORY_MISMATCH",
+                            hashes={"expectedSha256": "c" * 64, "actualSha256": "d" * 64})
+        self.session.failure = error
+        self.assertTrue(self.host.refresh(""))
+        self.assertTrue(self.host.findChild(QThread).wait(1000))
+        error.facts.clear()
+        error.facts["private"] = {"account": "synthetic account"}
+        self.wait()
+        expected = {"code": "INVENTORY_MISMATCH", "operation": "TRANSACTION", "returncode": None,
+                    "expectedSha256": "c" * 64, "actualSha256": "d" * 64}
+        self.assertEqual(self.host.failureDiagnostics, expected)
+        exposed = self.host.failureDiagnostics
+        exposed["code"] = "private replacement"
+        exposed["nested"] = {"payload": []}
+        via_qt = self.host.property("failureDiagnostics")
+        via_qt.clear()
+        self.assertEqual(self.host.failureDiagnostics, expected)
+
+    def test_typed_failure_facts_are_resanitized_with_canonical_bounds(self):
+        class PayloadString(str):
+            private_payload = "synthetic private payload"
+        class PayloadInt(int):
+            private_payload = "synthetic private payload"
+        class PayloadDict(dict):
+            def get(self, *args):
+                raise AssertionError("custom mapping must not be read")
+        defaults = {"code": "LAYOUT_REFUSAL", "operation": "TRANSACTION", "returncode": None}
+        cases = [
+            ({"code": "COMMAND_TIMEOUT", "operation": "BUS_OWNER", "returncode": -128},
+             {"code": "COMMAND_TIMEOUT", "operation": "BUS_OWNER", "returncode": -128}),
+            ({"code": "COMMAND_EXIT", "operation": "EVALUATE_SCRIPT", "returncode": 255},
+             {"code": "COMMAND_EXIT", "operation": "EVALUATE_SCRIPT", "returncode": 255}),
+            ({"code": "private" * 10000, "operation": "private account", "returncode": "private path"}, defaults),
+            ({"code": [], "operation": {}, "returncode": True}, defaults),
+            ({"code": PayloadString("COMMAND_EXIT"), "operation": PayloadString("UNIT_SHOW"),
+              "returncode": PayloadInt(6)}, defaults),
+            (None, defaults), ([], defaults), ("private payload", defaults), (PayloadDict(), defaults),
+        ]
+        for returncode in (-129, 256, 10**100, False, 6.0, float("nan"), object(), LayoutError):
+            cases.append(({"returncode": returncode}, defaults))
+        for actual in ("A" * 64, "b" * 63, "b" * 65, "b" * 64 + "\n", "é" * 64,
+                       ["private payload"], PayloadString("b" * 64), None):
+            cases.append(({"expectedSha256": "a" * 64, "actualSha256": actual}, defaults))
+        cases.append(({"expectedSha256": "a" * 64}, defaults))
+        for index, (facts, expected) in enumerate(cases):
+            with self.subTest(case=index):
+                error = LayoutError("synthetic private path/account/widget payload")
+                error.facts = facts
+                error.diagnostics = {"primary": {"raw": "private payload"}}
+                self.session.failure = error
+                self.assertTrue(self.host.refresh(""))
+                self.wait()
+                self.assertEqual(self.host.failureDiagnostics, expected)
+                self.assertNotIn("private", self.host.problem)
+                self.assertEqual(self.host.state, {"phase": "UNKNOWN"})
+
+    def test_only_allowed_failure_fields_survive_even_with_valid_hashes(self):
+        error = LayoutError("synthetic private payload")
+        error.facts = {"code": "INVENTORY_MISMATCH", "operation": "TRANSACTION", "returncode": 0,
+                       "expectedSha256": "a" * 64, "actualSha256": "b" * 64,
+                       "path": "/synthetic/private", "account": "synthetic account",
+                       "widgets": [{"configuration": "private"}], "exception": error,
+                       "trace": object(), "stage": "private", "class": LayoutError}
+        self.session.failure = error
+        self.host.refresh(""); self.wait()
+        self.assertEqual(self.host.failureDiagnostics, {
+            "code": "INVENTORY_MISMATCH", "operation": "TRANSACTION", "returncode": 0,
+            "expectedSha256": "a" * 64, "actualSha256": "b" * 64})
+
+    def test_next_accepted_request_clears_diagnostics_and_next_failure_updates_them(self):
+        changed = QSignalSpy(self.host.changed)
+        self.session.failure = LayoutError("synthetic failure", code="COMMAND_EXIT", returncode=6)
+        self.host.refresh(""); self.wait()
+        prior_notifications = changed.count()
+        self.session.failure = LayoutError("synthetic next failure", code="COMMAND_IO", operation="VERSION")
+        self.session.gate.clear()
+        self.assertTrue(self.host.refresh(""))
+        self.assertEqual(self.host.failureDiagnostics, {})
+        self.assertEqual(changed.count(), prior_notifications + 1)
+        self.wait()
+        self.assertEqual(self.host.failureDiagnostics,
+                         {"code": "COMMAND_IO", "operation": "VERSION", "returncode": None})
+        self.session.failure = False
+        self.assertTrue(self.host.refresh(""))
+        self.assertEqual(self.host.failureDiagnostics, {})
+        self.wait()
+        self.assertEqual(self.host.failureDiagnostics, {})
+        self.assertEqual(self.host.state["phase"], "UNMANAGED")
+        self.assertEqual(self.host.problem, "")
+
+    def test_busy_and_closing_rejections_preserve_pending_and_completed_failure(self):
+        self.session.failure = LayoutError("synthetic failure", code="COMMAND_EXIT", returncode=6)
+        self.session.gate.clear()
+        self.assertTrue(self.host.refresh(""))
+        self.assertFalse(self.host.refresh(""))
+        self.assertFalse(self.host.prepareApply("DP-1", [28]))
+        self.assertFalse(self.host.prepareOperation("restore"))
+        self.assertFalse(self.host.confirm())
+        self.assertFalse(self.host.discard())
+        self.assertEqual(self.host.failureDiagnostics, {})
+        close = QSignalSpy(self.host.closeReady)
+        self.assertFalse(self.host.requestClose())
+        self.assertFalse(self.host.refresh(""))
+        self.wait()
+        expected = {"code": "COMMAND_EXIT", "operation": "TRANSACTION", "returncode": 6}
+        self.assertEqual(self.host.failureDiagnostics, expected)
+        self.assertEqual(close.count(), 1)
+        for accepted in (self.host.refresh(""), self.host.prepareApply("DP-1", [28]),
+                         self.host.prepareOperation("recover"), self.host.confirm(), self.host.discard()):
+            self.assertFalse(accepted)
+        self.assertTrue(self.host.requestClose())
+        self.assertEqual(close.count(), 1)
+        self.assertEqual(self.host.failureDiagnostics, expected)
+        self.assertEqual(len(self.session.calls), 1)
+
+    def test_rejected_actions_and_monitor_changes_do_not_erase_prior_failure(self):
+        self.session.failure = LayoutError("synthetic failure", code="COMMAND_IO")
+        self.host.refresh(""); self.wait()
+        expected = {"code": "COMMAND_IO", "operation": "TRANSACTION", "returncode": None}
+        self.assertFalse(self.host.prepareOperation("unsupported"))
+        self.assertFalse(self.host.confirm())
+        self.host.set_connectors(["DP-2"])
+        self.assertEqual(self.host.failureDiagnostics, expected)
+        self.assertTrue(self.host.discard())
+        self.assertEqual(self.host.failureDiagnostics, {})
+
+    def test_unknown_exceptions_have_fixed_diagnostics_without_retaining_the_exception(self):
+        import gc
+        import weakref
+        class UnknownFailure(Exception):
+            pass
+        error = UnknownFailure("synthetic private path/account/widget payload")
+        error.facts = {"code": "COMMAND_EXIT", "operation": "UNIT_SHOW", "returncode": 6}
+        error_ref = weakref.ref(error)
+        self.session.failure = error
+        del error
+        self.host.refresh(""); self.wait()
+        self.session.failure = False
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
+        self.assertIsNone(error_ref())
+        self.assertEqual(self.host.failureDiagnostics,
+                         {"code": "UNEXPECTED_FAILURE", "operation": "TRANSACTION", "returncode": None})
+        self.assertNotIn("private", self.host.problem)
+
+    def test_controller_import_and_construction_keep_native_and_update_paths_lazy(self):
+        from pathlib import Path
+        import subprocess
+        import sys
+        program = """import sys
+from scripts import panel_layout
+def forbidden(*args, **kwargs):
+    raise AssertionError('native runtime must stay unconstructed')
+panel_layout.NativeRuntime = forbidden
+from scripts.workspace_setup import WorkspaceController
+controller = WorkspaceController(None, {}, [])
+assert controller.failureDiagnostics == {}
+assert not any(name.endswith('panel_layout_update') for name in sys.modules)
+"""
+        result = subprocess.run([sys.executable, "-B", "-c", program],
+                                cwd=Path(__file__).resolve().parents[1],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_widgets_gives_actionable_guidance_without_echoing_identifiers(self):
         def missing(connector=""):

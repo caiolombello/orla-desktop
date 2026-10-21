@@ -16,6 +16,25 @@ from PySide6.QtCore import QObject, Property, QThread, QTimer, QUrl, Signal, Slo
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
+if __package__:
+    from .panel_layout import LayoutError
+else:
+    from panel_layout import LayoutError
+
+
+def _failure_diagnostics(exc):
+    if not isinstance(exc, LayoutError):
+        return {"code": "UNEXPECTED_FAILURE", "operation": "TRANSACTION", "returncode": None}
+    # Facts are mutable. Reapply the canonical closed vocabulary and hash/exit
+    # bounds, accepting only plain strings so no payload-bearing objects survive.
+    facts = exc.facts if type(exc.facts) is dict else {}
+    code, operation = facts.get("code"), facts.get("operation")
+    hashes = {key: facts.get(key) for key in ("expectedSha256", "actualSha256")}
+    return LayoutError("", code=code if type(code) is str else None,
+                       operation=operation if type(operation) is str else None,
+                       returncode=facts.get("returncode"),
+                       hashes=hashes if all(type(value) is str for value in hashes.values()) else None).facts
+
 
 class _Operation(QThread):
     def __init__(self, callback, parent):
@@ -24,14 +43,16 @@ class _Operation(QThread):
         self.result = None
         self.failed = False
         self.failure_kind = "unknown"
+        self.failure_diagnostics = {}
 
     def run(self):
         try:
             self.result = self.callback()
         except Exception as exc:
-            # Native diagnostics remain in the transaction journal. Exception
-            # text can contain paths, widget configuration or account data.
+            # Reads have no transaction journal. Keep only resanitized facts;
+            # exception text can contain paths, widget configuration or accounts.
             self.failed = True
+            self.failure_diagnostics = _failure_diagnostics(exc)
             message = str(exc)
             if message == "panel composition requires Plasma 6.7.5":
                 self.failure_kind = "compatibility"
@@ -60,6 +81,7 @@ class WorkspaceController(QObject):
         self._job = None
         self._kind = ""
         self._problem = ""
+        self._failure_diagnostics = {}
         self._closing = False
         self._close_signaled = False
         self._screens_changed = False
@@ -70,6 +92,7 @@ class WorkspaceController(QObject):
     busy = Property(bool, lambda self: self._job is not None, notify=changed)
     stage = Property(str, lambda self: self._kind, notify=changed)
     problem = Property(str, lambda self: self._problem, notify=changed)
+    failureDiagnostics = Property("QVariantMap", lambda self: copy.deepcopy(self._failure_diagnostics), notify=changed)
     closePending = Property(bool, lambda self: self._closing, notify=changed)
 
     def _start(self, kind, callback):
@@ -77,6 +100,7 @@ class WorkspaceController(QObject):
             return False
         self._kind = kind
         self._problem = ""
+        self._failure_diagnostics = {}
         self._review = {}
         self._screens_changed = False
         job = _Operation(callback, self)
@@ -94,6 +118,7 @@ class WorkspaceController(QObject):
         job.wait()
         self._job = None
         if job.failed:
+            self._failure_diagnostics = copy.deepcopy(job.failure_diagnostics)
             self._state = {"phase": "UNKNOWN"}
             messages = {
                 "compatibility": self.tr("Esta composição exige Plasma 6.7.5. Seu layout foi mantido."),
@@ -142,6 +167,7 @@ class WorkspaceController(QObject):
         if self.busy or self._closing:
             return False
         self.session.discard()
+        self._failure_diagnostics = {}
         self._review = {}
         self.changed.emit()
         return True
