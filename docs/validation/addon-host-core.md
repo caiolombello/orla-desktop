@@ -46,6 +46,25 @@ criada por engano com modo 0755. O diagnóstico identificou `export_invalid` /
 `unsafe`. Uma execução nova com a pasta 0700 passou sem alteração no serviço;
 a falha original foi preservada como falha de preparação da fixture.
 
+## Transporte QML real, isolado
+
+Uma execução separada usou Plasma Workspace 6.7.5, PySide6/Qt 6.11.2,
+o candidato `AddonTransport.qml` e o mesmo núcleo, em outro barramento privado.
+Treze chamadas cobriram os oito métodos, com as assinaturas `()`, `(s)`,
+`(ss)` e `(as)`. O teste verificou a resposta string real, sua representação
+no tipo QML e a extração por `ThemeFile.replyText`, incluindo seleção vazia,
+instalação desativada, leitura sintética de 0%, atualização, rollback e remoção.
+A recusa de seleção inválida retornou o envelope previsto; um serviço ausente
+acionou o callback de erro. Não houve avisos QML; o serviço foi recolhido.
+
+As duas falhas anteriores de preparação — cópia incompleta do serviço e pasta
+sintética com permissão 0755 — foram preservadas. A execução corrigida mudou
+somente a preparação privada, sem alterações no código do produto.
+
+O transporte é candidato de uma camada posterior. Esta verificação não cobre
+seu gerenciador de estado, seletor de arquivos, coordenação com Settings,
+interface instalada ou compatibilidade com Qt 6.12.
+
 ## Instalação e ativação sob demanda reais
 
 O pacote foi instalado com `kpackagetool6` em XDG temporário cujo caminho
