@@ -54,7 +54,10 @@ jobs:
           unset DISPLAY WAYLAND_DISPLAY AT_SPI_BUS_ADDRESS SESSION_MANAGER
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_updates_desktop*.py' -v
 
-      - name: Run portable addon SDK, service and installer tests with isolated user state
+      - name: Check canonical addon text generation (offline)
+        run: $ORLA_CI_PYTHON -I -B scripts/generate_addon_text_profile.py --check
+
+      - name: Run portable addon SDK, service, client and installer tests with isolated user state
         timeout-minutes: 5
         shell: bash
         run: |
@@ -79,8 +82,16 @@ jobs:
             QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion \
             QT_QPA_PLATFORMTHEME= PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
             PYTHONPATH="$PWD:$PWD/tests" \
-            "$ORLA_CI_PYTHON" -B -s -m unittest \
-              test_addons test_addon_store test_addon_worker test_addon_service test_package_cli -v
+            bash -euo pipefail -c '
+              "$1" -B -s -m unittest \
+                test_addon_text_profile test_addons test_addon_store test_addon_worker \
+                test_addon_service test_package_cli test_release -v
+              # Core runs without the dependent five-file client layer.
+              # A separate process preserves QCore/QGui application ownership.
+              if [[ -f tests/test_addon_manager_state.py ]]; then
+                "$1" -B -s -m unittest test_addon_manager_state -v
+              fi
+            ' -- "$ORLA_CI_PYTHON"
 
       - name: Run portable tests
         run: |

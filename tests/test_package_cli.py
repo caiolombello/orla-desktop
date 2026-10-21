@@ -89,6 +89,47 @@ class PackageCliTests(unittest.TestCase):
             self.assertEqual(archive.read("LICENSE"), b"MIT license")
             self.assertEqual(json.loads(archive.read("metadata.json"))["KPlugin"]["Id"], caiodock.PACKAGE_ID)
 
+    def test_addon_text_profile_archive_is_self_contained_with_full_notice(self):
+        import importlib.util
+        from test_addon_text_profile import canonical_oracle
+        source=Path(__file__).resolve().parents[1]
+        profile,_=canonical_oracle(source)
+        for name in ("code/addon_format.py","code/AddonText.js"):
+            target=self.root/"package/contents"/name
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(source/"package/contents"/name,target)
+        archive_path=caiodock.build(self.root)
+        extracted=self.root/"extracted-runtime"
+        with zipfile.ZipFile(archive_path) as archive:
+            self.assertNotIn("scripts/data/addon-text-unicode16.json",archive.namelist())
+            for name,prefix in (("contents/code/addon_format.py","# "),("contents/code/AddonText.js","// ")):
+                text=archive.read(name).decode()
+                body=text.split(prefix+"BEGIN UNICODE LICENSE\n",1)[1].split(prefix+"END UNICODE LICENSE",1)[0]
+                self.assertEqual(''.join(line[len(prefix):] for line in body.splitlines(True)),profile['license'])
+            archive.extractall(extracted)
+        self.assertFalse((extracted/'scripts').exists())
+        path=extracted/'contents/code/addon_format.py'
+        spec=importlib.util.spec_from_file_location('archive_addon_format',path)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        self.assertEqual(module.text('\U0001e5d0',1),'\U0001e5d0')
+        with self.assertRaises(module.AddonError): module.text('\u088f',1)
+        # Import the actual extracted Core JS with no client, canonical or UCD files.
+        program="""import sys
+from PySide6.QtCore import QCoreApplication,QUrl
+from PySide6.QtQml import QQmlEngine,QQmlComponent,QQmlExpression
+app=QCoreApplication([]);engine=QQmlEngine();c=QQmlComponent(engine)
+url=QUrl.fromLocalFile(sys.argv[1]).toString()
+c.setData(('import QtQml\\nimport "'+url+'" as AddonText\\nQtObject { function plain(value,maximum) { return AddonText.plain(value,maximum); } }').encode(),QUrl())
+o=c.create();assert o is not None,[e.toString() for e in c.errors()]
+for expression,expected in [('plain("\\u088f",1)',False),('plain("\\ud839\\uddd0",1)',True),('plain("e\\u0301",2)',True)]:
+    e=QQmlExpression(engine.rootContext(),o,expression);value,_=e.evaluate()
+    assert not e.hasError(),e.error().toString()
+    assert value is expected,(expression,value)
+"""
+        checked=subprocess.run([sys.executable,'-I','-B','-c',program,
+            str(extracted/'contents/code/AddonText.js')],cwd=extracted,capture_output=True,text=True,timeout=15)
+        self.assertEqual(checked.returncode,0,checked.stderr)
+
     def test_build_ignores_symlinks_and_rejects_missing_entrypoint(self):
         (self.root / "package/contents/ui/link.qml").symlink_to(self.root / "scripts/private.py")
         archive_path = caiodock.build(self.root)
