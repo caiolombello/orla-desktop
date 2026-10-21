@@ -183,7 +183,7 @@ depois da publicação não promete que a operação foi desfeita.
 
 O serviço `org.orla.Addons` é separado da ponte legada. Seus métodos retornam
 JSON em uma string, com prazo e worker pertencente ao host. O núcleo passou
-por testes privados e chamadas reais em barramento isolado; isso não qualifica
+por [testes privados e chamadas reais em barramento isolado](validation/addon-host-core.md); isso não qualifica
 a instalação na sessão do usuário, a interface completa ou a coleta real do
 produtor. O fluxo nas configurações, a extração do PeriGauge e sua validação
 local continuam em integração. QuotaLantern e FalaTrace mantêm o caminho
