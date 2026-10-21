@@ -13,6 +13,7 @@ import caiodock
 
 # The optional menu/window need bar/ and workspace/, which are not bundled.
 # Design checks and the gallery compare the bar and launcher token copies too.
+SOURCE_ONLY_DESKTOP = frozenset(("scripts/updates_desktop.py", "scripts/updates_desktop_state.py"))
 SOURCE_ONLY_TESTS = frozenset(("tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                                "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                                "tests/test_workspace_install.py",
@@ -36,7 +37,8 @@ def bundle(root: Path) -> tuple[Path, Path, Path]:
                        if path.is_file() and not path.is_symlink()
                        and "__pycache__" not in path.parts
                        and path.suffix not in (".pyc", ".pyo")
-                       and path.relative_to(root).as_posix() not in SOURCE_ONLY_TESTS)
+                       and path.relative_to(root).as_posix() not in SOURCE_ONLY_TESTS | SOURCE_ONLY_DESKTOP
+                       and not path.relative_to(root).as_posix().startswith("tests/test_updates_desktop"))
     entries = [(path, path.relative_to(root).as_posix()) for path in sources]
     entries.append((plasmoid, plasmoid.name))
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

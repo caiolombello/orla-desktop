@@ -25,7 +25,7 @@ import uuid
 import zipfile
 
 sys.dont_write_bytecode = True
-PACKAGE_SHA256 = 'aaff9294e5855015a008512e9e42e6e3404dc5314fff48ce68f54562cb0b3c93'
+PACKAGE_SHA256 = '1ca6b6051f37f7cf44974d555fafa1171181b23b2b9cddb8a6849a937d9a9908'
 SCHEMA = 'orla-workspace-install-0.1'
 
 
@@ -369,7 +369,7 @@ def _receipt(paths, selection):
     _need(type(generations) is dict and set(generations) == {selection['current']} | ({selection['previous']} if selection['previous'] else set()), 'invalid_record')
     expected = {'controller', 'launcher', 'desktop', 'tools/install.py', 'tools/package.py'}
     for digest, manifest in generations.items():
-        _need(re.fullmatch('[0-9a-f]{64}', digest) and type(manifest) is dict and manifest.get('schema') == 'orla-workspace-package-0.1', 'unsupported_schema')
+        _need(re.fullmatch('[0-9a-f]{64}', digest) and type(manifest) is dict and manifest.get('schema') == 'orla-workspace-package-0.2', 'unsupported_schema')
         expected.update('versions/' + digest + '/' + name for name in (*_package().PAYLOAD, 'manifest.json'))
     _need(set(value['files']) == expected, 'invalid_record')
     dirs = {'tools', 'versions'}
@@ -474,9 +474,11 @@ def _entrypoints(paths, manager, parents):
     command = [str(_absolute(Path(sys.executable))), '-I', '-B', '-c', code]
     ctl = ('#!/bin/sh\nexec ' + ' '.join(shlex.quote(p) for p in command) + ' "$@"\n').encode()
     wrapper = ('#!/bin/sh\nexec ' + shlex.quote(str(_location(paths, 'controller'))) + ' launch "$@"\n').encode()
-    desktop = ('[Desktop Entry]\nType=Application\nName=Composição Orla\nExec=' +
-               ' '.join(_desktop_quote(p) for p in [str(_location(paths, 'launcher'))]) +
-               '\nIcon=preferences-desktop\nTerminal=false\nCategories=Utility;\n').encode()
+    launcher = _desktop_quote(_location(paths, 'launcher'))
+    desktop = ('[Desktop Entry]\nType=Application\nName=Sobre e atualizações do Orla\nExec=' +
+               launcher + ' --updates\nIcon=preferences-desktop\nTerminal=false\nCategories=Utility;\n' +
+               'Actions=Composition;\n\n[Desktop Action Composition]\nName=Composição Orla\nExec=' +
+               launcher + '\n').encode()
     return {'controller': ctl, 'launcher': wrapper, 'desktop': desktop}
 
 
@@ -946,13 +948,15 @@ def _supervise(command, *, environment, capture=False, lease=None):
         return code
 
 
-def launch(paths, *, service=None, command_factory=None):
+def launch(paths, *, service=None, updates=False, command_factory=None):
     """Launch under a shared lease. command_factory(root, service) is an API seam.
 
+    Updates selects no composition service. Its factory receives None.
     A supplied factory replaces only the child command for isolated session tests;
     it cannot bypass selection, integrity checks, the lease or signal supervision.
     No CLI/environment option enables this seam.
     """
+    _need(type(updates) is bool and not (updates and service is not None), 'invalid_arguments')
     if service is not None:
         _service(service)
     with _locked(paths, shared=True) as lease:
@@ -960,9 +964,10 @@ def launch(paths, *, service=None, command_factory=None):
         selection = _selector(paths)
         _need(selection is not None, 'not_installed')
         receipt = _verify(paths, selection)
-        service = service if service is not None else receipt['service']
+        service = None if updates else service if service is not None else receipt['service']
         root = paths.base / 'versions' / selection['current']
-        command = ([sys.executable, '-I', '-B', str(root / 'workspace/main.py'), '--service', service]
+        arguments = ['--updates'] if updates else ['--service', service]
+        command = ([sys.executable, '-I', '-B', str(root / 'workspace/main.py'), *arguments]
                    if command_factory is None else command_factory(root, service))
         _need(isinstance(command, (list, tuple)) and command and all(type(p) is str and '\x00' not in p for p in command), 'invalid_command')
         return _supervise(command, environment=_environment(paths), lease=lease)
@@ -1001,7 +1006,9 @@ def main(argv=None):
             sub.add_argument('--service', required=True)
     for name in ('status', 'doctor', 'rollback', 'recover', 'uninstall'):
         actions.add_parser(name, allow_abbrev=False)
-    actions.add_parser('launch', allow_abbrev=False).add_argument('--service')
+    launch_flags = actions.add_parser('launch', allow_abbrev=False).add_mutually_exclusive_group()
+    launch_flags.add_argument('--service')
+    launch_flags.add_argument('--updates', action='store_true')
     args = parser.parse_args(argv)
     try:
         paths = InstallPaths.from_environment()
@@ -1011,7 +1018,7 @@ def main(argv=None):
                 options['service'] = args.service
             result = (install_archive if args.action == 'install' else update_archive)(args.archive.absolute(), **options)
         elif args.action == 'launch':
-            return launch(paths, service=args.service)
+            return launch(paths, service=args.service, updates=args.updates)
         else:
             result = {'status': status, 'doctor': doctor, 'rollback': rollback, 'recover': recover, 'uninstall': uninstall}[args.action](paths)
         print(json.dumps(result, sort_keys=True))

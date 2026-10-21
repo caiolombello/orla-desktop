@@ -186,5 +186,161 @@ raise SystemExit(subprocess.run([str(python), '-I', '-B', '-c',
             self.assertEqual(json.loads(result.stdout)["runtime"]["status"], "ready")
 
 
+# Installed updates qualification shares the existing Source-only suite.
+# Executes the actual main/launch/QML. No composition/native object is replaced.
+GUI = r'''
+import copy,hashlib,json,runpy,sys
+from pathlib import Path
+root=Path(sys.argv[1]); mode=sys.argv[2]; helper=sys.argv[3]
+sys.path.insert(0,str(root))
+from PySide6.QtCore import QTimer,Qt
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import qmlContext
+from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
+app=QGuiApplication([])
+report={}; errors=[]; timer=QTimer(); ticks=0
+if mode=='check':
+ from scripts import updates_desktop
+ def runner(root,ref,channel):
+  report['captured']=ref
+  return sys.executable,['-I','-B',helper]
+ updates_desktop.cli_command=runner
+
+def inspect():
+ global ticks
+ ticks+=1
+ try:
+  windows=[w for w in app.topLevelWindows() if w.objectName()=='updatesWindow']
+  if not windows:
+   assert ticks<100,'production updates window did not open'
+   return
+  window=windows[0]; host=qmlContext(window).contextProperty('updatesController')
+  assert not any(n in sys.modules for n in ('scripts.workspace_setup','scripts.panel_layout','workspace.install'))
+  report['reference']=host.reference
+  report['label']=window.findChild(QQuickItem,'updatesReference').property('text')
+  report['origin']=window.findChild(QQuickItem,'updatesReferenceOrigin').property('text')
+  report['status']=window.findChild(QQuickItem,'updatesStatus').property('text')
+  if mode=='check' and 'clicked' not in report:
+   report['clicked']=True
+   window.findChild(QQuickItem,'updatesCheck').clicked.emit()
+   return
+  if host.busy:return
+  if mode=='passive':
+   components=window.findChild(QQuickItem,'updatesComponentVersions')
+   if 'disclosureRequested' not in report:
+    report['scopeInitiallyVisible']=components.isVisible()
+    report['recordBeforeDisclosure']=copy.deepcopy(host.state['record'])
+    report['disclosureRequested']=True
+    window.findChild(QQuickItem,'updatesDetails').forceActiveFocus()
+    QTest.keyClick(window,Qt.Key_Space)
+    return
+   report['scopeVisible']=components.isVisible()
+   report['components']=components.property('text')
+   assert host.state['record']==report['recordBeforeDisclosure'],'disclosure changed check history'
+  report['record']=host.state['record']; report['storageWarning']=host.state['storageWarning']; window.close(); timer.stop()
+ except BaseException as exc:
+  errors.append(repr(exc));timer.stop();app.exit(90)
+timer.timeout.connect(inspect);timer.start(20)
+QTimer.singleShot(5000,lambda:app.exit(91))
+sys.argv=[str(root/'workspace/main.py'),'--updates']
+try:runpy.run_path(sys.argv[0],run_name='__main__')
+except SystemExit as exc:report['exit']=exc.code
+assert not errors,errors
+assert report.get('exit')==0,report
+for name,module in tuple(sys.modules.items()):
+ if name=='scripts' or name.startswith('scripts.') or name=='workspace' or name.startswith('workspace.'):
+  if getattr(module,'__file__',None): assert Path(module.__file__).is_relative_to(root),(name,module.__file__)
+print(json.dumps(report,sort_keys=True))
+'''
+
+
+class UpdatesEntryTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.temporary=tempfile.TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
+        self.base=Path(self.temporary.name)
+        fixture=EntryTests()
+        self.bundle=fixture.bundle(self.temporary.name)
+        self.env=fixture.environment(self.base)
+        self.env['HOME']=str(self.base/'home');Path(self.env['HOME']).mkdir()
+        for key in ('DBUS_SESSION_BUS_ADDRESS','DBUS_SYSTEM_BUS_ADDRESS','AT_SPI_BUS_ADDRESS'):
+            self.env[key]='unix:path='+str(self.base/'absent-bus')
+        self.env.update(QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',QML_DISABLE_DISK_CACHE='1')
+
+    def run_entry(self,*args,qt=True):
+        return subprocess.run([sys.executable,'-I',* ([] if qt else ['-S']),'-B',str(self.bundle/'workspace/main.py'),*args],cwd=self.base,env=self.env,capture_output=True,text=True,timeout=30)
+
+    def gui(self,mode='passive',hidden=False):
+        helper=self.base/'offline.py'
+        helper.write_text("import json\nprint(json.dumps("+repr(dict(status='no_release',reason=None,source='https://api.github.com/repos/caiolombello/orla-desktop/releases',installed_version='0.2.9',available_version=None,available_url=None,channel='stable',checked_at='2026-10-20T12:00:00Z'))+"))\n")
+        command=[sys.executable,'-I','-B','-c',GUI,str(self.bundle),mode,str(helper)]
+        if hidden:
+            if not shutil.which('bwrap'):self.skipTest('Bubblewrap absent: Source-hidden qualification unavailable')
+            mount=self.base/'home-mount';mount.mkdir(exist_ok=True)
+            command=['bwrap','--die-with-parent','--unshare-net','--uid',str(os.getuid()),'--gid',str(os.getgid()),'--ro-bind','/','/','--bind',str(mount),'/home','--ro-bind',str(next(p for p in ROOT.parents if p.parent == Path('/home'))),str(next(p for p in ROOT.parents if p.parent == Path('/home'))),'--perms','0755','--tmpfs',str(ROOT.parents[3]),'--bind',str(self.base),str(self.base),'--proc','/proc','--dev','/dev','--',*command]
+        result=subprocess.run(command,cwd=self.base,env=self.env,capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertNotIn('Destroyed while process',result.stderr)
+        return json.loads(result.stdout)
+
+    def test_actual_main_opens_only_updates_with_verified_manifest_reference(self):
+        before={p:p.read_bytes() for p in self.base.rglob('*') if p.is_file()}
+        result=self.gui()
+        manifest=(self.bundle/'manifest.json').read_bytes()
+        self.assertEqual(result['reference'],dict(role='bundle',component='workspace',origin='verified-manifest',version='0.2.9',commit='a'*40,digest=hashlib.sha256(manifest).hexdigest()))
+        self.assertEqual(result['label'],'0.2.9')
+        self.assertIn('esta cópia do Workspace',result['origin'])
+        self.assertIn('bundle verificado',result['origin'])
+        self.assertFalse(result['scopeInitiallyVisible'])
+        self.assertTrue(result['scopeVisible'])
+        self.assertEqual(result['components'],'Dock instalada: não verificada\nDock em execução: não verificada')
+        self.assertEqual(result['record'],{})
+        for path,data in before.items():self.assertEqual(path.read_bytes(),data)
+        for key in ('XDG_CONFIG_HOME','XDG_CACHE_HOME'):
+            self.assertEqual([p.name for p in Path(self.env[key]).iterdir()],['sentinel'])
+
+    def test_source_hidden_moved_actual_main_checks_offline_then_reopens_history(self):
+        result=self.gui('check',hidden=True)
+        self.assertEqual(result['record']['result']['status'],'no_release')
+        result=self.gui(hidden=True)
+        self.assertIn('Resultado salvo',result['status'],result)
+        self.assertEqual(result['record']['result']['status'],'no_release')
+
+    def test_version_is_qt_free_and_flags_are_exclusive(self):
+        result=self.run_entry('--version',qt=False)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for args in (('--updates','--service','literal.service'),('--updates','--diagnose'),('--updates','--version')):
+            result=self.run_entry(*args,qt=False)
+            self.assertEqual(result.returncode,2,result.stderr)
+            self.assertNotIn('Traceback',result.stderr)
+
+    def test_each_new_payload_and_isolation_marker_is_verified_before_qt(self):
+        names=['workspace/Updates.qml','scripts/updates.py','scripts/updates_contract.py','scripts/updates_desktop_state.py','scripts/updates_desktop.py','scripts/__init__.py','workspace/__init__.py']
+        for name in names:
+            path=self.bundle/name;data=path.read_bytes()
+            for missing in (False,True):
+                with self.subTest(name=name,missing=missing):
+                    if missing:path.unlink()
+                    else:path.write_bytes(data+b'\n# drift\n')
+                    result=self.run_entry('--updates',qt=False)
+                    self.assertEqual(result.returncode,1,result.stderr)
+                    self.assertNotIn('Qt for Python',result.stderr)
+                    self.assertNotIn('Traceback',result.stderr)
+                    path.write_bytes(data);path.chmod(0o644)
+
+    def test_passive_diagnosis_loads_both_production_surfaces(self):
+        result=self.run_entry('--diagnose')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(json.loads(result.stdout)['runtime']['surfaces'],['composition','updates'])
+        self.assertFalse(json.loads(result.stdout)['serviceContacted'])
+
+    def test_reference_digest_uses_verified_canonical_manifest(self):
+        path=self.bundle/'manifest.json';canonical=path.read_bytes()
+        path.write_text(json.dumps(json.loads(canonical),indent=2)+'\n')
+        report=self.gui()
+        self.assertEqual(report['reference']['digest'],hashlib.sha256(canonical).hexdigest())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,8 @@ PAYLOAD = tuple(sorted((
     "package/contents/code/Style.js", "package/contents/ui/Card.qml",
     "package/contents/ui/OrlaButton.qml", "workspace/main.py", "workspace/package.py",
     "workspace/__init__.py", "scripts/__init__.py",
+    "workspace/Updates.qml", "scripts/updates.py", "scripts/updates_contract.py",
+    "scripts/updates_desktop_state.py", "scripts/updates_desktop.py",
 )))
 RUNTIME = {"pythonMinimum": "3.10", "pysideMinimum": "6.11", "qtMinimum": "6.11", "plasmaExact": "6.7.5"}
 MEMBER_LIMIT, TOTAL_LIMIT, MANIFEST_LIMIT, ARCHIVE_LIMIT = 2 << 20, 4 << 20, 64 << 10, 16 << 20
@@ -102,7 +104,7 @@ def build(root: Path, output_dir: Path, *, commit: str) -> Path:
         files[name] = _source(root, name, MEMBER_LIMIT)
         if sum(map(len, files.values())) > TOTAL_LIMIT:
             raise PackageError("size_limit")
-    manifest = dict(schema="orla-workspace-package-0.1", component="workspace", version=version, commit=commit, runtime=RUNTIME, files=_records(files))
+    manifest = dict(schema="orla-workspace-package-0.2", component="workspace", version=version, commit=commit, runtime=RUNTIME, files=_records(files))
     files["manifest.json"] = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
@@ -146,7 +148,7 @@ def _manifest(data, files):
         manifest = json.loads(data.decode("utf-8"), object_pairs_hook=_unique)
         if (not isinstance(manifest, dict)
                 or set(manifest) != {"schema", "component", "version", "commit", "runtime", "files"}
-                or manifest["schema"] != "orla-workspace-package-0.1"
+                or manifest["schema"] != "orla-workspace-package-0.2"
                 or manifest["component"] != "workspace" or manifest["runtime"] != RUNTIME
                 or not _version(manifest["version"]) or not _hex(manifest["commit"], 40)
                 or not isinstance(manifest["files"], list) or len(manifest["files"]) != len(PAYLOAD)):

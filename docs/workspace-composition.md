@@ -28,8 +28,10 @@ consultados antes de abrir a janela.
 
 ## Bundle experimental separado
 
-O ZIP do companion contém 16 arquivos permitidos e um manifesto de tamanhos,
-modos e SHA-256. Preserva os imports relativos da interface e do helper; não inclui
+O ZIP do companion contém 21 arquivos permitidos no schema
+`orla-workspace-package-0.2` e um manifesto de tamanhos, modos e SHA-256.
+Inclui a janela de updates e sua CLI/contrato/estado/controller. Preserva os
+imports relativos da interface e do helper; não inclui
 Qt, a barra, o plasmoid inteiro ou um ambiente Python. Exige Python 3.10+ e
 PySide6/Qt Quick 6.11+ instalados. Não é um novo canal de updates ou uma release.
 
@@ -52,14 +54,20 @@ Depois de extrair, inclusive após mover a pasta ou mudar o diretório de trabal
 ```sh
 python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --version
 python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --diagnose
+python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --updates
 python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --service UNIT
 ```
 
-`--diagnose` verifica a árvore e carrega a interface real em um filho offscreen,
+`--diagnose` verifica a árvore e carrega as duas interfaces reais, composição
+e updates, em um filho offscreen,
 com diretórios XDG privados e barramentos ausentes. Distingue dependência Qt ausente,
 versão incompatível, erro de QML e falha/timeout do processo. Não consulta ou inicia
 Plasma; `nativeValidated` e `serviceContacted` permanecem falsos. `--version` não
-exige Qt. Abrir a composição exige `--service` explícito e mantém os gates do backend.
+exige Qt. `--updates` abre Sobre e atualizações sem serviço ou leitura de layout;
+recebe a referência do manifesto já verificado, exibida como **esta cópia do Workspace**.
+Ela não comprova a versão instalada/em execução da dock nem autentica o publicador.
+`--updates` e `--service` são exclusivos. Abrir a composição exige `--service`
+explícito e mantém os gates do backend.
 Falhas de inicialização não exibem caminhos privados em tracebacks.
 
 As raízes de configuração/estado são as do usuário que abre a composição. Valores
@@ -80,11 +88,15 @@ python3 -I -B /CAMINHO/CONFIAVEL/install.py install /CAMINHO/DO/BUNDLE.zip \
   --sha256 SHA256_64_HEX --commit COMMIT_40_HEX --service UNIT
 orla-workspacectl status
 orla-workspacectl doctor
+orla-workspace --updates
 orla-workspace
 ```
 
 `orla-workspace` e `orla-workspacectl` ficam em `$HOME/.local/bin`; a entrada
-“Composição Orla” fica no diretório XDG de aplicações. Não é criado autostart ou
+“Sobre e atualizações do Orla” fica no diretório XDG de aplicações, com ação
+“Composição Orla”. A entrada principal executa o wrapper absoluto com `--updates`;
+a ação e o comando sem flags preservam a composição. Continuam sendo três saídas
+registradas no recibo: dois wrappers e um arquivo desktop. Não é criado autostart ou
 serviço. Inclua `$HOME/.local/bin` no PATH, ou use os caminhos completos.
 Depois da instalação, o bootstrap, o ZIP e o checkout não são necessários para
 abrir, diagnosticar ou remover uma instalação íntegra. O serviço inicial fica
@@ -108,9 +120,11 @@ orla-workspacectl uninstall
 Update mantém uma geração anterior; outro update é recusado enquanto ela existir.
 Rollback alterna as duas gerações, preservando o serviço e as ferramentas do
 gerenciador. Não há limpeza automática nem atualização remota nesta fatia.
-Enquanto a janela ou seu worker continuam vivos, update, rollback, recover e
+Enquanto qualquer janela ou seu worker continuam vivos, update, rollback, recover e
 uninstall recusam a alteração e pedem fechar o Workspace. Sinais são encaminhados
 à janela e o supervisor aguarda o fechamento, sem timeout que mate uma transação.
+Updates usa a mesma lease compartilhada,
+herdada pela GUI, até o fechamento e a limpeza do processo de consulta terminarem.
 
 Hashes, modos, identidade dos diretórios, recibos e colisões são conferidos antes
 da alteração. Drift exige inspeção; `recover` não adota arquivos desconhecidos.
@@ -119,6 +133,22 @@ possível entre criar um inode e registrar sua identidade. Se uma remoção parc
 já retirou as ferramentas instaladas, `recover` exige novamente o par confiável
 original. Guarde esse par. Uninstall mantém a auditoria e remove somente a árvore
 própria; restaurar os painéis é uma operação separada da janela de composição.
+
+### Formato 0.1 → 0.2: instalação nova com confiança independente
+
+O verificador antigo exige 16 arquivos e recusa o arquivo de 21 antes de escrever.
+O novo recusa o formato antigo. Não há update, rollback ou adoção entre formatos;
+as ferramentas instaladas e os recibos não podem ser remendados para aceitá-los.
+O schema do estado/âncora continua `orla-workspace-install-0.1`.
+
+Feche todas as janelas. Com o par **antigo** confiável, termine eventual `recover`
+e execute `uninstall`. Confirme remoção concluída (seletor/pending nulos e
+saídas removidas). Preserve a âncora e os registros de auditoria. Obtenha o novo
+par `install.py`/`package.py` do mesmo Source revisado, por uma origem independente
+do ZIP, e confira seus hashes confiáveis. Só então use o comando `install` acima,
+com hash/commit externos e o serviço literal de composição. O histórico retido
+válido é preservado; não apague estado, não force colisões nem aceite drift.
+Recuperação de uma reinstalação 0.2 interrompida usa o novo par confiável.
 
 O backend exige Plasma 6.7.5 e pelo menos um painel existente, escolhido pelo
 usuário, para substituição. Painéis com a dock são recusados. Não há criação

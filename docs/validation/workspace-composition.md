@@ -145,12 +145,31 @@ registros a cada leitura e preserva a primeira falha diante de problemas posteri
 de transporte, log e limpeza. Os 101 arquivos de Source e os 110 arquivos do ISO
 foram reconferidos; imagem Fedora e checksum assinado também passaram antes do boot.
 
-O primeiro boot de preparação da VM foi executado. O provisionamento falhou com
-status 153 após a conferência do payload, e o supervisor preservou a falha e encerrou
-seu próprio processo QEMU. A tentativa levou 15,551 s; a imagem resultante e os logs
-foram mantidos, sem retry ou reparo dessa tentativa. A causa ainda depende do log
-interno de provisionamento. Não foram executados NativeRuntime nem a interface de
-composição dentro da VM. Não há aceite nativo ou preparação bem-sucedida.
+O primeiro boot de preparação falhou com status 153 em 15,551 s. Imagem e logs
+permanecem preservados; a investigação offline não estabeleceu a causa exata.
+Uma geração nova retirou um limite global de arquivo inadequado e tornou a captura
+durável antes do marcador. Após revisão independente e novo gate de assinatura,
+hashes e imagem limpa, a preparação passou em 105,362 s, com QEMU 0 e EOF.
+A auditoria Root confirmou as nove versões exigidas, os registros de hash e de
+assinatura dos 530 RPMs e a correspondência do binário systemd à atestação.
+
+O ciclo final dessa geração parou em 12,144 s antes de produzir o resultado do
+driver: o KWin registrou File size limit exceeded, com status 153. O supervisor
+preservou o KeyError original por ausência de result.json e encerrou seu QEMU.
+Imagem e evidência dessa tentativa também foram mantidas, sem retry ou reparo.
+A retirada do segundo limite global e a mensagem de falha por estágio passaram
+em 80 testes do autor e 41 métodos focados da revisão independente, sem bloqueadores.
+Uma geração nova passou na preparação em 163,753 s, com QEMU 0 e EOF; a auditoria
+reconfirmou as nove versões, 530 registros de assinatura e o binário systemd.
+
+Essa tentativa final avançou até o controlador, mas parou na leitura inicial em
+15,493 s: estado UNKNOWN e mensagem genérica, sem exceção original disponível.
+O driver registrou ATTEMPTED/FAIL_STOPPED; o ledger não contém recuperações.
+A imagem e os arquivos foram preservados, e o QEMU próprio foi encerrado. Não
+houve retry, reparo ou confirmação de operações após a falha. O diagnóstico dessa
+leitura está em andamento; a causa não foi presumida a partir do texto sanitizado.
+NativeRuntime e a composição continuam sem aceite nativo; preparação aprovada não
+é prova do fluxo de aplicar, desativar e restaurar.
 
 A CI do PR do instalador revelou uma condição da fixture de colisão: o Qt estava
 somente no venv que executava os testes e não era herdado pelo venv aninhado. A
@@ -159,3 +178,95 @@ reproduziu a falha antes da correção; os nove testes de entrada passaram depoi
 assim como a revisão independente e os dois controles de colisão por remoção de
 marcadores. O código de produção e as exigências de diagnóstico não foram alterados.
 O resultado da nova CI permanece separado desses testes locais.
+
+## U1 fase B — entrega instalada, qualificação privada
+
+O candidato usa exatamente 21 arquivos de payload e manifesto no formato
+`orla-workspace-package-0.2`. São os 16 anteriores mais Updates.qml e a
+CLI/contrato/estado/controller de updates. O novo gerenciador fixa o hash do
+verificador 0.2; estado, âncora, escrita imutável e supervisão mantêm o contrato 0.1.
+
+A entrada `main.py --updates` verifica a árvore inteira antes de Qt e carrega a
+QML de produção com referência do manifesto, sem construir NativeRuntime,
+importar a composição ou fazer refresh. O digest usa os dados já verificados,
+serializados canonicamente. Versão continua Qt-free; diagnóstico carrega as duas
+superfícies com controllers inertes, sem cache, consultas ou serviço.
+
+A entrada principal Sobre e atualizações usa o wrapper absoluto com `--updates`;
+a ação Composição Orla usa o mesmo wrapper sem flags. Permanecem três saídas
+registradas no recibo. O comando direto sem flags preserva a composição. Há
+recusa de flags misturadas e do payload incompleto/adulterado, inclusive dos dois
+marcadores de isolamento dos módulos Python.
+
+O teste usa ferramentas antigas retidas antes das edições e seus hashes exatos.
+O gerente antigo recusa o formato expandido antes de qualquer escrita; o novo
+recusa o arquivo antigo. Recover/uninstall antigos, reinstalação com par novo
+confiável e recuperação de interrupção preservam a âncora, a auditoria e o
+histórico antigo, incluindo bytes, modos e inodes. Update/rollback/recuperação
+entre gerações 0.2 passam; operações entre formatos permanecem recusadas.
+Esse teste de confiança usa `ORLA_OLD_WORKSPACE_TOOLS` apontando para a evidência
+privada; é explicitamente pulado se esse par histórico não estiver disponível.
+
+A GUI real offscreen manteve a lease durante consulta sintética bloqueada e
+fechamento por SIGTERM. Recover/update/rollback/uninstall recusaram com
+`busy_close_workspace` até a coleta do processo e de seu filho; após fechar,
+o retry passou. Matar somente o supervisor sintético também preservou a lease
+herdada pela GUI até terminar a limpeza. Nenhum NativeRuntime foi substituído
+para ocultar uma construção: o caminho de updates recusa imports de composição
+nas verificações da janela real.
+
+O ZIP determinístico foi verificado, movido e executado com Source oculto, cwd
+alheio, rede isolada e buses ausentes. Consulta offline injetada e reabertura do
+histórico passaram. Em outro fluxo privado, instalou-se o arquivo com o par novo
+independendente; após apagar bootstrap e ZIP, a entrada desktop abriu a GUI real,
+bloqueou uninstall enquanto aberta e terminou por sinal. Status/doctor/recover/
+uninstall instalados passaram. Doctor carregou ambas as QML reais; referência,
+serviço não contatado e `nativeValidated=false` foram preservados.
+
+O primeiro harness de namespace expôs UID de `/home` remapeado, recusado pelo
+cache. Corrigiu-se o mount privado, sem relaxar checks. A primeira descoberta
+integrada também detectou uma dependência nova de `sys.modules` que quebrava o
+carregamento por arquivo da fixture de venv. A adição foi corrigida; a classe
+original, incluindo o ajuste de venv aprovado, permanece byte-idêntica ao baseline.
+
+Verificação final: **112 testes Workspace em Fusion e 112 em org.kde.desktop**,
+mais **30 de updates em cada estilo** e **68 de CLI/release/design**; total de
+**352 execuções de testes aprovadas**, sem skips locais. Design check: zero
+problemas. Python 3.14.8, PySide6/Qt 6.11.2. As descobertas completas mantiveram o
+ResourceWarning histórico de sete objetos não coletados no shutdown; não houve
+falha de teste. Os 11 casos novos foram incorporados às suítes existentes já
+excluídas do ZIP do dock, preservando o release.py congelado e a descoberta da CI.
+
+
+Esta é evidência de candidato privado: o commit do artefato de qualificação é
+sintético, não um commit publicado. Root deve revisar, integrar os patches e
+reconstruir o artefato final com sua identidade real. A apresentação/galeria da
+fase A permanece congelada e sua aprovação é independente; não se geraram novas
+capturas nesta fase de entrega. Não houve publicação, rede real, instalação ou
+abertura na sessão do usuário, IPC/serviço real, NativeRuntime, hardware ou VM.
+Plasma/Wayland/AT e proveniência da dock instalada/em execução seguem abertos;
+U1 permanece parcial e U2 não é concluído por esta entrega.
+
+## Observação separada da tela Source em Wayland
+
+Root abriu a tela de updates do candidato integrado na sessão KDE/Wayland, com
+Qt/PySide6 6.11.2 e DPR 1,45. A janela de produção ficou visível, foi capturada
+apenas em seu próprio conteúdo e fechou normalmente, sem avisos. A referência
+Source exibida foi 0.2.9; não é prova da versão instalada ou carregada da dock.
+Nenhuma consulta ou ação de composição foi solicitada pelo harness. Os arquivos
+monitorados de applets, atalhos globais e KWin mantiveram bytes, modo e inode.
+
+A observação qualifica somente essa abertura/renderização Source. Entrada do
+bundle instalado, consulta real, teclado físico/retorno de foco, AT, esquema claro,
+múltiplos monitores e o ciclo nativo da composição permanecem separados.
+
+## Galeria da tela de updates
+
+Capturas sintéticas da QML de produção, em Qt 6.11.2 com estilo KDE. Versões,
+resultado e horários são dados de fixture; não representam uma consulta real nem
+uma release do Workspace. A galeria clara/escura foi revisada junto aos testes de
+teclado, foco, disclosure passivo e datas locais.
+
+![Updates em esquema escuro, dados sintéticos](../screenshots/workspace-updates/updates-dark-newer.png)
+
+![Updates em esquema claro, dados sintéticos](../screenshots/workspace-updates/updates-light-newer.png)
