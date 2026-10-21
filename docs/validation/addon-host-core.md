@@ -184,3 +184,77 @@ instalação continuam sem qualificação desta rodada. Não houve atualização
 PeriGauge instalado, ativação de exportação, migração de recibos de layout,
 reinício do KWin ou reboot. O pacote anterior também foi reconstruído e
 conferido para reversão; essa reversão não foi executada.
+
+
+## Interação nativa na instalação — 21/10
+
+Rodada na sessão de uso, sem uso humano simultâneo, com o runtime instalado de
+`948b4fa`: Fedora 44, Plasma/KWin 6.7.5, Qt 6.11.2, Wayland, uma saída 4K em
+escala 1,45 e esquema escuro do sistema. A entrada usou teclado, ponteiro
+absoluto e ponteiro relativo virtuais próprios, com prazo de 15 minutos; os três
+foram liberados e fechados ao final. As capturas mostram a dock real e ficaram
+somente na máquina. A visibilidade do painel não foi alterada: o auto hide
+original permaneceu configurado durante toda a rodada.
+
+O ponteiro absoluto chegou à posição pedida com erro de 1 px. Empurrá-lo contra
+a borda inferior revelou a dock em auto hide; ela voltou a ocultar após fechar
+os popups e afastar o ponteiro. Isso qualifica a revelação pela borda que a
+rodada anterior deixou pendente.
+
+Qualificado pela interação real:
+
+- O hover destaca o bloco e troca o texto do rótulo. O bloco Orla abre as
+  configurações ancoradas nele; a seção Complementos é alcançada pela rolagem.
+- Shift+Tab e Tab desenham o contorno completo em **Adicionar arquivo…** e
+  **Recarregar complementos**. Espaço abre o seletor nativo do KDE, modal sobre
+  o popup, que continua aberto atrás dele.
+- Um caminho digitado no seletor e Enter enviam o arquivo. Um arquivo inválido
+  mostrou o erro genérico e devolveu o foco visível ao botão.
+- Um manifesto sintético válido mostrou a prévia “Ainda não instalado”, a
+  permissão somente leitura e um único botão primário, **Instalar complemento**.
+  Os detalhes abrem pelo teclado, com autoria, versão, licença e origem
+  declaradas e o aviso de que o Orla não verifica quem publicou. Nada foi
+  instalado: **Recarregar** descartou a prévia e o armazenamento de
+  complementos continuou inexistente.
+- Escape fecha o seletor sem fechar as configurações, e depois fecha as
+  configurações. O calendário fecha por Escape e por clique fora. A Central de
+  Controle mostra o contorno ao navegar por Tab. O widget de periféricos mostra
+  o estado sem dados compartilhados.
+- O journal do período não registrou erro QML do Orla.
+
+Achados desta rodada:
+
+1. **Seletor parcialmente coberto pela dock.** O KWin centraliza o diálogo
+   modal sobre o popup de configurações, que fica junto à borda inferior. Em
+   auto hide o painel não reserva espaço e continua visível enquanto o popup
+   existe; com o tamanho de diálogo lembrado pelo KDE, a dock cobre **Abrir** e
+   **Cancelar**. Enter, Escape, clique duplo no arquivo, o botão de fechar e
+   arrastar a janela continuam funcionando. Em um KWin aninhado com D-Bus
+   privado, um `FileDialog` com `parentWindow: null` também se tornou transitório
+   da janela ativa e foi centralizado sobre ela; remover o pai não resolve. O
+   seletor de temas usa o mesmo arranjo e não foi exercido nesta rodada. A
+   correção depende de mudar de onde o seletor é aberto e fica para decisão de
+   design.
+2. **Contorno ausente após Escape no seletor.** O foco continua em
+   **Adicionar arquivo…**, mas o contorno só volta no Tab seguinte. O modelo de
+   foco não reacende o contorno depois que a janela perde ativação, e o seletor
+   tira essa ativação; os testes fixam essa regra. Ao aceitar um arquivo, o
+   contorno volta.
+3. **Consumo do host ocioso.** Com o widget de periféricos ativo, a dock pede
+   leitura a cada 15 s e o host nunca atinge a saída por ociosidade. Ele
+   recalculava o hash dos próprios módulos a cada 100 ms; em D-Bus privado,
+   isso custou cerca de 150 ms de CPU a cada 20 s parado. A correção de
+   `8c169cb` mantém 100 ms só durante um worker, usa 5 s de reserva parado e
+   encerra o host por evento de arquivo: 10 ms a cada 20 s, e saída 34 ms após
+   alterar um módulo. O bloco portátil do CI passou localmente em Qt 6.12 com
+   286 testes. Essa correção ainda não foi instalada na sessão de uso.
+
+Fora do escopo de complementos, a mesma rodada observou dois defeitos anteriores
+da dock. O rótulo de hover troca o texto, mas permanece onde apareceu enquanto
+continua visível; volta ao lugar certo depois que um popup fecha, e o Qt
+Wayland registrou que o popup do rótulo não tinha pai transitório. O cabeçalho do
+calendário aparece em inglês acima do mês em português.
+
+Não houve instalação ou ativação de complemento, produtor ou exportação,
+esquema claro nativo, leitor de tela, vários monitores, troca de escala,
+reinício ou login. O formato continua experimental.

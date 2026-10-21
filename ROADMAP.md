@@ -36,12 +36,16 @@ ativação separada, remoção confirmada e rollback. O coordenador aguarda cham
 fisicamente pendentes e exige releitura após resultado desconhecido. A prova
 privada com serviço e transporte KDE reais completou seis mutações, retomada
 de 0% e limpeza ao desativar/remover. O bloco portátil do CI passou localmente
-com 284 testes em Qt 6.12, sem falhas ou skips. Os testes do painel continuam
+com 286 testes em Qt 6.12, sem falhas ou skips. Os testes do painel continuam
 na matriz KDE local; imagens sintéticas claro/escuro verificam foco em viewport
 curto. A camada do PR 104 foi instalada localmente com backup e conferência de
-91 arquivos; o Plasma voltou ativo após recarga. Seletor/modalidade, foco e
-acessibilidade na instalação, revelação por hover, uso contínuo e matriz de
-monitores permanecem gates próprios. Consulte a
+91 arquivos; o Plasma voltou ativo após recarga. Na instalação, entrada virtual
+qualificou revelação pela borda, hover, foco por teclado, seletor modal,
+recusa de arquivo inválido e prévia sem instalar. Em auto hide, a dock cobre
+os botões do seletor, e o contorno só volta no Tab seguinte após cancelar;
+ambos aguardam decisão. O host deixou de consumir CPU parado em `8c169cb`.
+Acessibilidade, uso contínuo e matriz de monitores permanecem gates próprios.
+Consulte a
 [evidência delimitada](docs/validation/addon-host-core.md); não há catálogo ou
 ativação automática de projetos instalados.
 
