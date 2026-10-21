@@ -51,6 +51,10 @@ preserva a última prévia válida. Cancelar o seletor não muda a prévia; muda
 fechar o editor ou fazer uma edição mais recente descarta respostas pendentes.
 A leitura tem prazo limitado e aceita somente arquivo regular local, UTF-8 e o
 schema abaixo. Não há escrita em configuração durante seleção ou leitura.
+Com a dock em ocultar automaticamente, ela pode cobrir **Abrir** e **Cancelar** no
+seletor, que abre centralizado sobre o editor junto à dock. Use clique duplo no
+arquivo, Enter para abrir ou Escape para cancelar, ou arraste o seletor pela barra
+de título.
 
 **EN:** the current installer registers theme-file import independently of project
 plugins, using optional PySide6 QtCore/QtDBus and the user's D-Bus session. Reinstall
@@ -60,6 +64,9 @@ preview and Apply remain required. Cancel, tab changes and newer edits revoke th
 pending result. Failures preserve the last good preview. Native file acceptance,
 Escape and the complete shipping flow still require their separate Wayland gate;
 offscreen tests and the isolated chooser prototype do not qualify that behavior.
+With the dock set to auto-hide, it can cover **Open** and **Cancel** in the chooser,
+which KDE centers over the editor next to the dock. Double-click the file, press Enter
+to open or Escape to cancel, or drag the chooser by its title bar.
 
 See the [consumer validation record](validation/theme-consumer-0.2.6.md) for the
 synthetic evidence and unqualified native behavior.

@@ -207,6 +207,12 @@ instalar. A prévia corresponde aos bytes exatos escolhidos; selecionar não
 instala nem ativa a leitura. Remover pede confirmação, e o rollback só aparece
 quando existe uma versão anterior.
 
+O seletor do KDE abre centralizado sobre as configurações, junto à dock. Com a
+dock em ocultar automaticamente, ela pode cobrir **Abrir** e **Cancelar** no
+canto inferior do seletor. Nesse caso, dê clique duplo no arquivo ou use Enter
+para abrir e Escape para cancelar; também é possível arrastar o seletor pela
+barra de título. Com a dock sempre visível, o KDE mantém o seletor acima dela.
+
 Depois de instalar, **Ativar leitura** é uma escolha separada. O aplicativo de
 origem também precisa permitir a exportação, e o widget **Periféricos** deve
 estar visível no perfil atual. O Orla não inicia o produtor nem concede seu
