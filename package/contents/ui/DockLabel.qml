@@ -8,9 +8,24 @@ PlasmaCore.Dialog {
     id: label
     readonly property var owner: labelOwner
     readonly property Item target: owner.labelTarget
-    readonly property string text: target ? target.tooltip : ""
-    visible: target !== null && text.length > 0 && !owner.popupOpen
-    visualParent: target ? target.artwork : null
+    // A mapped Wayland popup keeps its first anchor. A new slot hides the
+    // label and maps it again on the next turn, anchored to that slot.
+    property Item shownTarget: null
+    property Timer remap: Timer {
+        interval: 0
+        onTriggered: label.shownTarget = label.target
+    }
+    readonly property string text: shownTarget ? shownTarget.tooltip : ""
+    visualParent: shownTarget ? shownTarget.artwork : null
+    // Requiring the new anchor keeps the window from mapping before it has one.
+    visible: shownTarget !== null && visualParent === shownTarget.artwork
+        && text.length > 0 && !owner.popupOpen
+    onTargetChanged: {
+        shownTarget = null;
+        if (target) remap.restart();
+        else remap.stop();
+    }
+    Component.onCompleted: if (target) remap.restart()
     location: owner.popAbove ? PlasmaCore.Types.BottomEdge : PlasmaCore.Types.TopEdge
     type: PlasmaCore.Dialog.Tooltip
     flags: Qt.ToolTip | Qt.WindowDoesNotAcceptFocus | Qt.FramelessWindowHint

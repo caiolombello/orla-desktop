@@ -272,6 +272,39 @@ Item {
         self.assertTrue(bounds.contains(top_left), (bounds, top_left))
         self.assertTrue(bounds.contains(bottom_right), (bounds, bottom_right))
 
+    def test_native_label_remaps_to_each_hovered_slot(self):
+        # A visible Wayland popup keeps its first anchor; the label must re-map
+        # for a new slot instead of only changing its text.
+        self.place_dock_inside_available_screen()
+        self.config.setProperty("showControlCenter", True)
+        self.assertTrue(self.dock.setProperty("nativePopups", True))
+        self.app.processEvents()
+        label = self.window.findChild(QObject, "dockLabelLoader").property("item")
+        self.assertIsNotNone(label)
+        first = self.window.findChild(QQuickItem, "settingsButton")
+        second = self.window.findChild(QQuickItem, "controlCenterButton")
+        visibility = QSignalSpy(label.visibleChanged)
+
+        def shown(tile):
+            target = label.property("shownTarget")
+            return (label.property("visible") and target is not None
+                    and target.objectName() == tile.objectName()
+                    and label.property("text") == tile.property("tooltip"))
+
+        self.dock.setProperty("labelTarget", first)
+        QTest.qWait(20)
+        self.assertTrue(shown(first))
+        self.dock.setProperty("labelTarget", second)
+        self.assertFalse(label.property("visible"))
+        QTest.qWait(20)
+        self.assertTrue(shown(second))
+        self.assertEqual(visibility.count(), 3)
+        self.dock.setProperty("labelTarget", None)
+        self.assertFalse(label.property("visible"))
+        QTest.qWait(20)
+        self.assertFalse(label.property("visible"))
+        self.assertEqual(self.warnings, [])
+
     def test_production_dialog_reuses_clicked_control_and_emits_one_lifecycle_per_open(self):
         self.place_dock_inside_available_screen()
         self.config.setProperty("showControlCenter", True)
