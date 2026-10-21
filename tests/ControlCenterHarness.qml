@@ -15,6 +15,8 @@ Window {
     property alias audioBackend: fixtureAudioBackend
     property alias brightnessBackend: fixtureBrightnessBackend
     property alias brightness: fixtureBrightness
+    property alias dndBackend: fixtureDndBackend
+    property alias dnd: fixtureDnd
 
     QtObject {
         id: fixtureBackend
@@ -87,6 +89,23 @@ Window {
         confirmationTimeout: 300
         backend: fixtureBrightnessBackend
     }
+    QtObject {
+        id: fixtureDndBackend
+        objectName: "controlCenterDndBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", inhibited: false, until: 0, byApplication: false, applications: []})
+        function setDoNotDisturb(on) { calls = calls.concat([on]); return !rejectWrites; }
+        // Tests report like Plasma's notification server would.
+        function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
+    }
+    DockUI.DoNotDisturbState {
+        id: fixtureDnd
+        objectName: "controlCenterDndState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixtureDndBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -102,5 +121,6 @@ Window {
         battery: fixtureBattery
         audio: fixtureAudio
         brightness: fixtureBrightness
+        doNotDisturb: fixtureDnd
     }
 }

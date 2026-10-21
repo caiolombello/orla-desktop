@@ -11,6 +11,7 @@ DockPopup {
     property var battery: null
     property var audio: null
     property var brightness: null
+    property var doNotDisturb: null
     property QtObject backendLifetime: null
     property bool playing: false
     property var validateClient: function(client) { return false; }
@@ -65,6 +66,7 @@ DockPopup {
         playing: rootPopup.playing
         audio: rootPopup.audio
         brightness: rootPopup.brightness
+        doNotDisturb: rootPopup.doNotDisturb
         foreground: rootPopup.scheme.text
         muted: rootPopup.scheme.textMuted
     }

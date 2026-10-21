@@ -12,6 +12,8 @@ Controls.Control {
     required property var audio
     // Optional: hosts without a brightness state show no display card.
     property var brightness: null
+    // Optional: hosts without a Do Not Disturb state show no focus card.
+    property var doNotDisturb: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
@@ -19,9 +21,9 @@ Controls.Control {
     property string powerError: ""
     property string allError: ""
     implicitWidth: 310
-    // Tall enough to show every module (including the display card) without
-    // scrolling on common screens; the popup budget still caps it on short ones.
-    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 620)
+    // Tall enough to show every module (display and focus cards included)
+    // without scrolling on common screens; the popup budget caps short ones.
+    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 700)
     Layout.fillHeight: true
     Layout.minimumHeight: 1
     Accessible.role: Accessible.Pane
@@ -43,6 +45,22 @@ Controls.Control {
         else if (kind === "power") powerError = message;
         else if (kind === "all") allError = message;
         return Boolean(dispatched);
+    }
+    function doNotDisturbText() {
+        const mode = root.doNotDisturb;
+        if (!mode) return "";
+        if (mode.status === "unavailable") return qsTr("As notificações do KDE estão indisponíveis.");
+        if (mode.status === "loading") return qsTr("Lendo o estado das notificações…");
+        if (mode.pending) return mode.desired ? qsTr("Ativando…") : qsTr("Desativando…");
+        if (!mode.inhibited) return qsTr("Desativado");
+        const now = Date.now();
+        if (mode.until > now) {
+            if (mode.until - now > 300 * 86400000) return qsTr("Ativado até você desativar");
+            return qsTr("Ativado até %1").arg(new Date(mode.until).toLocaleString(Qt.locale(), Locale.ShortFormat));
+        }
+        if (mode.byApplication && mode.applications.length > 0)
+            return qsTr("Ativado por %1").arg(boundedText(mode.applications.join(", "), 128));
+        return qsTr("Ativado por uma regra do KDE");
     }
     function reveal(control) {
         const viewport = scroll.contentItem;
@@ -457,6 +475,64 @@ Controls.Control {
                         wrapMode: Text.WordWrap
                         color: root.foreground
                         Accessible.role: root.brightness && root.brightness.error.length > 0 ? Accessible.AlertMessage : Accessible.StaticText
+                    }
+                }
+            }
+
+            Card {
+                objectName: "controlCenterDoNotDisturbCard"
+                visible: root.doNotDisturb !== null && root.doNotDisturb.status !== "inactive"
+                Layout.fillWidth: true
+                radius: Style.radius.module
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Style.space.sm
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.space.md
+                        OrlaIconButton {
+                            objectName: "controlCenterDoNotDisturb"
+                            // Stays enabled while confirming: disabling would drop keyboard focus.
+                            // The state ignores a second request until the first one settles.
+                            enabled: !!root.doNotDisturb && root.doNotDisturb.status === "ready"
+                            checked: !!root.doNotDisturb && root.doNotDisturb.presentation
+                            iconName: "notifications-disabled-symbolic"
+                            text: checked ? qsTr("Desativar Não perturbe") : qsTr("Ativar Não perturbe")
+                            onClicked: root.doNotDisturb.request(!root.doNotDisturb.inhibited)
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Não perturbe")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
+                                color: root.foreground
+                            }
+                            Controls.Label {
+                                objectName: "controlCenterDoNotDisturbStatus"
+                                Layout.fillWidth: true
+                                text: root.doNotDisturbText()
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                color: root.muted
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterDoNotDisturbError"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.doNotDisturb ? root.doNotDisturb.error : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
                     }
                 }
             }
