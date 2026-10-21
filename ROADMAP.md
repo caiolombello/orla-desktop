@@ -17,6 +17,18 @@ seguem em revisão, para um PR dependente. O formato permanece experimental;
 SDK estável, catálogo, código de terceiros e pagamentos continuam pendentes.
 [Evidência e limites](docs/validation/addon-host-core.md).
 
+**X4/DX4 — texto consistente entre runtimes (21/10):** o
+[PR 103](https://github.com/caiolombello/orla-desktop/pull/103), em rascunho e
+dependente do PR 102, fixa o perfil Unicode dos metadados em Python e no helper
+QML. A revisão independente aprovou o Source, a geração offline e a inclusão
+da licença nos pacotes. O bloco exato do CI passou localmente com 129 testes em
+Qt 6.12, sem os cinco arquivos do cliente. Em outro teste privado, o núcleo e
+o gerenciador QML candidato completaram seis mutações confirmadas, preservando
+instalação/atualização/rollback desativados. O teste do adaptador nativo de dados
+encontrou uma incompatibilidade no retorno encapsulado do Qt; sua correção, a
+composição e o foco seguem separados, antes da instalação na sessão de uso.
+O [perfil de texto](docs/ADDON_TEXT_PROFILE.md) permanece experimental.
+
 **I1 — exportação opcional do PeriGauge (21/10):** o
 [PR 4 do produtor](https://github.com/caiolombello/perigauge/pull/4), em rascunho,
 adiciona consentimento separado, projeção mínima e revogação explícita. A revisão
