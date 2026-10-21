@@ -23,7 +23,12 @@
 #include "LauncherController.h"
 #include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
+#include "OrlaCommandController.h"
 #include "BusChecks.h"
+#include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "WindowSession.h"
 
 // Synthetic Qt key events verify handlers only; they do not qualify Wayland/global-shortcut focus.
@@ -163,6 +168,115 @@ private Q_SLOTS:
         controller.setQuery(QString(513, QLatin1Char('x')));
         QCOMPARE(controller.status(), QStringLiteral("error"));
         snapshot(QStringLiteral("error"));
+        controller.dismiss();
+    }
+    void orlaCommandPanelShowsProviderAnswerAndEscapeReturnsToSearch()
+    {
+        int reads = 0;
+        OrlaCommandController::Done pending;
+        OrlaCommandController commands([&](QObject *, OrlaCommandController::Done done) { ++reads; pending = done; },
+                                       [] { return true; });
+        LauncherControllerTestOwner controllerOwner(nullptr, QString(), QString(), &commands);
+        LauncherController &controller = controllerOwner.controller();
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        const QString capture = qEnvironmentVariable("ORLA_UI_CAPTURE_DIR");
+        const auto snapshot = [&](const QString &name) {
+            QTest::qWait(100);
+            const QImage image = window->grabWindow();
+            QVERIFY(!image.isNull());
+            if (!capture.isEmpty()) QVERIFY(image.save(QDir(capture).filePath(name + QStringLiteral(".png"))));
+        };
+        // Repeater delegates live only in the visual tree, not under QObject children.
+        std::function<QQuickItem *(QQuickItem *, const QString &)> visual = [&](QQuickItem *root, const QString &name) -> QQuickItem * {
+            if (root->objectName() == name) return root;
+            for (auto *child : root->childItems()) if (auto *found = visual(child, name)) return found;
+            return nullptr;
+        };
+        const auto find = [&](const char *name) { return visual(window->contentItem(), QLatin1String(name)); };
+        const auto item = [&](const char *name) {
+            auto *found = find(name);
+            if (!found) qFatal("Missing QML item %s", name);
+            return found;
+        };
+        const auto commandRow = [&] {
+            for (int row = 0; row < controller.rows().size(); ++row)
+                if (controller.rows()[row].toMap().value(QStringLiteral("kind")).toString() == QStringLiteral("command")) return row;
+            return -1;
+        };
+        controller.setQuery(QStringLiteral("bateria"));
+        QTRY_VERIFY_WITH_TIMEOUT(commandRow() >= 0 && controller.status() == QStringLiteral("ready"), 5000);
+        controller.select(commandRow());
+        snapshot(QStringLiteral("command-row"));
+        QCOMPARE(reads, 0);
+        QTRY_VERIFY_WITH_TIMEOUT(item("searchInput")->hasActiveFocus(), 2000);
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(reads, 1);
+        QQuickItem *panel = item("orlaCommandPanel");
+        QVERIFY(panel);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->isVisible(), 2000);
+        QVERIFY(!item("resultsList")->isVisible());
+        QTRY_VERIFY_WITH_TIMEOUT(item("commandBackButton")->hasActiveFocus(), 2000);
+        QCOMPARE(item("commandStatus")->property("text").toString(), QStringLiteral("Lendo a última bateria compartilhada…"));
+        QVERIFY(!item("commandRereadButton")->isEnabled());
+        // The same frame shape the dock's parser accepts, with a current lease.
+        const qint64 generated = (QDateTime::currentMSecsSinceEpoch() / 1000 - 1) * 1000;
+        const QJsonObject device{{"name", "mouse"}, {"kind", "mouse"}, {"percent", 70}, {"level", QJsonValue::Null},
+            {"charging", "charging"}, {"estimated", false}, {"stale", false}, {"present", true},
+            {"observedAt", double(generated) / 1000}, {"observedAtMs", double(generated)}, {"components", QJsonArray{}}};
+        const QJsonObject addon{{"id", "org.example.battery"}, {"sha256", QString(64, QLatin1Char('a'))}, {"enabled", true},
+            {"generation", QString(32, QLatin1Char('b'))}, {"producerNamespace", "synthetic-battery"}, {"reason", "ready"},
+            {"errorCode", QJsonValue::Null}};
+        const QJsonObject peripherals{{"status", "ready"}, {"generatedAt", double(generated) / 1000}, {"source", "addon"},
+            {"producerVersion", "0.1.0"}, {"limited", false}, {"devices", QJsonArray{device}},
+            {"generatedAtMs", double(generated)}, {"expiresAtMs", double(generated + 30000)}, {"leaseMs", 30000}, {"addon", addon}};
+        const QJsonObject frame{{"schemaVersion", 2}, {"modules", QJsonArray{"peripherals"}}, {"peripherals", peripherals}};
+        pending(true, QString::fromUtf8(QJsonDocument(frame).toJson(QJsonDocument::Compact)), {});
+        QTRY_COMPARE_WITH_TIMEOUT(item("commandStatus")->property("text").toString(),
+                                  QStringLiteral("Baterias compartilhadas pelo aplicativo de origem."), 2000);
+        QTRY_VERIFY_WITH_TIMEOUT(find("commandDeviceState"), 2000);
+        QCOMPARE(item("commandDeviceState")->property("text").toString(), QStringLiteral("70% · carregando"));
+        QVERIFY(item("commandSharedAt")->isVisible());
+        snapshot(QStringLiteral("command-ready"));
+        QTest::keyClick(window, Qt::Key_Tab);
+        QTRY_VERIFY_WITH_TIMEOUT(item("commandRereadButton")->hasActiveFocus(), 2000);
+        QTest::keyClick(window, Qt::Key_Space);
+        QCOMPARE(reads, 2);
+        QJsonObject missing = peripherals;
+        missing[QStringLiteral("status")] = QStringLiteral("missing");
+        for (const char *key : {"generatedAt", "source", "producerVersion", "generatedAtMs", "expiresAtMs", "leaseMs"})
+            missing[QLatin1String(key)] = QJsonValue::Null;
+        missing[QStringLiteral("devices")] = QJsonArray{};
+        missing[QStringLiteral("addon")] = QJsonObject{{"id", QJsonValue::Null}, {"sha256", QJsonValue::Null}, {"enabled", false},
+            {"generation", QJsonValue::Null}, {"producerNamespace", QJsonValue::Null}, {"reason", "not_installed"},
+            {"errorCode", QJsonValue::Null}};
+        QJsonObject missingFrame = frame;
+        missingFrame[QStringLiteral("peripherals")] = missing;
+        pending(true, QString::fromUtf8(QJsonDocument(missingFrame).toJson(QJsonDocument::Compact)), {});
+        QTRY_VERIFY_WITH_TIMEOUT(item("commandStatus")->property("text").toString().startsWith(QStringLiteral("Nenhum complemento de bateria instalado")), 2000);
+        QTRY_VERIFY_WITH_TIMEOUT(!find("commandDevice"), 2000);
+        snapshot(QStringLiteral("command-not-installed"));
+        QTest::keyClick(window, Qt::Key_Space);
+        pending(true, QStringLiteral("{\"schemaVersion\":2,\"schemaVersion\":2}"), {});
+        QTRY_COMPARE_WITH_TIMEOUT(item("commandStatus")->property("text").toString(),
+                                  QStringLiteral("A resposta do serviço de complementos é inválida."), 2000);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible(), 2000);
+        QTRY_VERIFY_WITH_TIMEOUT(item("searchInput")->hasActiveFocus(), 2000);
+        QCOMPARE(commands.status(), QStringLiteral("idle"));
+        QCOMPARE(controller.query(), QStringLiteral("bateria"));
         controller.dismiss();
     }
     void headerEntryTargetsFitAndKeepKeyboardControl_data()

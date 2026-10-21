@@ -16,7 +16,9 @@
 #include "LauncherController.h"
 #include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
+#include "OrlaCommandController.h"
 #include "BusChecks.h"
+#include <QDBusConnection>
 
 namespace {
 // The second exact favorite-file read is the Store's own reload, after the
@@ -51,6 +53,27 @@ QString writeSteamHelper(QTemporaryDir &directory)
     file.write("'))\n");
     file.close();
     return helper;
+}
+}
+
+// Synthetic addon host on the private test bus: the real launcher transport
+// calls SnapshotFor(as) -> s exactly as it would call the installed host.
+class FakeAddonHost final : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.orla.Addons1")
+public:
+    QString reply;
+    QList<QStringList> requests;
+public Q_SLOTS:
+    QString SnapshotFor(const QStringList &modules) { requests.append(modules); return reply; }
+};
+namespace {
+int commandRow(const LauncherController &launcher)
+{
+    for (int row = 0; row < launcher.rows().size(); ++row)
+        if (launcher.rows()[row].toMap().value(QStringLiteral("kind")).toString() == QStringLiteral("command")) return row;
+    return -1;
 }
 }
 
@@ -812,6 +835,114 @@ private Q_SLOTS:
         QVERIFY(launcher.rows().isEmpty());
         QCOMPARE(launcher.status(),QStringLiteral("idle"));
         QCOMPARE(opened.size(),1);
+    }
+    void orlaCommandsListOnSearchAndReadOnlyOnExplicitExecute()
+    {
+        int reads = 0, checks = 0;
+        OrlaCommandController::Done pending;
+        OrlaCommandController commands([&](QObject *, OrlaCommandController::Done done) { ++reads; pending = done; },
+                                       [&] { ++checks; return true; });
+        LauncherControllerTestOwner owner(nullptr, QString(), QString(), &commands);
+        LauncherController &launcher = owner.controller();
+        launcher.setQuery(QStringLiteral("2+2"));
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        QCOMPARE(commandRow(launcher), -1);
+        QCOMPARE(checks, 0);
+        for (const QString &query : {QStringLiteral("bateria"), QStringLiteral("Periféricos"), QStringLiteral("perifericos"), QStringLiteral("battery")}) {
+            launcher.setQuery(query);
+            QTRY_VERIFY_WITH_TIMEOUT(commandRow(launcher) >= 0 && launcher.status() == QStringLiteral("ready"), 5000);
+        }
+        const int row = commandRow(launcher);
+        const QVariantMap command = launcher.rows()[row].toMap();
+        QVERIFY(command.value(QStringLiteral("enabled")).toBool());
+        QCOMPARE(command.value(QStringLiteral("commandId")).toString(), OrlaCommandController::batteryCommand);
+        QCOMPARE(command.value(QStringLiteral("category")).toString(), QStringLiteral("orla"));
+        // Searching, matching and re-rendering never read the provider; availability is checked once.
+        QCOMPARE(reads, 0);
+        QCOMPARE(checks, 1);
+        launcher.select(row);
+        const auto generation = launcher.generation();
+        const QString id = command.value(QStringLiteral("id")).toString();
+        QVERIFY(!launcher.execute(row, generation, id, QStringLiteral("some-action")));
+        QVERIFY(launcher.execute(row, generation, id));
+        QCOMPARE(reads, 1);
+        QVERIFY(commands.busy());
+        QVERIFY(!launcher.execute(row, generation, id));
+        QCOMPARE(reads, 1);
+        QCOMPARE(launcher.query(), QStringLiteral("battery"));
+        pending(true, QStringLiteral("{\"schemaVersion\":2}"), {});
+        QCOMPARE(commands.status(), QStringLiteral("ready"));
+        QCOMPARE(commands.reply(), QStringLiteral("{\"schemaVersion\":2}"));
+        pending(true, QStringLiteral("late duplicate"), {});
+        QCOMPARE(commands.reply(), QStringLiteral("{\"schemaVersion\":2}"));
+        QVERIFY(!launcher.execute(row, generation - 1, id));
+        launcher.dismiss();
+        QCOMPARE(commands.status(), QStringLiteral("idle"));
+        QVERIFY(commands.reply().isEmpty());
+        launcher.setQuery(QStringLiteral("bateria"));
+        QTRY_VERIFY_WITH_TIMEOUT(commandRow(launcher) >= 0, 5000);
+        QCOMPARE(checks, 2);
+    }
+    void orlaCommandWithoutProviderIsDisabledAndCancelledReadsNeverPublish()
+    {
+        bool provider = false;
+        int reads = 0;
+        OrlaCommandController::Done pending;
+        OrlaCommandController commands([&](QObject *, OrlaCommandController::Done done) { ++reads; pending = done; },
+                                       [&] { return provider; });
+        {
+            LauncherControllerTestOwner owner(nullptr, QString(), QString(), &commands);
+            LauncherController &launcher = owner.controller();
+            launcher.setQuery(QStringLiteral("bateria"));
+            QTRY_VERIFY_WITH_TIMEOUT(commandRow(launcher) >= 0 && launcher.status() != QStringLiteral("loading"), 5000);
+            const QVariantMap command = launcher.rows()[commandRow(launcher)].toMap();
+            QVERIFY(!command.value(QStringLiteral("enabled")).toBool());
+            QVERIFY(command.value(QStringLiteral("description")).toString().contains(QStringLiteral("indisponível")));
+            QVERIFY(!commands.read(OrlaCommandController::batteryCommand));
+            QCOMPARE(reads, 0);
+            launcher.dismiss();
+        }
+        provider = true;
+        QVERIFY(!commands.read(QStringLiteral("orla.unknown")));
+        QVERIFY(commands.read(OrlaCommandController::batteryCommand));
+        QCOMPARE(reads, 1);
+        const quint64 revision = commands.revision();
+        commands.cancelAll();
+        QCOMPARE(commands.status(), QStringLiteral("idle"));
+        pending(true, QStringLiteral("{}"), {});
+        QCOMPARE(commands.status(), QStringLiteral("idle"));
+        QCOMPARE(commands.revision(), revision + 1);
+        QVERIFY(commands.read(OrlaCommandController::batteryCommand));
+        pending(false, {}, QStringLiteral("private server detail"));
+        QCOMPARE(commands.status(), QStringLiteral("error"));
+        QCOMPARE(commands.errorCode(), QStringLiteral("unavailable"));
+        QVERIFY(commands.read(OrlaCommandController::batteryCommand));
+        pending(true, QString(262145, QLatin1Char('x')), {});
+        QCOMPARE(commands.errorCode(), QStringLiteral("invalid_response"));
+        QVERIFY(commands.requestClose());
+        QCOMPARE(commands.status(), QStringLiteral("idle"));
+    }
+    void orlaCommandRealTransportCallsTheAddonHostSignature()
+    {
+        auto bus = QDBusConnection::sessionBus();
+        FakeAddonHost host;
+        host.reply = QStringLiteral("{\"synthetic\":true}");
+        OrlaCommandController commands;
+        QVERIFY(!commands.available());
+        QVERIFY(!commands.read(OrlaCommandController::batteryCommand));
+        QVERIFY(bus.registerObject(QStringLiteral("/org/orla/Addons"), &host, QDBusConnection::ExportAllSlots));
+        QVERIFY(bus.registerService(QStringLiteral("org.orla.Addons")));
+        commands.resetAvailability();
+        QVERIFY(commands.available());
+        QVERIFY(commands.read(OrlaCommandController::batteryCommand));
+        QTRY_COMPARE_WITH_TIMEOUT(commands.status(), QStringLiteral("ready"), 4000);
+        QCOMPARE(commands.reply(), host.reply);
+        QCOMPARE(host.requests, QList<QStringList>{QStringList{QStringLiteral("peripherals")}});
+        QVERIFY(bus.unregisterService(QStringLiteral("org.orla.Addons")));
+        bus.unregisterObject(QStringLiteral("/org/orla/Addons"));
+        QVERIFY(commands.read(OrlaCommandController::batteryCommand));
+        QTRY_COMPARE_WITH_TIMEOUT(commands.status(), QStringLiteral("error"), 4000);
+        QCOMPARE(commands.errorCode(), QStringLiteral("unavailable"));
     }
 };
 QTEST_MAIN(LauncherTests)

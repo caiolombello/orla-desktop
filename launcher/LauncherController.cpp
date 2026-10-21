@@ -1,4 +1,5 @@
 #include "LauncherController.h"
+#include "OrlaCommandController.h"
 #include "SteamProviderController.h"
 #include <KConfigGroup>
 #include <KRunner/AbstractRunner>
@@ -38,9 +39,9 @@ QString appForMatch(const KRunner::QueryMatch &match)
 }
 
 
-LauncherController::LauncherController(SteamProviderController *steam, QObject *parent, const QString &aliasPath, const QString &favoritePath)
+LauncherController::LauncherController(SteamProviderController *steam, QObject *parent, const QString &aliasPath, const QString &favoritePath, OrlaCommandController *commands)
     : QObject(parent), m_config(QString(), KConfig::SimpleConfig), m_state(QString(), KConfig::SimpleConfig),
-      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_aliases(aliasPath), m_favorites(favoritePath), m_steam(steam)
+      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_aliases(aliasPath), m_favorites(favoritePath), m_steam(steam), m_commands(commands)
 {
     // Supply anonymous groups to ResultsModel as well: its default constructor opens KRunner's user state.
     m_model.runnerManager()->setHistoryEnabled(false);
@@ -80,6 +81,11 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
     ++m_generation;
     m_launchedGeneration = m_generation;
     refresh();
+}
+
+QObject *LauncherController::commands() const
+{
+    return m_commands;
 }
 
 QString LauncherController::status() const
@@ -178,6 +184,23 @@ void LauncherController::refresh()
     m_backendRows = applicationBackends;
     m_rows.append(calculatorRows);
     m_backendRows.append(calculatorBackends);
+    if (m_commands) {
+        // Matching lists only; the provider is not called until Enter/click on this row.
+        const QVariantList commands = m_commands->matches(m_query);
+        const bool available = !commands.isEmpty() && m_commands->available();
+        for (const QVariant &entry : commands) {
+            const QVariantMap command = entry.toMap();
+            const QString commandId = command.value(QStringLiteral("id")).toString();
+            m_rows.append(QVariantMap{{"id", QStringLiteral("command:") + commandId}, {"generation", m_generation},
+                {"title", command.value(QStringLiteral("title"))},
+                {"description", available ? command.value(QStringLiteral("description")).toString()
+                    : tr("Serviço de complementos indisponível nesta sessão.")},
+                {"iconName", QString()}, {"enabled", available}, {"kind", QStringLiteral("command")},
+                {"category", QStringLiteral("orla")}, {"categoryLabel", tr("ORLA")},
+                {"source", tr("Orla · leitura local")}, {"commandId", commandId}, {"actions", QVariantList{}}});
+            m_backendRows.append(-1);
+        }
+    }
     if (m_steam) {
         const QString needle = m_query.trimmed();
         int matches = 0;
@@ -452,6 +475,11 @@ bool LauncherController::execute(int row, quint64 generation, const QString &id,
         if (close && generation == m_generation) dismiss();
         return close;
     }
+    if (selected.value(QStringLiteral("kind")).toString() == QStringLiteral("command")) {
+        // A read never closes the launcher; its panel shows the provider's answer.
+        if (!actionId.isEmpty() || !m_commands || !selected.value(QStringLiteral("enabled")).toBool()) return false;
+        return m_commands->read(selected.value(QStringLiteral("commandId")).toString());
+    }
     if (selected.value(QStringLiteral("kind")).toString() == QStringLiteral("steam")) {
         if (!actionId.isEmpty() || !m_steam) return false;
         const bool opened = m_steam->openGame(selected.value(QStringLiteral("appid")).toString(),
@@ -495,6 +523,10 @@ void LauncherController::dismiss()
     m_selected = -1;
     m_error.clear();
     m_model.clear();
+    if (m_commands) {
+        m_commands->cancelAll();
+        m_commands->resetAvailability();
+    }
     emit changed();
     emit closeRequested();
 }

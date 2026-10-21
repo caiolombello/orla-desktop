@@ -49,9 +49,10 @@ endif()
 add_library(orla-launcher-core STATIC LauncherController.cpp LauncherController.h AliasStore.cpp AliasStore.h FavoritesStore.cpp FavoritesStore.h HelperPaths.cpp HelperPaths.h
     AiProviderController.cpp AiProviderController.h
     AiTextController.cpp AiTextController.h
-    SteamProviderController.cpp SteamProviderController.h)
+    SteamProviderController.cpp SteamProviderController.h
+    OrlaCommandController.cpp OrlaCommandController.h)
 target_include_directories(orla-launcher-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(orla-launcher-core PUBLIC Qt6::Core Qt6::Gui KF6::Runner KF6::ConfigCore KF6::Service)
+target_link_libraries(orla-launcher-core PUBLIC Qt6::Core Qt6::Gui Qt6::DBus KF6::Runner KF6::ConfigCore KF6::Service)
 
 add_executable(orla-launcher main.cpp WindowSession.cpp WindowSession.h)
 set_target_properties(orla-launcher PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/bin>")
@@ -63,7 +64,7 @@ target_compile_definitions(orla-launcher PRIVATE
     ORLA_AI_TEXT_HELPER_PATH="${ORLA_AI_TEXT_HELPER_PATH}"
     ORLA_STEAM_PYTHON_PATH="${Python3_EXECUTABLE}"
     ORLA_STEAM_HELPER_PATH="${ORLA_STEAM_HELPER_PATH}")
-qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+qt_add_resources(orla-launcher ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
 target_link_libraries(orla-launcher PRIVATE orla-launcher-core Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::DBus
     KF6::GlobalAccel KF6::WindowSystem)
 
@@ -98,7 +99,7 @@ if(BUILD_TESTING)
     add_executable(orla-launcher-ui-tests tests/UiTests.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-ui-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
-    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
     target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     # Keep action/cleanup coverage complete without growing the UI watchdog.
@@ -118,17 +119,17 @@ if(BUILD_TESTING)
     add_executable(orla-launcher-managed-dispatch-harness tests/ManagedDispatchHarness.cpp WindowSession.cpp WindowSession.h)
     get_target_property(ORLA_MAIN_DEFINITIONS orla-launcher COMPILE_DEFINITIONS)
     target_compile_definitions(orla-launcher-managed-dispatch-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
-    qt_add_resources(orla-launcher-managed-dispatch-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-managed-dispatch-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
     target_link_libraries(orla-launcher-managed-dispatch-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-quit-lifecycle-harness tests/QuitLifecycleHarness.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-quit-lifecycle-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
-    qt_add_resources(orla-launcher-quit-lifecycle-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-quit-lifecycle-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
     target_link_libraries(orla-launcher-quit-lifecycle-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-helper-relocation-harness tests/HelperRelocationHarness.cpp WindowSession.cpp WindowSession.h)
     target_compile_definitions(orla-launcher-helper-relocation-harness PRIVATE ${ORLA_MAIN_DEFINITIONS})
-    qt_add_resources(orla-launcher-helper-relocation-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml Style.js)
+    qt_add_resources(orla-launcher-helper-relocation-harness ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
     target_link_libraries(orla-launcher-helper-relocation-harness PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     add_executable(orla-launcher-shortcut-tests tests/ShortcutTests.cpp WindowSession.cpp WindowSession.h)

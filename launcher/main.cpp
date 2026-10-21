@@ -11,6 +11,7 @@
 #include "AiTextController.h"
 #include "LauncherController.h"
 #include "HelperPaths.h"
+#include "OrlaCommandController.h"
 #include "SteamProviderController.h"
 #include "WindowSession.h"
 
@@ -72,7 +73,9 @@ int main(int argc, char **argv)
     AiTextController aiTextController(parser.value(QStringLiteral("ai-python")), textHelper);
     SteamProviderController steamController(QStringLiteral(ORLA_STEAM_PYTHON_PATH),
         OrlaHelpers::resolve(OrlaHelpers::Kind::Steam, applicationDirectory, QStringLiteral(ORLA_STEAM_HELPER_PATH)));
-    LauncherController controller(&steamController);
+    // Orla commands read the existing addon host on explicit request only.
+    OrlaCommandController commandController;
+    LauncherController controller(&steamController, nullptr, QString(), QString(), &commandController);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("launcher"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("aiProviders"), &aiController);
