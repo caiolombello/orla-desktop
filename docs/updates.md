@@ -141,10 +141,20 @@ três casos ocorreu e mostra a outra referência quando a dock instalada é usad
 Uma atualização entre abrir a janela e consultar é percebida, porque a leitura se
 repete antes de iniciar a CLI.
 
-Limites: uma dock instalada para todo o sistema não é lida; a versão carregada
-pelo Plasma continua não verificada, e uma sessão ainda não recarregada pode
-executar a versão anterior. Metadados não autenticam o publicador.
+**Ler versão em execução**, dentro de Sobre os componentes, é a única ação que
+pergunta ao Plasma. Ela envia por D-Bus um script fixo e somente leitura a
+`org.kde.PlasmaShell.evaluateScript`, com prazo de 3 segundos, e recebe as versões
+dos widgets `org.caiodock.dock` carregados. A resposta precisa ser um objeto
+exato com até 16 versões SemVer; qualquer outra coisa vira “não foi possível ler
+agora”. Sem dock carregada, a linha diz isso. Quando a versão carregada difere da
+instalada, a janela sugere recarregar o Plasma ou entrar de novo na sessão. Abrir
+a janela, trocar o canal ou consultar releases nunca faz essa leitura.
+
+Limites: uma dock instalada para todo o sistema não é lida, e a leitura em
+execução reflete os metadados que o Plasma carregou, não a integridade dos
+arquivos. Metadados não autenticam o publicador.
 
 Uma prova sem janela, com os dados reais deste usuário e configuração/cache
 temporários, leu a dock 0.2.9 instalada e consultou o canal beta anonimamente:
-`up_to_date`, com a release 0.2.9.
+`up_to_date`, com a release 0.2.9. Uma leitura sob pedido, também sem janela, recebeu
+do Plasma a dock 0.2.9 em execução e não gravou arquivos.

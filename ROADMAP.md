@@ -394,8 +394,9 @@ pertencem a Root; offscreen não qualifica Plasma, Wayland ou AT. U1 permanece p
 **Fase C (21/10):** a janela lê de forma passiva os metadados da dock instalada
 para o usuário e, quando válidos, consulta com essa versão e origem explícita;
 sem eles, mantém a referência fonte/bundle e diz por quê. Uma prova com os dados
-reais leu a dock 0.2.9 e o canal beta respondeu `up_to_date`. Dock do sistema e
-versão carregada pelo Plasma continuam não verificadas. [Detalhes](docs/updates.md#dock-instalada-para-o-usuário--fase-c).
+reais leu a dock 0.2.9 e o canal beta respondeu `up_to_date`. Sob pedido, a janela
+também lê do Plasma a versão carregada e avisa se ela difere da instalada; abrir
+não pergunta ao Plasma. A dock instalada para o sistema continua não lida. [Detalhes](docs/updates.md#dock-instalada-para-o-usuário--fase-c).
 
 - [ ] **U1: avisos de versão.** Fonte oficial de releases do Orla, versão instalada/disponível, canal estável/beta, última consulta, cache e estado indisponível. Aceite: offline, falha e limite de consultas não parecem “já atualizado”; consultar não instala.
 - [ ] **U2: atualizar com recuperação.** Download verificado, compatibilidade, cópia da configuração, instalação iniciada pelo usuário e retorno ao pacote anterior. Definir autenticidade dos artefatos e origem confiável antes de distribuir o updater. Aceite: pacote inválido é recusado e uma atualização interrompida preserva uma versão utilizável e os perfis.
