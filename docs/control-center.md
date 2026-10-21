@@ -91,7 +91,28 @@ o valor certo, mas acusava falta de confirmação. Tela interna, várias telas,
 Wayland com escala diferente e o applet de brilho aberto ao mesmo tempo não foram
 exercitados.
 
-CC1 continua parcial. Microfone, Não perturbe e os gates reais do
+## Não perturbe — CC1-C
+
+O card **Não perturbe** usa as mesmas configurações e regras do applet de
+notificações do Plasma (`org.kde.notificationmanager`). Ligar pelo Orla ou pelo
+Plasma é um único estado, e o card mostra o motivo: sem prazo, até uma data, por
+um aplicativo ou por uma regra do KDE (tela cheia, espelhamento).
+
+Ligar grava o prazo de um ano usado pelo próprio toggle do Plasma; desligar limpa
+o prazo e revoga inibições de aplicativos, também como o Plasma. A mudança só
+conclui quando o servidor de notificações publica o novo estado, calculado pelo
+applet. Se uma regra do KDE mantiver o modo ativo, o card diz isso após 3 segundos
+em vez de mostrar sucesso; o Orla não sobrepõe essas regras. Sem o servidor de
+notificações, só este card fica desativado. O botão continua focável durante a
+confirmação, e um segundo pedido é ignorado até a primeira resposta.
+
+Na sessão Plasma 6.7.5 deste registro, Espaço no botão ligou o modo (`Inhibited`
+verdadeiro no D-Bus) e mostrou “Ativado até você desativar”; outro Espaço desligou.
+O `plasmanotifyrc` terminou idêntico ao anterior. A primeira versão desativava o
+botão durante a confirmação e perdia o foco do teclado; a prova nativa mostrou o
+defeito, corrigido e coberto por teste.
+
+CC1 continua parcial. Microfone e os gates reais do
 serviço de áudio ainda estão abertos; rede, Bluetooth e energia pertencem às
 fatias seguintes. Instalação, módulo privado do Plasma-PA, Pulse/PipeWire,
 barramento da sessão, compositor, seat, hardware, popup nativo e painel
