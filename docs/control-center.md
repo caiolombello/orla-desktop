@@ -59,7 +59,39 @@ herdam a paleta correspondente; as cores personalizadas do dock permanecem no
 seu vidro, conforme [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). A mudança visual não
 qualifica os serviços ou hardware nativos.
 
-CC1 continua parcial. Microfone, brilho, Não perturbe e os gates reais do
+## Brilho da tela — CC1-B
+
+O card **Tela** mostra um slider por tela com brilho ajustável (até quatro),
+com o nome da tela quando houver mais de uma. Os valores vêm do mesmo modelo do
+applet de brilho do Plasma (`org.kde.plasma.private.brightnesscontrolplugin`,
+PowerDevil) e acompanham mudanças feitas fora do Orla, como teclas de brilho.
+O adaptador só é carregado no painel real, enquanto a Central está aberta.
+
+Cada escrita vem de mover o slider por arraste ou teclado. Ela vai ao serviço por
+`org.kde.ScreenBrightness.Display.SetBrightnessWithContext`, sem o indicador do
+Plasma e com contexto próprio do Orla. A alteração só conta como concluída quando
+o PowerDevil anuncia o novo valor. Por isso o Orla não usa o `setBrightness` do
+modelo: ele atualiza o próprio modelo antes do serviço e descarta o eco. Há uma
+alteração em voo por tela; durante um arraste, só o valor mais recente aguarda a
+confirmação anterior. Recusa do serviço ou ausência de confirmação em 3 segundos
+mostra erro no card e volta ao valor atual. O mínimo é 1%, para não apagar painéis
+internos que desligam em zero.
+
+Sem tela ajustável, ou com o serviço indisponível, só esse card fica desativado e
+diz o motivo; sem o módulo do PowerDevil o card não aparece. A Central passou a
+caber em até 620 px de altura para mostrar todos os módulos sem rolagem em telas
+comuns, e o orçamento do popup continua limitando telas baixas.
+
+Na sessão Plasma 6.7.5 deste registro, com um monitor externo por DDC/CI, o
+card leu 100%. Duas setas para a esquerda pelo teclado levaram o monitor a 98%
+(9800 de 10000, conferido no D-Bus) sem erro após o prazo; duas para a direita
+voltaram a 100%. Uma mudança feita por fora apareceu no card sem escrita do Orla.
+A primeira versão, que escrevia pelo modelo, foi recusada nessa prova: mostrava
+o valor certo, mas acusava falta de confirmação. Tela interna, várias telas,
+Wayland com escala diferente e o applet de brilho aberto ao mesmo tempo não foram
+exercitados.
+
+CC1 continua parcial. Microfone, Não perturbe e os gates reais do
 serviço de áudio ainda estão abertos; rede, Bluetooth e energia pertencem às
 fatias seguintes. Instalação, módulo privado do Plasma-PA, Pulse/PipeWire,
 barramento da sessão, compositor, seat, hardware, popup nativo e painel
