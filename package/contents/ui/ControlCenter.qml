@@ -10,6 +10,8 @@ Controls.Control {
     required property var player
     required property var battery
     required property var audio
+    // Optional: hosts without a brightness state show no display card.
+    property var brightness: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
@@ -17,9 +19,9 @@ Controls.Control {
     property string powerError: ""
     property string allError: ""
     implicitWidth: 310
-    // Tall enough to show every module without scrolling on common screens;
-    // the popup budget still caps it on short ones.
-    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 520)
+    // Tall enough to show every module (including the display card) without
+    // scrolling on common screens; the popup budget still caps it on short ones.
+    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 620)
     Layout.fillHeight: true
     Layout.minimumHeight: 1
     Accessible.role: Accessible.Pane
@@ -320,6 +322,141 @@ Controls.Control {
                         wrapMode: Text.WordWrap
                         color: root.foreground
                         Accessible.role: Accessible.AlertMessage
+                    }
+                }
+            }
+
+            Card {
+                objectName: "controlCenterBrightnessCard"
+                visible: root.brightness !== null && root.brightness.status !== "inactive"
+                Layout.fillWidth: true
+                radius: Style.radius.module
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Style.space.sm
+                    Controls.Label {
+                        objectName: "controlCenterBrightnessHeading"
+                        Layout.fillWidth: true
+                        text: qsTr("Tela")
+                        font.pixelSize: Style.type.caption
+                        font.weight: Style.weight.bold
+                        textFormat: Text.PlainText
+                        color: root.foreground
+                        opacity: 0.72
+                    }
+                    Repeater {
+                        model: root.brightness ? root.brightness.displayIds : []
+                        delegate: ColumnLayout {
+                            id: displayRow
+                            required property string modelData
+                            readonly property var display: root.brightness.displayById(modelData) || ({label: ""})
+                            Layout.fillWidth: true
+                            spacing: Style.space.xxs
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                // A name only helps once there is more than one screen.
+                                visible: root.brightness.displayIds.length > 1
+                                text: displayRow.display.label || qsTr("Tela sem nome")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                color: root.muted
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Style.space.sm
+                                Controls.Slider {
+                                    id: brightnessSlider
+                                    objectName: "controlCenterBrightness"
+                                    Layout.fillWidth: true
+                                    Layout.minimumHeight: 40
+                                    padding: Style.space.xs
+                                    from: 1
+                                    to: 100
+                                    stepSize: 1
+                                    enabled: root.brightness.status === "ready"
+                                    opacity: enabled ? 1 : 1 - Style.state.disabled
+                                    Accessible.name: root.brightness.displayIds.length > 1
+                                        ? qsTr("Brilho de %1").arg(displayRow.display.label || qsTr("tela sem nome")) : qsTr("Brilho da tela")
+                                    onMoved: if (!root.brightness.request(displayRow.modelData, value))
+                                        value = root.brightness.presentationPercent(displayRow.modelData)
+                                    onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                                    background: Rectangle {
+                                        x: brightnessSlider.leftPadding
+                                        y: brightnessSlider.topPadding + (brightnessSlider.availableHeight - height) / 2
+                                        width: brightnessSlider.availableWidth
+                                        height: Style.size.iconButton
+                                        radius: height / 2
+                                        color: Style.alpha(brightnessSlider.palette.windowText, Style.state.pressed)
+                                        Rectangle {
+                                            width: Math.max(parent.height, brightnessSlider.visualPosition * parent.width)
+                                            height: parent.height
+                                            radius: height / 2
+                                            color: brightnessSlider.palette.highlight
+                                        }
+                                        Kirigami.Icon {
+                                            x: Style.space.sm
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: Style.size.iconSm
+                                            height: width
+                                            source: "brightness-high-symbolic"
+                                            isMask: true
+                                            color: brightnessSlider.palette.highlightedText
+                                        }
+                                        Rectangle {
+                                            objectName: "controlCenterBrightnessFocus"
+                                            anchors.fill: parent
+                                            anchors.margins: -Style.space.xs
+                                            radius: height / 2
+                                            color: "transparent"
+                                            visible: brightnessSlider.visualFocus
+                                            border.width: 2
+                                            border.color: brightnessSlider.palette.highlight
+                                        }
+                                    }
+                                    handle: Rectangle {
+                                        x: brightnessSlider.leftPadding + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
+                                        y: brightnessSlider.topPadding + (brightnessSlider.availableHeight - height) / 2
+                                        width: Style.size.iconButton - Style.space.xs
+                                        height: width
+                                        radius: width / 2
+                                        color: Style.glass.highlight
+                                        border.width: 1
+                                        border.color: Style.alpha(Style.glass.shade, 0.18)
+                                        visible: brightnessSlider.enabled
+                                    }
+                                }
+                                Binding {
+                                    target: brightnessSlider
+                                    property: "value"
+                                    value: root.brightness.presentationPercent(displayRow.modelData)
+                                    when: !brightnessSlider.pressed
+                                    restoreMode: Binding.RestoreNone
+                                }
+                                Controls.Label {
+                                    objectName: "controlCenterBrightnessPercent"
+                                    Layout.minimumWidth: Style.size.control
+                                    horizontalAlignment: Text.AlignRight
+                                    text: qsTr("%1%").arg(Math.round(brightnessSlider.value))
+                                    textFormat: Text.PlainText
+                                    font.features: {"tnum": 1}
+                                    color: root.foreground
+                                }
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterBrightnessStatus"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: !root.brightness ? ""
+                            : root.brightness.error.length > 0 ? root.brightness.error
+                            : root.brightness.status === "absent" ? qsTr("Nenhuma tela com brilho ajustável.")
+                            : root.brightness.status === "unavailable" ? qsTr("O controle de brilho do KDE está indisponível.")
+                            : root.brightness.status === "loading" ? qsTr("Lendo o brilho das telas…") : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: root.brightness && root.brightness.error.length > 0 ? Accessible.AlertMessage : Accessible.StaticText
                     }
                 }
             }

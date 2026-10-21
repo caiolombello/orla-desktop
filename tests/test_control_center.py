@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression, QQmlProperty
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 
 
 class ControlCenterTests(unittest.TestCase):
@@ -174,6 +174,125 @@ class ControlCenterTests(unittest.TestCase):
             self.assertLessEqual(top + control.height(), viewport.height() + 0.5, name)
             self.assertGreaterEqual(control.height(), 40)
             self.assertLessEqual(control.width(), self.center.width())
+        self.assertEqual(self.warnings, [])
+
+    def visual(self, name):
+        # Repeater delegates exist only in the visual tree; search it in QML.
+        found = self.evaluate("(function find(item) { if (item.objectName === %r) return item;"
+                              " for (let i = 0; i < item.children.length; ++i) { const f = find(item.children[i]);"
+                              " if (f) return f; } return null; })(contentItem)" % name, self.center)
+        return found
+
+    def brightness_calls(self):
+        calls = self.window.findChild(QObject, "controlCenterBrightnessBackend").property("calls")
+        return calls.toVariant() if hasattr(calls, "toVariant") else calls
+
+    def test_brightness_reflects_the_service_and_confirms_each_change_in_order(self):
+        state = self.window.findChild(QObject, "controlCenterBrightnessState")
+        confirmations = QSignalSpy(state.confirmed)
+        slider = self.visual("controlCenterBrightness")
+        self.assertIsNotNone(slider)
+        self.assertTrue(self.item("controlCenterBrightnessCard").isVisible())
+        self.assertEqual(slider.property("value"), 50)
+        self.assertEqual(self.visual("controlCenterBrightnessPercent").property("text"), "50%")
+        self.assertEqual(self.brightness_calls(), [])
+        slider.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(20)
+        self.assertTrue(slider.property("visualFocus"))
+        self.assertTrue(self.visual("controlCenterBrightnessFocus").isVisible())
+        QTest.keyClick(self.window, Qt.Key_Right)
+        QTest.keyClick(self.window, Qt.Key_Right)
+        QTest.qWait(20)
+        # One change in flight; the newer value waits for the service's readback.
+        self.assertEqual(self.brightness_calls(), [{"id": "display0", "raw": 5100}])
+        self.assertTrue(state.property("pendingAny"))
+        self.assertEqual(slider.property("value"), 52)
+        self.evaluate('brightnessBackend.report("display0", 5100)', self.window)
+        QTest.qWait(20)
+        self.assertEqual(self.brightness_calls(), [{"id": "display0", "raw": 5100}, {"id": "display0", "raw": 5200}])
+        self.evaluate('brightnessBackend.report("display0", 5200)', self.window)
+        QTest.qWait(20)
+        self.assertFalse(state.property("pendingAny"))
+        self.assertEqual(confirmations.count(), 2)
+        # Readbacks update the same slider: focus and an ongoing drag survive.
+        self.assertTrue(slider.hasActiveFocus())
+        self.assertEqual(self.visual("controlCenterBrightnessPercent").property("text"), "52%")
+        # A change made elsewhere (keys, Plasma applet) shows up without a write.
+        self.evaluate('brightnessBackend.report("display0", 3000)', self.window)
+        QTest.qWait(20)
+        self.assertEqual(slider.property("value"), 30)
+        self.assertEqual(len(self.brightness_calls()), 2)
+        self.assertFalse(self.item("controlCenterBrightnessStatus").isVisible())
+        self.assertEqual(self.warnings, [])
+
+    def test_unconfirmed_or_refused_brightness_says_so_and_shows_the_current_value(self):
+        slider = self.visual("controlCenterBrightness")
+        self.assertIsNotNone(slider)
+        status = self.item("controlCenterBrightnessStatus")
+        slider.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Left)
+        QTest.qWait(20)
+        self.assertEqual(slider.property("value"), 49)
+        QTest.qWait(450)
+        self.assertTrue(status.isVisible())
+        self.assertIn("não foi confirmado", status.property("text"))
+        self.assertEqual(slider.property("value"), 50)
+        self.evaluate("brightnessBackend.rejectWrites = true", self.window)
+        QTest.keyClick(self.window, Qt.Key_Left)
+        QTest.qWait(20)
+        self.assertIn("recusou", status.property("text"))
+        self.assertEqual(slider.property("value"), 50)
+        self.assertEqual(len(self.brightness_calls()), 2)
+
+    def test_readback_during_the_write_confirms_and_a_signalled_failure_ends_the_wait(self):
+        state = self.window.findChild(QObject, "controlCenterBrightnessState")
+        confirmations = QSignalSpy(state.confirmed)
+        self.evaluate("brightnessBackend.reportDuringWrite = true", self.window)
+        self.assertTrue(self.evaluate('request("display0", 61)', state))
+        self.assertFalse(state.property("pendingAny"))
+        self.assertEqual(confirmations.count(), 1)
+        self.evaluate("brightnessBackend.reportDuringWrite = false", self.window)
+        self.assertTrue(self.evaluate('request("display0", 40)', state))
+        self.assertTrue(state.property("pendingAny"))
+        self.evaluate('brightnessBackend.writeFailed("display0")', self.window)
+        self.assertFalse(state.property("pendingAny"))
+        self.assertIn("recusou", self.item("controlCenterBrightnessStatus").property("text"))
+        self.assertEqual(self.evaluate('presentationPercent("display0")', state), 61)
+        self.assertEqual(self.warnings, [])
+
+    def test_missing_or_invalid_brightness_disables_only_its_card(self):
+        card = self.item("controlCenterBrightnessCard")
+        status = self.item("controlCenterBrightnessStatus")
+        for snapshot, text in (('{status: "ready", displays: []}', "Nenhuma tela com brilho ajustável."),
+                               ('{status: "absent", displays: []}', "Nenhuma tela com brilho ajustável."),
+                               ('{status: "unavailable", displays: []}', "O controle de brilho do KDE está indisponível."),
+                               ('{status: "ready", displays: [{id: "x", label: "", value: 11, max: 10, internal: false}]}',
+                                "O controle de brilho do KDE está indisponível.")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate(f"brightnessBackend.snapshot = {snapshot}", self.window)
+                QTest.qWait(20)
+                self.assertTrue(card.isVisible())
+                self.assertEqual(status.property("text"), text)
+                self.assertIsNone(self.visual("controlCenterBrightness"))
+                self.assertTrue(self.item("controlCenterAudioVolume").isEnabled())
+        self.evaluate("brightness.backend = null", self.window)
+        QTest.qWait(20)
+        self.assertFalse(card.isVisible())
+        self.assertEqual(self.brightness_calls(), [])
+        self.assertEqual(self.warnings, [])
+
+    def test_several_screens_are_named_and_never_go_below_one_percent(self):
+        self.evaluate('brightnessBackend.snapshot = {status: "ready", displays: ['
+                      '{id: "a", label: "Tela A", value: 50, max: 100, internal: true},'
+                      '{id: "b", label: "Tela B", value: 4000, max: 10000, internal: false}]}', self.window)
+        QTest.qWait(30)
+        state = self.window.findChild(QObject, "controlCenterBrightnessState")
+        self.assertTrue(self.evaluate('request("b", 0)', state))
+        self.assertEqual(self.brightness_calls(), [{"id": "b", "raw": 100}])
+        self.assertFalse(self.evaluate('request("missing", 40)', state))
+        self.assertEqual(self.evaluate('presentationPercent("a")', state), 50)
+        names = self.evaluate('displays.map(display => display.label).join("|")', state)
+        self.assertEqual(names, "Tela A|Tela B")
         self.assertEqual(self.warnings, [])
 
     def test_full_volume_keeps_a_separate_visible_keyboard_focus_ring(self):
