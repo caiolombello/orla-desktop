@@ -10,13 +10,13 @@ ColumnLayout {
     property var integrations: null
     readonly property bool known: ["quota", "peripherals", "recording"].indexOf(widgetId) >= 0
     readonly property string project: widgetId === "quota" ? "QuotaLantern"
-        : widgetId === "peripherals" ? "PeriGauge" : widgetId === "recording" ? "FalaTrace" : ""
+        : widgetId === "peripherals" ? qsTr("Bateria de periféricos") : widgetId === "recording" ? "FalaTrace" : ""
     readonly property var reading: known && integrations ? integrations[widgetId] : null
     readonly property string statusText: {
         if (!known) return "";
         if (!shown) return qsTr("Desativado neste perfil");
-        if (!integrations || integrations.error) return qsTr("Integração indisponível");
-        if (integrations.loading) return qsTr("Relendo cache local…");
+        if (!integrations || integrations.errorFor(widgetId)) return qsTr("Integração indisponível");
+        if (widgetId === "peripherals" ? integrations.addonLoading : integrations.legacyLoading) return qsTr("Relendo cache local…");
         if (!reading) return qsTr("Sem estado disponível");
         if (reading.status === "missing") return qsTr("Sem cache local");
         if (reading.status === "invalid") return qsTr("Cache local inválido");
@@ -56,7 +56,7 @@ ColumnLayout {
         spacing: Style.space.sm
         Controls.Label {
             Layout.fillWidth: true
-            text: qsTr("Adaptador local incluído · Experimental")
+            text: root.widgetId === "peripherals" ? qsTr("Complemento externo · Experimental") : qsTr("Adaptador local incluído · Experimental")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
             font.pixelSize: Style.type.caption
@@ -65,7 +65,7 @@ ColumnLayout {
             objectName: "moduleDescription"
             Layout.fillWidth: true
             text: root.widgetId === "quota" ? qsTr("Acompanhe quotas de IA a partir do cache do QuotaLantern.")
-                : root.widgetId === "peripherals" ? qsTr("Veja a bateria dos periféricos registrada pelo PeriGauge.")
+                : root.widgetId === "peripherals" ? qsTr("Veja baterias compartilhadas localmente por um aplicativo externo.")
                 : qsTr("Consulte o último estado salvo pelo FalaTrace. A captura ao vivo não é verificada.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
@@ -81,7 +81,9 @@ ColumnLayout {
         Controls.Label {
             objectName: "moduleRequirements"
             Layout.fillWidth: true
-            text: qsTr("Requer o aplicativo e a ponte local atualizada. Só os módulos ativados neste perfil têm seus caches lidos pela dock.")
+            text: root.widgetId === "peripherals"
+                ? qsTr("Mostrar neste perfil, ativar o complemento e permitir o compartilhamento no aplicativo são escolhas separadas. Adicionar um arquivo não ativa a leitura.")
+                : qsTr("Requer o aplicativo e a ponte local atualizada. Só os módulos ativados neste perfil têm seus caches lidos pela dock.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
             font.pixelSize: Style.type.caption

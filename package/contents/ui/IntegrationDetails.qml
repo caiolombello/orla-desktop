@@ -8,7 +8,8 @@ ColumnLayout {
     required property var dock
     required property var integrations
     property string selected: "quota"
-    readonly property string project: selected === "quota" ? "quotalantern" : selected === "peripherals" ? "perigauge" : "falatrace"
+    property var addonsSession: null
+    readonly property string project: selected === "quota" ? "quotalantern" : "falatrace"
     spacing: Style.space.md
 
     function stateText(modelData) {
@@ -16,15 +17,18 @@ ColumnLayout {
         if (modelData.stale) return qsTr("Leitura desatualizada");
         if (root.selected === "quota") return typeof modelData.usedPercent === "number"
             ? Math.round(modelData.usedPercent) + "% usado" : qsTr("Quota desconhecida");
-        return typeof modelData.percent === "number" ? Math.round(modelData.percent) + "%"
-            + (modelData.estimated ? qsTr(" · estimativa") : "") : qsTr("Percentual desconhecido");
+        const levels = {critical: qsTr("Nível crítico"), low: qsTr("Nível baixo"), good: qsTr("Nível bom"), full: qsTr("Bateria cheia")};
+        const reading = typeof modelData.percent === "number" ? Math.round(modelData.percent) + "%"
+            : levels[modelData.level] || qsTr("Percentual desconhecido");
+        return reading + (modelData.estimated ? qsTr(" · estimativa") : "")
+            + (modelData.charging === "charging" ? qsTr(" · carregando") : modelData.charging === "full" ? qsTr(" · carga completa") : "");
     }
 
     Controls.Label {
         objectName: "integrationDescription"
         Layout.fillWidth: true
-        text: root.integrations.error || (root.selected === "quota" ? qsTr("Leituras já coletadas pelo QuotaLantern. Cada janela é independente; custos não são percentuais de quota.")
-            : root.selected === "peripherals" ? qsTr("Últimas leituras do PeriGauge. Estimativas e dados antigos são identificados.")
+        text: root.integrations.errorFor(root.selected) || (root.selected === "quota" ? qsTr("Leituras já coletadas pelo QuotaLantern. Cada janela é independente; custos não são percentuais de quota.")
+            : root.selected === "peripherals" ? qsTr("Baterias compartilhadas por um aplicativo externo. Estimativas e dados antigos são identificados.")
             : qsTr("Último estado salvo pelo FalaTrace. A atividade da captura não foi verificada. Abra o aplicativo para controlar a gravação."))
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
@@ -47,8 +51,9 @@ ColumnLayout {
             : root.selected === "peripherals" ? !(root.integrations.peripherals.devices || []).length : true
         text: root.selected === "quota" ? qsTr("Sem quota recente. Abra o QuotaLantern para atualizar suas leituras.")
             : root.selected === "peripherals" ? (root.integrations.peripherals.status === "missing"
-                ? qsTr("Sem cache local do PeriGauge.") : root.integrations.peripherals.status === "invalid"
-                ? qsTr("O cache local do PeriGauge é inválido.") : qsTr("Sem bateria disponível no cache local."))
+                ? qsTr("Sem dados compartilhados. Confira a ativação do complemento e a permissão no aplicativo de origem.") : root.integrations.peripherals.status === "invalid"
+                ? qsTr("Os dados compartilhados são inválidos.") : root.integrations.peripherals.status === "stale"
+                ? qsTr("Dados desatualizados. Aguarde uma nova coleta no aplicativo de origem.") : qsTr("Sem bateria externa disponível."))
             : root.integrations.recordingSummary
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
@@ -62,7 +67,7 @@ ColumnLayout {
         ColumnLayout {
             id: entries
             width: parent.width
-            spacing: 12
+            spacing: Style.space.md
             Repeater {
                 model: root.selected === "quota" ? root.integrations.quota.windows || [] : root.integrations.peripherals.devices || []
                 delegate: ColumnLayout {
@@ -84,6 +89,21 @@ ColumnLayout {
                         wrapMode: Text.WordWrap
                         color: root.dock.muted
                     }
+                    Repeater {
+                        model: root.selected === "peripherals" ? modelData.components || [] : []
+                        delegate: Controls.Label {
+                            required property var modelData
+                            objectName: "peripheralComponent"
+                            Layout.fillWidth: true
+                            text: {
+                                const labels = {left: qsTr("Esquerdo"), right: qsTr("Direito"), case: qsTr("Estojo")};
+                                return labels[modelData.label] + " · " + root.stateText(modelData);
+                            }
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                            color: root.dock.muted
+                        }
+                    }
                     Controls.Label {
                         Layout.fillWidth: true
                         visible: root.selected === "quota" && Boolean(modelData.resetAt || modelData.resetDescription)
@@ -97,8 +117,35 @@ ColumnLayout {
             }
         }
     }
-    RowLayout {
-        Controls.Button { objectName: "refreshCacheButton"; text: qsTr("Reler cache local"); enabled: !root.integrations.loading; onClicked: root.integrations.refresh() }
-        Controls.Button { text: qsTr("Projeto GitHub"); onClicked: Qt.openUrlExternally("https://github.com/caiolombello/" + root.project) }
+    ColumnLayout {
+        Layout.fillWidth: true
+        OrlaButton {
+            objectName: "refreshCacheButton"
+            Layout.fillWidth: true
+            text: root.selected === "peripherals" && root.addonsSession && root.addonsSession.reloadRequired
+                ? qsTr("Recarregar complementos") : qsTr("Reler cache local")
+            enabled: !(root.selected === "peripherals" ? root.integrations.addonLoading : root.integrations.legacyLoading)
+                && !(root.addonsSession && root.selected === "peripherals" && root.addonsSession.busy)
+            onClicked: {
+                if (root.selected === "peripherals" && root.addonsSession && root.addonsSession.reloadRequired) root.addonsSession.reload();
+                else root.integrations.refresh();
+            }
+        }
+        OrlaButton {
+            objectName: "legacyProjectLink"
+            Layout.fillWidth: true
+            visible: root.selected !== "peripherals"
+            text: qsTr("Projeto GitHub")
+            onClicked: Qt.openUrlExternally("https://github.com/caiolombello/" + root.project)
+        }
+        Controls.Label {
+            objectName: "addonReloadGuidance"
+            Layout.fillWidth: true
+            visible: root.selected === "peripherals" && root.addonsSession !== null && root.addonsSession.reloadRequired
+            text: root.addonsSession ? root.addonsSession.feedback : ""
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: root.dock.muted
+        }
     }
 }

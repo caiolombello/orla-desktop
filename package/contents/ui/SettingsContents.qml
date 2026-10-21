@@ -18,10 +18,19 @@ ColumnLayout {
     property var desktopSwitch: null
     property var automation: null
     property var integrations: null
+    property var addonsSession: null
+    property var addonScheme: Style.scheme("dark")
+    readonly property bool widgetsTabActive: tabs.currentIndex === 1 && !importing && appearance.editing
+    signal addonFileRequested()
+    signal addonWaitCanceled()
     required property var contextBindings
     readonly property bool contextsTabActive: tabs.currentIndex === 3
     signal appearanceCanceled()
     spacing: Style.space.sm
+    function addonsAvailable() {
+        return addonsSession !== null && addonsSession.surfaceActive && addonsSession.owner === settings
+            && visible && widgetsTabActive;
+    }
     function setPreference(key, value) {
         if (importing) return false;
         const patch = {};
@@ -181,9 +190,9 @@ ColumnLayout {
     }
     function reveal(control) {
         const viewport = widgetScroll.contentItem;
-        const point = control.mapToItem(viewport, 0, 0);
-        const height = Math.min(control.height, viewport.height);
-        if (point.y < 0) viewport.contentY += point.y;
+        const point = control.mapToItem(viewport, 0, -Style.space.xs);
+        const height = Math.min(control.height + Style.space.xs * 2, viewport.height);
+        if (point.y < 0 || control.height + Style.space.xs * 2 > viewport.height) viewport.contentY += point.y;
         else if (point.y + height > viewport.height) viewport.contentY += point.y + height - viewport.height;
     }
     SegmentedTabs {
@@ -349,7 +358,7 @@ ColumnLayout {
                                         Layout.fillWidth: true
                                         text: modelData.id === "clock" ? qsTr("Relógio e calendário") : modelData.id === "pomodoro" ? qsTr("Pomodoro")
                                             : modelData.id === "music" ? qsTr("Música (MPRIS)") : modelData.id === "systemBattery" ? qsTr("Bateria do computador")
-                                            : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? "PeriGauge" : "FalaTrace"
+                                            : modelData.id === "quota" ? "QuotaLantern" : modelData.id === "peripherals" ? qsTr("Periféricos") : "FalaTrace"
                                         enabled: settings.profiles.writable && !settings.importing
                                         checked: modelData.visible
                                         onToggled: settings.setWidgetVisible(modelData.id, checked)
@@ -397,6 +406,55 @@ ColumnLayout {
                     }
                 }
                 Controls.Label { Layout.fillWidth: true; text: settings.profiles.error; visible: text.length > 0; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                AddonManager {
+                    objectName: "addonManager"
+                    Layout.fillWidth: true
+                    visible: settings.addonsSession !== null
+                    scheme: settings.addonScheme
+                    readonly property var session: settings.addonsSession
+                    readonly property var state: session ? session.manager : null
+                    addons: state ? state.addons : []
+                    preview: state ? state.preview : null
+                    busy: session ? session.busy : false
+                    loading: state ? state.loading : false
+                    feedback: session ? session.feedback : ""
+                    feedbackKind: state ? state.feedbackKind : "status"
+                    profilePeripheralVisible: settings.profiles.effective.widgets.some(row => row.id === "peripherals" && row.visible)
+                    onChooseFileRequested: if (settings.addonsAvailable()) settings.addonFileRequested()
+                    onInstallRequested: sha => { if (settings.addonsAvailable()) state.installAddon(sha); }
+                    onEnableRequested: (id, sha) => { if (settings.addonsAvailable()) state.enableAddon(id, sha); }
+                    onDisableRequested: (id, sha) => { if (settings.addonsAvailable()) state.disableAddon(id, sha); }
+                    onRemoveRequested: (id, sha) => { if (settings.addonsAvailable()) state.removeAddon(id, sha); }
+                    onRollbackRequested: (id, sha) => { if (settings.addonsAvailable()) state.rollbackAddon(id, sha); }
+                    onOpenOriginRequested: origin => { if (settings.addonsAvailable()) session.openOrigin(origin); }
+                    onRevealRequested: control => settings.reveal(control)
+                }
+                OrlaButton {
+                    objectName: "addonReload"
+                    Layout.fillWidth: true
+                    // Native scroll chrome can narrow the actual clipped viewport.
+                    Layout.maximumWidth: Math.max(Style.size.target, widgetScroll.contentItem.width - Style.space.xs * 2)
+                    Layout.alignment: Qt.AlignLeft
+                    Layout.leftMargin: Style.space.xs
+                    Layout.rightMargin: Style.space.xs
+                    visible: settings.addonsSession !== null
+                    text: qsTr("Recarregar complementos")
+                    enabled: settings.addonsSession !== null && !settings.addonsSession.busy
+                    onClicked: settings.addonsSession.reload()
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                OrlaButton {
+                    objectName: "addonCancelWait"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: Math.max(Style.size.target, widgetScroll.contentItem.width - Style.space.xs * 2)
+                    Layout.alignment: Qt.AlignLeft
+                    Layout.leftMargin: Style.space.xs
+                    Layout.rightMargin: Style.space.xs
+                    visible: settings.addonsSession !== null && settings.addonsSession.waiting
+                    text: qsTr("Cancelar espera e fechar")
+                    onClicked: settings.addonWaitCanceled()
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Para ocultar automaticamente: configure a visibilidade do painel no modo de edição do Plasma."); wrapMode: Text.WordWrap; opacity: 0.65 }
             }
         }

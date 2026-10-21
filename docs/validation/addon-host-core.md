@@ -82,7 +82,7 @@ seguinte ativou outro processo e retornou o mesmo catálogo privado. A remoção
 real apagou o pacote e o registro próprio; preservou integralmente o registro
 de complementos e as preferências sintéticas.
 
-## Limites da evidência
+## Limites da validação original do núcleo
 
 Não houve instalação na sessão de uso, interação com o seletor de arquivos,
 validação de foco Plasma/Wayland, coleta de hardware, execução do PeriGauge,
@@ -92,3 +92,71 @@ produtor e a instalação local completa são etapas separadas.
 
 Os limites experimentais de retenção e recuperação estão no
 [guia de extensões](../EXTENSIONS.md).
+
+
+## Cliente e coordenação — prova privada de 21/10
+
+A camada de interface acrescenta gerenciamento de complementos em
+Configurações → Widgets: escolher arquivo, conferir metadados, instalar,
+ativar leitura, desativar, remover com confirmação e voltar à versão anterior.
+Instalação, atualização e rollback mantêm a leitura desativada. Não há pacote
+de produtor distribuído por padrão, código comunitário executável ou catálogo.
+
+Uma prova separada usou o transporte KDE real, o serviço real, o gerenciador
+QML, o coordenador e o adaptador de dados de produção, em D-Bus privado,
+com manifesto e exportação sintéticos. Treze chamadas diretas cobriram os
+oito métodos tipados; outras 16 chamadas passaram pelo fluxo coordenado.
+As seis mutações do gerenciador foram confirmadas. A abertura aguardou a
+leitura fisicamente pendente antes de listar metadados, retomou uma leitura
+válida de 0% após fechar e limpou os dados ao desativar/remover. Não houve
+avisos QML; o serviço foi recolhido e os 545 arquivos de entrada permaneceram
+iguais. Isso não usou o barramento da sessão de uso nem hardware.
+
+Essa composição exigiu normalizar a string encapsulada na resposta nativa do
+Qt, proteger notificações anteriores à conclusão do componente e cancelar
+callbacks da apresentação antes de acessar objetos já destruídos. Os
+resultados anteriores com falha foram preservados. Cancelar/Recarregar
+reservam espaço para o contorno de foco completo no viewport real, em vez
+de alterar fontes, alvos ou o orçamento do popup.
+
+O encerramento do coordenador também tem regressões próprias: resultados
+atrasados e duplicados são ignorados após sua destruição, inclusive quando
+um observador o retira durante a publicação. A instância substituta continua
+operante, mantém seu foco e aceita uma nova leitura válida. Essas provas
+usam objetos Qt reais e transporte simulado; o teste de interoperabilidade
+privada acima cobre a instância viva, sem promover esse caso de destruição
+a uma prova de fechamento nativo do Plasma.
+
+O bloco portátil proposto do CI passou localmente em Qt/PySide 6.12.0 e
+Python 3.14.8: 129 testes do núcleo, 38 do cliente e 117 de apresentação,
+coordenação portátil e dados, sem falhas ou skips. Os nove testes do painel
+real exigem os módulos KDE e ficam na validação local com Qt 6.11.2;
+não são omitidos por um novo skip. O resultado local não é CI hospedado.
+
+Capturas sintéticas do componente pai, com dados fictícios e renderização
+offscreen, mostram os contornos de foco nas duas paletas:
+
+![Recarregar complementos no esquema escuro](../screenshots/addon-manager/addons-dark-reload.png)
+![Cancelar espera no esquema claro e viewport curto](../screenshots/addon-manager/addons-light-wait.png)
+
+## PeriGauge — ciclo UPower privado de 21/10
+
+O executável revisado do produtor completou um único ciclo real privado,
+com UPower: coleta e cache, consentimento separado, publicação da projeção,
+leitura exata pelo host, reutilização sem renovar a validade, expiração real
+de 30 segundos e desativação com remoção da exportação. O estado inicial e
+final permaneceu desativado. O host privado também confirmou ausência de
+leitura para pacote não instalado, desativado ou oculto pelo perfil, e
+completou desativação/remoção. Os 19 processos próprios foram recolhidos.
+
+A configuração e o serviço instalados do produtor não foram alterados.
+As leituras privadas foram retidas somente para diagnóstico local; nenhum
+nome ou identificador de hardware integra este registro ou as capturas.
+Esse ciclo não qualifica HID, Buds, notificações, saúde do hardware, operação
+oculta da interface, uso contínuo, atualização do produtor instalado ou a
+interface Orla na sessão de uso. Esses gates continuam separados.
+
+O seletor/modalidade, foco e acessibilidade nativos, troca de perfis em uso,
+escala/monitores, reinício/login e atualização completa ainda precisam das
+suas provas na instalação. X4, I1 e DX4 permanecem parciais; o formato
+continua experimental.

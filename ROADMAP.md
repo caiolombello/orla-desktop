@@ -24,19 +24,35 @@ QML. A revisão independente aprovou o Source, a geração offline e a inclusão
 da licença nos pacotes. O bloco exato do CI passou localmente com 129 testes em
 Qt 6.12, sem os cinco arquivos do cliente. Em outro teste privado, o núcleo e
 o gerenciador QML candidato completaram seis mutações confirmadas, preservando
-instalação/atualização/rollback desativados. O teste do adaptador nativo de dados
-encontrou uma incompatibilidade no retorno encapsulado do Qt; sua correção, a
-composição e o foco seguem separados, antes da instalação na sessão de uso.
+instalação/atualização/rollback desativados. A camada seguinte corrige a
+normalização do retorno encapsulado do Qt; o teste privado do adaptador de
+produção e sua composição com o coordenador passaram sem avisos QML.
 O [perfil de texto](docs/ADDON_TEXT_PROFILE.md) permanece experimental.
+
+**X4/DX4 — cliente nas configurações (21/10):** o Source acrescenta escolher
+arquivo, prévia de metadados, aprovação por SHA completo, instalação desativada,
+ativação separada, remoção confirmada e rollback. O coordenador aguarda chamadas
+fisicamente pendentes e exige releitura após resultado desconhecido. A prova
+privada com serviço e transporte KDE reais completou seis mutações, retomada
+de 0% e limpeza ao desativar/remover. O bloco portátil do CI passou localmente
+com 284 testes em Qt 6.12, sem falhas ou skips. Os testes do painel continuam
+na matriz KDE local; imagens sintéticas claro/escuro verificam foco em viewport
+curto. Instalação na sessão de uso, seletor/modalidade, acessibilidade e matriz
+de monitores permanecem gates próprios. Consulte a
+[evidência delimitada](docs/validation/addon-host-core.md); não há catálogo ou
+ativação automática de projetos instalados.
 
 **I1 — exportação opcional do PeriGauge (21/10):** o
 [PR 4 do produtor](https://github.com/caiolombello/perigauge/pull/4), em rascunho,
 adiciona consentimento separado, projeção mínima e revogação explícita. A revisão
 independente aprovou o Source; no checkout integrado passaram 83 testes de
 biblioteca, formatação, build e 12 invocações privadas da CLI. As quatro fixtures
-produzidas também passaram pelo parser/store do Orla. Coleta normal real,
-hardware, notificações, atualização do serviço instalado e desinstalação continuam
-sem qualificação. A instalação local e suas permissões permanecem inalteradas;
+produzidas também passaram pelo parser/store do Orla. Um único ciclo real
+privado com UPower passou coleta, publicação autorizada, leitura exata pelo host,
+reutilização sem renovar validade, expiração real e desativação; terminou OFF e
+recolheu os processos próprios. HID/Buds, notificações, saúde do hardware,
+operação contínua e atualização do serviço instalado continuam sem qualificação.
+A instalação local do produtor e suas permissões permanecem inalteradas;
 I1/X4/DX4 seguem parciais, e QuotaLantern permanece uma integração opcional separada.
 
 **Histórico de validação anterior ao modo Meta:** o launcher compacto de `43905da` passou ativação por Ctrl+Alt+Meta+O, consulta, ↓ e Escape com retorno à mesma janela de teste em dois processos independentes, em uma tela Wayland. Isso não qualifica Enter/execução, provedores reais ou múltiplos monitores. Dock Auto Hide e popups separados do dock foram observados nesta máquina; o Menu Orla isolado passou hover, duas aberturas e ↓/Escape em DPR 2. O helper final sem modificações passou aplicar → desativar → restaurar normalmente o layout original → reaplicar em uma tela Plasma 6.7.5/Wayland com DPR 2, preservando o dock independente e verificando a ordem dos cinco módulos. O ciclo não mostrou novo crash, mas crashes intermitentes anteriores em desligamentos rápidos do Plasma não foram resolvidos pela proteção contra o limite de partidas. Outras telas/ambientes e o aceite completo continuam abertos. Os assets publicados 0.2.9 permanecem inalterados e não incluem launcher, barra ou helper de layout. Os checklists abaixo mantêm o aceite completo, incluindo trabalho ainda não implementado.

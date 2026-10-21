@@ -11,6 +11,7 @@ from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from test_addon_peripherals import peripheral_frame, missing_frame
 
 
 class WidgetStripTests(unittest.TestCase):
@@ -33,6 +34,7 @@ class WidgetStripTests(unittest.TestCase):
         self.publish()
 
     def tearDown(self):
+        self.app.processEvents()
         if self.engine.rootObjects():
             self.window.close()
             self.window.deleteLater()
@@ -57,13 +59,15 @@ class WidgetStripTests(unittest.TestCase):
     def publish(self, quota=None, peripherals=None, recording=None):
         snapshot = {
             "schemaVersion": 2,
-            "modules": ["quota", "peripherals", "recording"],
+            "modules": ["quota", "recording"],
             "quota": quota or {"status": "missing", "windows": [], "costs": []},
-            "peripherals": peripherals or {"status": "missing", "devices": []},
             "recording": recording or {"status": "missing", "state": "unknown"},
         }
         text = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
-        self.assertTrue(self.evaluate("acceptSnapshot(" + json.dumps(text) + ", ['quota','peripherals','recording'])", self.integrations))
+        self.assertTrue(self.evaluate("acceptSnapshot(" + json.dumps(text) + ", ['quota','recording'])", self.integrations))
+        self.evaluate("invalidateAddons(); refresh()", self.integrations)
+        frame = missing_frame() if peripherals is None else peripherals
+        self.evaluate("transport.replyAddons(" + json.dumps(json.dumps(frame)) + ", false)", self.integrations)
 
     # Widgets are square live icons (slot = iconSize 42 + Style.dock.slotGap 8);
     # `live` says whether the icon shows data or its idle face.
@@ -119,7 +123,7 @@ class WidgetStripTests(unittest.TestCase):
         identities = [quota, peripherals, battery, recording]
 
         self.assert_idle(quota, "QuotaLantern", "Sem leitura disponível")
-        self.assert_idle(peripherals, "PeriGauge", "Sem cache local")
+        self.assert_idle(peripherals, "Bateria de periféricos", "Sem cache local")
         self.assert_idle(battery, "Energia", "Bateria indisponível")
         self.assert_idle(recording, "FalaTrace", "Sem estado disponível")
         quota.forceActiveFocus(Qt.TabFocusReason)
@@ -128,13 +132,13 @@ class WidgetStripTests(unittest.TestCase):
 
         self.publish(
             quota={"status": "ready", "windows": [{"provider": "codex", "usedPercent": 37, "stale": False}], "costs": []},
-            peripherals={"status": "ready", "devices": [{"name": "Mouse", "percent": 64, "stale": False, "present": True}]},
+            peripherals=peripheral_frame(percent=64),
             recording={"status": "unknown", "state": "recording"},
         )
         self.evaluate("status = 'ready'; percentKnown = true; percent = 99; charging = 'not-charging'", self.battery)
         QTest.qWait(10)
         self.assert_live(quota, "QuotaLantern", "codex · 37% usado")
-        self.assert_live(peripherals, "PeriGauge", "Mouse · 64%")
+        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · 64%")
         self.assert_live(battery, "99%", "Na tomada")
         self.assert_live(recording, "FalaTrace", "Estado salvo · gravando")
         self.assertTrue(quota.property("activeFocus"))
@@ -143,52 +147,58 @@ class WidgetStripTests(unittest.TestCase):
 
         self.publish(
             quota={"status": "stale", "windows": [{"provider": "codex", "usedPercent": 37, "stale": True}], "costs": []},
-            peripherals={"status": "stale", "devices": [{"name": "Mouse", "percent": 64, "stale": True, "present": True}]},
+            peripherals=peripheral_frame(percent=64, stale=True),
             recording={"status": "unknown", "state": "recording"},
         )
         QTest.qWait(10)
         self.assert_live(quota, "QuotaLantern", "Dados desatualizados")
-        self.assert_live(peripherals, "PeriGauge", "Dados desatualizados")
+        self.assert_live(peripherals, "Bateria de periféricos", "Dados desatualizados")
 
         self.publish(
             quota={"status": "stale", "windows": [{"provider": "codex", "usedPercent": 37, "stale": True}], "costs": []},
-            peripherals={"status": "unknown", "devices": [{"name": "Mouse", "percent": None, "stale": False, "present": False}]},
+            peripherals=peripheral_frame(percent=None, present=False),
             recording={"status": "unknown", "state": "recording"},
         )
         QTest.qWait(10)
-        self.assert_live(peripherals, "PeriGauge", "Mouse · fora de alcance")
+        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
 
         self.evaluate("unavailable('Falha de conexão')", self.integrations)
         self.evaluate("status = 'unavailable'; percentKnown = false; percent = -1", self.battery)
         QTest.qWait(10)
         self.assert_idle(quota, "QuotaLantern", "Integração indisponível")
-        self.assert_idle(peripherals, "PeriGauge", "Integração indisponível")
+        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
+        self.evaluate("refresh(); transport.replyAddons('', true)", self.integrations)
+        self.assert_idle(peripherals, "Bateria de periféricos", "Integração indisponível")
         self.assert_idle(battery, "Energia", "Bateria indisponível")
         self.assert_idle(recording, "FalaTrace", "Sem estado disponível")
         self.assertEqual([self.tile(name) for name in ("quotaTile", "peripheralsTile", "systemBatteryTile", "recordingTile")], identities)
 
-    def test_whitespace_only_absent_name_stays_compact_through_real_snapshot_contract(self):
+    def test_unvalidated_names_fail_closed_and_valid_generic_absent_name_preserves_focus(self):
         peripherals = self.tile("peripheralsTile")
         identity = peripherals
         peripherals.forceActiveFocus(Qt.TabFocusReason)
-        self.publish(peripherals={
-            "status": "unknown",
-            "devices": [{"name": " \t ", "percent": None, "stale": False, "present": False}],
-        })
-        QTest.qWait(10)
-        self.assertIs(self.tile("peripheralsTile"), identity)
-        self.assertTrue(peripherals.property("activeFocus"))
-        self.assertFalse(peripherals.property("live"))
-        self.assertEqual(peripherals.width(), self.SLOT)
+        for name in (" \t ", " Mouse ", "<b>Private alias</b>"):
+            frame = peripheral_frame(percent=None, present=False)
+            frame['peripherals']['devices'][0]['name'] = name
+            self.publish(peripherals=frame)
+            QTest.qWait(10)
+            self.assertIs(self.tile("peripheralsTile"), identity)
+            self.assertTrue(peripherals.property("activeFocus"))
+            self.assert_idle(peripherals, "Bateria de periféricos", "Integração indisponível")
+        self.publish(peripherals=peripheral_frame(percent=None, present=False))
+        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
 
-        self.publish(peripherals={
-            "status": "unknown",
-            "devices": [{"name": " Mouse ", "percent": None, "stale": False, "present": False}],
-        })
-        QTest.qWait(10)
-        self.assertIs(self.tile("peripheralsTile"), identity)
-        self.assertTrue(peripherals.property("activeFocus"))
-        self.assert_live(peripherals, "PeriGauge", " Mouse  · fora de alcance")
+    def test_coarse_level_has_text_and_icon_without_manufactured_ring_or_percentage(self):
+        self.publish(peripherals=peripheral_frame(percent=None, level='low', charging='charging'))
+        tile = self.tile('peripheralsTile')
+        self.assert_live(tile, 'Bateria de periféricos', 'Mouse · Nível baixo · carregando')
+        data = json.loads(self.evaluate('JSON.stringify(info.data)', tile))
+        self.assertEqual(data['value'], '')
+        self.assertEqual(data['progress'], -1)
+        self.assertEqual(data['glyph'], 'input-mouse-symbolic')
+        self.publish(peripherals=peripheral_frame(percent=0, estimated=True))
+        self.assert_live(tile, 'Bateria de periféricos', 'Mouse · 0% · estimativa')
+        self.assertEqual(json.loads(self.evaluate('JSON.stringify(info.data)', tile))['progress'], 0)
 
     def test_clock_and_idle_pomodoro_stay_live_and_disabled_widget_stays_hidden(self):
         clock = self.tile("clockTile")

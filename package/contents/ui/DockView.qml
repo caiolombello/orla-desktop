@@ -25,6 +25,8 @@ Item {
     property alias tasksModel: tasks
     property alias pomodoro: focusTimer
     property alias integrations: localIntegrations
+    property alias addonsSession: addonsSession
+    property var addonTransportOverride: null
     property alias appearance: appearanceState
     property alias appearancePreset: appearancePresetState
     property alias systemBattery: power
@@ -615,6 +617,32 @@ Item {
         active: enabledModules.length > 0
         enabledModules: ["quota", "peripherals", "recording"].filter(module => root.widgetVisible(module))
     }
+    AddonTransport { id: nativeAddonTransport }
+    AddonsSession {
+        id: addonsSession
+        objectName: "dockAddonsSession"
+        running: root.ready
+        dataState: localIntegrations
+        transport: root.addonTransportOverride !== null ? root.addonTransportOverride : nativeAddonTransport
+        surfaceActive: settings.visible && root.contextCommandsVisible && settingsContents.widgetsTabActive
+        owner: settingsContents
+        scopeKey: profileState.activeProfileId + ":" + profileState.revision
+        onOriginApproved: origin => Qt.openUrlExternally(origin)
+    }
+    AddonFilePicker {
+        id: addonPicker
+        objectName: "dockAddonFilePicker"
+        manager: addonsSession.manager
+        parentWindow: settings.nativeDialog
+        active: addonsSession.surfaceActive
+    }
+    Binding {
+        target: settings.nativeDialog
+        property: "hideOnWindowDeactivate"
+        // A modal chooser legitimately takes activation from this popup.
+        value: !addonPicker.visible && !addonsSession.manager.selecting
+        when: settings.nativeDialog !== null
+    }
     function requestControlCenter(client, host, anchor) {
         return ready && controlCenterPopup.openFromClient(client, host, anchor);
     }
@@ -1022,6 +1050,10 @@ Item {
             desktopSwitch: desktopSwitchState
             automation: autoContextState
             integrations: localIntegrations
+            addonsSession: addonsSession
+            addonScheme: root.popupScheme
+            onAddonFileRequested: addonPicker.open()
+            onAddonWaitCanceled: settings.close()
             onAppearanceCanceled: settings.close()
         }
     }
@@ -1064,8 +1096,8 @@ Item {
         id: integrationPopup
         objectName: "integrationPopup"
         dock: root
-        title: root.selectedIntegration === "quota" ? "QuotaLantern" : root.selectedIntegration === "peripherals" ? "PeriGauge" : "FalaTrace"
-        IntegrationDetails { dock: popupContext; integrations: localIntegrations; selected: root.selectedIntegration }
+        title: root.selectedIntegration === "quota" ? "QuotaLantern" : root.selectedIntegration === "peripherals" ? qsTr("Bateria de periféricos") : "FalaTrace"
+        IntegrationDetails { dock: popupContext; integrations: localIntegrations; selected: root.selectedIntegration; addonsSession: addonsSession }
     }
     Connections {
         target: root.configuration
@@ -1248,7 +1280,7 @@ Item {
         }
         Controls.Label {
             Layout.fillWidth: true
-            text: qsTr("Bateria do computador. Baterias de periféricos continuam no PeriGauge.")
+            text: qsTr("Bateria do computador. Baterias externas ficam em Periféricos.")
             color: root.popupScheme.textMuted
             font.pixelSize: Style.type.caption
             wrapMode: Text.WordWrap; textFormat: Text.PlainText

@@ -93,7 +93,7 @@ class LocalModuleTests(unittest.TestCase):
     def test_closed_or_unknown_module_clears_disclosure_and_short_layout_fits(self):
         for width in (350, 420):
             self.window.setWidth(width)
-            for widget, project in (("quota", "QuotaLantern"), ("peripherals", "PeriGauge"),
+            for widget, project in (("quota", "QuotaLantern"), ("peripherals", "Bateria de periféricos"),
                                     ("recording", "FalaTrace")):
                 with self.subTest(width=width, widget=widget):
                     self.details.setProperty("widgetId", widget)
@@ -117,3 +117,16 @@ class LocalModuleTests(unittest.TestCase):
         self.assertEqual(self.details.property("statusText"), "")
         self.assertFalse(self.details.property("visible"))
         self.assertEqual(self.warnings, [])
+
+    def test_external_battery_status_ignores_failed_or_loading_legacy_channel(self):
+        self.details.setProperty('widgetId', 'peripherals')
+        self.details.setProperty('shown', True)
+        self.bridge.setProperty('peripherals', {'status':'ready'})
+        self.bridge.setProperty('error', 'legacy failed')
+        self.bridge.setProperty('loading', True)
+        self.assertEqual(self.details.property('statusText'), 'Leitura disponível')
+        self.bridge.setProperty('addonLoading', True)
+        self.assertEqual(self.details.property('statusText'), 'Relendo cache local…')
+        self.bridge.setProperty('addonError', 'addon failed')
+        self.assertEqual(self.details.property('statusText'), 'Integração indisponível')
+        self.assertEqual(self.bridge.property('refreshRequests'), 0)

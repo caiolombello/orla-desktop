@@ -8,7 +8,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND', 'software')
 os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'Fusion')
 
-from PySide6.QtCore import QObject, QUrl
+from PySide6.QtCore import QObject, QUrl, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 
@@ -33,55 +33,76 @@ class PeripheralsUiTests(unittest.TestCase):
 
     def tearDown(self):
         self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(self.engine, QEvent.DeferredDelete)
         self.app.processEvents()
+        self.assertEqual(self.warnings, [])
 
-    def accept(self, peripherals):
-        value = {'schemaVersion': 2, 'modules': ['quota', 'peripherals', 'recording'],
-                 'quota': {'status': 'missing', 'windows': [], 'costs': []},
-                 'peripherals': peripherals, 'recording': {'status': 'missing', 'state': 'unknown'}}
-        expression = QQmlExpression(self.engine.rootContext(), self.integration,
-                                    'acceptSnapshot(' + json.dumps(json.dumps(value)) + ", ['quota','peripherals','recording'])")
-        accepted, _ = expression.evaluate()
+    def evaluate(self, source, target=None):
+        expression = QQmlExpression(self.engine.rootContext(), target or self.integration, source)
+        value, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
-        self.assertTrue(accepted)
         self.app.processEvents()
+        return value
 
-    def test_summary_distinguishes_absent_stale_unknown_and_missing_cache(self):
+    def accept(self, frame):
+        self.evaluate('enabledModules=["peripherals"]; active=true; refresh()')
+        transport = self.integration.findChild(QObject, 'fixtureTransport')
+        self.evaluate('reply(' + json.dumps(json.dumps(frame)) + ')', transport)
+
+    def test_summary_distinguishes_absent_stale_unknown_and_missing_export(self):
+        from test_addon_peripherals import peripheral_frame, missing_frame
         cases = (
-            ({'status': 'unknown', 'devices': [{'name': 'Mouse', 'present': False, 'stale': True, 'percent': None}]},
-             'Mouse · fora de alcance'),
-            ({'status': 'stale', 'devices': [{'name': 'Mouse', 'present': True, 'stale': True, 'percent': None}]},
-             'Dados desatualizados'),
-            ({'status': 'unknown', 'devices': [{'name': 'Mouse', 'present': True, 'stale': False, 'percent': None}]},
-             'Percentual desconhecido'),
-            ({'status': 'missing', 'devices': []}, 'Sem cache local'),
+            (peripheral_frame(present=False), 'Mouse · fora de alcance'),
+            (peripheral_frame(stale=True), 'Dados desatualizados'),
+            (peripheral_frame(percent=None), 'Percentual desconhecido'),
+            (missing_frame(), 'Sem cache local'),
         )
-        for peripherals, expected in cases:
+        for frame, expected in cases:
             with self.subTest(expected=expected):
-                self.accept(peripherals)
+                self.evaluate('invalidateAddons()')
+                self.accept(frame)
                 self.assertEqual(self.integration.property('batterySummary'), expected)
 
-    def test_details_show_origin_limit_and_cache_only_refresh(self):
-        self.accept({'status': 'ready', 'generatedAt': 1791658800.0, 'source': 'oneshot',
-                     'producerVersion': '0.1.0-alpha.3', 'limited': True,
-                     'devices': [{'name': 'Mouse', 'present': True, 'stale': False, 'percent': 0, 'estimated': True}]})
+    def test_details_show_generic_origin_limit_zero_estimate_and_cache_only_refresh(self):
+        from test_addon_peripherals import peripheral_frame
+        frame = peripheral_frame(percent=0, estimated=True)
+        frame['peripherals']['limited'] = True
+        self.accept(frame)
         metadata = self.details.findChild(QObject, 'peripheralsMetadata')
         button = self.details.findChild(QObject, 'refreshCacheButton')
         self.assertIsNotNone(metadata)
         self.assertIsNotNone(button)
-        self.assertIn('coleta pontual', metadata.property('text'))
+        self.assertIn('exportação local', metadata.property('text'))
+        self.assertNotIn('PeriGauge', metadata.property('text'))
         self.assertIn('modelo limitado', metadata.property('text'))
         self.assertEqual(button.property('text'), 'Reler cache local')
-        expression = QQmlExpression(self.engine.rootContext(), self.details,
-                                    "stateText({present: true, stale: false, percent: 0, estimated: true})")
-        state, _ = expression.evaluate()
-        self.assertFalse(expression.hasError(), expression.error().toString())
-        self.assertEqual(state, '0% · estimativa')
+        self.assertEqual(self.evaluate('stateText(integrations.peripherals.devices[0])', self.details), '0% · estimativa')
 
-    def test_legacy_snapshot_remains_usable_without_new_metadata(self):
-        self.accept({'status': 'ready', 'devices': [{'name': 'Teclado', 'stale': False, 'percent': 64}]})
-        self.assertEqual(self.integration.property('batterySummary'), 'Teclado · 64%')
+    def test_old_private_projection_cannot_bypass_addon_validation(self):
+        self.accept({'schemaVersion': 2, 'modules': ['peripherals'],
+            'peripherals': {'status': 'ready', 'devices': [{'name': 'PRIVATE-SENTINEL', 'percent': 64}]}})
+        self.assertEqual(self.integration.property('addonErrorCode'), 'invalid_response')
+        self.assertEqual(self.evaluate('peripherals.devices.length'), 0)
         self.assertEqual(self.details.findChild(QObject, 'peripheralsMetadata').property('visible'), False)
+
+    def test_coarse_charging_components_and_stale_values_use_only_lease_gated_projection(self):
+        from test_addon_peripherals import peripheral_frame
+        frame = peripheral_frame(percent=None, level='low', charging='charging', estimated=True,
+            components=[dict(label='left', percent=0, charging='charging'),
+                        dict(label='right', percent=75, charging='discharging')])
+        self.accept(frame)
+        self.assertEqual(self.evaluate('stateText(integrations.peripherals.devices[0])', self.details),
+            'Nível baixo · estimativa · carregando')
+        components = json.loads(self.evaluate("JSON.stringify((function collect(item) { let result = item.objectName === 'peripheralComponent' ? [item.text] : []; for (const child of item.children) result = result.concat(collect(child)); return result; })(this))", self.details))
+        self.assertEqual(set(components),
+            {'Esquerdo · 0% · carregando', 'Direito · 75%'})
+        self.assertFalse(self.details.findChild(QObject, 'legacyProjectLink').property('visible'))
+        self.assertNotIn('PeriGauge', self.details.findChild(QObject, 'integrationDescription').property('text'))
+        self.evaluate('nowMsOverride=130000')
+        self.assertEqual(self.evaluate('peripherals.devices.length'), 0)
+        self.assertIn('Dados desatualizados', self.details.findChild(QObject, 'integrationEmptyState').property('text'))
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify((function collect(item) { let result = item.objectName === 'peripheralComponent' ? [item.text] : []; for (const child of item.children) result = result.concat(collect(child)); return result; })(this))", self.details)), [])
+
 
 
 if __name__ == '__main__':

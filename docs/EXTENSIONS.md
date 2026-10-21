@@ -1,6 +1,6 @@
 # Extensões, temas e integrações de IA
 
-> **Ecossistema em construção.** Há um núcleo experimental para complementos JSON de bateria, com schemas, CLI e serviço próprio. Sua interface e distribuição ainda estão em integração. SDK estável, execução de plugins de terceiros e loja continuam futuros. Os demais contratos propostos abaixo não são APIs publicadas.
+> **Ecossistema em construção.** O checkout oferece complementos JSON experimentais de bateria, com schemas, CLI, serviço próprio e gerenciamento em Configurações → Widgets. A distribuição e a qualificação da interface instalada continuam em andamento. SDK estável, execução de plugins de terceiros e loja continuam futuros. Os demais contratos propostos abaixo não são APIs publicadas.
 
 ## Objetivo
 
@@ -191,11 +191,33 @@ depois da publicação não promete que a operação foi desfeita.
 
 O serviço `org.orla.Addons` é separado da ponte legada. Seus métodos retornam
 JSON em uma string, com prazo e worker pertencente ao host. O núcleo passou
-por [testes privados e chamadas reais em barramento isolado](validation/addon-host-core.md); isso não qualifica
-a instalação na sessão do usuário, a interface completa ou a coleta real do
-produtor. O fluxo nas configurações, a extração do PeriGauge e sua validação
-local continuam em integração. QuotaLantern e FalaTrace mantêm o caminho
+por [testes privados e chamadas reais em barramento isolado](validation/addon-host-core.md).
+O cliente e a coordenação também completaram um ciclo privado com transporte
+KDE real e dados sintéticos; um ciclo separado do PeriGauge usou UPower real.
+Essas provas têm escopos distintos e não qualificam a interface instalada,
+HID/Buds ou operação contínua. QuotaLantern e FalaTrace mantêm o caminho
 experimental opcional descrito acima.
+
+### Gerenciar nas configurações
+
+No Source desta camada, abra **Configurações → Widgets → Complementos** e
+use **Adicionar arquivo…** para escolher o JSON fornecido pelo projeto do
+produtor. Confira nome, autoria, licença, origem declarada e versão antes de
+instalar. A prévia corresponde aos bytes exatos escolhidos; selecionar não
+instala nem ativa a leitura. Remover pede confirmação, e o rollback só aparece
+quando existe uma versão anterior.
+
+Depois de instalar, **Ativar leitura** é uma escolha separada. O aplicativo de
+origem também precisa permitir a exportação, e o widget **Periféricos** deve
+estar visível no perfil atual. O Orla não inicia o produtor nem concede seu
+consentimento. A opção de abrir a origem exige clique explícito.
+
+Enquanto metadados são conferidos, a leitura de bateria fica suspensa. Se uma
+operação terminar com resultado desconhecido, **Recarregar complementos**
+confere o estado; a interface não repete a alteração automaticamente.
+**Cancelar espera e fechar** fecha a janela sem fingir que uma chamada ainda
+pendente terminou. Os limites experimentais de retenção acima continuam
+valendo para a interface e para a CLI.
 
 ## SDK de execução de provedores — proposta, não API publicada
 

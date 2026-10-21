@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 from datetime import datetime, timezone
@@ -40,7 +41,6 @@ class IntegrationTests(unittest.TestCase):
 
     def test_selected_modules_read_only_their_cache_and_omit_other_payloads(self):
         paths = {'quota': '.local/share/codexbar-linux/history.jsonl',
-                 'peripherals': '.local/state/perigauge/state.json',
                  'recording': '.local/state/recording-cli/recording-session.json'}
         legacy = self.bridge.collect_snapshot(self.home, self.now)
         for module, relative in paths.items():
@@ -52,7 +52,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_empty_and_invalid_module_selections_do_no_cache_io(self):
         with patch.object(self.bridge, '_read_bounded', side_effect=AssertionError('unexpected cache read')) as read, \
-                patch.object(self.bridge.Path, 'home', side_effect=AssertionError('unexpected home lookup')):
+                patch.object(self.bridge.Path, 'home', side_effect=AssertionError('unexpected home lookup')), \
+                patch.object(importlib.util, 'spec_from_file_location', side_effect=AssertionError('backend lookup')):
             self.assertEqual(self.bridge.collect_selected_snapshot([]),
                              {'schemaVersion': 2, 'modules': []})
             for selection in (None, 'quota', {}, ['unknown'], ['quota', 'quota'], [False],
@@ -115,129 +116,101 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(self.bridge.collect_snapshot(self.home, self.now)['quota']['status'], 'invalid')
 
     def test_snapshot_cli_runs_without_qt_or_provider_collectors(self):
-        env = dict(os.environ, HOME=str(self.home))
+        env = dict(os.environ, HOME=str(self.home), XDG_DATA_HOME=str(self.home / '.local/share'),
+                   XDG_STATE_HOME=str(self.home / '.local/state'))
         result = subprocess.run([sys.executable, '-S', str(MODULE), '--snapshot'], env=env, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)
         self.assertEqual(value['schemaVersion'], 1)
         self.assertEqual(value['quota']['status'], 'missing')
 
-    def test_peripherals_hide_identifiers_and_neutralize_old_readings(self):
-        path = self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3', 'source': 'daemon',
-            'generated_at': self.now.timestamp(), 'devices': [
-            {'id': 'private-device-id', 'backend': 'hidpp', 'vendor': 'Private vendor', 'name': 'Mouse\n' + ('x' * 100), 'kind': 'mouse',
-             'present': True, 'updated_at': self.now.timestamp(), 'battery': {'percent': 0, 'charging': 'discharging', 'estimated': True}},
-            {'name': 'Old', 'kind': 'earbuds', 'present': True, 'updated_at': self.now.timestamp() - 901, 'battery': {'percent': 80}, 'components': [{'id': 'left', 'percent': 90}]},
-            {'name': 'Hidden', 'kind': 'keyboard', 'hidden': True, 'battery': {'percent': 99}},
-        ], 'issues': [{'code': 'private-code', 'detail': 'private device path'}]})
+    def install_peripheral_addon(self, enabled=True, record=None):
+        from test_addons import load, manifest, export
+        self.store = load('addon_store')
+        self.paths = self.store.AddonPaths(home=self.home,
+            data_home=self.home / '.local/share', state_home=self.home / '.local/state')
+        package = self.home / 'synthetic.orla-addon.json'
+        package.write_text(json.dumps(manifest()))
+        package.chmod(0o600)
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        self.store.install_addon(paths=self.paths, file=package, expected_sha256=digest)
+        if enabled:
+            self.store.enable_addon(paths=self.paths, addon_id='org.example.battery',
+                                    expected_current_sha256=digest)
+        value = export() if record is None else record
+        stamp = int(self.now.timestamp() * 1000)
+        value.update(generatedAtMs=stamp, expiresAtMs=stamp+30000)
+        for device in value['devices']:
+            if device['observedAtMs'] == 100000:
+                device['observedAtMs'] = stamp
+        path = self.paths.state_home / 'synthetic-battery/exports/orla-peripherals-v1.json'
+        path.parent.mkdir(parents=True, mode=0o700)
+        path.parent.parent.chmod(0o700)
+        path.write_text(json.dumps(value))
         path.chmod(0o600)
+        return path, digest
+
+    def test_both_legacy_methods_ignore_private_cache_without_installed_consent(self):
+        self.write_state('perigauge/state.json', {'schema': 1, 'generated_at': self.now.timestamp(),
+            'devices': [{'name': 'PRIVATE-SENTINEL', 'kind': 'mouse', 'present': True,
+                         'updated_at': self.now.timestamp(), 'battery': {'percent': 87}}]})
+        for frame in (self.bridge.collect_snapshot(self.home, self.now),
+                      self.bridge.collect_selected_snapshot(['peripherals'], self.home, self.now)):
+            self.assertEqual(frame['peripherals']['status'], 'missing')
+            self.assertEqual(frame['peripherals']['devices'], [])
+            self.assertEqual(frame['peripherals']['addon']['reason'], 'not_installed')
+            self.assertNotIn('PRIVATE-SENTINEL', json.dumps(frame))
+
+    def test_installed_package_and_export_do_not_enable_reading(self):
+        path, _ = self.install_peripheral_addon(enabled=False)
+        real_open = os.open
+        def guarded_open(name, *args, **kwargs):
+            self.assertNotIn('synthetic-battery', str(name), 'unconsented producer read')
+            return real_open(name, *args, **kwargs)
+        with patch.object(os, 'open', side_effect=guarded_open):
+            result = self.bridge.collect_selected_snapshot(['peripherals'], self.home, self.now)
+        self.assertEqual(result['peripherals']['addon']['reason'], 'disabled')
+        self.assertEqual(result['peripherals']['devices'], [])
+        self.assertTrue(path.exists())
+
+    def test_both_legacy_envelopes_project_actual_enabled_addon_and_preserve_zero(self):
+        path, digest = self.install_peripheral_addon()
         before = (path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns)
-        result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
-        self.assertEqual(result['status'], 'ready')
-        self.assertEqual((result['generatedAt'], result['source'], result['producerVersion']),
-                         (self.now.timestamp(), 'daemon', '0.1.0-alpha.3'))
-        self.assertFalse(result['limited'])
-        self.assertEqual(len(result['devices']), 2)
-        self.assertEqual(result['devices'][0]['percent'], 0)
-        self.assertEqual(result['devices'][0]['name'], 'Mouse' + ('x' * 75))
-        self.assertTrue(result['devices'][0]['estimated'])
-        self.assertEqual(result['devices'][0]['observedAt'], self.now.timestamp())
-        self.assertTrue(result['devices'][0]['present'])
-        self.assertIsNone(result['devices'][1]['percent'])
-        self.assertIsNone(result['devices'][1]['components'][0]['percent'])
-        self.assertTrue(result['devices'][1]['stale'])
-        self.assertNotIn('private-device-id', json.dumps(result))
-        self.assertNotIn('hidpp', json.dumps(result))
-        self.assertNotIn('Private vendor', json.dumps(result))
-        self.assertNotIn('private device path', json.dumps(result))
+        for frame in (self.bridge.collect_snapshot(self.home, self.now),
+                      self.bridge.collect_selected_snapshot(['peripherals'], self.home, self.now)):
+            result = frame['peripherals']
+            self.assertEqual(result['status'], 'ready')
+            self.assertEqual(result['source'], 'addon')
+            self.assertEqual(result['devices'][0]['percent'], 0)
+            self.assertEqual(result['devices'][0]['name'], 'mouse')
+            self.assertEqual(result['generatedAtMs'], int(self.now.timestamp()*1000))
+            self.assertEqual(result['generatedAt'], self.now.timestamp())
+            self.assertEqual(result['leaseMs'], 30000)
+            self.assertEqual(result['addon']['sha256'], digest)
+            self.assertRegex(result['addon']['generation'], r'^[0-9a-f]{32}$')
         self.assertEqual((path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns), before)
 
-    def test_peripherals_distinguish_absent_stale_and_unknown_observations(self):
-        base = {'schema': 1, 'version': '0.1.0-alpha.3', 'source': 'oneshot',
-                'generated_at': self.now.timestamp(), 'devices': []}
-        cases = (
-            ({**base, 'devices': [{'name': 'Absent', 'kind': 'mouse', 'present': False,
-                                   'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
-             'unknown', False, False, self.now.timestamp()),
-            ({**base, 'generated_at': self.now.timestamp() - 901,
-              'devices': [{'name': 'Old', 'kind': 'mouse', 'present': True,
-                           'updated_at': self.now.timestamp() - 901, 'battery': {'percent': 45}}]},
-             'stale', True, False, self.now.timestamp() - 901),
-            ({**base, 'devices': [{'name': 'Future', 'kind': 'mouse', 'present': True,
-                                   'updated_at': self.now.timestamp() + 1, 'battery': {'percent': 45}}]},
-             'unknown', False, True, None),
-            ({**base, 'devices': [{'name': 'Malformed', 'kind': 'mouse', 'present': True,
-                                   'updated_at': 'now', 'battery': {'percent': 45}}]},
-             'unknown', False, True, None),
-            ({**base, 'generated_at': self.now.timestamp() + 1,
-              'devices': [{'name': 'Future snapshot', 'kind': 'mouse', 'present': True,
-                           'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
-             'unknown', False, True, self.now.timestamp()),
-            ({**base, 'generated_at': 'now',
-              'devices': [{'name': 'Malformed snapshot', 'kind': 'mouse', 'present': True,
-                           'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
-             'unknown', False, True, self.now.timestamp()),
-            ({**base, 'devices': [{'name': 'Unknown presence', 'kind': 'mouse', 'present': 'yes',
-                                   'updated_at': self.now.timestamp(), 'battery': {'percent': 45}}]},
-             'unknown', False, True, self.now.timestamp()),
-        )
-        for record, status, stale, limited, observed_at in cases:
-            with self.subTest(device=record['devices'][0]['name']):
-                self.write_state('perigauge/state.json', record)
-                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
-                self.assertEqual(result['status'], status)
-                self.assertEqual(result['devices'][0]['stale'], stale)
-                self.assertEqual(result['devices'][0]['observedAt'], observed_at)
-                self.assertIsNone(result['devices'][0]['percent'])
-                self.assertEqual(result['limited'], limited)
-                if record['devices'][0]['name'] == 'Unknown presence':
-                    self.assertIsNone(result['devices'][0]['present'])
+    def test_unselected_peripherals_never_lookup_backend_or_producer(self):
+        self.install_peripheral_addon()
+        with patch.object(importlib.util, 'spec_from_file_location', side_effect=AssertionError('backend lookup')), \
+                patch.object(os, 'open', side_effect=AssertionError('producer IO')):
+            self.assertEqual(self.bridge.collect_selected_snapshot([], self.home, self.now),
+                             {'schemaVersion': 2, 'modules': []})
+        with patch.object(importlib.util, 'spec_from_file_location', side_effect=AssertionError('backend lookup')):
+            self.assertEqual(self.bridge.collect_selected_snapshot(['recording'], self.home, self.now)
+                             ['recording']['status'], 'missing')
 
-    def test_peripherals_degrade_legacy_metadata_without_discarding_fresh_values(self):
-        self.write_state('perigauge/state.json', {'schema': 1, 'generated_at': self.now.timestamp(), 'devices': [
-            {'name': 'Legacy', 'kind': 'keyboard', 'present': True, 'updated_at': self.now.timestamp(),
-             'battery': {'percent': 64}},
-        ]})
-        result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
-        self.assertEqual(result['status'], 'ready')
-        self.assertEqual(result['devices'][0]['percent'], 64)
-        self.assertTrue(result['limited'])
-        self.assertIsNone(result['source'])
-        self.assertIsNone(result['producerVersion'])
-
-    def test_malformed_stale_flags_neutralize_all_current_battery_fields(self):
-        for malformed in ('true', None, 0, 1, {}, []):
-            with self.subTest(stale=malformed):
-                self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3',
-                    'source': 'daemon', 'generated_at': self.now.timestamp(), 'devices': [{
-                        'name': 'Mouse', 'kind': 'mouse', 'present': True, 'stale': malformed,
-                        'updated_at': self.now.timestamp(),
-                        'battery': {'percent': 73, 'level': 'good', 'charging': 'charging', 'estimated': True},
-                        'components': [{'id': 'left', 'percent': 64, 'charging': 'charging'}],
-                    }]})
-                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
-                device = result['devices'][0]
-                self.assertEqual(result['status'], 'unknown')
-                self.assertTrue(result['limited'])
-                self.assertIsNone(device['percent'])
-                self.assertIsNone(device['level'])
-                self.assertEqual(device['charging'], 'unknown')
-                self.assertFalse(device['estimated'])
-                self.assertIsNone(device['components'][0]['percent'])
-                self.assertEqual(device['components'][0]['charging'], 'unknown')
-
-    def test_malformed_hidden_flags_never_expose_device(self):
-        for malformed in ('true', None, 0, 1, {}, []):
-            with self.subTest(hidden=malformed):
-                self.write_state('perigauge/state.json', {'schema': 1, 'version': '0.1.0-alpha.3',
-                    'source': 'daemon', 'generated_at': self.now.timestamp(), 'devices': [{
-                        'name': 'PRIVATE-SENTINEL', 'kind': 'mouse', 'present': True, 'hidden': malformed,
-                        'updated_at': self.now.timestamp(), 'battery': {'percent': 73},
-                    }]})
-                result = self.bridge.collect_snapshot(self.home, self.now)['peripherals']
-                self.assertEqual(result['devices'], [])
-                self.assertTrue(result['limited'])
-                self.assertNotIn('PRIVATE-SENTINEL', json.dumps(result))
+    def test_invalid_or_unsafe_export_is_finite_and_preserves_other_readers(self):
+        path, _ = self.install_peripheral_addon()
+        path.write_text('{"private":"PRIVATE-SENTINEL"}')
+        result = self.bridge.collect_snapshot(self.home, self.now)
+        self.assertEqual(result['peripherals']['status'], 'invalid')
+        self.assertEqual(result['peripherals']['devices'], [])
+        self.assertEqual(result['quota']['status'], 'missing')
+        self.assertNotIn('PRIVATE-SENTINEL', json.dumps(result))
+        path.unlink()
+        os.mkfifo(path, 0o600)
+        self.assertEqual(self.bridge.collect_snapshot(self.home, self.now)['peripherals']['status'], 'invalid')
 
     def test_recording_phase_is_cached_and_never_claims_live_capture(self):
         session = {'version': 1, 'id': 'private-session', 'owner': 'manual', 'backend': 'audio',
@@ -272,22 +245,25 @@ class IntegrationTests(unittest.TestCase):
         self.write_state('recording-cli/recording-session.json', {'version': 1, 'phase': 'recording', 'startedAt': 'invalid'})
         result = self.bridge.collect_snapshot(self.home, self.now)
         self.assertEqual(result['quota']['status'], 'missing')
-        self.assertEqual(result['peripherals'], {'status': 'invalid', 'generatedAt': None, 'source': None,
-                                                 'producerVersion': None, 'limited': False, 'devices': []})
+        self.assertEqual(result['peripherals']['status'], 'missing')
+        self.assertEqual(result['peripherals']['addon']['reason'], 'not_installed')
         self.assertEqual(result['recording']['status'], 'invalid')
         self.assertEqual(result['recording']['state'], 'unknown')
 
-    def test_runtime_honors_absolute_xdg_state_home_without_reading_legacy_config(self):
-        root = self.home / 'alternate-state'
-        path = root / 'perigauge/state.json'
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({'schema': 1, 'generated_at': self.now.timestamp(), 'devices': []}))
+    def test_runtime_honors_absolute_xdg_roots_without_reading_legacy_config(self):
+        self.install_peripheral_addon()
+        data = self.home / 'alternate-data'
+        state = self.home / 'alternate-state'
+        (self.home / '.local/share').rename(data)
+        (self.home / '.local/state').rename(state)
         legacy = self.home / '.config/recording-cli/state.json'
         legacy.parent.mkdir(parents=True)
         legacy.write_text('{"state":"recording"}')
-        with patch.dict(os.environ, {'HOME': str(self.home), 'XDG_STATE_HOME': str(root)}):
+        with patch.dict(os.environ, {'HOME': str(self.home), 'XDG_STATE_HOME': str(state),
+                                     'XDG_DATA_HOME': str(data)}):
             result = self.bridge.collect_snapshot(now=self.now)
-        self.assertEqual(result['peripherals']['status'], 'unknown')
+        self.assertEqual(result['peripherals']['status'], 'ready')
+        self.assertEqual(result['peripherals']['devices'][0]['percent'], 0)
         self.assertEqual(result['recording']['status'], 'missing')
 
     def test_symlink_and_fifo_cache_are_rejected_without_following_or_blocking(self):
@@ -315,6 +291,40 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual([(w['provider'], w['usedPercent']) for w in quota['windows']], [('cursor', 25.0), ('glm', 30.0), ('grok', 20.0)])
         self.assertEqual(quota['costs'], [])
 
+    def test_missing_generic_helper_preserves_legacy_envelope_and_other_modules(self):
+        copied = self.home / 'isolated-code/integrations.py'
+        copied.parent.mkdir()
+        copied.write_bytes(MODULE.read_bytes())
+        spec = importlib.util.spec_from_file_location('isolated_legacy_bridge', copied)
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        result = bridge.collect_snapshot(self.home, self.now)
+        self.assertEqual(result['schemaVersion'], 1)
+        self.assertEqual(result['quota']['status'], 'missing')
+        self.assertEqual(result['recording']['status'], 'missing')
+        self.assertEqual(result['peripherals']['status'], 'invalid')
+        self.assertEqual(result['peripherals']['devices'], [])
+        self.assertNotIn('isolated-code', json.dumps(result))
+
+    def test_corrupt_registry_never_reads_export_repairs_state_or_leaks_failure_text(self):
+        self.install_peripheral_addon()
+        registry = self.paths.store / 'registry.json'
+        registry.write_text('{"private":"PRIVATE-SENTINEL"}')
+        before = registry.read_bytes()
+        real_open = os.open
+        def guarded_open(name, *args, **kwargs):
+            self.assertNotIn('synthetic-battery', str(name), 'export read after registry refusal')
+            return real_open(name, *args, **kwargs)
+        with patch.object(os, 'open', side_effect=guarded_open):
+            result = self.bridge.collect_snapshot(self.home, self.now)
+        self.assertEqual(result['peripherals']['status'], 'invalid')
+        self.assertEqual(result['peripherals']['addon']['errorCode'], 'state')
+        self.assertEqual(result['peripherals']['devices'], [])
+        self.assertEqual(result['recording']['status'], 'missing')
+        self.assertEqual(result['quota']['status'], 'missing')
+        self.assertNotIn('PRIVATE-SENTINEL', json.dumps(result))
+        self.assertEqual(registry.read_bytes(), before)
+
     @unittest.skipUnless(shutil.which('dbus-run-session'), 'private D-Bus runner unavailable')
     def test_private_bus_selective_wire_and_source_change_exit(self):
         # A private bus and copied source keep this check away from user services.
@@ -327,7 +337,11 @@ app = QCoreApplication([])
 with tempfile.TemporaryDirectory() as temporary:
     source = Path(temporary) / 'integrations.py'
     source.write_bytes(Path(sys.argv[1]).read_bytes())
-    env = dict(os.environ, HOME=temporary, XDG_STATE_HOME=temporary + '/state')
+    for sibling in ('addon_store.py', 'addon_io.py', 'addon_format.py'):
+        source.with_name(sibling).write_bytes(Path(sys.argv[1]).with_name(sibling).read_bytes())
+    env = dict(os.environ, HOME=temporary, XDG_STATE_HOME=temporary + '/state',
+               XDG_DATA_HOME=temporary + '/data', XDG_CONFIG_HOME=temporary + '/config',
+               XDG_CACHE_HOME=temporary + '/cache')
     service = subprocess.Popen([sys.executable, str(source), '--serve'], env=env)
     try:
         bus = QDBusConnection.sessionBus()
