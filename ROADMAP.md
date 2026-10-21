@@ -13,7 +13,8 @@ distribuído ou ativado por padrão. Passaram 118 testes locais do núcleo/insta
 14 chamadas em D-Bus privado e o ciclo real de KPackage/ativação lazy em XDG
 temporário. Essas provas não qualificam a interface instalada. Seletor, foco,
 coordenação entre metadados e leitura de bateria e sua composição nas configurações
-seguem em revisão, para um PR dependente. O formato permanece experimental;
+integram a camada dependente do [PR 104](https://github.com/caiolombello/orla-desktop/pull/104).
+O formato permanece experimental;
 SDK estável, catálogo, código de terceiros e pagamentos continuam pendentes.
 [Evidência e limites](docs/validation/addon-host-core.md).
 
@@ -37,8 +38,10 @@ privada com serviço e transporte KDE reais completou seis mutações, retomada
 de 0% e limpeza ao desativar/remover. O bloco portátil do CI passou localmente
 com 284 testes em Qt 6.12, sem falhas ou skips. Os testes do painel continuam
 na matriz KDE local; imagens sintéticas claro/escuro verificam foco em viewport
-curto. Instalação na sessão de uso, seletor/modalidade, acessibilidade e matriz
-de monitores permanecem gates próprios. Consulte a
+curto. A camada do PR 104 foi instalada localmente com backup e conferência de
+91 arquivos; o Plasma voltou ativo após recarga. Seletor/modalidade, foco e
+acessibilidade na instalação, revelação por hover, uso contínuo e matriz de
+monitores permanecem gates próprios. Consulte a
 [evidência delimitada](docs/validation/addon-host-core.md); não há catálogo ou
 ativação automática de projetos instalados.
 

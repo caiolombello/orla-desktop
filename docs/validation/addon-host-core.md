@@ -160,3 +160,27 @@ O seletor/modalidade, foco e acessibilidade nativos, troca de perfis em uso,
 escala/monitores, reinício/login e atualização completa ainda precisam das
 suas provas na instalação. X4, I1 e DX4 permanecem parciais; o formato
 continua experimental.
+
+
+## Instalação local — 21/10
+
+O runtime de `948b4fa` foi instalado na sessão de uso com backup do pacote
+anterior. Os 91 arquivos instalados coincidiram com o pacote verificado
+(`6b93b96c0606169622605484eb5f9ed5e8ec213683b8e3de9fc34cb8322d7c67`).
+Os registros de ativação lazy de temas e addons corresponderam ao instalador;
+o registro legado permaneceu igual. O catálogo de complementos ainda não
+existia no armazenamento, sem pacote de produtor instalado ou ativado por esta
+atualização.
+
+O Plasma foi recarregado uma vez e voltou ativo. O registro desse período não
+mostrou erro de carregamento QML, erro de lifetime do coordenador ou saída por
+crash. A dock renderizou ao ser mostrada temporariamente, e o auto hide original
+foi restaurado no mesmo painel/applet. Isso não qualifica revelar pela borda:
+a rota absoluta do dispositivo virtual de teste não foi estabelecida.
+
+A entrada virtual foi encerrada diante de atividade simultânea na sessão,
+preservando o foco mais recente. Seletor, modalidade, popups e teclado na
+instalação continuam sem qualificação desta rodada. Não houve atualização do
+PeriGauge instalado, ativação de exportação, migração de recibos de layout,
+reinício do KWin ou reboot. O pacote anterior também foi reconstruído e
+conferido para reversão; essa reversão não foi executada.
