@@ -41,6 +41,18 @@ Escolher/Aplicar/Desfazer por esse novo controle em perfil gerenciado permanecem
 pendentes no KDE real; C1/UX1/X1 seguem parciais.
 Veja o [registro](docs/validation/appearance-presets-source.md).
 
+**DX — saída de build explícita:** `build --output-dir DIR` permite empacotar
+uma Source protegida em destino gravável, sem mudar origem ou permissões.
+O default continua `PROJECT_ROOT/dist`. A recusa anterior da opção foi
+reproduzida nos dois entrypoints; passaram 23 testes da CLI e um de release,
+incluindo fixture readonly, determinismo e preservação de estado. A publicação
+0.2.9 mantém seu helper anterior. A CLI local foi atualizada para `93e897a` e o
+wrapper instalado empacotou os 67 arquivos em destino gravável, com hash igual
+ao candidato. Source, configuração do desktop, dock, barra e launcher foram
+preservados; não houve recarga do Plasma. A primeira tentativa recusou o
+preflight por comparação de tipos no helper, antes de qualquer alteração;
+a correção comparou o identificador textual exato do processo.
+
 ## Resultado esperado
 
 Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado no Raycast e notificações configuráveis, integração com os projetos do Caio e instalação acessível para outras pessoas. A identidade Orla continua própria, com uma interface bonita, consistente e personalizável. Temas, widgets, comandos e provedores de IA poderão ser ampliados pela comunidade; autores poderão distribuir addons gratuitos ou comerciais conforme os contratos e políticas abaixo. Caio decide as prioridades e valida o uso diário. Este documento define a sequência proposta; os números de versão são marcos, sem promessa de datas.
