@@ -4,11 +4,156 @@ Revisão do plano: 11/10/2026. O documento abaixo continua sendo a proposta de l
 
 ## Estado atual do fonte: compatibilidade A0.1 experimental
 
-O checkout inclui um painel **IA** no launcher opcional. Todos os provedores continuam desligados. Abrir o painel não inicia processos; a ação explícita **Verificar clientes instalados** consulta uma lista fixa de CLIs e, separadamente, o botão com consentimento testa uma troca mínima do protocolo anônimo do Codex para uma versão reconhecida. A consulta e o teste não recebem consulta de busca, prompt ou contexto de usuário; não há geração, autenticação, reaproveitamento de sessão, armazenamento de credenciais ou handoff para terminal.
+O checkout inclui um painel **IA** no launcher opcional. Todos os provedores continuam desligados. Abrir o painel não inicia processos; a ação explícita **Verificar clientes instalados** consulta uma lista fixa de CLIs e, separadamente, o botão com consentimento testa uma troca mínima do protocolo anônimo do Codex para uma versão reconhecida. A consulta e o teste de compatibilidade não recebem consulta de busca, prompt ou contexto de usuário; nessas ações não há geração, autenticação, reaproveitamento de sessão, armazenamento de credenciais ou handoff para terminal.
 
-O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 (texto escolhido enviado a um backend autorizado) não começou.
+O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 ainda não foi concluída.
 
 O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.9; a experiência exige build separado do launcher. O ZIP inclui somente os helpers de detecção/teste e seus testes. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
+
+### Fatia integrada nesta mudança Source: texto explícito via Ollama
+
+Esta mudança Source integra a menor parte local da A1 somente para Ollama,
+com validação delimitada da composição. A pessoa escolhe reescrever, resumir ou
+traduzir, digita o texto, modelo, porta e idioma de destino quando aplicável e
+seleciona `127.0.0.1` ou `::1`. A prévia revela destino, modelo, tarefa, dados e
+**custo não informado** antes de um consentimento de sessão. Editar host, porta
+ou modelo revoga o consentimento. Nada roda ao abrir, editar ou consentir;
+somente **Gerar** inicia a chamada.
+
+Em execução, todos os campos ficam travados e **Cancelar** permanece disponível.
+O streaming aparece numa saída somente leitura, a parcial continua revisável e
+a cópia exige **Copiar resultado**. Fechar o painel ou abrir Steam cancela
+compatibilidade e texto. O fechamento solicitado pela UI e o atalho repetido
+com a janela ativa esperam compatibilidade, texto e Steam drenarem antes de
+prosseguir uma única vez. A nova tentativa limpa o resultado anterior antes
+do preflight; chamadas ignoradas durante execução/fechamento o preservam.
+Timeout mantém sua causa após a limpeza. Uso desconhecido continua desconhecido,
+e uma resposta terminal rejeitada por custo inválido não publica tokens.
+Ao voltar à busca, as quatro rotas QML de execução de resultado passam por uma
+verificação comum dos três proprietários e de fechamento pendente, inclusive
+callbacks que guardaram o ticket ao pressionar o botão. Os controles mostram
+espera e se reabilitam após a limpeza; a busca continua editável. A falha de
+limpeza notifica a interface ao mudar de estado, sem repetir polls idênticos,
+e mantém a barreira ocupada até resolver o runtime.
+
+A cadeia operacional usa processos próprios:
+
+```text
+painel IA -> AiTextController -> python -I -B ai_text_ollama.py run-ollama
+          -> lifecycle T1/T2 -> conector HTTP Ollama numérico
+```
+
+O controller usa caminhos absolutos, cwd 0700 próprio e ambiente filho vazio.
+O helper aceita somente Ollama numérico em loopback. T1/T2 continuam protegidos:
+executar `ai_text.py` diretamente ainda retorna `unsupported_transport`, e o
+adaptador HTTPS privado de OpenAI integrado historicamente pelo PR 34 segue sem
+entrypoint, credenciais, seleção ou UI. Essa fatia não reutiliza a expressão
+genérica “API na nuvem” para OpenAI.
+
+O recorte exclui probe, descoberta, inicialização de servidor, download de
+modelo, contexto padrão, leitura de clipboard, histórico, arquivos, tools,
+autenticação, credenciais e API paga. Loopback identifica o destino da conexão,
+não o processo que escuta nele: esse processo pode encaminhar o texto para a
+rede. Por isso a interface não promete identidade Ollama, privacidade nem
+processamento offline.
+
+O plano R2, o shim, o controller R3 e a correção de UI têm revisão delimitada
+favorável. A composição inicial passou build normal, seis CTests isolados e
+90 testes Python (6 do shim, 23 T1 e 61 T2). Após as seis correções revisadas
+do PR [#36](https://github.com/caiolombello/orla-desktop/pull/36), um build novo
+e os seis CTests passaram com 24 entradas do controller e 18 da UI. As fixtures
+cobriram a cadeia controller → helper → servidor HTTP Qt, streaming, cancelamento,
+parcial, resultado anterior e a barreira do atalho com três proprietários.
+Os dois jobs hospedados passaram em `1f59e0c`; em `2c8b750`, o portátil passou,
+mas o processo da UI saiu com SIGSEGV depois das 17 entradas aprovadas. A causa
+continua desconhecida. Os dois jobs passaram posteriormente em `57c2aa0`, com
+os seis CTests reportados pelo job do launcher; a etapa GDB foi pulada. A captura
+continua condicionada à falha, sem converter falha original em sucesso ou provar
+correção do SIGSEGV.
+
+As duas correções seguintes de notificação da limpeza e execução na busca
+passaram na composição exata: build novo, os seis CTests, 25 entradas do
+controller e 27 da UI (24,75 s, limite preservado de 30 s). O novo teste Steam
+teve seu controle obsoleto corrigido após diagnóstico; a ação de cópia é
+observada somente no clipboard privado da plataforma offscreen.
+Os dois jobs passaram também em `28c5ef4`, com os seis CTests hospedados em
+74,04 s e a UI em 24,27 s; o log de sucesso não imprime os contadores Qt filhos.
+
+As duas correções seguintes notificam o estado final antes de `closeReady` e
+mantêm um pedido de saída até a conclusão da limpeza, mesmo quando o atalho
+repete um pedido de ocultação. A geração reentrante continua bloqueada durante
+a notificação final. O caminho imediatamente pronto usa o mesmo fechamento;
+a intenção é consumida antes de ocultar/sair, sem duplicação nem quit herdado.
+A composição conjunta passou um build novo de 40 passos e os seis CTests
+isolados em 75,925 s, com controller 27 e UI 27. A UI levou 24,60 s, dentro
+do limite preservado de 30 s. A revisão do controller aprovou esse Source
+com uma limitação preservada: um desafio QML cooperativo adicional exigiu
+confirmação de cancelamento e observou cancelamento não confirmado, com causa
+exata desconhecida. Os casos QML forced/timeout e os 27 testes normais passaram.
+A revisão independente da saída passou os 27 testes normais e um desafio
+adicional com os três helpers reais: o último controlador notificou todos
+prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
+único e a prontidão posterior não duplicou ocultação/saída. O ciclo seguinte
+sem quit também passou. A primeira fixture desse desafio pressupunha um
+prazo Steam errado e falhou antes da verificação causal; ficou preservada.
+A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
+A correção seguinte mantém o uso de tokens privado até a resposta completa,
+saída normal zero e limpeza confirmada. Dados extras, saída com erro,
+cancelamento ou timeout não publicam metadados rejeitados; o texto parcial
+continua revisável. Sete regressões com helpers reais e retries passaram,
+após falharem causalmente no código anterior. A revisão independente passou
+34 entradas do controller e um desafio adicional de cinco entradas com saída
+padrão fechada e processo ainda vivo, incluindo uso desconhecido e fechamento.
+A composição do código passou build novo de 40 passos e os seis CTests uma vez
+em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
+Os dois jobs hospedados passaram em `8d137cf`, com os seis CTests em 78,72 s.
+A build local desse commit passou os seis em 79,47 s, mas não foi instalada
+antes de dois novos comentários de revisão. A correção seguinte preserva a
+primeira falha observada quando cancelamento ou fechamento começam depois dela
+e drena stdout sem interpretar eventos após o primeiro erro de protocolo.
+O cancelamento anterior à falha permanece cancelamento; o parcial aceito antes
+do erro continua revisável. Dezessete regressões com helpers reais e retries
+foram adicionadas: quinze falharam causalmente na base, com dois controles
+pré-início aprovados. A composição final passou build novo de 40 passos e os
+seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
+A revisão independente passou controller 51 e um desafio QML de quatro
+entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
+ficaram UNRUN; o trace serializado null não comprova ordem temporal.
+Em `5aaf518`, CI run 38175193804 aprovou o job portátil, mas behavior saiu
+com SIGSEGV após 7 PASS/0 FAIL/1 skip esperado; os outros cinco CTests passaram.
+A causa continua UNKNOWN. Um único GDB local saiu zero sem reproduzir o crash.
+O diagnóstico hospedado agora seleciona apenas behavior ou UI, nessa prioridade,
+sem alterar a falha original nem os limites. Isso não é uma correção do crash;
+CI desta revisão e integração na branch principal continuam pendentes.
+O canary local desse Source foi instalado reversivelmente após build permanente
+ALL40/seis CTests em 80,85 s. Atalho, retorno de foco, painel de IA, Tab com
+rolagem, popup de tarefa, calculadora, saída limpa e reinício passaram no KDE.
+Não foi executada descoberta ou geração real de IA. Ollama e modelo reais,
+qualidade semântica, clipboard e acessibilidade nativos, matriz de telas,
+empacotamento relocável, distribuição/release e admissão completa continuam
+abertos. A1 permanece aberta: o roadmap completo ainda exige também o backend
+API opt-in e os demais gates publicados.
+
+A revisão posterior preserva o erro original após recuperar a limpeza, bloqueia
+novos trabalhos IA/Steam enquanto o fechamento está pendente e mantém
+cancelamento/timeout quando o sinal interrompe a publicação. A composição local
+passou ALL40, seis CTests em 83,64 s (UI 30 dentro de 30 s; controller 53) e 93 testes
+Python. O SIGSEGV após Totals do desafio dirigido continua UNKNOWN: um GDB não
+reproduziu e a suíte completa aprovada não explica a falha. CI/merge da nova
+revisão estão pendentes; a instalação local continua no canary `5aaf518`.
+
+A revisão seguinte valida eventos de falha somente após EOF limpo e saída normal
+zero do helper. Eventos extras, bytes sem terminador e saída não zero preservam
+`invalid_helper_response`; o primeiro cancelamento explícito continua registrando
+a causa já observada. O launcher passa a abrir em 660×420, com entradas IA/Steam
+de pelo menos 40×40 e conteúdo IA contido na largura disponível, incluindo versões
+longas. A combinação passou build novo ALL40 e os seis CTests uma vez em 84,38 s:
+UI 32/26,588 s Qt (limite 30 s) e controller 57/12,621 s Qt (limite 40 s).
+Os 93 testes Python aprovados na revisão anterior não foram repetidos porque seus
+arquivos permaneceram iguais. Revisões independentes aprovaram cada mudança de
+código. CI/merge desta combinação e os testes do layout compacto no KDE permanecem
+pendentes; a instalação local ainda está no canary `5aaf518`, e as causas dos
+crashes históricos continuam UNKNOWN.
 
 ## Resultado esperado
 
@@ -104,3 +249,12 @@ As versões são janelas de planejamento, sem datas prometidas. Adaptadores inte
 - Provar que dados externos e resultado do modelo não executam ações nem elevam acesso; permissões negadas/revogadas impedem chamadas ao broker.
 
 Esta especificação orienta a implementação. Não concede ao Orla acesso a qualquer conta, assinatura, token, ferramenta ou dado do usuário.
+
+
+A revisão mais recente mantém cancelamento/timeout durante a publicação de
+`started` e apresenta mensagens fixas de recuperação para todos os códigos de
+falha aceitos. Dois revisores independentes aprovaram os escopos; a composição
+passou build novo de 40 passos, seis CTests (90,697s) e 116 testes Python. A fixture cobre a
+escrita completa antes do retorno do sink; não promete entrega/ACK ou escrita
+parcial atômica. CI da revisão, atualização do canary `5aaf518`, provedores reais e
+admissão completa seguem pendentes. Veja o registro de validação de IA.

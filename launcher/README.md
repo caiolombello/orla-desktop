@@ -1,6 +1,6 @@
 # Orla Launcher — componente opcional experimental
 
-Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. Não há histórico de consultas do Orla, contexto automático, runner de shell, integrações de conta ou rede.
+Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança as ações e Esc limpa/cancela e fecha. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
 
 ## Steam local — somente no fonte
 
@@ -21,6 +21,156 @@ Para executar clientes, o controlador exige um `XDG_RUNTIME_DIR` absoluto, priva
 A invocação `python3 -I -B scripts/ai.py detect` continua reconhecida. Sem a pasta privada fornecida pelo controlador, as consultas que exigem execução isolada ficam indisponíveis; o helper não cria uma pasta no checkout. O teste do protocolo anônimo continua sendo uma ação separada de consentimento na interface. CLI reconhecida ou troca mínima bem-sucedida não demonstra autorização do provedor, elegibilidade de conta, acesso a modelo, API suportada ou prontidão para inferência.
 
 A fatia Source recebeu aprovação independente e foi integrada pelo PR [#20](https://github.com/caiolombello/orla-desktop/pull/20); a CI portátil [também passou](https://github.com/caiolombello/orla-desktop/actions/runs/38115242191/job/114398735163). Esse run anterior não compilou o launcher C++/QML nem executou CTests. O job separado de build em Fedora 44 agora [compilou o launcher e passou os cinco CTests fechados](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). Não há versão de release própria para o launcher: os assets 0.2.9 excluem launcher C++/QML, painel de IA e barra. O ZIP do dock inclui somente `scripts/ai.py` e `tests/test_ai.py`, sem oferecer painel ou integração de IA ao usuário. Evidências sintéticas e one-shot delimitadas estão no [registro de validação](../docs/validation/ai-provider-source.md). Autenticação, inferência, semântica de cancelamento, uso, pedidos pagos, procedência do cliente instalado, isolamento de namespace/rede e comportamento nativo Wayland/QML permanecem sem qualificação.
+
+## Geração de texto Ollama — integração experimental neste Source
+
+Esta mudança Source integra ao painel **IA** uma transformação de texto
+limitada a Ollama: reescrever, resumir ou traduzir. A pessoa informa texto,
+modelo, porta, idioma quando necessário e escolhe somente `127.0.0.1` ou `::1`.
+Antes do envio, a interface mostra destino, modelo, tarefa, dados e **custo não
+informado**, explica que qualquer processo nesse endereço pode receber ou
+encaminhar o texto e pede consentimento para a sessão. Alterar host, porta ou
+modelo revoga esse consentimento. Abrir o painel, editar campos ou consentir não
+executa nada; somente **Gerar** inicia o pedido.
+
+Durante a execução, os campos ficam bloqueados e a ação principal vira
+**Cancelar**. Deltas aparecem numa área somente leitura; resposta parcial é
+preservada para revisão e **Copiar resultado** continua sendo uma ação manual.
+Fechar o painel ou abrir Steam cancela os dois controladores de IA. O pedido
+de fechamento da UI e a repetição do atalho com a janela ativa esperam os três
+proprietários — compatibilidade de IA, texto e Steam — antes de concluir uma
+única vez. Uma nova tentativa limpa texto e uso anteriores antes de validar
+a entrada; uma tentativa ignorada durante execução ou fechamento preserva o
+resultado ativo. Ao voltar à busca, Enter, cliques e ações de resultado ficam
+bloqueados enquanto algum dos três proprietários está ocupado ou há fechamento
+pendente. Os controles
+mostram o estado de espera, permitem continuar digitando e voltam a funcionar
+após a limpeza. Uma falha de limpeza atualiza a interface sem repetir o aviso
+nos polls idênticos; a operação permanece ocupada até a recuperação.
+
+O controller inicia exatamente Python isolado com `-I -B`, o helper
+`ai_text_ollama.py` e `run-ollama`, em cwd privado e com ambiente filho vazio.
+O helper operacional seleciona somente o conector Ollama numérico e reutiliza o
+lifecycle T1/T2 protegido. O entrypoint direto `ai_text.py` continua falhando
+fechado com `unsupported_transport`; o adaptador HTTPS privado de OpenAI também
+permanece sem ligação operacional, credenciais ou UI. Não há probe automático,
+início de servidor, download de modelo, fallback, leitura de clipboard,
+histórico, arquivos/contexto, autenticação ou API paga.
+
+Esta mudança adota a composição Source validada. O shim, o controller R3 e a
+correção de UI receberam revisão independente delimitada. O build normal da composição, seis
+CTests isolados e 90 testes Python passaram (6 do shim, 23 T1 e 61 T2),
+usando somente processos e servidores HTTP privados e sintéticos. Após as
+correções do PR [#36](https://github.com/caiolombello/orla-desktop/pull/36), um
+build normal e os seis CTests passaram, com 19 entradas do controller e
+17 da UI. As duas correções seguintes de resultado anterior e atalho receberam
+revisões independentes; a composição final passou um build novo e os seis
+CTests, com 24 entradas do controller e 18 da UI. Timeout continua sendo falha
+de prazo após a limpeza; uso só é
+rotulado como reportado quando o estado validado informa isso. Uma resposta
+terminal com custo inválido não publica os tokens daquela resposta. A fixture
+do shim também passou em Python 3.12.3 e 3.14.7 em harnesses próprios que
+preservam HOME/CODEX_HOME. Não houve
+Ollama ou modelo real, validação semântica da resposta,
+clipboard nativo, acessibilidade nativa, instalação, pacote relocável, release
+ou admissão de usuário/Wayland. Loopback limita o destino de rede; não confirma
+identidade Ollama, processamento offline ou privacidade, e o processo que
+escuta ali pode encaminhar o conteúdo para outra rede. Os dois jobs hospedados
+passaram em `1f59e0c`. Em `2c8b750`, o job portátil passou e as 17 entradas da
+UI passaram, mas o processo saiu com SIGSEGV depois de terminar os testes; a
+causa permanece desconhecida. Os dois jobs passaram depois em `57c2aa0`; o job
+do launcher reportou os seis CTests aprovados e o diagnóstico GDB foi pulado.
+O workflow mantém a captura limitada somente após falha, preservando o resultado
+original. Esse run aprovado não explica o SIGSEGV anterior.
+
+As duas correções seguintes de NOTIFY e execução de resultados passaram na
+composição exata: build novo, seis CTests, 25 entradas do controller e 27 da UI.
+A UI terminou em 24,75 s, dentro do limite preservado de 30 s. O teste de ação
+lê somente o buffer de clipboard privado da plataforma offscreen. A revisão
+detectou uma referência obsoleta no novo teste Steam; o teste foi corrigido
+para conferir o controle vivo após a reconstrução do modelo.
+Os dois jobs também passaram em `28c5ef4`; os seis CTests hospedados terminaram
+em 74,04 s e a UI em 24,27 s. Esse log aprovado não imprime os contadores Qt
+dos processos filhos.
+
+As duas correções seguintes publicam a notificação final antes de liberar o
+fechamento e mantêm a intenção de sair mesmo após novos pedidos de ocultação.
+O estado final chega aos bindings da UI com a barreira de geração preservada
+durante a notificação; depois a prontidão é emitida uma vez. O pedido de saída
+faz parte do mesmo fechamento após a limpeza dos três proprietários, incluindo
+o caminho em que todos já ficaram prontos. Os flags são consumidos antes de
+despachar ocultação/saída, sem herdar um quit no ciclo seguinte.
+A composição conjunta passou build novo de 40 passos e os seis CTests isolados
+em 75,925 s, com 27 entradas do controller e 27 da UI, sem falhas nesses dois
+processos. A UI levou 24,60 s, dentro do limite preservado de 30 s.
+A revisão do controller aprovou o Source com uma limitação explícita: um
+desafio QML cooperativo adicional falhou ao exigir cancelamento confirmado
+(apresentou cancelamento não confirmado, causa exata desconhecida); os casos
+QML forced/timeout e os 27 testes normais passaram. A falha foi preservada.
+A revisão independente da saída passou os 27 testes normais e um desafio
+adicional com os três helpers reais: o último controlador notificou todos
+prontos com quit ainda pendente, o atalho efetivo fez o fechamento imediato
+único e a prontidão posterior não duplicou ocultação/saída. O ciclo seguinte
+sem quit também passou. A primeira fixture desse desafio pressupunha um
+prazo Steam errado e falhou antes da verificação causal; ficou preservada.
+A fixture corrigida alterou apenas o prazo de teste exposto, em build novo.
+O uso de tokens agora fica pendente até validar a resposta completa, saída
+normal zero e limpeza confirmada. Dados extras, erro de saída, cancelamento
+e timeout descartam esse uso sem apagar o texto parcial revisável. Sete novas
+regressões com helpers reais e retries passaram depois das falhas causais no
+código anterior. A revisão independente passou controller 34 e um desafio
+adicional de cinco entradas: saída padrão fechada com processo ainda vivo
+não publica uso; conclusão válida publica uso reportado ou desconhecido,
+e fechamento preserva a barreira e a ordem de notificação.
+A composição do código passou build novo de 40 passos e os seis CTests uma vez
+em 78,502 s, com controller 34 e UI 27 (24,508 s, limite de 30 s).
+Os dois jobs hospedados passaram em `8d137cf`, com os seis CTests em 78,72 s.
+A build local desse commit passou os seis em 79,47 s, mas não foi instalada
+antes de dois novos comentários de revisão. A correção seguinte preserva a
+primeira falha observada quando cancelamento ou fechamento começam depois dela
+e drena stdout sem interpretar eventos após o primeiro erro de protocolo.
+O cancelamento anterior à falha permanece cancelamento; o parcial aceito antes
+do erro continua revisável. Dezessete regressões com helpers reais e retries
+foram adicionadas: quinze falharam causalmente na base, com dois controles
+pré-início aprovados. A composição final passou build novo de 40 passos e os
+seis CTests uma vez em 81,147 s: controller 51 e UI 27 (24,663 s, limite 30 s).
+A revisão independente passou controller 51 e um desafio QML de quatro
+entradas. O setup inicial falhou antes dos helpers e seus oráculos causais
+ficaram UNRUN; o trace serializado null não comprova ordem temporal.
+Em `5aaf518`, CI run 38175193804 aprovou o job portátil, mas behavior saiu
+com SIGSEGV depois de 7 PASS/0 FAIL/1 skip esperado; os outros cinco CTests
+passaram. Causa UNKNOWN; um único GDB local saiu zero sem reproduzir o crash.
+O workflow amplia somente o diagnóstico após falha para um alvo behavior/UI,
+priorizando behavior e mantendo os limites e o resultado original. CI desta
+revisão e integração na branch principal continuam pendentes.
+O canary local de `5aaf518` substituiu reversivelmente o executável instalado,
+com backup e alteração somente do caminho no wrapper. A build permanente ALL40
+passou seis CTests uma vez em 80,85 s. No KDE foram observados atalho, retorno
+de foco, painel de IA, rolagem por Tab, popup de tarefa, cálculo `2+2`, saída
+limpa e reinício; o serviço ficou ativo/habilitado. Esses fluxos básicos não
+qualificam geração/provedor real, clipboard/acessibilidade, matriz de telas,
+pacote relocável, distribuição/release ou admissão completa.
+
+A revisão posterior preserva o erro original após recuperar a limpeza, bloqueia
+novos trabalhos IA/Steam enquanto o fechamento está pendente e mantém
+cancelamento/timeout quando o sinal interrompe a publicação. A composição local
+passou ALL40, seis CTests em 83,64 s (UI 30 dentro de 30 s; controller 53) e 93 testes
+Python. O SIGSEGV após Totals do desafio dirigido continua UNKNOWN: um GDB não
+reproduziu e a suíte completa aprovada não explica a falha. CI/merge da nova
+revisão estão pendentes; a instalação local continua no canary `5aaf518`.
+
+A revisão seguinte valida eventos de falha somente após EOF limpo e saída normal
+zero do helper. Eventos extras, bytes sem terminador e saída não zero preservam
+`invalid_helper_response`; o primeiro cancelamento explícito continua registrando
+a causa já observada. O launcher passa a abrir em 660×420, com entradas IA/Steam
+de pelo menos 40×40 e conteúdo IA contido na largura disponível, incluindo versões
+longas. A combinação passou build novo ALL40 e os seis CTests uma vez em 84,38 s:
+UI 32/26,588 s Qt (limite 30 s) e controller 57/12,621 s Qt (limite 40 s).
+Os 93 testes Python aprovados na revisão anterior não foram repetidos porque seus
+arquivos permaneceram iguais. Revisões independentes aprovaram cada mudança de
+código. CI/merge desta combinação e os testes do layout compacto no KDE permanecem
+pendentes; a instalação local ainda está no canary `5aaf518`, e as causas dos
+crashes históricos continuam UNKNOWN.
 
 ## Fundação do pacote de dados — somente no fonte
 
@@ -49,7 +199,7 @@ um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
 
 ## Compilar e testar
 
-Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml, Quick; Test/DBus para testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
+Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
 
 ```sh
 cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON
@@ -78,3 +228,12 @@ As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles
 - [KWaylandExtras 6.30](https://github.com/KDE/kwindowsystem/blob/v6.30.0/src/kwaylandextras.h), [política de token — KWin 6.7.5](https://github.com/KDE/kwin/blob/v6.7.5/src/xdgactivationv1.cpp).
 - [TextField](https://doc.qt.io/qt-6.11/qml-qtquick-controls-textfield.html), [Text.PlainText/elide](https://doc.qt.io/qt-6.11/qml-qtquick-text.html), [Keys](https://doc.qt.io/qt-6.11/qml-qtquick-keys.html), [QQuickWindow](https://doc.qt.io/qt-6.11/qquickwindow.html) — Qt 6.11.2.
 - [QProcess](https://doc.qt.io/qt-6.11/qprocess.html) e [QDesktopServices](https://doc.qt.io/qt-6.11/qdesktopservices.html) — subprocesso com argumentos separados e encaminhamento de URI no Qt 6.11.2.
+
+
+A revisão mais recente mantém cancelamento/timeout durante a publicação de
+`started` e apresenta mensagens fixas de recuperação para todos os códigos de
+falha aceitos. Dois revisores independentes aprovaram os escopos; a composição
+passou build novo de 40 passos, seis CTests (90,697s) e 116 testes Python. A fixture cobre a
+escrita completa antes do retorno do sink; não promete entrega/ACK ou escrita
+parcial atômica. CI da revisão, atualização do canary `5aaf518`, provedores reais e
+admissão completa seguem pendentes. Veja o registro de validação de IA.

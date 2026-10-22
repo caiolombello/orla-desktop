@@ -1836,7 +1836,7 @@ class AiTextTransportTests(unittest.TestCase):
 
     def test_finalizer_guard_failure_after_started_preserves_partial_without_terminal(self):
         delta = b'{"message":{"role":"assistant","content":"kept"},"done":false}\n'
-        signals = FakeSignals(fail_at={("block", 2)})
+        signals = FakeSignals(fail_at={("block", 3)})
         outcome, sink, _connector, _response, _signals, trace, _specs = self.run_local(
             [delta, TimeoutError()], signals=signals,
         )
@@ -1848,7 +1848,7 @@ class AiTextTransportTests(unittest.TestCase):
 
     def test_restore_failure_after_one_terminal_attempt_changes_only_private_outcome(self):
         terminal = b'{"message":{"role":"assistant","content":"ok"},"done":true}\n'
-        for failure in (("restore_handler", 1), ("restore_mask", 2)):
+        for failure in tuple(("restore_handler", count) for count in range(1, 7)) + (("restore_mask", 3),):
             with self.subTest(failure=failure):
                 signals = FakeSignals(fail_at={failure})
                 outcome, sink, *_rest = self.run_local(
@@ -1856,11 +1856,227 @@ class AiTextTransportTests(unittest.TestCase):
                 )
                 self.assertEqual(outcome.state, "finalization_failed")
                 self.assertEqual(outcome.exit_code, 3)
+                self.assertEqual(outcome.code, "process_cleanup_failed")
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                # Late-recorder failures still attempt all three originals;
+                # failures restoring an original remain explicitly unconfirmed.
+                if failure[0] == "restore_mask" or failure[1] <= 3:
+                    self.assertEqual(signals.handlers, {name: "original-" + name
+                                                        for name in self.target.SIGNAL_NAMES})
                 self.assertEqual([event["type"] for event in sink.events],
                                  ["started", "delta", "completed"])
                 self.assertEqual(sum(event["type"] in {
                     "completed", "failed", "cancelled",
                 } for event in sink.events), 1)
+
+    def test_late_cleanup_lifecycle_keeps_terminal_failure_and_original_mask(self):
+        target = self.target
+        class PendingSignals(FakeSignals):
+            def __init__(self, name, original_mask):
+                super().__init__()
+                self.name = name
+                self.mask = original_mask
+                self.original_mask = original_mask
+                self.delivered_with_handlers = False
+
+            def block(self, names):
+                self._step("block", ("block", tuple(names)))
+                previous = self.mask
+                self.mask = "blocked"
+                return previous
+
+            def restore_mask(self, mask):
+                count = self._step("restore_mask", ("restore_mask", mask))
+                self.mask = mask
+                if count == 3:
+                    self.delivered_with_handlers = all(callable(self.handlers[name])
+                                                       for name in target.SIGNAL_NAMES)
+                    self.handlers[self.name]()
+                    raise target._TimedOut() if self.name == "SIGALRM" else target._Cancelled()
+
+        completed = b'{"message":{"role":"assistant","content":""},"done":true}\n'
+        cases = (([completed, b""], None, "terminal_emitted", "completed", None, 0),
+                 ([b'invalid json\n'], None, "terminal_emitted", "failed", "protocol_invalid", 0),
+                 ([completed, b""], 2, "sink_failed", None, None, 3))
+        for name in ("SIGTERM", "SIGALRM"):
+            for chunks, sink_failure, state, terminal, code, exit_code in cases:
+                with self.subTest(signal=name, state=state, terminal=terminal):
+                    signals = PendingSignals(name, frozenset({"caller-blocked-signal"}))
+                    sink = RecordingSink(fail_at=sink_failure)
+                    outcome, *_rest = self.run_local(chunks, signals=signals, sink=sink)
+                    self.assertEqual((outcome.state, outcome.terminal, outcome.code, outcome.exit_code),
+                                     (state, terminal, code, exit_code))
+                    self.assertTrue(signals.delivered_with_handlers)
+                    self.assertEqual(signals.mask, signals.original_mask)
+                    self.assertEqual(signals.handlers, {signal_name: "original-" + signal_name
+                                                        for signal_name in target.SIGNAL_NAMES})
+                    self.assertEqual([call[0] for call in signals.calls[-4:]],
+                                     ["restore_mask", "restore_handler", "restore_handler", "restore_handler"])
+
+    def test_started_mask_failure_restores_original_mask_and_first_error(self):
+        class MaskSignals(FakeSignals):
+            def __init__(self, failures=(), lifecycle=False):
+                super().__init__(fail_at=failures)
+                self.mask = "initial-mask"
+                self.lifecycle = lifecycle
+
+            def block(self, names):
+                self._step("block", ("block", tuple(names)))
+                previous = self.mask
+                self.mask = "blocked-mask"
+                return previous
+
+            def restore_mask(self, mask):
+                count = self._step("restore_mask", ("restore_mask", mask))
+                self.mask = mask
+                if self.lifecycle and count == 2:
+                    raise self_target._Cancelled()
+
+        self_target = self.target
+        cases = (
+            ({("block", 2)}, False, False, "preflight_failed", 2, 0),
+            ({("restore_mask", 2)}, False, False, "terminal_emitted", 0, 2),
+            ({("restore_mask", 2), ("block", 3)}, False, False, "finalization_failed", 3, 1),
+            (set(), True, True, "sink_failed", 3, 0),
+            ({("restore_mask", 2)}, False, True, "sink_failed", 3, 0),
+        )
+        for failures, lifecycle, sink_failure, state, exit_code, acknowledged in cases:
+            with self.subTest(failures=failures, lifecycle=lifecycle, sink_failure=sink_failure):
+                signals = MaskSignals(failures, lifecycle)
+                sink = RecordingSink(fail_at=1 if sink_failure else None)
+                factories = []
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda spec: factories.append(spec),
+                    clock=FakeClock(), signal_boundary=signals, sink=sink,
+                )
+                self.assertEqual((outcome.state, outcome.exit_code), (state, exit_code))
+                self.assertEqual(outcome.published_events, acknowledged)
+                self.assertEqual(factories, [])
+                self.assertEqual(signals.mask, "initial-mask")
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 6 if state == "terminal_emitted" else 3)
+                if state == "terminal_emitted":
+                    self.assertEqual(sink.events[-1]["code"], "process_cleanup_failed")
+                elif sink_failure:
+                    self.assertEqual(sink.events, [])
+
+    def test_lifecycle_exception_inside_started_publish_finalizes_without_ack(self):
+        cases = ((self.target._Cancelled, "cancelled", None),
+                 (self.target._TimedOut, "failed", "operation_timeout"))
+        for exception, terminal_type, code in cases:
+            with self.subTest(exception=exception.__name__):
+                signals = FakeSignals()
+                factories = []
+                terminal_calls = []
+
+                def interrupt(event):
+                    if event["type"] == "started":
+                        raise exception()
+                    terminal_calls.extend(signals.calls)
+
+                sink = RecordingSink(on_publish=interrupt)
+                outcome = self.target._run_call(
+                    input_reader=FakeReader([self.request_wire(), b""]),
+                    connector_factory=lambda spec: factories.append(spec),
+                    clock=FakeClock(), signal_boundary=signals, sink=sink,
+                )
+                self.assertEqual(factories, [])
+                self.assertEqual((outcome.state, outcome.exit_code),
+                                 ("terminal_emitted", 0))
+                self.assertEqual((outcome.terminal, outcome.code), (terminal_type, code))
+                self.assertEqual(outcome.published_events, 1)
+                self.assertFalse(outcome.partial_published)
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", terminal_type])
+                self.assertEqual([event["sequence"] for event in sink.events], [0, 1])
+                expected = {"schemaVersion": 1, "requestId": "txt-transport.1",
+                            "sequence": 1, "type": terminal_type}
+                if code is not None:
+                    expected.update(code=code, retryable=True)
+                self.assertEqual(sink.events[-1], expected)
+                self.assertIn(("cancel_timer",), terminal_calls)
+                self.assertIn(("hook", "after_wipe"), terminal_calls)
+                self.assertFalse(any(call[0] == "restore_handler" for call in terminal_calls))
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                self.assertEqual(signals.calls[-4:], [
+                    ("restore_mask", "original-mask"),
+                    ("restore_handler", "SIGALRM", "original-SIGALRM"),
+                    ("restore_handler", "SIGTERM", "original-SIGTERM"),
+                    ("restore_handler", "SIGINT", "original-SIGINT"),
+                ])
+                retry, retry_sink, *_rest = self.run_local([
+                    b'{"message":{"role":"assistant","content":""},"done":true}\n', b"",
+                ])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["sequence"], 1)
+
+    def test_lifecycle_exception_during_delta_publication_keeps_terminal_class(self):
+        delta = b'{"message":{"role":"assistant","content":"kept"},"done":false}\n'
+        terminal = (
+            b'{"message":{"role":"assistant","content":""},"done":true,'
+            b'"prompt_eval_count":4,"eval_count":5}\n'
+        )
+        cases = ((self.target._Cancelled, "cancelled", None),
+                 (self.target._TimedOut, "failed", "operation_timeout"))
+        for exception, terminal_type, code in cases:
+            with self.subTest(exception=exception.__name__):
+                def interrupt(event):
+                    if event["type"] == "delta":
+                        raise exception()
+
+                sink = RecordingSink(on_publish=interrupt)
+                outcome, sink, _connector, response, signals, trace, _specs = self.run_local(
+                    [delta, terminal, b""], sink=sink,
+                )
+                self.assertEqual(trace, ["response.close", "connector.close"])
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                self.assertEqual(len(response.calls), 1)
+                self.assertEqual((outcome.state, outcome.exit_code),
+                                 ("terminal_emitted", 0))
+                self.assertEqual((outcome.terminal, outcome.code), (terminal_type, code))
+                self.assertEqual([event["type"] for event in sink.events],
+                                 ["started", "delta", terminal_type])
+                self.assertEqual([event["sequence"] for event in sink.events], [0, 1, 2])
+                self.assertEqual(sink.events[1]["text"], "kept")
+                expected = {"schemaVersion": 1, "requestId": "txt-transport.1",
+                            "sequence": 2, "type": terminal_type}
+                if code is not None:
+                    expected.update(code=code, retryable=True)
+                self.assertEqual(sink.events[-1], expected)
+                retry, retry_sink, *_rest = self.run_local([delta, terminal, b""])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["usage"]["totalTokens"], 9)
+
+    def test_ordinary_sink_exceptions_still_fail_closed_after_started(self):
+        class CustomSinkError(Exception):
+            pass
+
+        delta = b'{"message":{"role":"assistant","content":"hidden"},"done":false}\n'
+        terminal = b'{"message":{"role":"assistant","content":""},"done":true}\n'
+        for exception in (BrokenPipeError, OSError, CustomSinkError):
+            with self.subTest(exception=exception.__name__):
+                class FailingSink(RecordingSink):
+                    def publish(self, event):
+                        if event["type"] == "delta":
+                            raise exception("synthetic sink fault")
+                        super().publish(event)
+
+                outcome, sink, _connector, _response, signals, trace, _specs = self.run_local(
+                    [delta, terminal, b""], sink=FailingSink(),
+                )
+                self.assertEqual(trace, ["response.close", "connector.close"])
+                self.assertEqual(signals.counts["cancel_timer"], 1)
+                self.assertEqual(signals.counts["restore_handler"], 6)
+                self.assertEqual((outcome.state, outcome.exit_code), ("sink_failed", 3))
+                self.assertIsNone(outcome.terminal)
+                self.assertEqual([event["type"] for event in sink.events], ["started"])
+                self.assertNotIn("synthetic sink fault", json.dumps(outcome.__dict__))
+                retry, retry_sink, *_rest = self.run_local([terminal, b""])
+                self.assertEqual((retry.terminal, retry.exit_code), ("completed", 0))
+                self.assertEqual(retry_sink.events[-1]["usage"]["status"], "unknown")
 
     def test_sink_failure_never_retries_or_calls_a_connector_after_failed_started(self):
         connector_calls = []
@@ -1977,7 +2193,7 @@ class AiTextTransportTests(unittest.TestCase):
                 self.target, "_wipe", failing_wipe,
             ):
                 signals = FakeSignals(
-                    fail_at={("block", 2)} if kind == "guard" else (),
+                    fail_at={("block", 3)} if kind == "guard" else (),
                 )
                 trace = []
                 response = FakeResponse([stream, b""], trace)
@@ -2003,7 +2219,7 @@ class AiTextTransportTests(unittest.TestCase):
                     )
 
                 self.assertEqual(signals.counts["cancel_timer"], 1)
-                self.assertEqual(signals.counts["restore_handler"], 3)
+                self.assertEqual(signals.counts["restore_handler"], 6 if kind == "normal" else 3)
                 if kind == "preflight":
                     self.assertEqual(outcome.state, "preflight_failed")
                     self.assertEqual(outcome.exit_code, 2)

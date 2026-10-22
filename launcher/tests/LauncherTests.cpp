@@ -1,5 +1,6 @@
 #include <QtTest>
 #include "LauncherController.h"
+#include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
 
@@ -25,7 +26,8 @@ private Q_SLOTS:
     void initTestCase() { verifyPrivateTestBus(); }
     void editingClearsOldResultsBeforeReplacementArrives()
     {
-        LauncherController launcher;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
         launcher.setQuery(QStringLiteral("2+2"));
         QTRY_VERIFY_WITH_TIMEOUT(!launcher.rows().isEmpty() && launcher.status() == "ready", 5000);
         QCOMPARE(launcher.rows().first().toMap().value("title").toString(), QStringLiteral("4"));
@@ -36,7 +38,8 @@ private Q_SLOTS:
     }
     void oversizedInputReportsRecoverableErrorWithoutSearching()
     {
-        LauncherController launcher;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
         launcher.setQuery(QString(513, QLatin1Char('x')));
         QCOMPARE(launcher.status(), QStringLiteral("error"));
         QVERIFY(!launcher.error().isEmpty());
@@ -47,7 +50,8 @@ private Q_SLOTS:
     }
     void staleExecutionIsRejectedEvenWhenTheSameQueryReturns()
     {
-        LauncherController launcher;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
         launcher.setQuery(QStringLiteral("2+2"));
         QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
         const auto oldGeneration = launcher.generation();
@@ -63,7 +67,8 @@ private Q_SLOTS:
     }
     void escapeCancelsBothDebouncedAndInFlightResults()
     {
-        LauncherController launcher;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
         QSignalSpy closed(&launcher, &LauncherController::closeRequested);
         launcher.setQuery(QStringLiteral("2+2"));
         launcher.dismiss();
@@ -84,7 +89,8 @@ private Q_SLOTS:
         const auto receipt = qEnvironmentVariable("ORLA_TEST_RECEIPT");
         if (receipt.isEmpty()) QSKIP("Owned desktop fixture was not provided; no installed app is launched");
         QFile::remove(receipt);
-        LauncherController launcher;
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
         launcher.setQuery(QStringLiteral("OrlaOwnedLauncherFixture"));
         QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
         QCOMPARE(launcher.rows().size(), 1);
@@ -109,7 +115,8 @@ private Q_SLOTS:
         QList<QUrl> opened;
         SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE),
             writeSteamHelper(directory), [&opened](const QUrl &url) { opened.append(url); return true; });
-        LauncherController launcher(&steam);
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &launcher = controllerOwner.controller();
         steam.scan({QStringLiteral("native=/synthetic/root")});
         QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 3000);
 
