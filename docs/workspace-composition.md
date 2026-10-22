@@ -14,8 +14,10 @@ plano não escrevem configurações, bancos ou recibos.
 
 No checkout: `python3 scripts/orla.py layout setup --service UNIT`, com PySide6 e
 os widgets necessários já instalados. Há também um ZIP experimental separado,
-relocável, descrito abaixo. Não há botão no plasmoid apontando para um caminho do
-desenvolvedor. Instalação gerenciada e entrada no menu do desktop continuam abertas.
+relocável e um instalador experimental, descritos abaixo. Não há botão no plasmoid
+apontando para um caminho do desenvolvedor. O instalador cria uma entrada própria
+no menu; seus testes e revisão qualificam o contrato de instalação descrito abaixo,
+separado do ciclo nativo.
 
 O pré-requisito Menu Orla segue a [instalação manual da barra](../bar/README.md).
 Também são necessários Menu Global, espaçador, bandeja, áudio/rede e relógio do
@@ -63,8 +65,60 @@ Falhas de inicialização não exibem caminhos privados em tracebacks.
 As raízes de configuração/estado são as do usuário que abre a composição. Valores
 XDG relativos são ignorados em favor dos defaults, conforme a
 [especificação XDG](https://specifications.freedesktop.org/basedir/latest/).
-O bundle não instala widgets nem cria autostart, serviço ou atalho; o instalador
-com ownership, atualização e rollback é o próximo incremento de distribuição.
+O bundle não instala widgets nem cria autostart, serviço ou atalho.
+
+## Instalação gerenciada experimental
+
+O bootstrap é o par confiável `workspace/install.py` e `workspace/package.py` do
+mesmo código revisado, mantidos juntos. O instalador recebe o ZIP e os pins externos;
+não baixa código nem escolhe um serviço automaticamente. Passou em testes privados
+e revisão independente; não foi instalado na sessão do usuário. Em um diretório
+com o par confiável:
+
+```sh
+python3 -I -B /CAMINHO/CONFIAVEL/install.py install /CAMINHO/DO/BUNDLE.zip \
+  --sha256 SHA256_64_HEX --commit COMMIT_40_HEX --service UNIT
+orla-workspacectl status
+orla-workspacectl doctor
+orla-workspace
+```
+
+`orla-workspace` e `orla-workspacectl` ficam em `$HOME/.local/bin`; a entrada
+“Composição Orla” fica no diretório XDG de aplicações. Não é criado autostart ou
+serviço. Inclua `$HOME/.local/bin` no PATH, ou use os caminhos completos.
+Depois da instalação, o bootstrap, o ZIP e o checkout não são necessários para
+abrir, diagnosticar ou remover uma instalação íntegra. O serviço inicial fica
+registrado; `orla-workspace --service OUTRA_UNIT` é uma substituição explícita
+apenas para aquela execução.
+
+Os arquivos próprios ficam em `$XDG_DATA_HOME/orla-desktop/workspace`, com versões
+identificadas pelo hash do ZIP e ferramentas fixadas fora do payload. Estado e
+histórico ficam em `$XDG_STATE_HOME/orla/workspace-install`. Valores XDG ausentes,
+vazios ou relativos usam os defaults do usuário. Nenhuma dessas operações escreve
+na configuração dos painéis, nos bancos de layout ou no launcher independente.
+
+```sh
+orla-workspacectl update /CAMINHO/DO/NOVO-BUNDLE.zip \
+  --sha256 SHA256_64_HEX --commit COMMIT_40_HEX
+orla-workspacectl rollback
+orla-workspacectl recover
+orla-workspacectl uninstall
+```
+
+Update mantém uma geração anterior; outro update é recusado enquanto ela existir.
+Rollback alterna as duas gerações, preservando o serviço e as ferramentas do
+gerenciador. Não há limpeza automática nem atualização remota nesta fatia.
+Enquanto a janela ou seu worker continuam vivos, update, rollback, recover e
+uninstall recusam a alteração e pedem fechar o Workspace. Sinais são encaminhados
+à janela e o supervisor aguarda o fechamento, sem timeout que mate uma transação.
+
+Hashes, modos, identidade dos diretórios, recibos e colisões são conferidos antes
+da alteração. Drift exige inspeção; `recover` não adota arquivos desconhecidos.
+Recuperação automática cobre os checkpoints persistidos, não toda interrupção
+possível entre criar um inode e registrar sua identidade. Se uma remoção parcial
+já retirou as ferramentas instaladas, `recover` exige novamente o par confiável
+original. Guarde esse par. Uninstall mantém a auditoria e remove somente a árvore
+própria; restaurar os painéis é uma operação separada da janela de composição.
 
 O backend exige Plasma 6.7.5 e pelo menos um painel existente, escolhido pelo
 usuário, para substituição. Painéis com a dock são recusados. Não há criação
@@ -110,4 +164,4 @@ da janela permanece recusado enquanto houver uma operação.
 Recomendação de execução: Sol 6.1, medium; backend existente limita a implementação. Escalar
 raciocínio se uma transição não puder preservar os bancos e o primeiro erro.
 Implementação inicial executada com evidência sintética; criação aditiva, reativação direta,
-instalação autônoma e aceite nativo permanecem incrementos posteriores.
+qualificação da instalação na sessão do usuário e aceite nativo permanecem gates posteriores.

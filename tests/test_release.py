@@ -46,6 +46,7 @@ class ReleaseBundleTests(unittest.TestCase):
             for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
                          "test_workspace_setup.py", "test_workspace_view.py",
                          "test_workspace_entry.py", "test_workspace_package.py",
+                         "test_workspace_install.py",
                          "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py",
                          "native/control_center_audio.py", "native/control_center_audio_session.py",
                          "native/run_control_center_audio.py", "native/control_center_audio.conf.in"):
@@ -96,6 +97,7 @@ class ReleaseBundleTests(unittest.TestCase):
                 for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
                              "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                              "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
+                             "tests/test_workspace_install.py",
                              "tests/test_design_system.py", "tests/design_gallery.py",
                              "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
                              "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",
