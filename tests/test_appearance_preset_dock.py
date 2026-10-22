@@ -16,6 +16,7 @@ class AppearancePresetDockTests(unittest.TestCase):
     focus = fixtures.ProfilesDockTests.focus
     settle = fixtures.ProfilesDockTests.settle
     flat = fixtures.ProfilesDockTests.flat
+    open_catalog = portable.AppearancePresetTests.open_catalog
     exported = portable.AppearancePresetTests.exported
     candidate = portable.AppearancePresetTests.candidate
     preview = portable.AppearancePresetTests.preview
@@ -23,6 +24,14 @@ class AppearancePresetDockTests(unittest.TestCase):
     test_keyboard_import_apply_and_escape_cancel_fit_420_pixels = portable.AppearancePresetTests.test_keyboard_import_apply_and_escape_cancel_fit_420_pixels
 
     test_preview_status_keeps_focused_button_inside_scroll_viewport = portable.AppearancePresetTests.test_preview_status_keeps_focused_button_inside_scroll_viewport
+
+    test_collapsed_catalog_skips_choices_and_space_enters_first_choice = portable.AppearancePresetTests.test_collapsed_catalog_skips_choices_and_space_enters_first_choice
+
+    test_successful_preview_can_collapse_from_child_with_visible_status_and_focus = portable.AppearancePresetTests.test_successful_preview_can_collapse_from_child_with_visible_status_and_focus
+
+    test_pending_invalid_portable_input_reveals_both_sections_and_cancel_resets = portable.AppearancePresetTests.test_pending_invalid_portable_input_reveals_both_sections_and_cancel_resets
+
+    test_catalog_tab_backtab_return_and_escape_keep_focus_visible_without_writes = portable.AppearancePresetTests.test_catalog_tab_backtab_return_and_escape_keep_focus_visible_without_writes
 
     def test_widget_strip_and_open_guard_follow_temporary_visibility(self):
         self.initialize()

@@ -169,3 +169,109 @@ The unrelated broader offscreen failures recorded above remain open.
 
 Next UX work reduces preset/common-control density on short screens while
 preserving error recovery, preview/cancel and the existing popup budget.
+
+
+## Compact preset chooser — 15 October 2026
+
+The next UX1 increment folds the preset grid and portable appearance behind
+**Presets e aparência portátil**, initially closed. The four names and current
+preview status remain outside the fold. Exact preview identity is derived from
+the effective appearance and widget list; no saved/last-used preset identity is
+invented. A legacy configuration keeps its visible **Ir para Perfis** route and
+cannot choose a preset or import implicitly.
+
+Opening preserves the existing four cards and their keyboard order. A pending
+or invalid portable input reveals both sections and prevents hiding the recovery
+path. A valid preview can be collapsed manually with its status retained; focus
+moves from a descendant before hiding it. Cancel/reopen resets the two view-only
+sections. Apply/Undo within the same edit preserve their openness. Deferred issue
+revelation checks current state, so a synchronous successful catalog choice does
+not unexpectedly open JSON. No persisted preference, parser format, token,
+font, target size or popup budget changed.
+
+At the existing 420 px gallery budget, the collapsed managed view now shows all
+three basic theme cards earlier. The legacy profile route uses extra space and
+common numeric controls still require scrolling; this does not claim that the
+entire editor fits without scrolling. The narrow 350 px dock test caught a
+selected **Estúdio · Em prévia** caption overflow. The card suffix became
+**· Prévia**, while status and accessibility keep **Em prévia**. Neither geometry
+nor the text-fit tolerance was relaxed.
+
+Verification on Qt/PySide6 6.11.2:
+
+- Three new behavior cases exercised closed Tab skipping/Space expansion,
+  collapsing from a focused child with preview status retained, and pending/error
+  revelation plus clean cancel/reopen. The old UI lacked the new disclosure and
+  failed the initial checks. Existing expanded navigation and persistence guards
+  remain covered, including the real-dock fixture at its default width.
+- Appearance, portable appearance/parser/dock and profile suites ran 86 tests
+  under **each** of Fusion and org.kde.desktop: **85 passed, one skipped**. The
+  skipped desktop-URL/TaskManager case needs a Wayland/X11 session. These counts
+  include both fixture variants of the new cases.
+- Design check reported zero issues; all seven design guards passed. The complete
+  gallery generated 62 PNGs including its index. Eight relevant synthetic frames
+  below were inspected across both schemes. The gallery waits for actual popup
+  closed/opened signals when changing its synthetic profile, rather than racing
+  the exit animation.
+- Earlier failing runs and gallery lifecycle failures remain in private evidence.
+  The broader unrelated native-dialog/audio offscreen failures recorded above
+  were not rerun or relabeled green. No launcher/C++ change or local CTest run is
+  included in this increment.
+
+| State at 420 px | Dark | Light |
+| --- | --- | --- |
+| Compact, legacy preferences | [Capture](../screenshots/appearance-compact/preset-compact-dark-legacy-420.png) | [Capture](../screenshots/appearance-compact/preset-compact-light-legacy-420.png) |
+| Compact, managed profile | [Capture](../screenshots/appearance-compact/preset-compact-dark-managed-420.png) | [Capture](../screenshots/appearance-compact/preset-compact-light-managed-420.png) |
+| Catalog preview, Maré / Jogo | [Capture](../screenshots/appearance-compact/preset-catalog-dark-mare-420.png) | [Capture](../screenshots/appearance-compact/preset-catalog-light-jogo-420.png) |
+| Invalid portable input retained | [Capture](../screenshots/appearance-compact/preset-portable-dark-invalid-420.png) | [Capture](../screenshots/appearance-compact/preset-portable-light-invalid-420.png) |
+
+
+### Installed compact popup: bounded keyboard visit
+
+The public applet installer updated the local package, with a durable previous
+package/rollback backup. The package contained the same 67 members and only
+`AppearancePresetControls.qml` changed from the prior installed package. The
+installed file matches SHA-256
+`f81d720a5aac684d937fd8b52c5078df1bf4ec136aebb4e3f1a1211c67dd359f`.
+A single guarded Plasma stop/install/start completed. Read-only readiness checks
+waited through three temporary unmapped-screen observations before admitting an
+exact inventory match; no second installation/restart or configuration repair
+occurred. Panel/app IDs, configuration target, launcher process/invocation and
+protected files were preserved. No published release asset/version changed.
+
+The later visit used the installed applet in Plasma 6.7.5/Wayland, one enabled
+output at scale 1.45. Its current configuration uses legacy preferences: no
+profile was initialized, selected or migrated. AT-SPI Press opened the known
+settings control, and SetFocus explicitly selected known controls. Temporary
+uinput devices sent actual keys; completion required accessible UI outcomes:
+
+- The chooser began collapsed. Tab from its explicitly focused disclosure
+  reached the visible legacy **Ir para Perfis** route.
+- Space expanded the chooser. The four actual card buttons were disabled in
+  legacy mode. Return on the explicitly focused portable disclosure expanded its
+  editor; export was available and import remained disabled. Neither was invoked.
+- After explicit focus on Export, AT-SPI activation of the outer disclosure
+  collapsed both groups; the header reported focus and the inner controls were
+  hidden. This observes the resulting focus state, not internal timing or a
+  physical pointer interaction.
+- Return reopened the catalog with portable JSON collapsed. Space expanded the
+  portable section; Escape closed the popup. Reopening began with both sections
+  collapsed; Space on explicitly focused Cancel closed it without Apply.
+
+**The next Tab from the legacy profile route to the first theme remains
+UNQUALIFIED.** The observer did not confirm focus on the theme checkbox. Earlier
+attempts that expected it remain FAILED, alongside registration readiness and
+homonymous card/label selector failures. Later selectors distinguish actual card
+button roles; no product workaround was added. Multiple remembered accessibility
+focus states across Plasma windows do not identify a unique keyboard receiver.
+The final bounded functional result therefore does not qualify that next Tab,
+spontaneous focus/grabs, native pointer entry, managed preset selection/import,
+native pixel review, other schemes/displays or general accessibility usability.
+Managed selection/import and complete focus chains remain offscreen evidence.
+
+Every visit restored temporary accessibility flags and reported unchanged hashes
+for the four checked configuration files plus unchanged Plasma/launcher service
+snapshots. A separate final read confirmed all 132 protected file/hash/mode
+entries and absence of all five created input-device pairs. No Apply, export,
+preset/profile change, app launch or native screenshot was performed. The visual
+evidence remains the synthetic gallery above. C1/UX1/DX2 remain partial.

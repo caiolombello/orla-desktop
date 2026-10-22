@@ -143,6 +143,13 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   to blur behind that panel. Search is a capsule with a magnifier; results show the
   app's own theme icon (`iconName` from KRunner, drawn with `IconImage`) and the
   selected row is filled with the accent. The header drags the window.
+- **Appearance.** Keep presets and portable JSON behind the initially collapsed
+  “Presets e aparência portátil” control. Names and current preview status stay
+  visible; a saved preset identity must never be inferred. Basic themes and
+  form/motion precede advanced colors/theme JSON. Pending or invalid input reveals
+  its editor and keeps recovery reachable. Collapsing moves focused descendants
+  before hiding them; cancel/reopen resets only presentation state. Preserve the
+  fixed footer and popup budget; use the short-screen gallery in both schemes.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the
