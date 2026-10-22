@@ -13,6 +13,7 @@ Templates.TabButton {
     font.pixelSize: Style.type.label
     font.weight: checked ? Style.weight.demiBold : Style.weight.medium
     Accessible.name: text
+    Accessible.onPressAction: tab.click()
     contentItem: Text {
         text: tab.text
         font: tab.font

@@ -19,7 +19,7 @@ Limits: up to 16 named profiles (Previous preferences is separate), unique names
 
 Empty `profilesJSON` uses the flat settings; there is no implicit migration. Invalid, oversized or future-format profile JSON is preserved and disables presentation writes. On startup the dock falls back to the flat presentation; invalid replacement while running retains the last validated presentation. Report the error rather than editing KConfig while Plasma is running. If a saved custom appearance is invalid when cloning, the new profile uses the earlier theme/icon/motion preferences and shows a message; the original flat value is preserved.
 
-Activities/desktop association and switching, bar/launcher/event-surface selection, native popup/focus gestures and full release qualification remain open. See [validation](validation/profiles-0.2.5.md).
+Optional context-driven profile selection is implemented in current Source; see [Contexts](contexts.md) for opt-in, precedence, session-only manual override and native limits. Bar/launcher/event-surface selection, native popup/focus gestures and full release qualification remain open. See [validation](validation/profiles-0.2.5.md).
 
 ## Português brasileiro
 
@@ -54,9 +54,9 @@ selection, edit or invalid document is preserved instead of being overwritten.
 The caller must validate its own captured context, binding and request generation;
 this method does not infer those authorities or roll back callback side effects.
 
-This is a Source prerequisite for opt-in automatic context selection. Its controller,
-continuous context observation, controls and native journey are not implemented by
-this contract. The unit tests use synthetic Qt configuration, not a live KConfig
-transaction or a Plasma/Wayland focus qualification.
+The opt-in context controller consumes this guard in current Source. It validates
+its captured context, bindings, owners and manual override immediately before the
+single assignment. Its tests use synthetic Qt configuration, not a live KConfig
+transaction or a Plasma/Wayland focus qualification. See [Contexts](contexts.md).
 
-Associação/troca de Activities/desktops, escolha de barra/launcher/eventos, gestos/foco de popup nativo e qualificação da release completa continuam pendentes. Consulte a [validação](validation/profiles-0.2.5.md).
+O automático por contexto está implementado no Source, com ativação opcional e limites em [Contextos](contexts.md). Jornada nativa do automático, troca de Activity, escolha de barra/launcher/eventos e qualificação completa continuam pendentes. Consulte a [validação](validation/profiles-0.2.5.md).

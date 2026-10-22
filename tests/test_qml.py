@@ -346,6 +346,138 @@ Item {
                 self.assertFalse(identity.hasError(), identity.error().toString())
         self.assertEqual(self.warnings, [])
 
+    def test_control_center_context_busy_includes_its_queued_session(self):
+        self.config.setProperty("showControlCenter", True)
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        expression = QQmlExpression(self.engine.rootContext(), popup, "openFromDock(owner)")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        self.assertFalse(popup.property("visible"))
+        self.assertTrue(popup.property("contextSwitchBusy"))
+        QTest.qWait(80)
+        self.assertTrue(popup.property("visible"))
+        self.assertTrue(popup.property("contextSwitchBusy"))
+        busy_changed = QSignalSpy(popup.contextSwitchBusyChanged)
+        QQmlExpression(self.engine.rootContext(), popup, "closeSession()").evaluate()
+        self.assertTrue(popup.property("contextSwitchBusy"))
+        self.assertTrue(busy_changed.wait(1000))
+        self.assertFalse(popup.property("contextSwitchBusy"))
+        self.assertEqual(self.warnings, [])
+
+    def test_popup_busy_includes_closed_notification_and_deferred_restore(self):
+        self.place_dock_inside_available_screen()
+        self.dock.setProperty("nativePopups", True)
+        self.app.processEvents()
+        anchor = self.window.findChild(QQuickItem, "settingsButton")
+        popup = self.window.findChild(QObject, "settingsPopup")
+        self.engine.rootContext().setContextProperty("ownedPopupAnchor", anchor)
+        expression = QQmlExpression(self.engine.rootContext(), popup, "openAt(ownedPopupAnchor)")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        QTest.qWait(40)
+        observations = []
+        def closed():
+            observations.append((popup.property("visible"), popup.property("interactionBusy")))
+        popup.closed.connect(closed)
+        try:
+            popup.close()
+            self.assertEqual(observations, [(False, True)])
+            self.assertTrue(popup.property("interactionBusy"))
+            QTest.qWait(25)
+            dialog = popup.property("nativeDialog")
+            self.assertFalse(dialog.isVisible())
+            self.assertIsNotNone(dialog.activeFocusItem())
+            self.assertTrue(popup.property("interactionBusy"))
+            # Offscreen can keep a hidden window as focusWindow until another owns it.
+            self.window.requestActivate()
+            QTest.qWait(80)
+            self.assertFalse(popup.property("interactionBusy"))
+            self.assertEqual(self.warnings, [])
+        finally:
+            popup.closed.disconnect(closed)
+
+    def test_popup_busy_old_restore_cannot_release_a_new_close_ticket(self):
+        self.place_dock_inside_available_screen()
+        self.dock.setProperty("nativePopups", True)
+        self.app.processEvents()
+        popup = self.window.findChild(QObject, "settingsPopup")
+        anchor = self.window.findChild(QQuickItem, "settingsButton")
+        self.engine.rootContext().setContextProperty("ownedPopupAnchor", anchor)
+        self.engine.rootContext().setContextProperty("ownedHostWindow", self.window)
+        self.engine.rootContext().setContextProperty("ownedPopup", popup)
+        source = """(function() {
+            let count = 0;
+            ownedPopup.closed.connect(function() {
+                count++;
+                if (count === 1) Qt.callLater(function() {
+                    ownedPopup.openAt(ownedPopupAnchor);
+                    ownedPopup.close();
+                });
+                else {
+                    ownedHostWindow.requestActivate();
+                    Qt.callLater(function() {
+                        ownedPopup.anchorControl.intermediateBusy = ownedPopup.interactionBusy;
+                    });
+                }
+            });
+            ownedPopup.openAt(ownedPopupAnchor);
+        })()"""
+        # The observer uses an owned fixture item to retain its between-callback witness.
+        witness = QQmlComponent(self.engine)
+        witness.setData(b'import QtQuick; QtObject { property bool intermediateBusy: false }', QUrl())
+        holder = witness.create()
+        self.engine.rootContext().setContextProperty("busyWitness", holder)
+        source = source.replace('ownedPopup.anchorControl.intermediateBusy', 'busyWitness.intermediateBusy')
+        expression = QQmlExpression(self.engine.rootContext(), popup, source)
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        QTest.qWait(40)
+        popup.close()
+        QTest.qWait(100)
+        self.assertTrue(holder.property("intermediateBusy"))
+        self.window.requestActivate()
+        QTest.qWait(40)
+        self.assertFalse(popup.property("interactionBusy"))
+        self.assertEqual(self.warnings, [])
+        holder.deleteLater()
+
+    def test_popup_busy_rehost_and_reopen_early_returns_eventually_release(self):
+        self.place_dock_inside_available_screen()
+        self.dock.setProperty("nativePopups", True)
+        self.app.processEvents()
+        popup = self.window.findChild(QObject, "settingsPopup")
+        anchor = self.window.findChild(QQuickItem, "settingsButton")
+        newer = self.window.findChild(QQuickItem, "addButton")
+        self.engine.rootContext().setContextProperty("ownedPopupAnchor", anchor)
+        for mode in ("rehost", "reopen"):
+            expression = QQmlExpression(self.engine.rootContext(), popup, "openAt(ownedPopupAnchor)")
+            expression.evaluate()
+            QTest.qWait(40)
+            def closed():
+                if mode == "rehost":
+                    popup.setProperty("anchorControl", newer)
+                else:
+                    expression.evaluate()
+            popup.closed.connect(closed)
+            popup.close()
+            popup.closed.disconnect(closed)
+            self.assertTrue(popup.property("interactionBusy"))
+            QTest.qWait(50)
+            if mode == "reopen":
+                self.assertTrue(popup.property("visible"))
+                popup.close()
+            self.window.requestActivate()
+            for _ in range(20):
+                if QGuiApplication.focusWindow() == self.window:
+                    break
+                QTest.qWait(5)
+            self.assertEqual(QGuiApplication.focusWindow(), self.window)
+            newer.forceActiveFocus(Qt.OtherFocusReason)
+            QTest.qWait(80)
+            self.assertFalse(popup.property("interactionBusy"))
+            self.assertEqual(self.window.activeFocusItem(), newer)
+        self.assertEqual(self.warnings, [])
+
     def test_native_popup_close_preserves_a_newer_host_focus_choice(self):
         self.place_dock_inside_available_screen()
         self.dock.setProperty("nativePopups", True)

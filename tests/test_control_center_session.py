@@ -53,6 +53,75 @@ class ControlCenterSessionTests(unittest.TestCase):
         QTest.qWait(35)
         self.assertEqual(self.warnings, [])
 
+    def test_interaction_summary_covers_queued_open_handoff_and_real_idle(self):
+        self.assertTrue(self.evaluate("session.openFromDock(ownerItem.anchor)"))
+        self.settle()
+        self.assertEqual(self.values(self.window, "busyAtOpen"), [True])
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.assertTrue(self.evaluate("session.openFromClient(firstClient, barHost, barAnchor)"))
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.settle()
+        self.assertEqual(self.values(self.window, "busyAtOpen"), [True, True])
+        self.evaluate("session.close()")
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.settle()
+        self.assertFalse(self.session.property("interactionBusy"))
+        # Retained client/error/host metadata is not an interaction.
+        self.assertTrue(self.evaluate("session.client === firstClient"))
+        self.assertEqual(self.values(self.backend, "calls"), [])
+
+    def test_interaction_summary_holds_native_focus_backend_and_popup_completion(self):
+        lifetime = QObject(self.window)
+        self.window.setProperty("backendLifetimeFixture", lifetime)
+        self.assertTrue(self.evaluate("session.openFromDock(ownerItem.anchor)"))
+        self.settle()
+        self.evaluate("popup.asynchronousClose = true; popup.holdNativeVisible = true")
+        self.assertTrue(self.evaluate("session.openFromClient(firstClient, barHost, barAnchor)"))
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.evaluate("popup.finishClose(); popup.nativeDialog.activeFocusItem = ownerItem.anchor")
+        self.settle()
+        self.assertFalse(self.popup.property("visible"))
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.evaluate("popup.finishNativeHide()")
+        self.window.setProperty("backendLifetimeFixture", None)
+        lifetime.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.settle()
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock"])
+        self.evaluate("popup.nativeDialog.active = true; popup.nativeDialog.activeFocusItem = null")
+        self.settle()
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock", "bar"])
+        self.evaluate("popup.holdInteraction = true; session.releaseClient(firstClient); popup.finishClose(); popup.finishNativeHide()")
+        self.settle()
+        self.assertFalse(self.popup.property("visible"))
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.evaluate("popup.holdInteraction = false")
+        self.settle()
+        # Window.active may still be true for a transient family; no actual focus is held.
+        self.assertFalse(self.session.property("interactionBusy"))
+        self.assertEqual(self.values(self.backend, "calls"), [])
+
+    def test_interaction_summary_survives_reentrant_open_and_cancelled_request(self):
+        self.evaluate("""const normalOpen = session.performOpen;
+            session.performOpen = function() {
+                if (!session.interactionBusy) throw new Error('handoff was idle');
+                session.performOpen = normalOpen;
+                session.openFromDock(ownerItem.anchor);
+                throw new Error('superseded opening');
+            };""")
+        self.assertTrue(self.evaluate("session.openFromClient(firstClient, barHost, barAnchor)"))
+        self.settle()
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.assertTrue(self.session.property("dockOrigin"))
+        self.assertEqual(self.values(self.window, "busyAtOpen"), [True])
+        self.evaluate("session.close(); session.openFromClient(firstClient, barHost, barAnchor); session.releaseClient(firstClient)")
+        self.assertTrue(self.session.property("interactionBusy"))
+        self.settle()
+        self.assertFalse(self.session.property("interactionBusy"))
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock"])
+        self.assertEqual(self.values(self.backend, "calls"), [])
+
     def test_dock_and_bar_open_same_audio_without_writes_on_queued_boundary(self):
         self.assertTrue(self.evaluate("session.openFromDock(ownerItem.anchor)"))
         self.assertFalse(self.popup.property("visible"))

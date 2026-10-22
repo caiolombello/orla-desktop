@@ -32,6 +32,7 @@ Item {
     property alias taskDrag: taskDragState
     property alias contexts: contextState
     property alias contextBindings: contextBindingsState
+    property alias autoContextProfiles: autoContextState
     property alias desktopSwitch: desktopSwitchState
     property var desktopSwitchBackendOverride: null
     // Qualified with the final adapter against a private Qt/KDE service fixture.
@@ -195,8 +196,8 @@ Item {
     Loader {
         id: contextSourceLoader
         objectName: "contextSourceLoader"
-        active: root.contextSnapshotOverride === null && settings.visible
-            && settingsContents.contextsTabActive
+        active: root.contextSnapshotOverride === null
+            && (autoContextState.observing || (settings.visible && settingsContents.contextsTabActive))
         source: active ? Qt.resolvedUrl("KdeContextSource.qml") : ""
     }
     ContextState {
@@ -226,6 +227,16 @@ Item {
         configuration: root.configuration
         profiles: profileState
         contexts: contextState
+    }
+    AutoContextProfileState {
+        id: autoContextState
+        objectName: "dockAutoContextProfiles"
+        configuration: root.configuration
+        profiles: profileState
+        contexts: contextState
+        bindingsState: contextBindingsState
+        active: root.ready
+        interactionBusy: root.autoContextInteractionBusy
     }
     AppearancePresetState {
         id: appearancePresetState
@@ -264,6 +275,17 @@ Item {
     readonly property bool popupOpen: settings.visible || addDialog.visible || calendarPopup.visible
         || integrationPopup.visible || controlCenterPopup.visible || pomodoroPopup.visible
         || musicPopup.visible || batteryPopup.visible || nativeTaskMenu.visible || taskMenu.visible
+    readonly property bool autoContextInteractionBusy: !ready || popupOpen
+        || appearanceState.editing || appearanceState.dirty
+        || appearancePresetState.dirty || appearancePresetState.busy
+        || settingsContents.widgetDrag !== null
+        || taskDragState.pressed || taskDragState.committing
+        || launcherOrderBusy || launcherReloadPending || viewport.moving
+        || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
+        || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
+        || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
+        || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
+        || controlCenterPopup.contextSwitchBusy || taskMenu.contextSwitchBusy
     function hoverTile(tile, hovered) {
         if (hovered && !taskDragState.active) labelTarget = tile;
         else if (labelTarget === tile) labelTarget = null;
@@ -897,6 +919,19 @@ Item {
     Controls.Menu {
         id: taskMenu
         objectName: "taskContextMenu"
+        property int interactionEpoch: 0
+        property bool interactionActive: false
+        readonly property bool contextSwitchBusy: visible || interactionActive
+        onAboutToShow: { interactionEpoch++; interactionActive = true; }
+        onAboutToHide: { interactionEpoch++; interactionActive = true; }
+        onClosed: {
+            const epoch = interactionEpoch;
+            const menu = taskMenu;
+            Qt.callLater(() => {
+                if (Qt.isQtObject(menu) && epoch === menu.interactionEpoch && !menu.visible)
+                    menu.interactionActive = false;
+            });
+        }
         parent: root
         margins: -1
         popupType: Controls.Popup.Window
@@ -981,6 +1016,7 @@ Item {
             contexts: contextState
             contextBindings: contextBindingsState
             desktopSwitch: desktopSwitchState
+            automation: autoContextState
             integrations: localIntegrations
             onAppearanceCanceled: settings.close()
         }

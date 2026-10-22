@@ -42,13 +42,24 @@ Controls.ScrollView {
             textRole: "name"
             currentIndex: controls.choices.findIndex(choice => choice.id === controls.pendingId)
             Accessible.name: qsTr("Perfil a usar")
+            Accessible.onPressAction: {
+                if (!selector.enabled || !selector.visible) return;
+                selector.forceActiveFocus(Qt.OtherFocusReason);
+                if (selector.popup.visible) selector.popup.close();
+                else selector.popup.open();
+            }
             onActiveFocusChanged: if (activeFocus) controls.reveal(this)
             onActivated: index => controls.pendingId = controls.choices[index].id
             // Keep the native style TextInput; ComboBox display text is literal.
             delegate: Controls.ItemDelegate {
+                id: profileOption
                 required property var modelData
                 width: selector.width
                 text: modelData.name
+                Accessible.onPressAction: {
+                    if (profileOption.enabled && profileOption.visible && selector.popup.visible)
+                        profileOption.click();
+                }
                 contentItem: Text { text: parent.text; textFormat: Text.PlainText; color: selector.palette.text; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
             }
         }

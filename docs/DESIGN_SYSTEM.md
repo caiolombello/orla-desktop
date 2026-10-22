@@ -183,6 +183,18 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   buttons, glyphs and focus rings to the allocated height; keep the preferred
   28/32 px sizes and the 20 px menu mark. Adapt vertical padding within the panel
   budget while preserving the system font. Review the short-host gallery in both schemes.
+- **Automatic profiles.** Keep the default-profile and context-input selectors,
+  native opt-in and plain status in one rounded Contexts module. Choosing either
+  selector must not enable automation. Keep an unknown context policy visible as
+  an unselected, repairable choice. Desktop-only is explicit; never infer it from
+  an unavailable Activity. Put precedence, policy changes, manual override,
+  restart and immediate-save rules
+  behind the initially collapsed “Como funciona”. Reveal the expanded group after
+  layout settles only while its disclosure owns focus; oversized groups reveal
+  their start. Keep keyboard ownership on the native ComboBox with KDE's Menu
+  popup. If “Retomar automático agora” disappears while focused, transfer that
+  existing focus to an available control without a deferred focus reclaim. Status in the profile
+  summary may elide; the full status remains in Contexts. Review 350/420 px in both schemes.
 - **Bar settings.** Keep content choices together and appearance in a second rounded
   module. Menu customization and panel-composition help start collapsed; opening them
   must not change any `cfg_*` value. Keep aliased native controls instantiated while

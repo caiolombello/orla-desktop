@@ -6,6 +6,7 @@ import "../code/Style.js" as Style
 Controls.ScrollView {
     id: controls
     property var desktopSwitch: null
+    property var automation: null
     required property var contexts
     required property var bindingsState
     required property var profiles
@@ -80,24 +81,38 @@ Controls.ScrollView {
     function reveal(control) {
         const viewport = contentItem;
         const point = control.mapToItem(viewport, 0, 0);
+        const height = Math.min(control.height, viewport.height);
         if (point.y < 0) viewport.contentY += point.y;
-        else if (point.y + control.height > viewport.height)
-            viewport.contentY += point.y + control.height - viewport.height;
+        else if (point.y + height > viewport.height)
+            viewport.contentY += point.y + height - viewport.height;
     }
     function restoreFocus(control) { Qt.callLater(() => { if (control && control.enabled) control.forceActiveFocus(Qt.TabFocusReason); }); }
     onActiveChanged: if (active) { captureIntent("activity"); captureIntent("desktop"); }
 
     ColumnLayout {
         width: controls.availableWidth
-        spacing: 10
+        spacing: Style.space.md
+        AutoContextControls {
+            objectName: "autoContextControls"
+            Layout.fillWidth: true
+            visible: controls.automation !== null
+            automation: controls.automation
+            profiles: controls.profiles
+            onFocusRequested: control => controls.reveal(control)
+        }
         DesktopSwitchControls {
             Layout.fillWidth: true
             command: controls.desktopSwitch
             onFocusRequested: control => controls.reveal(control)
         }
         Controls.Label {
+            objectName: "contextBindingsExplanation"
             Layout.fillWidth: true
-            text: qsTr("Associar organiza suas preferências. Nesta versão, isso não troca automaticamente o perfil, a Activity ou a área de trabalho.")
+            text: controls.automation !== null
+                ? controls.automation.policy === "desktop"
+                    ? qsTr("Associações por ID. Em Somente áreas, as associações de Activity ficam preservadas e são ignoradas pelo automático.")
+                    : qsTr("Associações por ID. Com o automático ativado, a Activity tem prioridade sobre a área de trabalho.")
+                : qsTr("Associar organiza suas preferências. As associações não trocam a Activity ou a área de trabalho.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }

@@ -74,7 +74,7 @@ Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado
 
 **Bateria e mídia alpha 0.2.4:** bateria do sistema opcional, desligada por padrão, lê somente o agregado UPower e preserva estados neutros/0% válido. Mídia compartilha um modelo MPRIS nativo, prefere Spotify inicialmente, mantém seleção manual por sessão e respeita capacidades por comando. Fixtures de bateria/mídia, leitura real agregada UPower e dois players sintéticos em D-Bus privado passaram; a regressão conjunta passou os 96 testes. B1/M1 continuam parciais: múltiplas baterias/UPS/transições reais, Spotify real/áudio, capa/progresso/abertura do cliente e interação humana no painel têm gates próprios. O launcher não integra esta release. Consulte a [validação](docs/validation/battery-media-0.2.4.md).
 
-**Perfis manuais publicados na alpha 0.2.5:** o dock já oferece criação e seleção explícita, cópia das preferências salvas e retorno às preferências anteriores sem migração automática. Perfis guardam apps fixados, aparência, ordem/visibilidade dos sete widgets, eventos do calendário e filtro de janelas pela área atual. Pomodoro continua global na seleção. Revisão da implementação aprovada, 49 testes direcionados em Fusion/KDE e regressão KDE de 123 testes passaram. Snapshot nativo privado (metadata 0.2.4 com overlays de perfis, 26 arquivos congelados) comprovou Apply/Cancel/disco/restart e um ciclo próprio de remover/recriar. Não é qualificação da release inteira nem de popup/foco/gesto humano. P1/C1 continuam parciais; retomada do timer entre processos e escolha de barra/launcher/eventos permanecem abertas, assim como P2/W1. Consulte [uso](docs/profiles.md) e [validação](docs/validation/profiles-0.2.5.md).
+**Perfis manuais publicados na alpha 0.2.5:** o dock já oferece criação e seleção explícita, cópia das preferências salvas e retorno às preferências anteriores sem migração automática. Perfis guardam apps fixados, aparência, ordem/visibilidade dos sete widgets, eventos do calendário e filtro de janelas pela área atual. Pomodoro continua global na seleção. Revisão da implementação aprovada, 49 testes direcionados em Fusion/KDE e regressão KDE de 123 testes passaram. Snapshot nativo privado (metadata 0.2.4 com overlays de perfis, 26 arquivos congelados) comprovou Apply/Cancel/disco/restart e um ciclo próprio de remover/recriar. Não é qualificação da release inteira nem de popup/foco/gesto humano. P1/C1 continuam parciais; escolha de barra/launcher/eventos e os fluxos completos permanecem abertos, assim como P2/W1. A prova posterior de Pomodoro ativo no KDE privado qualificou troca automática e reinício normal com o prazo original; seus limites constam na [validação instalada](docs/validation/contexts-auto-installed.md#active-pomodoro-across-automatic-profiles-and-process-restart). Consulte [uso](docs/profiles.md) e [validação](docs/validation/profiles-0.2.5.md).
 
 **Publicação alpha 0.2.7:** a [prerelease 0.2.7](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7) foi publicada em 11/10/2026 UTC, a partir do commit `9ca1792ee3e9c20ad770042d2d441aa1ae6efbce` (PR 16; CI run 38111731691 aprovado). Os downloads públicos anônimos do applet, ZIP e `SHA256SUMS` coincidem byte a byte com a build da release; veja [validação](docs/validation/local-events-0.2.7.md). Instalação/upgrade e admissão nativa não foram executados. O ZIP inclui a CLI Steam experimental; Menu Orla e launcher continuam excluídos. Assets 0.2.5/0.2.6 permanecem inalterados.
 
@@ -223,12 +223,18 @@ C1, M1 e B1 permanecem sem aceite completo: 0.2.4/0.2.5 entregam somente os incr
 ### 0.5 — Perfis, Activities e áreas de trabalho
 
 - [ ] **P1: perfis manuais.** Trabalho, Pessoal, Jogos e perfis próprios com apps fixados, aparência, ordem/visibilidade dos widgets e escolha de dock/barra/launcher/eventos. Aceite: alternar e reiniciar restaura cada perfil; o Pomodoro continua com o prazo correto ao trocar de perfil.
-- [ ] **P2: associação a contexto KDE.** A primeira fatia foi publicada na alpha 0.2.8: a aba Contextos associa explicitamente Activity e desktop atuais por ID estável a perfis gerenciados existentes, sem troca automática; a descoberta é somente leitura e as ações exigem intenção explícita. P2 segue parcial até qualificar a integração nativa e definir prioridade entre seleção manual, desktop, Activity e padrão. Aceite futuro: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil.
+- [ ] **P2: associação a contexto KDE.** A alpha 0.2.8 publicou associações explícitas. O Source atual oferece automático opcional por instância: Activity → área → padrão gerenciado, com escolha manual até novo contexto confirmado/retomada e preservação das interações. O pacote está instalado com automático desligado na sessão principal. No KDE privado real, foram qualificadas transições/precedência/reinício, os seletores e o fluxo de ativação/manual/Retomar, a prévia/Cancelar/Aplicar/Desfazer de aparência, o ciclo de áreas por ID e a continuidade do Pomodoro com relógio real. O ciclo de Activities também passou: renomear preservou associação e escolha manual; remover a Activity corrente selecionou a âncora sem setter corretivo; um novo ID com o mesmo nome usou Jogos e manteve a associação antiga. Foram 13 Press e dez verificações incluindo saída/persistência; a suíte de composição passou 44 testes por estilo. As regras de residência da janela foram explícitas na fixture; isso não qualifica o painel do usuário. P2 segue parcial: faltam outros rascunhos/interações, painel do usuário, foco/seat, monitores e contagem nativa de setters. A política explícita “Somente áreas” já está implementada e instalada, preservando o padrão que exige ambos os contextos prontos. Após corrigir a restauração inicial de perfil tratada como seleção manual, a jornada R3 passou opt-in público, transições e reinício na mesma configuração, com Activity vazia real. Os dois processos encerraram normalmente; a sessão principal permaneceu preservada. As tentativas R1/R2 continuam FAILED em seus registros. Os demais gates de P2 permanecem abertos. Aceite: trocar contexto pelas ferramentas do KDE atualiza o perfil uma vez, sem ciclos; renomear/remover contexto não apaga o perfil. [Regras e limites](docs/contexts.md), [prova instalada e próximos gates](docs/validation/contexts-auto-installed.md).
 - [ ] **W1: seletor de contexto.** Mostrar Activity e área atuais; permitir trocar por clique ou atalho, com resposta de erro se o serviço não estiver disponível. Diferenciar trocar o perfil e trocar o contexto do KDE. Aceite: nome e destaque acompanham a troca real, inclusive com comportamento por monitor qualificado.
+
+**Próximo incremento de P1/UX:** renomear o perfil ativo gerenciado pela aba
+Perfis, sem recriar seu ID. Aceite: alterar somente o nome em uma escrita,
+preservando associações, aparência, apps e Pomodoro; nome inválido/repetido,
+prévia pendente ou edição obsoleta não gravam. Revisar teclado, foco e os
+viewports de 350/420 px em claro/escuro. Remover/importar perfis fica separado.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 
-P1 está parcialmente implementado no dock; falta escolher barra/launcher/eventos e qualificar os fluxos completos. A prova privada de seleção preservou o Pomodoro, mas resetou o timer antes do restart: retomada entre processos é UNRUN. P1 depende de C1. A primeira fatia de P2 foi publicada em 0.2.8, mas permanece parcial até prova nativa; W1 oferece seleção e troca de área com os aceites delimitados abaixo, ainda parcial. O filtro de janelas por Activity continua separado do filtro de área virtual existente.
+P1 está parcialmente implementado no dock; falta escolher barra/launcher/eventos e qualificar os fluxos completos. A prova antiga de seleção resetou o timer antes do restart e não qualifica retomada. A jornada posterior de Pomodoro ativo qualificou o prazo e a contagem acessível durante troca automática e reinício normal em KDE privado; painel do usuário, conclusão/pausa/reset e os fluxos completos permanecem separados. P1 depende de C1. A primeira fatia de P2 foi publicada em 0.2.8, mas permanece parcial até qualificar os fluxos completos e o painel do usuário; W1 oferece seleção e troca de área com os aceites delimitados abaixo, ainda parcial. O filtro de janelas por Activity continua separado do filtro de área virtual existente.
 
 ### 0.6 — Barra superior modular inspirada no macOS
 
@@ -574,7 +580,7 @@ em perfil gerenciado, clipboard e foco nativos mantêm qualificação separada.
 | 1. Composição visual instalada — R1/UX0 | Qualificar esta revisão no painel; depende da revisão e instalação reversível do Source preparado | Abrir/fechar cada popup por clique/Escape, foco visível, claro/escuro, movimento reduzido, autohide sob hover/fullscreen e configuração preservada. Registrar tela/escala/revisão; ambientes não disponíveis permanecem UNRUN. |
 | 2. Windows/Meta → busca — L0/L2 | Atribuição, recuperação, fluxo básico e baseline delimitado de primeira tecla registrados; aceite completo aberto | Expandir prontidão em monitores/escala, cargas e atalho inibido antes de anunciar orçamento. Digitação sem intervalo ainda perde caracteres para a janela anterior; qualquer otimização exige comparação. Manter consulta atual, execução explícita, Escape/foco e recuperação. IA/Steam não são dependências. |
 | 3. Central de Controle na barra — CC0/CC1-A/T1 | Mesmos modelos acessíveis pela barra ou dock, entradas opcionais e dono do estado definido | Abrir não escreve; volume/mudo/saída mostram readback/falha; segunda entrada não cria backend concorrente; desativar barra preserva dock. Áudio real tem prova própria; microfone/brilho/rede são fatias posteriores. |
-| 4. Seletor de área virtual — W1 | Mostrar e trocar a área atual, distinguindo contexto e perfil; depende de prova D-Bus KWin versionada | Clique/atalho troca uma vez e acompanha mudanças externas; indisponibilidade explícita; contexto não apaga perfil. Automação P2 espera decisão de precedência manual/Activity/desktop. |
+| 4. Seletor de área virtual — W1 | Mostrar e trocar a área atual, distinguindo contexto e perfil; depende de prova D-Bus KWin versionada | Clique/atalho troca uma vez e acompanha mudanças externas; indisponibilidade explícita; contexto não apaga perfil. Automação P2 tem precedência definida e Source implementado; a jornada nativa segue aberta. |
 | 5. Aparência portátil — C1/X1 | Exportar/importar aparência, ordem e visibilidade com preview/reversão; depende do schema experimental existente | Exportação sem segredos, eventos ou caminhos privados; import inválido não escreve; Cancelar/Aplicar/desfazer/restart preservam perfil. Catálogo declarativo segue após a prova; código externo continua condicionado a X5. |
 
 Cada incremento registra resultado, evidência, limitação e decisão de continuidade. UX0/UX1/DX2 continuam parciais até seus critérios completos. Provas de provedores/hardware ausentes permanecem UNRUN. Não iniciar checkout, SDK estável ou código de terceiros apenas para completar uma lista de recursos.
@@ -1228,20 +1234,40 @@ separadas. A jornada completa em uma única tentativa, Cancelar com
 edições, Aplicar/persistência e foco/seat continuam abertos.
 [Registro e limites](docs/validation/shared-control-center-source.md#bar-settings-package-installed--15-october-2026).
 
-**P2 — próxima vertical: perfil automático por contexto.** A implementação será
+**P2 — Source: perfil automático por contexto (15/10).** A implementação é
 opcional por instância, desligada por padrão, com precedência Activity → área de
 trabalho → perfil padrão gerenciado escolhido. Os dois contextos precisam estar
 prontos; indisponibilidade mantém o perfil atual. Uma escolha manual prevalece
 até o próximo par confirmado de IDs, mesmo após renomeação ou reconexão; retomar
-explicitamente também poderá liberar o automático. Ao reiniciar com a opção
-habilitada, a observação completa poderá retomar a regra.
+explicitamente também libera o automático. Ao reiniciar com a opção
+habilitada, o primeiro par completo retoma a regra.
 
-A troca deve aguardar edição, arraste, popups em fechamento, transferência da
+**Incremento atual — base explícita da regra:** o Source acrescenta **Usar no
+automático**, com **Activity e áreas** como padrão e **Somente áreas** como opção.
+A segunda usa área → padrão, ignorando Activity por escolha explícita e
+preservando suas associações. Escolher a base não ativa o automático. Mudar a
+base retoma a regra após as interações; uma escolha manual posterior prevalece,
+inclusive antes do primeiro contexto confirmado. Valores desconhecidos pausam
+sem reescrita. As quatro suítes afetadas passaram 149 testes e dois skips
+esperados de TaskManager por estilo, em Fusion/KDE; design check, sete guardas e
+galeria claro/escuro também passaram. Os controles mantêm o foco visível em
+350/420 px. O pacote já foi instalado localmente com backup e uma recarga
+controlada; a checagem fresca confirmou configuração e layout preservados,
+automático desligado e cinco chaves ausentes. No KDE privado, o opt-in público e
+as trocas Trabalho → Pessoal → Trabalho passaram com Activity realmente vazia,
+assim como a saída normal do primeiro processo. R1/R2 permanecem FAILED nos
+registros. A correção posterior de hidratação inicial passou 181 testes e dois
+skips esperados por estilo; já está instalada. A nova jornada R3 confirmou também
+o segundo processo selecionando Pessoal sem ações, com a mesma configuração,
+seguido de saída normal e preservação da sessão principal. P2 continua parcial.
+Consulte o [registro](docs/validation/contexts-auto-installed.md#desktop-only-private-kde-attempt-r3).
+
+A troca aguarda edição, arraste, popups em fechamento, transferência da
 Central e pedidos de áudio, então recalcular somente o contexto mais recente.
-Não deve fechar rascunhos nem trocar a Activity/área KDE. Antes da única escrita,
-revalidar contexto, associação, perfil e intenção manual. Essa política está
-definida; automação, controles de opt-in e jornada nativa ainda não estão
-implementados. O comportamento atual continua sendo associação explícita.
+Não fecha rascunhos nem troca a Activity/área KDE. Antes da única escrita,
+revalida contexto, associação, perfil e intenção manual. O controlador e os
+controles de opt-in estão implementados no Source; a jornada nativa continua
+aberta. A observação contínua é somente leitura e não ativa o escritor de área.
 
 O primeiro pré-requisito de Source acrescenta uma guarda opcional à seleção de
 perfil, executada depois da transição e imediatamente antes da escrita. Recusa,
@@ -1249,13 +1275,81 @@ exceção ou revisão alterada preservam a escolha/edição mais recente, inclus
 uma troca que vai e volta ao mesmo perfil. Uma seleção sem mudança também valida
 a guarda e não grava. O contrato mantém os callers de três argumentos e está
 documentado em [profiles.md](docs/profiles.md#experimental-internal-selection-contract).
-Esse incremento não foi instalado na sessão; o controlador automático e seus
-bloqueios de interação continuam sendo os próximos passos de P2.
+Esse primeiro incremento de guarda não foi instalado na sessão. No passo
+seguinte, o Source passou a compor controlador, observação e bloqueios de
+interação, com um módulo Contextos e ajuda progressiva no design system.
 Os seis casos novos recusam a versão anterior e passam na nova. As suítes afetadas
 passaram em Fusion e KDE: 124 aprovações e um skip de TaskManager por estilo;
 design check, sete guardas de design e build passaram. São provas com configuração
 Qt sintética; a galeria foi renderizada e revista nos dois esquemas. Essas provas
-não qualificam automação, KConfig ou foco na sessão nativa.
+não qualificam KConfig ou foco na sessão nativa.
+
+O controlador acrescenta testes portáteis de precedência, habilitação explícita,
+override manual, ABA, reconexão, documentos inválidos, dois donos e reentrada.
+A composição testa configurações clean/dirty, último contexto, foco do botão
+Retomar, navegação do seletor por mouse/teclado, áudio pendente/gesto e a saída do
+menu fallback. A galeria inclui 350/420 px em claro/escuro. P2 **não está concluído**:
+nessa etapa Source a composição ainda não havia sido instalada; falta trocar contexto KDE real,
+qualificar foco/seat e persistência/reinício, incluindo os gates de monitor.
+As 17 suítes direcionadas passaram em processos isolados em Fusion e KDE: 343
+aprovações e cinco skips de TaskManager por estilo. Os 29 casos do controlador
+entram explicitamente na CI. Build, design check, sete guardas e 23 testes da CLI
+passaram; oito capturas sintéticas foram revistas nos dois esquemas. A etapa
+seguinte instalou o pacote com o automático ainda desligado e provou a UI sem
+edições, conforme o registro abaixo.
+
+**P2/UX — atualização instalada e diagnóstico de 15/10:** o pacote de 72 arquivos
+foi instalado e passou a visita sem edição com o automático desligado. O teste
+isolado ligado manteve o perfil anterior: o serviço KDE informa Activity atual
+vazia, enquanto a área virtual está pronta. Isso explica a espera pelo par
+completo; não constitui aprovação da seleção automática positiva. Um modo
+somente por área exige definir ausência estável versus indisponibilidade
+temporária antes de mudar a precedência.
+
+As abas de configurações agora oferecem ativação acessível explícita. A regressão
+falhou na versão anterior e passou após a correção; as suítes afetadas tiveram
+55 aprovações e dois skips por estilo. Cinco ações AT-SPI passaram na candidata
+Wayland sem instrumentação. A correção foi instalada com backup e uma recarga;
+barra, launcher, configuração e bancos originais foram preservados, mantendo
+o automático desligado. A galeria foi revista em claro/escuro. A mesma regressão
+passou também na suíte portátil: 38/38 em cada estilo, sem skips (`81b22a5`).
+
+Uma etapa posterior passou somente o backend KDE privado: ActivityManager e
+KWin reais, barramento/compositor isolados e a cópia íntegra de 72 arquivos
+(`72ea3ad`) produziram trabalho → pessoal → trabalho no mesmo `plasmawindowed`,
+com transições de área e documento final persistido após saída normal. Nenhum
+writer externo/hook de seleção foi usado após o lançamento, nem input ou rede. A primeira
+tentativa falhou no guard da assinatura pública antes de mutação; ela permanece
+FAILED, e a correção `a(iss)` pertence apenas ao visitante. Cleanup e verificação
+independente preservaram a sessão principal. Isso não completa P2: opt-in por UI,
+escolha manual/Retomar, precedência de Activity, reinício habilitado, painel do
+usuário, foco/seat e monitores continuam abertos. [Evidência e limites](docs/validation/contexts-auto-installed.md#private-kde-backend-transition).
+
+**P2/UX — motivo da espera (15/10):** o status agora informa Activity, área ou ambas
+indisponíveis, e diferencia carregamento, preservando a exigência do par pronto e
+a escolha manual. Duas regressões causais, 57 aprovações e um skip por estilo,
+design, build e quatro capturas de 350 px em claro/escuro passaram. A alteração
+de texto foi instalada com backup e uma recarga, preservando a sessão e o
+automático desligado; a mensagem nova ainda não foi visitada no popup nativo.
+[Evidência e capturas](docs/validation/contexts-auto-installed.md#waiting-state-explanation).
+
+**P2 — reinício habilitado no backend privado (15/10):** a prova com o pacote
+atual (`bd695bc`) repetiu as transições e encerrou o primeiro host normalmente.
+Com ele ausente, mudar só a área não alterou o perfil salvo. O segundo host,
+com novo processo/owner e a mesma configuração sem novo seed, selecionou Pessoal
+automaticamente e persistiu após saída normal. Cleanup e postcheck preservaram
+a sessão principal, ainda com o automático desligado. Isso qualifica esse
+reinício no KDE privado; UI de opt-in, escolha manual/Retomar, precedência de
+Activity, painel do usuário, foco/seat e monitores continuam abertos.
+[Registro](docs/validation/contexts-auto-installed.md#private-kde-enabled-restart).
+
+**P2 — precedência no KDE privado (15/10):** seis pares reais confirmados de
+Activity/área distinguiram Activity associada → área associada → padrão no mesmo
+host íntegro, sem writer externo após o lançamento. A volta à Activity restaurou
+sua última área pelo KWin; o ajuste seguinte da área foi explícito. Saída normal,
+persistência e postcheck passaram, preservando a sessão principal. A precedência
+do backend privado está qualificada; UI, painel do usuário e foco/seat continuam
+abertos. [Evidência](docs/validation/contexts-auto-installed.md#private-kde-activity-precedence).
 
 **X1/X2 — pré-requisito da importação de tema por arquivo:** o consumidor de
 prévia/aplicação já existe, mas o pacote QML não distribui um leitor de arquivo.

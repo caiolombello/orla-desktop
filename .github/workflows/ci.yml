@@ -61,6 +61,7 @@ jobs:
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_profiles.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_task_drag_state.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_contexts.py' -v
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_auto_context_profiles.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_desktop_switch.py' -v
 
       - name: Check the design system

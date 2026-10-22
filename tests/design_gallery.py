@@ -114,6 +114,90 @@ class Gallery:
         window.close()
         engine.deleteLater()
 
+    def auto_contexts(self, host: str) -> None:
+        """Opt-in and manual override in the real dock composition, synthetic data."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "QmlHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+        popup = window.findChild(QQuickItem, "settingsPopup")
+
+        def evaluate(source, target=dock):
+            expression = QQmlExpression(context if target is dock else QQmlEngine.contextForObject(target), target, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+
+        def open_settings(width):
+            popup.setProperty("width", width)
+            popup.open()
+            window.findChild(QQuickItem, "settingsTabs").setProperty("currentIndex", 3)
+            QTest.qWait(60)
+
+        def close_settings():
+            popup.close()
+            QTest.qWait(300)
+
+        try:
+            window.setWidth(900)
+            window.setHeight(900)
+            popup.setProperty("popupType", 0)
+            popup.setProperty("heightBudget", 540)
+            evaluate("anchors.centerIn=undefined;x=40;y=24;"
+                     "profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);"
+                     "profiles.select('work',profiles.activeProfileId,profiles.revision);"
+                     "autoContextProfiles.setDefaultProfile('games')")
+            open_settings(350)
+            self.save(f"contexts-auto-{host}-off-350", window, self.scene_rect(popup))
+            evaluate("autoContextProfiles.setEnabled(true)")
+            self.save(f"contexts-auto-{host}-waiting-350", window, self.scene_rect(popup))
+            snapshot = json.loads(evaluate("JSON.stringify(contextSnapshot)", window))
+            for name, activity_status, desktop_status in (
+                ("activity-unavailable", "unavailable", "ready"),
+                ("both-unavailable", "unavailable", "unavailable"),
+            ):
+                frame = json.loads(json.dumps(snapshot))
+                frame["activity"]["status"] = activity_status
+                frame["desktop"]["status"] = desktop_status
+                evaluate("contextSnapshot=" + json.dumps(frame), window)
+                self.save(f"contexts-auto-{host}-{name}-350", window, self.scene_rect(popup))
+            evaluate("contextSnapshot=" + json.dumps(snapshot), window)
+            details = window.findChild(QQuickItem, "autoContextHelpToggle")
+            details.forceActiveFocus(Qt.TabFocusReason)
+            QTest.keyClick(window, Qt.Key_Space)
+            self.save(f"contexts-auto-{host}-help-350", window, self.scene_rect(popup))
+            close_settings()
+            evaluate("profiles.select('personal',profiles.activeProfileId,profiles.revision)")
+            assert evaluate("autoContextProfiles.manualOverride")
+            open_settings(420)
+            window.findChild(QQuickItem, "autoContextHelpToggle").setProperty("checked", False)
+            window.findChild(QQuickItem, "autoContextResume").forceActiveFocus(Qt.TabFocusReason)
+            self.save(f"contexts-auto-{host}-manual-420", window, self.scene_rect(popup))
+            close_settings()
+            assert evaluate("autoContextProfiles.setPolicy('desktop')")
+            desktop_only = json.loads(json.dumps(snapshot))
+            desktop_only["activity"] = {"status": "unavailable", "currentId": "", "ids": [], "names": []}
+            evaluate("contextSnapshot=" + json.dumps(desktop_only), window)
+            policy = window.findChild(QQuickItem, "autoContextPolicy")
+            for width in (350, 420):
+                details.setProperty("checked", False)
+                open_settings(width)
+                policy.forceActiveFocus(Qt.TabFocusReason)
+                self.save(f"contexts-policy-{host}-desktop-focus-{width}", window, self.scene_rect(popup))
+                evaluate("Accessible.pressAction()", policy)
+                self.save(f"contexts-policy-{host}-desktop-open-{width}", window, self.scene_rect(popup))
+                evaluate("Accessible.pressAction()", policy)
+                details.forceActiveFocus(Qt.TabFocusReason)
+                QTest.keyClick(window, Qt.Key_Space)
+                self.save(f"contexts-policy-{host}-desktop-help-{width}", window, self.scene_rect(popup))
+                close_settings()
+        finally:
+            close_settings()
+            window.close()
+            engine.deleteLater()
+
     def appearance_catalog(self, host: str) -> None:
         """Compact and expanded preset states in the unchanged short popup."""
         engine = self.engine()
@@ -766,6 +850,7 @@ def render(host: str, output: Path) -> int:
     app = QGuiApplication.instance() or QGuiApplication([])
     gallery = Gallery(output)
     gallery.dock(host)
+    gallery.auto_contexts(host)
     gallery.appearance_catalog(host)
     gallery.appearance_advanced(host)
     gallery.widget_order(host)
