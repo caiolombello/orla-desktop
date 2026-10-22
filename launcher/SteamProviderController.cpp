@@ -1,6 +1,7 @@
 #include "SteamProviderController.h"
 
 #include <QDesktopServices>
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
@@ -9,6 +10,7 @@
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStandardPaths>
 
 #ifdef Q_OS_UNIX
 #include <cerrno>
@@ -172,6 +174,23 @@ private:
     bool m_duplicate = false;
 };
 
+bool discoveryPathIsValid(const QString &path)
+{
+    if (!path.startsWith(QLatin1Char('/')) || path.size() > 4096 || path.contains(QLatin1Char('\\')))
+        return false;
+    for (const char32_t character : path.toUcs4()) {
+        const QChar::Category category = QChar::category(character);
+        if (category == QChar::Other_Control || category == QChar::Other_Format
+            || category == QChar::Other_Surrogate || category == QChar::Other_PrivateUse
+            || category == QChar::Other_NotAssigned) return false;
+    }
+    const QStringList parts = path.mid(1).split(QLatin1Char('/'));
+    for (const QString &part : parts)
+        if (part.isEmpty() || part == QStringLiteral(".") || part == QStringLiteral("..")
+            || part.toUtf8().size() > 255) return false;
+    return true;
+}
+
 QString safeErrorMessage(const QString &code)
 {
     if (code == QStringLiteral("invalid_roots"))
@@ -189,9 +208,10 @@ QString safeErrorMessage(const QString &code)
 }
 
 SteamProviderController::SteamProviderController(const QString &pythonPath, const QString &helperPath,
-                                                 UrlOpener opener, QObject *parent)
+                                                 UrlOpener opener, QObject *parent, RootLocator rootLocator)
     : QObject(parent), m_pythonPath(pythonPath), m_helperPath(helperPath),
-      m_opener(opener ? std::move(opener) : UrlOpener(QDesktopServices::openUrl))
+      m_opener(opener ? std::move(opener) : UrlOpener(QDesktopServices::openUrl)),
+      m_rootLocator(std::move(rootLocator))
 {
     m_deadline.setSingleShot(true);
     m_killGrace.setSingleShot(true);
@@ -253,6 +273,33 @@ SteamProviderController::~SteamProviderController()
         m_process.kill();
         m_process.waitForFinished(kCleanupVerificationMs);
     }
+}
+
+QStringList SteamProviderController::discoverLocalRoots(const QString &homeBase, const QString &dataBase)
+{
+    QStringList roots;
+    QSet<QString> seen;
+    const auto append = [&](const QString &base, const QString &relative, const QString &kind) {
+        if (!discoveryPathIsValid(base)) return;
+        const QFileInfo candidate(base + relative);
+        if (!candidate.isDir()) return;
+        const QString canonical = candidate.canonicalFilePath();
+        if (!discoveryPathIsValid(canonical) || seen.contains(canonical)) return;
+        seen.insert(canonical);
+        roots.append(kind + QLatin1Char('=') + canonical);
+    };
+    // Only known directory entries are inspected; aliases become scan-safe canonical paths.
+    append(dataBase, QStringLiteral("/Steam"), QStringLiteral("native"));
+    append(homeBase, QStringLiteral("/.steam/root"), QStringLiteral("native"));
+    append(homeBase, QStringLiteral("/.steam/steam"), QStringLiteral("native"));
+    append(homeBase, QStringLiteral("/.var/app/com.valvesoftware.Steam/data/Steam"), QStringLiteral("flatpak"));
+    return roots;
+}
+
+QStringList SteamProviderController::locateRoots() const
+{
+    if (m_rootLocator) return m_rootLocator();
+    return discoverLocalRoots(QDir::homePath(), QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
 }
 
 bool SteamProviderController::validateRoots(const QStringList &rootSpecs) const

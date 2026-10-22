@@ -35,8 +35,16 @@ argumentos de jogo, URI arbitrário nem chamada automática a outro aplicativo.
 AppID precisa ser decimal ASCII canônico entre 1 e 4294967295. A geração não
 comprova que o cliente, jogo ou handler de URI exista.
 
-No launcher Source, abrir o painel Steam não executa a CLI. A pessoa cola de uma
-a oito raízes no mesmo formato acima e aciona **Carregar jogos**. O controlador
+No launcher Source, abrir o painel Steam não executa a CLI. A pessoa pode acionar **Localizar pastas do Steam** para preencher raízes existentes
+nos locais conhecidos ou informar de uma a oito raízes no mesmo formato acima.
+A descoberta consulta somente a pasta Steam da localização local de dados, os
+aliases conhecidos `.steam/root` e `.steam/steam` e a pasta local convencional do
+Flatpak. Resolve os aliases para caminhos canônicos e elimina duplicatas. Não
+lista diretórios nem lê metadados de jogos; pastas presentes não comprovam cliente,
+handler ou conta disponíveis. Se nenhuma pasta for encontrada, preserva o texto
+manual e informa somente ausência nos locais conhecidos. As mensagens dessa
+busca são independentes do inventário carregado. Só **Carregar jogos** inicia o
+scan existente. O controlador
 inicia Python/helper absolutos com argumentos separados, valida schema, tipos,
 limites, referências e correspondência do exit code antes de publicar qualquer
 inventário. Recarga ou cancelamento retira resultados anteriores e incrementa a
@@ -51,8 +59,9 @@ ou chamado. Segundo a documentação do Qt 6.11.2, sucesso de
 Exemplos convencionais de raízes a avaliar numa rodada real são
 `/home/SEU_USUARIO/.local/share/Steam` e
 `/home/SEU_USUARIO/.var/app/com.valvesoftware.Steam/data/Steam`. Estes exemplos
-não foram consultados nem qualificados nesta rodada. Não há detecção automática
-via `$HOME`, `~`, pacotes, processos ou Flatpak. `native`/`flatpak` é a origem
+não foram consultados nem qualificados nesta rodada. Não há descoberta automática ao abrir o painel ou detecção via pacotes/processos.
+O botão explícito usa a localização local de dados e a base pessoal do Qt somente
+para consultar esses caminhos conhecidos, sem varrer pastas ou discos. `native`/`flatpak` é a origem
 informada pelo chamador; a presença dos metadados não prova instalação do cliente.
 Raízes e todos os seus componentes devem ser diretórios reais, absolutos, sem
 links simbólicos, `..`, componentes vazios ou barra final; aliases como
@@ -160,6 +169,9 @@ Saída CLI: 0 para `available`, `absent` ou geração de URI; 2 para `partial`,
 rejeitados ou detalhes sensíveis.
 
 ## Fontes e qualificação pendente
+
+O incremento Source de descoberta opcional de pastas, seus testes e limites
+estão registrados em [validação da descoberta](validation/steam-root-discovery-source.md).
 
 Fontes consultadas em 2026-10-11, sem Steam Web API ou acesso a conta:
 
