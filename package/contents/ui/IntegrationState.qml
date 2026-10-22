@@ -113,12 +113,11 @@ Item {
         return parts.join(" · ");
     }
     readonly property string quotaMetadataSummary: {
-        if (quota.source !== "addon") return "";
-        const parts = [qsTr("exportação local")];
-        const updated = quota.updatedAt ? new Date(quota.updatedAt) : null;
-        if (updated && isFinite(updated.getTime()))
-            parts.push(qsTr("atualizado em %1").arg(updated.toLocaleString(Qt.locale(), "d MMM, HH:mm")));
-        return parts.join(" · ");
+        // Without a shared reading there is no origin or time to show.
+        const updated = quota.source === "addon" && quota.updatedAt ? new Date(quota.updatedAt) : null;
+        if (!updated || !isFinite(updated.getTime())) return "";
+        return qsTr("exportação local") + " · "
+            + qsTr("atualizado em %1").arg(updated.toLocaleString(Qt.locale(), "d MMM, HH:mm"));
     }
     readonly property string recordingSummary: recording.state === "stopped" ? qsTr("Sessão encerrada")
         : recording.state === "recording" ? qsTr("Estado salvo · gravando")

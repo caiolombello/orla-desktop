@@ -339,6 +339,8 @@ class QuotaDetailsTests(unittest.TestCase):
         self.answer_addon(frame)
         self.assertTrue(self.integration.property('quotaAddonActive'))
         self.assertIn('permissão no aplicativo de origem', self.part('integrationEmptyState').property('text'))
+        # Installed dock: "exportação local" stayed visible with nothing shared.
+        self.assertFalse(self.part('quotaMetadata').property('visible'))
 
     def test_addon_quota_changed_outside_settings_offers_the_reload(self):
         self.answer_addon(quota_frame())
