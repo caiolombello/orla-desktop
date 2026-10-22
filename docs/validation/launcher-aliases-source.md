@@ -70,9 +70,21 @@ A [primeira prova nativa](launcher-aliases-native.md), de 14/10, passou consulta
 de nomes iguais, abertura centralizada do editor, cancelamento e Salvar pelo
 mouse sem executar os aplicativos. Uma nova rodada com os dados próprios
 copiados para outro perfil confirmou consulta após reinício e retorno de foco
-com dois marcadores salvos. Um único Enter fechou o launcher, mas não produziu
-execução dos aplicativos de teste (A=0/B=0); a causa continua em investigação.
-Execução, edição/remoção, esquema claro nativo, acessibilidade, outras escalas
-e monitores continuam sem qualificação. L2/UX2
-permanecem parciais; favoritos, comandos internos e o setup completo seguem
-no roadmap. Assets públicos 0.2.9 permanecem inalterados.
+com dois marcadores salvos. Nessa rodada, um único Enter fechou o launcher sem
+executar os aplicativos de teste (A=0/B=0); o episódio continua registrado.
+
+O Source `dd02b7b` corrigiu o encerramento prematuro durante trabalho assíncrono.
+Seis casos de regressão falharam no `main` anterior; sete passaram depois, e os
+oito CTests completos passaram em Fusion e KDE no candidato e no build de
+produção. A instalação posterior preservou configurações e Meta/atalhos.
+Uma nova prova privada no KDE confirmou reinício, um Enter com A=1/B=0,
+edição/renomeação com ID preservado, recusa do alvo ausente, remoção e três
+fechamentos com saída zero e marcadores de foco. Uma rodada intermediária com
+falha do supervisor ficou parcial e não foi reexecutada; a rotina corrigida
+recebeu 41 testes puros e revisão antes da nova prova.
+
+Consulte os detalhes e limites na [validação nativa](launcher-aliases-native.md).
+Perfil pessoal, esquema claro nativo, acessibilidade, outras escalas e monitores
+continuam sem qualificação. L2/UX2 permanecem parciais; favoritos, comandos
+internos e o setup completo seguem no roadmap. Assets públicos 0.2.9 permanecem
+inalterados.

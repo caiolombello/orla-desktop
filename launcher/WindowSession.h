@@ -18,6 +18,7 @@ public:
     ~WindowSession() override;
     QString shortcutText() const { return m_shortcutText; }
     QString notice() const { return m_notice; }
+    void requestQuit();
     // Ask the compositor to blur behind the rounded glass panel drawn by QML.
     // An empty rect turns the blur off. Unsupported compositors simply ignore it.
     Q_INVOKABLE void setBlurRegion(const QRectF &rect, qreal radius);
@@ -42,4 +43,5 @@ private:
     quint64 m_activationGeneration = 0;
     bool m_registered = false;
     bool m_deactivated = false;
+    bool m_quitRequested = false;
 };
