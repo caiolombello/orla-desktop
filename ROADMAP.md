@@ -1074,6 +1074,18 @@ na sessão instalada continuam separados. Falhas anteriores da fixture/leitor e 
 limpeza independente permanecem registradas.
 [Provas e limites](docs/validation/shared-control-center-source.md#newer-host-focus-after-native-popup-close--15-october-2026).
 
+**CC1-A/CC0 — áudio real em fixture isolada (15/10):** o teste nativo agora é
+reproduzível no repositório, com KWin, D-Bus e servidor PipeWire próprios e duas
+saídas sintéticas. O backend real do Plasma confirmou volume; a troca dock →
+barra cancelou o pedido pendente antes de fechar, leu o efeito tardio sem HUD e
+confirmou uma nova alteração uma única vez. Dock → barra → dock manteve a view
+e o estado de áudio; três QObjects de backend foram destruídos, sem sobreposição
+dos backends publicados. Fusion/KDE passaram, assim como 76 regressões por estilo,
+design e sete guardas. Uma cópia privada sem o cancelamento prévio foi recusada
+pelo teste. Nenhum código de produto foi alterado ou reinstalado. A prova usa
+protocolo real com descritores sintéticos, sem certificar hardware ou o painel
+instalado. O runner e os limites estão no [guia de validação](docs/validation/shared-control-center-source.md#native-audio-pending-transfer--15-october-2026).
+
 **Próximo aceite de C1/UX1/CC0:** operação de áudio pendente e ciclo de backend
 na Central instalada, configuração opcional pela interface nativa, overflow e
 cancelamento no painel real, monitores adicionais e mudanças de contexto. Os marcos

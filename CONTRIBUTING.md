@@ -53,6 +53,27 @@ PYTHONPATH=tests QT_QUICK_CONTROLS_STYLE=org.kde.desktop python3 -B -m unittest 
 
 The profile core also runs independently in portable CI with offscreen Qt; the dock integration suites above need KDE/Qt. These synthetic checks do not qualify native popups or human panel gestures. The private KConfig proof covers a frozen snapshot and one owned remove/re-add cycle with the new applet explicitly seeded from saved JSON; timer resume across processes, real apps and full release qualification remain separate.
 
+The Source checkout has an optional self-contained native Control Center audio
+runner; these bar-dependent fixtures are excluded from the alpha ZIP.
+Use the system `/usr/bin/python3` with matching PySide6/KDE QML, Linux pidfds,
+`dbus-run-session`, KWin's virtual backend, PipeWire and `pactl` installed:
+
+```bash
+/usr/bin/python3 -B tests/native/run_control_center_audio.py --area /tmp/orla-cc-audio-fusion --style Fusion
+/usr/bin/python3 -B tests/native/run_control_center_audio.py --area /tmp/orla-cc-audio-kde --style org.kde.desktop
+```
+
+Choose a new absolute ASCII path without spaces for each run; existing output is
+never replaced. The runner creates private D-Bus/Wayland/audio servers and XDG
+directories, uses two synthetic null sinks, and owns process cleanup. It neither
+installs the applet nor sends input to your desktop or changes session audio.
+`RUNNER-RESULT.json` and `PROBE-RESULT.json` must both pass; a nonzero exit is a
+failure, including cleanup or configuration drift. Home paths are redacted from
+the owned server logs after cleanup. Share sanitized summaries, not raw session
+logs. This test exercises real PlasmaPA/PipeWire protocol and QObject lifetimes;
+it does not certify physical hardware or the installed panel. See the
+[fixture, evidence and limits](docs/validation/shared-control-center-source.md#native-audio-pending-transfer--15-october-2026).
+
 The source checkout has a separate experimental [C++/Qt Quick launcher](https://github.com/caiolombello/orla-desktop/blob/main/launcher/README.md). Its guide lists the versioned dependencies and build/CTest commands. All five CTests guard a private D-Bus and temporary XDG/runtime; the execution fixture launches only its own desktop entry, the AI controller fixtures use fake helpers, and the Steam controller fixtures use a synthetic tree and injected opener. The `launcher-build-and-ctest` job compiles the component in a digest-pinned Fedora 44 container; [its hosted run passed all five CTests](https://github.com/caiolombello/orla-desktop/actions/runs/38124013823/job/114424469019). This does not configure a required status check or qualify global focus, native Plasma/Wayland behavior, real providers, installation, or release.
 
 The source checkout also includes [Menu Orla, an experimental optional bar component](https://github.com/caiolombello/orla-desktop/blob/main/bar/README.md), independently identified as `org.orla.bar` 0.1.0. It is excluded from release 0.2.5. Its injected-backend tests need Python/PySide6 and Qt Quick Controls, but no graphical session or native session/task adapters:

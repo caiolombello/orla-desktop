@@ -43,7 +43,10 @@ class ReleaseBundleTests(unittest.TestCase):
             (root / "tests").mkdir()
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
             for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
-                         "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py"):
+                         "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py",
+                         "native/control_center_audio.py", "native/control_center_audio_session.py",
+                         "native/run_control_center_audio.py", "native/control_center_audio.conf.in"):
+                (root / "tests" / name).parent.mkdir(parents=True, exist_ok=True)
                 (root / "tests" / name).write_text("source-only fixture\n", encoding="utf-8")
             (root / "bar").mkdir()
             (root / "bar/main.qml").write_text("source-only applet\n", encoding="utf-8")
@@ -87,7 +90,9 @@ class ReleaseBundleTests(unittest.TestCase):
                                      or "__pycache__" in name for name in archive.namelist()))
                 for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
                              "tests/test_design_system.py", "tests/design_gallery.py",
-                             "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml"):
+                             "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
+                             "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",
+                             "tests/native/run_control_center_audio.py", "tests/native/control_center_audio.conf.in"):
                     self.assertNotIn(prefix + name, archive.namelist())
                 unpacked = root / "unpacked"
                 archive.extractall(unpacked)

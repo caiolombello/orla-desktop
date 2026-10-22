@@ -1,0 +1,30 @@
+# Isolated protocol fixture. Neither node represents physical hardware.
+# node.virtual=false exercises the production PlasmaPA eligibility branch.
+context.properties = { core.daemon = true core.name = orla-audio support.dbus = false }
+context.spa-libs = { audio.convert.* = audioconvert/libspa-audioconvert support.* = support/libspa-support }
+context.modules = [
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-metadata }
+    { name = libpipewire-module-spa-node-factory }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-access }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-link-factory }
+    { name = libpipewire-module-protocol-pulse }
+]
+pulse.properties = { server.address = [ "unix:SOCKET" ] pulse.allow-module-loading = false }
+context.objects = [
+    { factory = metadata args = { metadata.name = default metadata.values = [
+        { key = default.audio.sink value = { name = orla_fixture_a } }
+    ] } }
+    { factory = adapter args = {
+        factory.name = support.null-audio-sink node.name = orla_fixture_a
+        node.description = "Orla synthetic output A" media.class = Audio/Sink
+        node.virtual = false audio.position = [ FL FR ]
+    } }
+    { factory = adapter args = {
+        factory.name = support.null-audio-sink node.name = orla_fixture_b
+        node.description = "Orla synthetic output B" media.class = Audio/Sink
+        node.virtual = false audio.position = [ FL FR ]
+    } }
+]
