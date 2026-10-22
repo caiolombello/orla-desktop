@@ -1058,9 +1058,25 @@ preservaram a sessão real e encerraram seus processos próprios. Isso não qual
 overflow físico no painel, rolagem por input, autoscroll ou outras telas.
 [Provas e limites](docs/validation/profiles-0.2.5.md#scrolled-app-viewport-and-event-exclusion--15-october-2026).
 
-**Próximo aceite de C1/UX1/CC0:** transferência/foco entre hosts dos popups
-instalados, overflow e cancelamento no painel real, monitores adicionais e
-mudanças de contexto. Os marcos
+**UX0/CC0 — foco após fechar e duas entradas da Central (15/10):** uma falha
+reproduzida offscreen e em Wayland fazia Configurações roubar foco de um controle
+escolhido durante o fechamento. A correção preserva esse foco e invalida callbacks
+de abertura/âncora/host antigos, respeitando o cancelamento da Central. Passaram
+92 entradas por estilo Fusion/KDE (89 aprovadas, três skips), design, sete guardas,
+galeria e build. Em fixture Wayland, dock → barra → dock passou com o diálogo
+antigo visível no pedido, fechamento e saída real do teclado antes da troca de
+host, sem trocar popup/view/estado de áudio. O áudio dessa fixture é sintético.
+A correção foi instalada com backup e uma recarga, preservando configuração e
+launcher. No painel real passaram três cliques, três mudanças de foco por Tab,
+Escape e recolhimento, com configuração, papéis da barra e recursos preservados.
+Isso qualifica rehosting público; identidade exata do teclado e ciclo de backend
+na sessão instalada continuam separados. Falhas anteriores da fixture/leitor e a
+limpeza independente permanecem registradas.
+[Provas e limites](docs/validation/shared-control-center-source.md#newer-host-focus-after-native-popup-close--15-october-2026).
+
+**Próximo aceite de C1/UX1/CC0:** operação de áudio pendente e ciclo de backend
+na Central instalada, configuração opcional pela interface nativa, overflow e
+cancelamento no painel real, monitores adicionais e mudanças de contexto. Os marcos
 continuam parciais e o goal mantém o roadmap completo, incluindo integrações
 opcionais, ecossistema, distribuição e IA.
 

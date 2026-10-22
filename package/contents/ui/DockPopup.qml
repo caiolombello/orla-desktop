@@ -12,6 +12,9 @@ Item {
     property real anchorX: dock ? dock.width / 2 : 0
     property var anchorControl: dock
     property bool nativeOpenActive: false
+    property int _focusRestoreGeneration: 0
+    onAnchorControlChanged: _focusRestoreGeneration++
+    onDockChanged: _focusRestoreGeneration++
     readonly property bool nativeBackend: Boolean(dock && dock.nativePopups)
     readonly property real screenHeight: dock && dock.Screen.height > 0 ? dock.Screen.height : 640
     readonly property real maximumPopupHeight: Math.max(1, screenHeight - (dock ? dock.height : 0) - 30)
@@ -90,16 +93,24 @@ Item {
         onClosed: { popup.visible = false; popup.closed(); }
     }
     onVisibleChanged: {
+        const generation = ++_focusRestoreGeneration;
         if (!nativeBackend || visible || !nativeOpenActive) return;
         nativeOpenActive = false;
         // Keep the shared content owned by this facade while its host is hidden.
         surface.parent = popup;
-        closed();
         const control = anchorControl;
+        const ownerWindow = control ? control.Window.window : null;
+        closed();
         Qt.callLater(() => {
-            const ownerWindow = control ? control.Window.window : null;
-            if (ownerWindow && ownerWindow.active && control.visible && control.enabled)
-                control.forceActiveFocus(Qt.PopupFocusReason);
+            // Close observers may cancel, reopen, rehost or choose a newer control.
+            if (generation !== _focusRestoreGeneration || visible || nativeOpenActive
+                || anchorControl !== control || !Qt.isQtObject(control) || !Qt.isQtObject(ownerWindow)
+                || control.Window.window !== ownerWindow || !ownerWindow.visible || !ownerWindow.active
+                || !control.visible || !control.enabled) return;
+            const focused = ownerWindow.activeFocusItem;
+            if (focused && focused !== ownerWindow.contentItem && focused !== control
+                && focused.visible && focused.enabled) return;
+            control.forceActiveFocus(Qt.PopupFocusReason);
         });
     }
     Loader {

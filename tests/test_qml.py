@@ -346,6 +346,53 @@ Item {
                 self.assertFalse(identity.hasError(), identity.error().toString())
         self.assertEqual(self.warnings, [])
 
+    def test_native_popup_close_preserves_a_newer_host_focus_choice(self):
+        self.place_dock_inside_available_screen()
+        self.dock.setProperty("nativePopups", True)
+        self.app.processEvents()
+        anchor = self.window.findChild(QQuickItem, "settingsButton")
+        newer = self.window.findChild(QQuickItem, "addButton")
+        popup = self.window.findChild(QObject, "settingsPopup")
+        self.assertTrue(newer.isVisible() and newer.isEnabled())
+        self.window.requestActivate()
+        for _ in range(40):
+            if QGuiApplication.focusWindow() == self.window:
+                break
+            QTest.qWait(5)
+        self.assertEqual(QGuiApplication.focusWindow(), self.window)
+        self.engine.rootContext().setContextProperty("ownedPopupAnchor", anchor)
+        expression = QQmlExpression(self.engine.rootContext(), popup, "openAt(ownedPopupAnchor)")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        QTest.qWait(40)
+        dialog = popup.property("nativeDialog")
+        self.assertTrue(popup.property("visible") and dialog.isVisible())
+        self.assertEqual(QGuiApplication.focusWindow(), dialog)
+        choices = []
+
+        def choose_newer_control():
+            # closed is public and synchronous; the facade queues restoration afterwards.
+            self.window.requestActivate()
+            for _ in range(40):
+                if QGuiApplication.focusWindow() == self.window:
+                    break
+                QTest.qWait(5)
+            newer.forceActiveFocus(Qt.OtherFocusReason)
+            choices.append((QGuiApplication.focusWindow() == self.window,
+                            self.window.activeFocusItem() == newer))
+
+        popup.closed.connect(choose_newer_control)
+        try:
+            popup.close()
+            QTest.qWait(80)
+            self.assertEqual(choices, [(True, True)])
+            self.assertEqual(QGuiApplication.focusWindow(), self.window)
+            self.assertEqual(self.window.activeFocusItem(), newer)
+            self.assertFalse(popup.property("visible") or dialog.isVisible())
+            self.assertEqual(self.warnings, [])
+        finally:
+            popup.closed.disconnect(choose_newer_control)
+
     def test_native_task_menu_routes_only_to_owned_dialog_and_preserves_keyboard_close(self):
         self.place_dock_inside_available_screen()
         self.dock.setProperty("nativePopups", True)

@@ -25,6 +25,8 @@ symbols, wallpapers or app icons).
 - **Popovers and modules.** Popups are floating glass popovers without close buttons
   (Esc and clicking outside close them). Related controls sit in rounded modules,
   Control Center style: capsule sliders, round toggles, grouped settings lists.
+  Deferred focus restoration belongs to the same opening, anchor and window. Keep
+  a newer live control's focus; closing observers may cancel or rehost the popup.
 - **One accent per surface**, for the selection, the primary action and progress.
 
 ## Where color comes from
