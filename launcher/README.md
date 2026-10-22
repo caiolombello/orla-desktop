@@ -539,6 +539,56 @@ clique no menu e abertura de aplicativos continuam sem qualificação nesse flux
 python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
 ```
 
+### Sessão de busca pelo atalho — experimental no fonte
+
+Uma instalação feita com o gerenciador novo pode manter o launcher disponível
+pelo atalho salvo, em primeiro plano no terminal:
+
+```sh
+~/.local/bin/orla-launcherctl session
+```
+
+O comando confere a instalação e abre a versão selecionada com
+`--managed-shortcuts --start-hidden`. O atalho salvo abre a busca; Escape a
+oculta, e Ctrl+Q encerra a sessão. Sem atalho registrado, a janela fica visível
+pelo fallback existente. Uma instância gerenciada já ativa causa recusa, sem
+substituir seu proprietário. Iniciar essa sessão é uma escolha explícita de usar
+os atalhos persistentes; serviço, autostart e Meta isolada têm configuração própria.
+Encerre a sessão antes de atualizar, reverter ou remover a instalação.
+
+Uma atualização apenas do payload preserva as ferramentas antigas, que não
+adquirem esse comando. Nesse caso, use um bootstrap novo e verificado:
+
+```sh
+python3 -I -B /caminho/bootstrap-novo/install.py session
+# Alternativa de desenvolvimento:
+python3 scripts/orla.py launcher session
+```
+
+Passaram 57 testes de instalação/CLI, 56 do pacote e 15 do bundle: 128 no total.
+Os cinco casos novos capturam o exec, verificando os argumentos fixos, recusa
+antes de executar quando há pendência/drift, seleção B/A após atualização/reversão
+e preservação da abertura manual. Esses testes não iniciam ELF, atalhos ou D-Bus.
+
+Em prova nativa separada, o bootstrap da
+[CI 38668551212](https://github.com/caiolombello/orla-desktop/actions/runs/38668551212)
+iniciou uma instalação isolada com o payload B previamente verificado. O atalho
+físico Ctrl+Alt+Meta+O abriu e focou a busca duas vezes, sem clique. `2-1` mostrou
+`1` pela Calculadora do KRunner; Escape ocultou a janela mantendo processo e
+registro ativos, e a reabertura usou o mesmo processo. Ctrl+Q encerrou com código
+zero. O serviço anterior foi restaurado com o mesmo executável; nove arquivos
+protegidos e os atalhos/configurações de Orla, KRunner e Meta permaneceram exatos.
+
+A primeira tentativa ficou inconclusiva porque o observador recusou a leitura
+após Escape (`sink_refused`, causa exata desconhecida). Seu registro foi
+preservado. Uma nova tentativa, em outro perfil, aguardou uma leitura válida
+dentro do prazo; uma leitura inconclusiva anterior não contou como janela oculta.
+A captura própria foi conferida em Wayland/Fusion, uma saída/escala 1,45. Isso
+qualifica o fluxo delimitado com o bootstrap novo e o payload B anterior, sem
+qualificar o novo ELF da CI, Meta isolada, execução de apps, outros ambientes,
+serviço/autostart público ou migração do legado. A instalação principal continua
+com o launcher anterior. R2/L0 permanecem parciais.
+
 ### Recuperação da finalização — experimental no fonte
 
 Se uma instalação já publicou todos os arquivos, recibos e o marcador de

@@ -41,7 +41,7 @@ class LauncherInstallCliTests(unittest.TestCase):
         self.invoke_stub(["launcher", *arguments], arguments, code=7)
 
     def test_status_launch_uninstall_match_standalone_actions(self):
-        for action in ("status", "launch", "uninstall", "rollback"):
+        for action in ("status", "launch", "uninstall", "rollback", "session"):
             with self.subTest(action=action):
                 self.invoke_stub(["launcher", action], [action])
 
@@ -69,7 +69,8 @@ class LauncherInstallCliTests(unittest.TestCase):
                ["launcher", "recover"], ["launcher", "recover", "--rollback"],
                ["launcher", "recover", "--finish-install", "--rollback-update"],
                ["launcher", "update", "archive.zip"],
-               ["launcher", "update", "archive.zip", "--sha256", "a" * 64])
+               ["launcher", "update", "archive.zip", "--sha256", "a" * 64],
+               ["launcher", "session", "--start-hidden"], ["launcher", "session", "extra"])
         with mock.patch.object(caiodock.importlib.util, "spec_from_file_location") as locate:
             for arguments in bad:
                 with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()):

@@ -331,6 +331,7 @@ def parser() -> argparse.ArgumentParser:
     launcher_update.add_argument("--commit", required=True)
     launcher_commands.add_parser("status", help="read launcher installation status without changing it")
     launcher_commands.add_parser("launch", help="open the independently installed launcher")
+    launcher_commands.add_parser("session", help="start the owned launcher with its managed shortcut")
     launcher_commands.add_parser("uninstall", help="remove owned launcher files and preserve user configuration")
     launcher_commands.add_parser("rollback", help="restore the retained launcher payload")
     launcher_recover = launcher_commands.add_parser("recover", help="recover an owned launcher transaction", allow_abbrev=False)
