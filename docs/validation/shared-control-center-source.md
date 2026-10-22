@@ -219,3 +219,64 @@ remover o probe.
 Transferência e desativação têm esse aceite delimitado. Permanecem abertos o
 checkbox nativo, seleção de saída, transferência durante operação de áudio
 pendente, outros monitores/ambientes e os demais critérios CC0/CC1/T1.
+
+### Encaixe dos controles na barra — 14/10
+
+O painel real tem 32 pontos de altura, com uma área útil de 24 para os applets.
+Os botões exigiam 28/32 mesmo nessa área menor. A regressão reproduziu o
+excesso; o Source `800a9c8` limita as alturas de layout ao espaço recebido e
+reduz o padding vertical para preservar o ícone e o texto. O indicador de erro
+também tem altura limitada. A preferência continua 28/32; o mínimo anunciado
+ao Plasma passa a 24, sem modificar a configuração do painel.
+
+A ordem da leitura em `controlHeight` é deliberada: uma reprodução independente
+com o BarHarness real, Qt 6.11.2 e ambos os estilos encontrou binding loop no
+startup ao ler `height` antes de `implicitHeight`. Ler `implicitHeight` primeiro
+eliminou os avisos. As falhas iniciais e as variantes privadas foram preservadas;
+o mecanismo interno de inicialização permanece uma inferência.
+
+| Verificação do Source final | Resultado |
+|---|---|
+| Barra, Fusion / KDE | 33 PASS em cada estilo, sem warnings |
+| Composição compartilhada, Fusion / KDE | 7 PASS em cada estilo |
+| Alturas 24/28/32/64, normal e compacta | Controles e ícones contidos; texto do menu cabe |
+| Teclado em host curto | Menu Space/Escape, Tab para Central, Space e clique inferior |
+| Design | Check, sete guards e galeria claro/escuro revisada: PASS |
+| Revisão independente | Source e preparação nativa: zero bloqueadores |
+
+Capturas offscreen com dados sintéticos, foco na Central e host de 24 pontos:
+
+| Escuro | Claro |
+|---|---|
+| ![Barra curta escura](../screenshots/shared-control-center/bar-fit-dark.png) | ![Barra curta clara](../screenshots/shared-control-center/bar-fit-light.png) |
+
+O episódio nativo passou em uma sessão Plasma 6.7.5/Wayland:
+
+- Menu Orla e Central mediram 32 × 24, dentro do host. O ícone do menu mediu
+  20 × 20; o canvas da Central, 24 × 20, com desenho centralizado pelo menor
+  lado. Todos os 19 registros observados mantiveram controle e canvas contidos.
+- Um clique por controle em `y=27`, junto à borda inferior, produziu exatamente
+  um callback `clicked` e abriu seu popup. Tab/Escape na Central e ↓/Escape no
+  menu fecharam ambos. Ao final, o foco lógico do menu ficou em seu botão e o
+  KWin voltou à mesma janela própria; isso não prova reativação do painel.
+- Não houve uso de clipboard, screenshots, ações de sessão ou acionamento de
+  controles de hardware. Os quatro helpers de input confirmaram liberação dos
+  dispositivos; a janela própria encerrou com código zero e os scripts KWin
+  próprios foram removidos.
+- O consumidor inicialmente presumiu ordem cronológica do journal. Os
+  registros chegaram invertidos; ordenar pela sequência de cada contexto
+  corrigiu a leitura, sem repetir input. Também foi preservada uma falha do
+  audit ao exigir exit zero do journal vazio; a leitura final estava vazia,
+  sem erro em stderr e com exit 1. Não se encontraram avisos de BarView no PID
+  do episódio; isso não é uma auditoria de todos os logs do Plasma.
+
+A retirada do probe deixou exatamente os dois arquivos de produção da barra,
+com 14 arquivos no pacote. Dock, launcher, CLI, atalhos, mapas/modos das
+configurações e bancos ficaram iguais. Plasma terminou ativo, com success e
+zero restarts; a geometria final confirmou painel 32/hosts 24. Essa recarga
+confirma o pacote sem repetir a interação após retirar o probe.
+
+Preferência compacta na UI nativa, entrada por teclado/anel de foco na barra,
+fontes ampliadas, esquema claro nativo, outras telas/escalas e os demais gates
+de T1/UX0 permanecem UNRUN. O conteúdo do indicador de erro não foi exercitado
+na sessão real.

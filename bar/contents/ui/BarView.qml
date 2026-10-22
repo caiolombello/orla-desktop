@@ -69,7 +69,10 @@ Item {
     Component.onCompleted: displayedApplication = nextApplication
     signal openRequested(string kind)
     implicitWidth: row.implicitWidth
-    implicitHeight: compactHeight ? 28 : 32
+    implicitHeight: compactHeight ? Style.size.iconButton : Style.space.xxxl
+    readonly property real minimumControlHeight: Style.space.xxl
+    // Panel margins can allocate less than our preferred height.
+    readonly property real controlHeight: Math.min(root.implicitHeight, Math.max(0, root.height))
 
     SessionActions {
         id: actions
@@ -162,13 +165,15 @@ Item {
                 + (wantsLabel ? Math.ceil(Math.min(120, menuLabelText.implicitWidth)) + (menuGlyph.visible ? 6 : 0) : 0)
                 + leftPadding + rightPadding)
             implicitHeight: root.implicitHeight
-            padding: 6
+            padding: Style.space.xs + Style.space.xxs
+            topPadding: Math.min(padding, Math.max(0, (root.controlHeight - Style.size.iconMd) / 2))
+            bottomPadding: topPadding
             focusPolicy: Qt.StrongFocus
             hoverEnabled: true
             Layout.minimumWidth: 32
             Layout.maximumWidth: Math.min(implicitWidth, Math.max(32, root.width))
-            Layout.preferredHeight: root.implicitHeight
-            Layout.maximumHeight: root.implicitHeight
+            Layout.preferredHeight: root.controlHeight
+            Layout.maximumHeight: root.controlHeight
             Layout.alignment: Qt.AlignVCenter
             Accessible.name: qsTr("Menu Orla")
             Accessible.role: Accessible.ButtonMenu
@@ -187,8 +192,9 @@ Item {
                     objectName: "orlaMenuIcon"
                     readonly property color ink: menuButton.palette.buttonText
                     visible: menuButton.icon.source.toString() !== ""
-                    Layout.preferredWidth: 20; Layout.preferredHeight: 20
-                    Layout.minimumWidth: 20; Layout.maximumWidth: 20
+                    Layout.preferredWidth: Style.size.iconMd; Layout.preferredHeight: Style.size.iconMd
+                    Layout.minimumWidth: Style.size.iconMd; Layout.maximumWidth: Style.size.iconMd
+                    Layout.minimumHeight: Style.size.iconMd; Layout.maximumHeight: Style.size.iconMd
                     onInkChanged: requestPaint()
                     onPaint: {
                         const context = getContext("2d");
@@ -243,10 +249,13 @@ Item {
             implicitWidth: Style.size.iconButton + Style.space.xs
             implicitHeight: root.implicitHeight
             padding: Style.space.xs
+            topPadding: Math.min(padding, Math.max(0, (root.controlHeight - Style.size.iconMd) / 2))
+            bottomPadding: topPadding
             focusPolicy: Qt.StrongFocus
             hoverEnabled: true
             Layout.preferredWidth: implicitWidth
-            Layout.preferredHeight: implicitHeight
+            Layout.preferredHeight: root.controlHeight
+            Layout.maximumHeight: root.controlHeight
             Layout.alignment: Qt.AlignVCenter
             Accessible.name: text
             Accessible.description: root.controlCenterDescription
@@ -331,6 +340,11 @@ Item {
             visible: root.showOrlaMenu && root.actionError !== ""
             text: qsTr("Falha na ação")
             Accessible.description: root.actionError
+            topPadding: Math.min(padding, Math.max(0, (root.controlHeight - implicitContentHeight) / 2))
+            bottomPadding: topPadding
+            Layout.preferredHeight: root.controlHeight
+            Layout.maximumHeight: root.controlHeight
+            Layout.alignment: Qt.AlignVCenter
             Controls.ToolTip.visible: hovered
             Controls.ToolTip.text: root.actionError
             onClicked: menu.open()
