@@ -1,8 +1,9 @@
 # Composição opcional — validação de código e interface
 
 20/10/2026. PySide6/Qt 6.11.2, renderização offscreen/software. Este registro
-qualifica a janela no checkout e a ligação ao gerenciador existente com runtime
-sintético. Não qualifica o comportamento nativo de Plasma/Wayland nem distribuição.
+qualifica a janela e a ligação ao gerenciador existente com runtime sintético.
+O incremento do bundle abaixo qualifica também a carga sem checkout. Não qualifica
+o comportamento nativo de Plasma/Wayland ou instalação gerenciada.
 
 ## Comportamento verificado
 
@@ -56,6 +57,44 @@ cortado. A revisão independente final não encontrou bloqueadores neste escopo.
 Não foram executados NativeRuntime, IPC real, recarga de plasmashell ou ciclo
 completo desta janela na sessão do usuário. Os gates próprios anteriores de
 SIGINT/SIGTERM/Window.close exercitaram o controller com uma Session bloqueada e
-loop Qt real em filhos privados; não provam o ciclo nativo. Distribuição sem Source,
-entrada instalada no desktop, criação aditiva e reativação direta permanecem no
+loop Qt real em filhos privados; não provam o ciclo nativo. Entrada instalada no
+desktop, criação aditiva e reativação direta permanecem no
 [roadmap](../../ROADMAP.md). Reativação atual exige restore → novo plano/apply.
+
+## Incremento de distribuição: ZIP relocável
+
+O bundle separado fecha a árvore de imports da janela: 16 arquivos regulares 0644
+e manifesto. A verificação cobre determinismo, hashes/commit externos, schema,
+entradas duplicadas/extras/ausentes, modos, symlinks e limites de expansão. Os
+testes usam fixtures sintéticas para adulterações e o payload real para integração.
+
+O payload real foi extraído de bytes verificados, movido para um caminho com
+espaços/Unicode e aberto de outro diretório. `--version` e `--diagnose` passaram;
+a árvore permaneceu idêntica, sem bytecode novo. Um teste Bubblewrap ocultou o
+repositório e removeu a rede: o diagnóstico carregou a interface real sem fallback
+para Source. Esse teste é explicitamente pulado quando Bubblewrap está ausente.
+
+Pacotes instalados com os nomes `workspace` e `scripts` não substituem os imports
+locais do bundle; o teste preserva a colisão encontrada na inspeção final.
+Um Python privado sem Qt ainda consulta versão e informa `qt_runtime_missing`.
+Versão Qt incompatível impede iniciar o host; erros de inicialização são
+sanitizados. O diagnóstico usa XDG privado, barramentos ausentes e controller
+inerte: não instancia NativeRuntime nem testa a sessão Plasma. As configurações
+XDG do chamador foram preservadas. A resolução de estado relativo também passou
+com os defaults do usuário, antes de construir a interface.
+
+Verificação do incremento pelos comandos acima: 60 testes de composição em
+Fusion e 60 em KDE; 177 do backend; 50 de CLI/release/design; design check sem
+problemas. Os processos das suítes Qt registraram um `ResourceWarning` de sete
+objetos Python não coletáveis ao terminar; não houve falha de teste. Nenhum QML
+foi alterado neste incremento; a galeria anterior continua sendo a referência visual.
+A revisão independente final não encontrou bloqueadores: 96 testes focados
+passaram, além de cinco variantes de colisão com pacotes instalados. Remover
+qualquer um dos dois marcadores de pacote em cópias privadas reproduziu a falha;
+no bundle final, todos os helpers inspecionados vieram da árvore local. Esse
+resultado substitui o aceite inicial, que não havia detectado a colisão.
+
+Não foram instalados bundle, atalho ou serviço na sessão do usuário. O ZIP não
+inclui Qt ou widgets; hashes do manifesto não autenticam o autor. O instalador
+com ownership, seletor de geração, update/rollback e barreira de fechamento
+permanece o próximo gate de distribuição, separado do ciclo nativo completo.

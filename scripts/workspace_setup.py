@@ -1,4 +1,4 @@
-"""Optional checkout-only Qt companion for the existing layout transactions.
+"""Optional Qt companion for the existing layout transactions.
 
 Qt imports stay here so the ordinary CLI keeps working without PySide6.
 The synchronous backend runs off the GUI thread and outlives Plasma restarts.
@@ -200,8 +200,9 @@ def launch(service):
     template = panel_layout.read_json(root / "layouts/mac-inspired-topbar.json")
     config = os.environ.get("XDG_CONFIG_HOME", "")
     config = Path(config) if config.startswith("/") else Path.home() / ".config"
-    state = os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))
-    store = panel_layout.FileStore(config, Path(state) / "orla/layouts")
+    state = os.environ.get("XDG_STATE_HOME", "")
+    state = Path(state) if state.startswith("/") else Path.home() / ".local/state"
+    store = panel_layout.FileStore(config, state / "orla/layouts")
     session = workspace_layout.CompositionSession(panel_layout.NativeRuntime(service), store, template)
     app = QGuiApplication(sys.argv[:1])
     app.setApplicationName("Orla — Composição")

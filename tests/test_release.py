@@ -44,6 +44,8 @@ class ReleaseBundleTests(unittest.TestCase):
             (root / "tests").mkdir()
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
             for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
+                         "test_workspace_setup.py", "test_workspace_view.py",
+                         "test_workspace_entry.py", "test_workspace_package.py",
                          "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py",
                          "native/control_center_audio.py", "native/control_center_audio_session.py",
                          "native/run_control_center_audio.py", "native/control_center_audio.conf.in"):
@@ -92,6 +94,8 @@ class ReleaseBundleTests(unittest.TestCase):
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
                 for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
+                             "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
+                             "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                              "tests/test_design_system.py", "tests/design_gallery.py",
                              "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
                              "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",

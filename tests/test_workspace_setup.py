@@ -161,6 +161,22 @@ class HostTests(unittest.TestCase):
             self.assertEqual(runtime.events.count("apply"), 1)
             self.assertEqual(runtime.events.count("remove-owned"), 1)
 
+    def test_launch_uses_caller_defaults_for_relative_xdg_homes_before_gui_start(self):
+        from pathlib import Path
+        from unittest import mock
+        from scripts import panel_layout, workspace_setup
+        home = Path("/synthetic-workspace-home")
+        class StartupObserved(Exception):
+            pass
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "relative-config", "XDG_STATE_HOME": "relative-state"}), \
+                mock.patch.object(Path, "home", return_value=home), \
+                mock.patch.object(panel_layout, "NativeRuntime"), \
+                mock.patch.object(panel_layout, "FileStore") as store, \
+                mock.patch.object(workspace_setup, "QGuiApplication", side_effect=StartupObserved):
+            with self.assertRaises(StartupObserved):
+                workspace_setup.launch("plasma-fixture.service")
+        store.assert_called_once_with(home / ".config", home / ".local/state/orla/layouts")
+
 
 if __name__ == "__main__":
     unittest.main()

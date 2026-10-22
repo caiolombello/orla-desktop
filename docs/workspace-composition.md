@@ -12,10 +12,10 @@ acompanhar as recargas do Plasma; a qualificação nativa desse ciclo segue aber
 Só a confirmação explícita despacha uma operação; leitura, revisão e abandono do
 plano não escrevem configurações, bancos ou recibos.
 
-Primeira entrada: `python3 scripts/orla.py layout setup --service UNIT`, no checkout
-completo, com PySide6 e os widgets necessários já instalados. Não há botão no
-plasmoid apontando para um caminho do desenvolvedor. O pacote público atual não
-é um kit autônomo deste companion; distribuição e instalação continuam abertas.
+No checkout: `python3 scripts/orla.py layout setup --service UNIT`, com PySide6 e
+os widgets necessários já instalados. Há também um ZIP experimental separado,
+relocável, descrito abaixo. Não há botão no plasmoid apontando para um caminho do
+desenvolvedor. Instalação gerenciada e entrada no menu do desktop continuam abertas.
 
 O pré-requisito Menu Orla segue a [instalação manual da barra](../bar/README.md).
 Também são necessários Menu Global, espaçador, bandeja, áudio/rede e relógio do
@@ -23,6 +23,48 @@ Plasma. A janela não instala widgets. `UNIT` é o nome literal do serviço Plas
 do usuário atual, verificado pelo helper; não há escolha automática de serviço.
 Os comandos `layout status --service UNIT` e `layout setup --help` podem ser
 consultados antes de abrir a janela.
+
+## Bundle experimental separado
+
+O ZIP do companion contém 16 arquivos permitidos e um manifesto de tamanhos,
+modos e SHA-256. Preserva os imports relativos da interface e do helper; não inclui
+Qt, a barra, o plasmoid inteiro ou um ambiente Python. Exige Python 3.10+ e
+PySide6/Qt Quick 6.11+ instalados. Não é um novo canal de updates ou uma release.
+
+Para construir a partir do commit revisado, no checkout:
+
+```sh
+python3 -I -B workspace/package.py build --commit COMMIT_40_HEX --output-dir OUTPUT
+python3 -I -B workspace/package.py verify OUTPUT/orla-workspace-0.2.9.zip \
+  --sha256 SHA256_64_HEX --commit COMMIT_40_HEX
+```
+
+Use os valores de commit/hash registrados para o artefato recebido. A verificação
+deve usar uma cópia confiável do verificador antes da extração; hashes identificam
+os bytes esperados, não autenticam o autor. O verificador recusa entradas extras,
+duplicadas, ausentes, symlinks, modos divergentes e expansão excessiva. A extração
+é feita numa pasta vazia, preservando arquivos regulares com modo 0644.
+
+Depois de extrair, inclusive após mover a pasta ou mudar o diretório de trabalho:
+
+```sh
+python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --version
+python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --diagnose
+python3 -I -B /CAMINHO/DO/BUNDLE/workspace/main.py --service UNIT
+```
+
+`--diagnose` verifica a árvore e carrega a interface real em um filho offscreen,
+com diretórios XDG privados e barramentos ausentes. Distingue dependência Qt ausente,
+versão incompatível, erro de QML e falha/timeout do processo. Não consulta ou inicia
+Plasma; `nativeValidated` e `serviceContacted` permanecem falsos. `--version` não
+exige Qt. Abrir a composição exige `--service` explícito e mantém os gates do backend.
+Falhas de inicialização não exibem caminhos privados em tracebacks.
+
+As raízes de configuração/estado são as do usuário que abre a composição. Valores
+XDG relativos são ignorados em favor dos defaults, conforme a
+[especificação XDG](https://specifications.freedesktop.org/basedir/latest/).
+O bundle não instala widgets nem cria autostart, serviço ou atalho; o instalador
+com ownership, atualização e rollback é o próximo incremento de distribuição.
 
 O backend exige Plasma 6.7.5 e pelo menos um painel existente, escolhido pelo
 usuário, para substituição. Painéis com a dock são recusados. Não há criação
@@ -68,4 +110,4 @@ da janela permanece recusado enquanto houver uma operação.
 Recomendação de execução: Sol 6.1, medium; backend existente limita a implementação. Escalar
 raciocínio se uma transição não puder preservar os bancos e o primeiro erro.
 Implementação inicial executada com evidência sintética; criação aditiva, reativação direta,
-distribuição autônoma e aceite nativo permanecem incrementos posteriores.
+instalação autônoma e aceite nativo permanecem incrementos posteriores.
