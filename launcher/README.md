@@ -267,9 +267,16 @@ O primeiro teste real encontrou saída automática do Qt após o job KIO executa
 um app com a janela oculta. A correção usa `setQuitLockEnabled(false)`, como o
 [KRunner 6.7.5](https://github.com/KDE/plasma-workspace/blob/v6.7.5/krunner/main.cpp),
 e a regressão executa o `main` real, reabre a busca e verifica saída explícita.
-Não foi qualificada digitação antes do foco: um probe sem pausa perdeu a primeira
-letra. Latência de ativação, outros monitores, atalhos inibidos e reinício do
-daemon continuam abertos. Ctrl+Q foi verificado na regressão isolada, sem novo
+O [baseline posterior de foco](../docs/validation/launcher-focus-baseline.md)
+registrou 15 tentativas próprias. As três sem intervalo perderam caracteres
+para a janela anterior; a primeira tecla foi emitida antes do callback do
+atalho. As reaberturas a 50/100/500 ms passaram três vezes por intervalo, e as
+três primeiras aberturas de novos processos a 500 ms também passaram. A mediana
+até o callback de atividade com foco foi 15,15 ms nas reaberturas; isso não
+garante digitação sem intervalo ou define um orçamento geral. A ativação foi
+preservada: os dados não demonstraram atraso adicional de foco do campo.
+Outros monitores, atalhos inibidos e reinício do daemon continuam abertos.
+Ctrl+Q foi verificado na regressão isolada, sem novo
 teste nativo nesta revisão. Os recibos históricos abaixo mantêm seu escopo.
 
 ## Limites de qualificação

@@ -389,12 +389,23 @@ Revisar prioridades ao concluir cada marco ou invalidar uma prova técnica. A m�
 
 ## Próxima execução em incrementos
 
+**Prontidão de foco medida em 13/10:** o [baseline de 15 tentativas](docs/validation/launcher-focus-baseline.md)
+registrou mediana/máximo de 15,15/23,50 ms até o callback de atividade com foco
+nas 11 reaberturas e 56,87/84,84 ms nas quatro primeiras apresentações. As três
+tentativas sem intervalo dividiram a consulta entre a janela anterior e Orla;
+a emissão inicial precedeu o callback do atalho. As reaberturas a 50/100/500 ms
+passaram três vezes por intervalo e três novos processos passaram a 500 ms.
+A ativação foi preservada após revisão independente; nenhum ganho de latência
+foi anunciado. Isso conclui a medição delimitada, mantendo L0/L2 e UX0 parciais.
+O próximo incremento funcional é a Central de Controle na barra; a prontidão
+da busca em outros ambientes permanece como gate de qualificação.
+
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.
 
 | Ordem / incremento | Resultado e dependências | Aceite delimitado |
 |---|---|---|
 | 1. Composição visual instalada — R1/UX0 | Qualificar esta revisão no painel; depende da revisão e instalação reversível do Source preparado | Abrir/fechar cada popup por clique/Escape, foco visível, claro/escuro, movimento reduzido, autohide sob hover/fullscreen e configuração preservada. Registrar tela/escala/revisão; ambientes não disponíveis permanecem UNRUN. |
-| 2. Windows/Meta → busca — L0/L2 | Atribuição, recuperação e fluxo básico passaram localmente; próxima fatia mede prontidão de foco e primeira tecla | Digitação rápida após Meta não perde a primeira letra nos ambientes qualificados; medir antes de otimizar. Expandir monitores/escala e atalho inibido; manter consulta atual, execução explícita, Escape/foco e recuperação. IA/Steam não são dependências. |
+| 2. Windows/Meta → busca — L0/L2 | Atribuição, recuperação, fluxo básico e baseline delimitado de primeira tecla registrados; aceite completo aberto | Expandir prontidão em monitores/escala, cargas e atalho inibido antes de anunciar orçamento. Digitação sem intervalo ainda perde caracteres para a janela anterior; qualquer otimização exige comparação. Manter consulta atual, execução explícita, Escape/foco e recuperação. IA/Steam não são dependências. |
 | 3. Central de Controle na barra — CC0/CC1-A/T1 | Mesmos modelos acessíveis pela barra ou dock, entradas opcionais e dono do estado definido | Abrir não escreve; volume/mudo/saída mostram readback/falha; segunda entrada não cria backend concorrente; desativar barra preserva dock. Áudio real tem prova própria; microfone/brilho/rede são fatias posteriores. |
 | 4. Seletor de área virtual — W1 | Mostrar e trocar a área atual, distinguindo contexto e perfil; depende de prova D-Bus KWin versionada | Clique/atalho troca uma vez e acompanha mudanças externas; indisponibilidade explícita; contexto não apaga perfil. Automação P2 espera decisão de precedência manual/Activity/desktop. |
 | 5. Aparência portátil — C1/X1 | Exportar/importar aparência, ordem e visibilidade com preview/reversão; depende do schema experimental existente | Exportação sem segredos, eventos ou caminhos privados; import inválido não escreve; Cancelar/Aplicar/desfazer/restart preservam perfil. Catálogo declarativo segue após a prova; código externo continua condicionado a X5. |
