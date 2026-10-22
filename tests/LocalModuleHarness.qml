@@ -11,6 +11,10 @@ Controls.ApplicationWindow {
         objectName: "moduleBridge"
         property bool loading: false
         property string error: ""
+        readonly property bool legacyLoading: loading
+        property bool addonLoading: false
+        property string addonError: ""
+        function errorFor(module) { return module === "peripherals" ? addonError : error; }
         property var quota: ({status: "ready"})
         property var peripherals: ({status: "missing"})
         property var recording: ({status: "unknown"})

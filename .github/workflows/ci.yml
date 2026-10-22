@@ -91,6 +91,13 @@ jobs:
               if [[ -f tests/test_addon_manager_state.py ]]; then
                 "$1" -B -s -m unittest test_addon_manager_state -v
               fi
+              if [[ -f tests/test_addon_composition.py ]]; then
+                "$1" -B -s -m unittest \
+                  test_addon_manager test_addon_peripherals \
+                  test_addon_composition.AddonCompositionTests \
+                  test_addon_composition.AddonSessionInitializationTests \
+                  test_addon_composition.AddonSessionLifetimeTests -v
+              fi
             ' -- "$ORLA_CI_PYTHON"
 
       - name: Run portable tests

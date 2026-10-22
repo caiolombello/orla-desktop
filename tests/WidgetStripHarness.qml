@@ -39,10 +39,26 @@ Window {
         property real percent: -1
         property string charging: "unknown"
     }
-    DockUI.Integrations {
+    DockUI.IntegrationState {
         id: integrations
         objectName: "fixtureIntegrations"
-        active: false
+        active: true
+        enabledModules: ["quota", "peripherals", "recording"]
+        nowMsOverride: 100000
+        transport: fixtureTransport
+    }
+    QtObject {
+        id: fixtureTransport
+        property var queue: []
+        function asyncCall(message, resolve, reject) { queue = queue.concat([{message: message, resolve: resolve, reject: reject}]); }
+        function replyAddons(raw, failed) {
+            const waiting = queue.filter(call => call.message.service === "org.orla.Addons");
+            queue = queue.filter(call => call.message.service !== "org.orla.Addons");
+            for (const call of waiting) {
+                if (failed) call.reject({});
+                else call.resolve({value: raw});
+            }
+        }
     }
     QtObject {
         id: dock

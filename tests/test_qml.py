@@ -620,16 +620,29 @@ Item {
         self.assertEqual(self.warnings, [])
 
     def test_integrations_render_real_percentages_and_neutral_stale_data(self):
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'ready', devices: [{name: 'Mouse', percent: 64, stale: false}]}, recording: {status: 'idle', state: 'idle'}}), ['quota','peripherals','recording'])")
+        import json
+        from test_addon_peripherals import peripheral_frame, missing_frame
+        self.evaluate("integrations.active=true; integrations.enabledModules=['quota','peripherals','recording']; integrations.nowMsOverride=100000")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion:2,modules:['quota','recording'],quota:{status:'ready',windows:[{provider:'codex',label:'5 h',usedPercent:37,stale:false}]},recording:{status:'idle',state:'idle'}}), ['quota','recording'])")
+        self.app.processEvents()
+        def reply_addon(frame):
+            self.evaluate("integrations.refresh()")
+            expr = QQmlExpression(self.engine.rootContext(), self.window,
+                "addonCalls.filter(c => c.message.service === 'org.orla.Addons' && c.message.member === 'SnapshotFor').slice(-1)[0].resolve({value: " + json.dumps(json.dumps(frame)) + "})")
+            expr.evaluate()
+            self.assertFalse(expr.hasError(), expr.error().toString())
+        reply_addon(peripheral_frame(percent=64))
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "codex · 37% usado")
         self.assertEqual(self.evaluate("integrations.batterySummary"), "Mouse · 64%")
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'stale', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: true}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}), ['quota','peripherals','recording'])")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion:2,modules:['quota','recording'],quota:{status:'stale',windows:[{provider:'codex',label:'5 h',usedPercent:37,stale:true}]},recording:{status:'missing',state:'unknown'}}), ['quota','recording']); integrations.invalidateAddons()")
+        self.app.processEvents()
+        reply_addon(missing_frame())
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "Dados desatualizados")
         self.assertEqual(self.evaluate("integrations.batterySummary"), "Sem cache local")
-        self.assertFalse(self.evaluate("integrations.acceptSnapshot('{\"schemaVersion\": 999}', ['quota'])"))
+        self.assertFalse(self.evaluate("integrations.acceptSnapshot('{\"schemaVersion\":999}', ['quota'])"))
 
     def test_failed_integration_neutralizes_previously_fresh_details(self):
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}), ['quota','peripherals','recording'])")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion:2,modules:['quota','recording'],quota:{status:'ready',windows:[{provider:'codex',label:'5 h',usedPercent:37,stale:false}]},recording:{status:'missing',state:'unknown'}}), ['quota','recording'])")
         self.evaluate("integrations.unavailable('Falha de conexão')")
         self.assertEqual(self.evaluate("integrations.quota.windows.length"), 0)
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "Integração indisponível")

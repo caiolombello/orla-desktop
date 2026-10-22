@@ -2,6 +2,7 @@
 """Read-only cache bridge. Never imports providers or accesses credentials."""
 import argparse
 from datetime import datetime, timezone
+import importlib.util
 import json
 import math
 import os
@@ -60,84 +61,41 @@ def _datetime(value):
         return None
 
 
-def _percent(value):
-    return float(value) if type(value) in (int, float) and 0 <= value <= 100 else None
+_backend = None
 
 
-def _age_seconds(value, now):
-    return now.timestamp() - value if type(value) in (int, float) and 0 <= value <= 1e12 else None
+def _addon_backend():
+    global _backend
+    if _backend is None:
+        spec = importlib.util.spec_from_file_location('_orla_integrations_addon_store',
+            Path(__file__).absolute().with_name('addon_store.py'))
+        backend = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(backend)
+        _backend = backend
+    return _backend
 
 
-def _charging(value):
-    return value if value in ('discharging', 'charging', 'full') else 'unknown'
-
-
-def _safe_name(value):
-    if not isinstance(value, str):
-        return 'Periférico'
-    value = ''.join(character for character in value if character.isprintable())[:80]
-    return value or 'Periférico'
-
-
-def _peripherals(state_dir, now):
-    result = {'status': 'missing', 'generatedAt': None, 'source': None, 'producerVersion': None,
-              'limited': False, 'devices': []}
+def _peripherals(home, now, use_xdg):
+    # Load only for an explicitly selected module, with the caller's root/clock.
+    code = 'io'
     try:
-        record = _read_bounded(state_dir / 'perigauge/state.json')
-        if not isinstance(record, dict) or type(record.get('schema')) is not int or record['schema'] != 1:
-            raise ValueError('Unsupported schema')
-        devices = record.get('devices')
-        if not isinstance(devices, list) or len(devices) > 128 or not all(isinstance(d, dict) and isinstance(d.get('battery'), dict) for d in devices):
-            raise ValueError('Invalid devices')
-        generated_age = _age_seconds(record.get('generated_at'), now)
-        if generated_age is not None and generated_age >= 0:
-            result['generatedAt'] = float(record['generated_at'])
-        source = record.get('source')
-        if source in ('daemon', 'oneshot'):
-            result['source'] = source
-        version = record.get('version')
-        if (isinstance(version, str) and 0 < len(version) <= 40
-                and all(character.isascii() and (character.isalnum() or character in '.+-_') for character in version)):
-            result['producerVersion'] = version
-        result['limited'] = generated_age is None or generated_age < 0 or result['source'] is None or result['producerVersion'] is None
-        for device in devices:
-            if 'hidden' in device:
-                if type(device.get('hidden')) is not bool:
-                    result['limited'] = True
-                    continue
-                if device['hidden']:
-                    continue
-            age = _age_seconds(device.get('updated_at'), now)
-            stale_valid = 'stale' not in device or type(device.get('stale')) is bool
-            stale = device.get('stale') is True or (age is not None and age > 900) or (generated_age is not None and generated_age > 900)
-            present = device.get('present') if type(device.get('present')) is bool else None
-            confirmed = (stale_valid and age is not None and age >= 0 and generated_age is not None
-                         and generated_age >= 0 and not stale and not device.get('error') and present is True)
-            if (age is None or age < 0 or present is None
-                    or not stale_valid):
-                result['limited'] = True
-            battery = device['battery']
-            components = device.get('components', [])
-            if not isinstance(components, list) or len(components) > 16 or not all(isinstance(c, dict) for c in components):
-                raise ValueError('Invalid components')
-            result['devices'].append({'name': _safe_name(device.get('name')),
-                'kind': device.get('kind') if device.get('kind') in ('mouse', 'keyboard', 'earbuds', 'headset', 'touchpad', 'gamepad', 'other') else 'other',
-                'percent': _percent(battery.get('percent')) if confirmed else None,
-                'level': battery.get('level') if confirmed and battery.get('level') in ('critical', 'low', 'good', 'full') else None,
-                'charging': _charging(battery.get('charging')) if confirmed else 'unknown',
-                'estimated': confirmed and battery.get('estimated') is True, 'stale': stale,
-                'present': present,
-                'observedAt': float(device['updated_at']) if age is not None and age >= 0 else None,
-                'components': [{'label': c['id'], 'percent': _percent(c.get('percent')) if confirmed else None,
-                                'charging': _charging(c.get('charging')) if confirmed else 'unknown'}
-                               for c in components if c.get('id') in ('left', 'right', 'case')]})
-        result['status'] = 'ready' if any(d['percent'] is not None or d['level'] is not None for d in result['devices']) else 'stale' if any(d['stale'] for d in result['devices']) else 'unknown'
-    except FileNotFoundError:
+        backend = _addon_backend()
+    except (OSError, ImportError):
         pass
-    except (OSError, ValueError, RecursionError):
-        result = {'status': 'invalid', 'generatedAt': None, 'source': None, 'producerVersion': None,
-                  'limited': False, 'devices': []}
-    return result
+    else:
+        try:
+            paths = backend.AddonPaths(home=home,
+                data_home=None if use_xdg else home / '.local/share',
+                state_home=None if use_xdg else home / '.local/state')
+            return backend.snapshot_peripherals(paths=paths, now_ms=int(now.timestamp() * 1000),
+                                                profile_enabled=True)
+        except backend.AddonError as error:
+            code = error.code
+    # Legacy callers retain their envelope; no private cache fallback or raw error.
+    return dict(status='invalid', generatedAt=None, source=None, producerVersion=None,
+        limited=True, devices=[], generatedAtMs=None, expiresAtMs=None, leaseMs=None,
+        addon=dict(id=None, sha256=None, enabled=False, generation=None,
+                   producerNamespace=None, reason='export_invalid', errorCode=code))
 
 
 def _recording(state_dir, now):
@@ -216,7 +174,7 @@ def _collect_modules(modules, home, now):
     if 'quota' in modules:
         result['quota'] = _quota(home, now)
     if 'peripherals' in modules:
-        result['peripherals'] = _peripherals(state_dir, now)
+        result['peripherals'] = _peripherals(home, now, use_xdg)
     if 'recording' in modules:
         result['recording'] = _recording(state_dir, now)
     return result

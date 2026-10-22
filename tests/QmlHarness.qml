@@ -11,6 +11,8 @@ Window {
     property string fixtureContextSnapshotJSON: ""
     property int contextWriteCount: 0
     property int profileWriteCount: 0
+    property var addonCalls: []
+    property var addonTransport: ownedAddonTransport
     property var contextTimerWitness: dockView.pomodoro
     readonly property bool contextTimerIdentity: contextTimerWitness === dockView.pomodoro
     property var contextSnapshot: fixtureContextSnapshotJSON.length ? JSON.parse(fixtureContextSnapshotJSON) : ({
@@ -56,6 +58,13 @@ Window {
         property int timerRemaining: 1500
         property bool timerBreak: false
         property int completedFocus: 0
+    }
+    QtObject {
+        id: ownedAddonTransport
+        function asyncCall(message, resolve, reject) {
+            addonCalls = addonCalls.concat([{message: message, resolve: resolve, reject: reject}]);
+            if (message.member === "ListAddons") resolve({values: [{}], value: {value: JSON.stringify({formatVersion:"0.1-experimental",ok:true,result:{generation:null,addons:[]}})}});
+        }
     }
     QtObject {
         id: ownedBatteryTransport
@@ -135,6 +144,8 @@ Window {
         controlCenterBackendOverride: controlCenterBackend
         audioBackendOverride: audioBackend
         integrations.active: false
+        integrations.transport: addonTransport
+        addonTransportOverride: addonTransport
         systemBattery.transport: ownedBatteryTransport
     }
     function findFixtureObject(node, name, seen) {

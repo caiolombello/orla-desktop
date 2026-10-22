@@ -996,7 +996,7 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertEqual(viewport.role(), QAccessible.Role.Pane)
         self.assertGreater(viewport.rect().height(), 0)
         for label in ("Relógio e calendário", "Pomodoro", "Música (MPRIS)",
-                      "Bateria do computador", "QuotaLantern", "PeriGauge", "FalaTrace"):
+                      "Bateria do computador", "QuotaLantern", "Periféricos", "FalaTrace"):
             row = self.accessible_named("Widget: " + label, viewport)
             self.assertEqual(row.role(), QAccessible.Role.Grouping)
             self.assertFalse(row.state().focusable)

@@ -2,26 +2,56 @@ import QtQuick
 
 Item {
     id: root
+    // Captured JavaScript record survives queued work without reading a destroyed QObject.
+    property var callbackLifetime: ({alive: true})
     property bool active: false
     property var enabledModules: []
     property var transport: null
-    readonly property var selectedModules: active && Array.isArray(enabledModules)
-        ? ["quota", "peripherals", "recording"].filter(module => enabledModules.indexOf(module) >= 0) : []
-    readonly property string selectionKey: JSON.stringify(selectedModules)
+    property var selectedModules: []
+    property string selectionKey: "[]"
+    property bool addonSuspended: false
+    property var addonIdentity: null
+    property double nowMsOverride: -1
+    property bool legacyLoading: false
+    property bool addonLoading: false
+    readonly property bool addonCallPending: addons.callPending
     property bool loading: false
+    property string legacyError: ""
+    property string addonError: ""
+    property string addonErrorCode: ""
     property string error: ""
+    property var legacyModules: []
+    property string legacyKey: "[]"
     property var snapshot: emptySnapshot([])
+    AddonPeripheralsState {
+        id: addons
+        active: root.active && root.selectedModules.indexOf("peripherals") >= 0
+        suspended: root.addonSuspended
+        // Read the inputs directly: derived selection may still be notifying observers.
+        admissionAllowed: function() {
+            return root.active && !root.addonSuspended && Array.isArray(root.enabledModules)
+                && root.enabledModules.indexOf("peripherals") >= 0;
+        }
+        transport: root.transport
+        expectedIdentity: root.addonIdentity
+        nowMsOverride: root.nowMsOverride
+        onLoadingChanged: root.addonLoading = loading
+        onErrorCodeChanged: root.addonErrorChangedFrom(errorCode)
+        onValueChanged: root.peripheralChanged(value)
+    }
     QtObject {
         id: internal
         property bool completed: false
         property int generation: 0
         property var flight: null
+        property var legacy: root.emptySnapshot([])
+        property var peripheral: ({status: "disabled", devices: []})
     }
     readonly property var quota: snapshot.quota
     readonly property var peripherals: snapshot.peripherals
     readonly property var recording: snapshot.recording
     readonly property string quotaSummary: {
-        if (error) return qsTr("Integração indisponível");
+        if (legacyError) return qsTr("Integração indisponível");
         if (quota.status === "stale") return qsTr("Dados desatualizados");
         const windows = quota.windows || [];
         let selected = null;
@@ -33,7 +63,7 @@ Item {
             : qsTr("Sem leitura disponível");
     }
     readonly property string batterySummary: {
-        if (error) return qsTr("Integração indisponível");
+        if (addonError) return qsTr("Integração indisponível");
         const devices = peripherals.devices || [];
         const available = devices.filter(device => device.present !== false && !device.stale
             && typeof device.percent === "number" && isFinite(device.percent));
@@ -47,9 +77,7 @@ Item {
     }
     readonly property string peripheralsMetadataSummary: {
         const parts = [];
-        if (peripherals.source === "daemon") parts.push(qsTr("coleta do daemon"));
-        else if (peripherals.source === "oneshot") parts.push(qsTr("coleta pontual"));
-        if (peripherals.producerVersion) parts.push("PeriGauge " + peripherals.producerVersion);
+        if (peripherals.source === "addon") parts.push(qsTr("exportação local"));
         if (typeof peripherals.generatedAt === "number" && isFinite(peripherals.generatedAt))
             parts.push(qsTr("atualizado em %1").arg(Qt.formatDateTime(new Date(peripherals.generatedAt * 1000), "d MMM, HH:mm")));
         if (peripherals.limited === true) parts.push(qsTr("modelo limitado"));
@@ -75,62 +103,114 @@ Item {
                 const item = data[module];
                 if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.status !== "string"
                         || (module === "quota" && !Array.isArray(item.windows))
-                        || (module === "peripherals" && !Array.isArray(item.devices))
                         || (module === "recording" && typeof item.state !== "string")) return null;
                 value[module] = item;
             }
             return value;
         } catch (_) { return null; }
     }
+    function errorFor(module) {
+        return selectedModules.indexOf(module) < 0 ? "" : module === "peripherals" ? addonError : legacyError;
+    }
+    function invalidateAddons() { addons.invalidate(); }
     function acceptSnapshot(text, modules) {
-        if (!Array.isArray(modules)) { unavailable(qsTr("Formato de integração incompatível.")); return false; }
+        if (!Array.isArray(modules) || modules.indexOf("peripherals") >= 0) { unavailable(qsTr("Formato de integração incompatível.")); return false; }
         const value = decodeSnapshot(text, modules);
         publish(value || emptySnapshot(modules), value ? "" : qsTr("Formato de integração incompatível."));
         return value !== null;
     }
+    function updateLoading() { loading = legacyLoading || addonLoading; }
+    function updateError() {
+        const hasAddon = selectedModules.indexOf("peripherals") >= 0;
+        error = legacyModules.length && hasAddon ? (legacyError && addonError ? legacyError : "")
+            : hasAddon ? addonError : legacyError;
+    }
+    function addonErrorChangedFrom(code) {
+        addonErrorCode = code;
+        if (addons.errorCode !== code) return;
+        addonError = code ? qsTr("Integração de periféricos indisponível.") : "";
+    }
+    function syncSnapshot() {
+        snapshot = {quota: internal.legacy.quota, peripherals: internal.peripheral, recording: internal.legacy.recording};
+    }
+    function peripheralChanged(value) { internal.peripheral = value; syncSnapshot(); }
     function publish(value, message) {
         const generation = internal.generation;
-        error = message;
-        if (generation === internal.generation) snapshot = value;
+        legacyError = message;
+        if (generation === internal.generation) { internal.legacy = value; syncSnapshot(); }
     }
-    function unavailable(message) { publish(emptySnapshot(selectedModules), message); }
-    function selectionChanged() {
+    function unavailable(message) { publish(emptySnapshot(legacyModules), message); }
+    function queueLegacyRefresh(generation) {
+        const lifetime = callbackLifetime;
+        Qt.callLater(function() {
+            if (!lifetime.alive) return;
+            if (generation === internal.generation) root.refreshLegacy();
+        });
+    }
+    function selectionChanged(invalidateAddon) {
+        if (!internal.completed) return;
         const generation = ++internal.generation;
-        publish(emptySnapshot(selectedModules), "");
+        const selected = active && Array.isArray(enabledModules)
+            ? ["quota", "peripherals", "recording"].filter(module => enabledModules.indexOf(module) >= 0) : [];
+        const modules = selected.filter(module => module !== "peripherals");
+        // Clear legacy state before addon notifications can reenter through snapshot.
+        internal.legacy = emptySnapshot(modules);
+        legacyModules = modules;
         if (generation !== internal.generation) return;
-        loading = internal.flight !== null && selectedModules.length > 0;
-        Qt.callLater(refresh);
+        legacyKey = JSON.stringify(modules);
+        if (generation !== internal.generation) return;
+        selectedModules = selected;
+        if (generation !== internal.generation) return;
+        selectionKey = JSON.stringify(selected);
+        if (generation !== internal.generation) return;
+        if (invalidateAddon) addons.invalidate();
+        if (generation !== internal.generation) return;
+        publish(internal.legacy, "");
+        if (generation !== internal.generation) return;
+        legacyLoading = internal.flight !== null && modules.length > 0;
+        updateError();
+        if (generation === internal.generation) queueLegacyRefresh(generation);
     }
     function finish(operation, reply, failed) {
         if (internal.flight !== operation || operation.settling) return;
         operation.settling = true;
-        if (operation.generation === internal.generation && selectionKey === operation.key) {
+        if (operation.generation === internal.generation && legacyKey === operation.key) {
             // Publish before releasing loading: observers may change the profile or refresh.
             if (failed) unavailable(qsTr("Atualize ou ative a ponte local nas integrações do instalador."));
-            else acceptSnapshot(reply ? String(reply.value) : "", operation.modules);
+            else acceptSnapshot(reply && typeof reply.value === "string" ? reply.value : "", operation.modules);
         }
         const changed = operation.generation !== internal.generation;
         if (internal.flight !== operation) return;
         internal.flight = null;
-        loading = false;
-        if (changed) Qt.callLater(refresh);
+        legacyLoading = false;
+        if (changed) queueLegacyRefresh(internal.generation);
     }
-    function refresh() {
-        if (!internal.completed || internal.flight !== null || !selectedModules.length) return;
-        const modules = selectedModules.slice();
-        const operation = {generation: internal.generation, key: selectionKey, modules: modules};
+    function refresh() { if (!active) return; refreshLegacy(); if (active) addons.refresh(); }
+    function refreshLegacy() {
+        if (!internal.completed || !active || internal.flight !== null || !legacyModules.length) return;
+        const modules = legacyModules.slice();
+        const operation = {generation: internal.generation, key: legacyKey, modules: modules};
         internal.flight = operation;
-        loading = true;
+        legacyLoading = true;
         // A loading observer can revoke the request before the transport dispatches it.
         if (operation.generation !== internal.generation) { finish(operation, null, true); return; }
         const message = {service: "org.caiodock.Integrations", path: "/org/caiodock/Integrations",
             iface: "org.caiodock.Integrations1", member: "SnapshotFor", signature: "(as)", arguments: [modules]};
         try {
             if (transport === null) { finish(operation, null, true); return; }
-            transport.asyncCall(message, reply => finish(operation, reply, false), () => finish(operation, null, true));
+            const lifetime = callbackLifetime;
+            transport.asyncCall(message,
+                reply => { if (lifetime.alive) finish(operation, reply, false); },
+                () => { if (lifetime.alive) finish(operation, null, true); });
         } catch (_) { finish(operation, null, true); }
     }
-    onSelectionKeyChanged: selectionChanged()
-    Component.onCompleted: { internal.completed = true; selectionChanged(); }
-    Timer { interval: 15000; running: root.selectedModules.length > 0; repeat: true; onTriggered: root.refresh() }
+    onLegacyLoadingChanged: updateLoading()
+    onAddonLoadingChanged: updateLoading()
+    onLegacyErrorChanged: updateError()
+    onAddonErrorChanged: updateError()
+    onEnabledModulesChanged: selectionChanged(false)
+    onActiveChanged: selectionChanged(true)
+    Component.onDestruction: callbackLifetime.alive = false
+    Component.onCompleted: { internal.completed = true; selectionChanged(true); }
+    Timer { interval: 15000; running: root.selectedModules.length > 0; repeat: true; onTriggered: root.refreshLegacy() }
 }

@@ -14,19 +14,30 @@ Row {
         if (key === "music") return Boolean(dock.player);
         if (key === "systemBattery") return dock.systemBattery.status === "ready"
             && dock.systemBattery.percentKnown;
-        if (dock.integrations.error) return false;
+        if (dock.integrations.errorFor(key)) return false;
         if (key === "quota") return (dock.integrations.quota.status === "ready"
                 || dock.integrations.quota.status === "stale")
             && (dock.integrations.quota.windows || [])
                 .some(window => window && finiteNumber(window.usedPercent));
         if (key === "peripherals") return (dock.integrations.peripherals.devices || [])
             .some(device => device && ((dock.integrations.peripherals.status === "ready"
-                    || dock.integrations.peripherals.status === "stale") && finiteNumber(device.percent)
+                    || dock.integrations.peripherals.status === "stale") && (finiteNumber(device.percent) || device.level || device.stale || (device.components || []).some(part => finiteNumber(part.percent)))
                 || device.present === false && typeof device.name === "string" && device.name.trim().length > 0));
         const state = dock.integrations.recording.state;
         return state === "starting" || state === "recording" || state === "stopped";
     }
-    function ratio(value) { return finiteNumber(value) ? Math.max(0, Math.min(1, value / 100)) : -1; }
+    function peripheralSummary() {
+        if (dock.integrations.errorFor("peripherals")) return qsTr("Integração indisponível");
+        const devices = dock.integrations.peripherals.devices || [];
+        const ready = devices.filter(device => device.present && !device.stale);
+        const device = ready.find(device => finiteNumber(device.percent)) || ready.find(device => device.level);
+        if (!device) return dock.integrations.batterySummary;
+        const levels = {critical: qsTr("Nível crítico"), low: qsTr("Nível baixo"), good: qsTr("Nível bom"), full: qsTr("Bateria cheia")};
+        const reading = finiteNumber(device.percent) ? Math.round(device.percent) + "%" : levels[device.level];
+        return device.name + " · " + reading + (device.estimated ? qsTr(" · estimativa") : "")
+            + (device.charging === "charging" ? qsTr(" · carregando") : device.charging === "full" ? qsTr(" · carga completa") : "");
+    }
+    function ratio(value) { return finiteNumber(value) && value >= 0 ? Math.min(1, value / 100) : -1; }
     // Ring color for a remaining level (battery) or a used share (quota).
     function remainingColor(percent) {
         return percent <= 10 ? Style.levels.critical : percent <= 20 ? Style.levels.low : Style.levels.good;
@@ -59,12 +70,12 @@ Row {
                     charging: live && dock.systemBattery.charging === "charging", glyph: "battery-100-symbolic"},
                 title: dock.systemBattery.percentKnown ? percent + "%" : qsTr("Energia"), subtitle: dock.powerSubtitle};
         }
-        const title = key === "quota" ? "QuotaLantern" : key === "peripherals" ? "PeriGauge" : "FalaTrace";
-        const subtitle = key === "quota" ? dock.integrations.quotaSummary : key === "peripherals" ? dock.integrations.batterySummary : dock.integrations.recordingSummary;
+        const title = key === "quota" ? "QuotaLantern" : key === "peripherals" ? qsTr("Bateria de periféricos") : "FalaTrace";
+        const subtitle = key === "quota" ? dock.integrations.quotaSummary : key === "peripherals" ? peripheralSummary() : dock.integrations.recordingSummary;
         if (key === "recording") return {live: live,
             data: {active: live && dock.integrations.recording.state === "recording"}, title: title, subtitle: subtitle};
         const windows = (dock.integrations.quota.windows || []).filter(window => window && finiteNumber(window.usedPercent));
-        const devices = (dock.integrations.peripherals.devices || []).filter(device => device && finiteNumber(device.percent));
+        const devices = (dock.integrations.peripherals.devices || []).filter(device => device && device.present !== false && !device.stale && finiteNumber(device.percent));
         const used = windows.length ? Math.round(Math.max(...windows.map(window => window.usedPercent))) : -1;
         const lowest = devices.length ? Math.round(Math.min(...devices.map(device => device.percent))) : -1;
         const percent = key === "quota" ? used : lowest;

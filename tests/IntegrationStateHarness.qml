@@ -9,6 +9,11 @@ Item {
     property bool refreshAfterLoad: false
     property bool changeOnError: false
     property int readyCommits: 0
+    property bool suspendOnAddonLoading: false
+    property bool cycleOnAddonCommit: false
+    property bool replayOnAddonCommit: false
+    property int addonCommits: 0
+    property bool replayBadOnPhysicalSettlement: false
     QtObject {
         id: transport
         objectName: "transport"
@@ -26,11 +31,12 @@ Item {
                     quota: {status: "ready", windows: []}})});
                 return;
             }
-            queue = queue.concat([{resolve: resolve, reject: reject}]);
+            queue = queue.concat([{service: message.service, resolve: resolve, reject: reject}]);
         }
-        function reply(text, failed) {
-            const next = queue[0];
-            queue = queue.slice(1);
+        function reply(text, failed, service) {
+            const index = service ? queue.findIndex(item => item.service === service) : 0;
+            const next = queue[index];
+            queue = queue.filter((item, i) => i !== index);
             replay = next.resolve;
             lastText = text;
             if (failed) next.reject();
@@ -41,17 +47,33 @@ Item {
         id: state
         objectName: "state"
         transport: transport
+        nowMsOverride: 100000
+        onAddonLoadingChanged: if (addonLoading && root.suspendOnAddonLoading) addonSuspended = true
+        onAddonCallPendingChanged: if (!addonCallPending && root.replayBadOnPhysicalSettlement) {
+            root.replayBadOnPhysicalSettlement = false;
+            transport.replay({value: "{}"});
+        }
         onLoadingChanged: {
             if (loading && root.revokeOnLoading) active = false;
             if (!loading && root.refreshAfterLoad) { root.refreshAfterLoad = false; refresh(); }
         }
         onErrorChanged: if (error && root.changeOnError) enabledModules = ["recording"]
-        onSnapshotChanged: if (snapshot.quota.status === "ready") {
-            root.readyCommits++;
-            if (root.changeOnCommit) enabledModules = ["peripherals"];
-            if (root.replayOnCommit) {
-                root.replayOnCommit = false;
-                transport.replay({value: transport.lastText});
+        onSnapshotChanged: {
+            if (snapshot.peripherals.status === "ready") {
+                root.addonCommits++;
+                if (root.cycleOnAddonCommit) { root.cycleOnAddonCommit = false; active = false; active = true; }
+                if (root.replayOnAddonCommit) {
+                    root.replayOnAddonCommit = false;
+                    transport.replay({value: transport.lastText});
+                }
+            }
+            if (snapshot.quota.status === "ready") {
+                root.readyCommits++;
+                if (root.changeOnCommit) enabledModules = ["peripherals"];
+                if (root.replayOnCommit) {
+                    root.replayOnCommit = false;
+                    transport.replay({value: transport.lastText});
+                }
             }
         }
     }

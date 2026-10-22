@@ -359,6 +359,35 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(json.loads(service.ListAddons(Message()))['ok'])
         self.assertEqual(len(self.processes), 1)
 
+    def test_identity_poll_is_fast_only_while_a_worker_is_in_flight(self):
+        service = self.fake_service()
+        self.assertTrue(service.watch.isActive())
+        self.assertEqual(service.watch.interval(), self.s.IDLE_WATCH_MS)
+        self.assertGreaterEqual(self.s.IDLE_WATCH_MS, 1000)
+        service.ListAddons(Message())
+        self.assertEqual(service.watch.interval(), self.s.FLIGHT_WATCH_MS)
+        self.processes[0].write(self.frame())
+        self.processes[0].complete()
+        self.assertTrue(self.bus.replies[0]['ok'])
+        self.assertEqual(service.watch.interval(), self.s.IDLE_WATCH_MS)
+        self.assertTrue(service.watch.isActive())
+
+    def test_source_file_event_retires_idle_host_before_the_slow_poll(self):
+        base = self.root / 'source'
+        base.mkdir(mode=0o700)
+        for name in load('addon_worker').SOURCE_NAMES:
+            shutil.copyfile(CODE / name, base / name)
+        service = self.fake_service(base=base)
+        (base / 'addon_io.py').write_bytes((base / 'addon_io.py').read_bytes() + b'\n# changed\n')
+        deadline = time.monotonic() + 2
+        while not service.obsolete and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(.01)
+        self.assertTrue(service.obsolete)
+        self.assertFalse(service.watch.isActive())
+        self.assertFalse(json.loads(service.ListAddons(Message()))['ok'])
+        self.assertEqual(self.processes, [])
+
     def test_failed_to_start_proves_no_commit_and_preserves_first_failure(self):
         service = self.fake_service()
         service.EnableAddon('org.example.battery', 'a' * 64, Message())
