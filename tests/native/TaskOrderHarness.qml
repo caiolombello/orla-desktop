@@ -10,7 +10,7 @@ Fixtures.QmlHarness {
     property bool observerAccepted: false
     property var movedHandler: null
     function identity(app, url) {
-        for (const id of ["org.orla.ModelA", "org.orla.ModelB"])
+        for (const id of ["org.orla.ModelA", "org.orla.ModelB", "org.orla.ModelC"])
             if (app === id || app === id + ".desktop" || url.endsWith(id + ".desktop")) return id;
         return "";
     }
@@ -32,6 +32,20 @@ Fixtures.QmlHarness {
         return JSON.stringify({rows:rows,launcherList:launchers.filter(url=>identity("",String(url))!==""),
             foreignRowCount:sourceDock.tasksModel.count-rows.length,
             foreignLauncherCount:launchers.filter(url=>identity("",String(url))==="").length});
+    }
+    property bool competingMoved: false
+    function armCompeting() {
+        armed = true;
+        movedHandler = function() {
+            if (!armed) return;
+            armed = false;
+            sourceDock.tasksModel.rowsMoved.disconnect(movedHandler);
+            const current = JSON.parse(snapshot()).rows;
+            const c = current.find(row => row.id === "org.orla.ModelC").row;
+            const first = Math.min(...current.map(row => row.row));
+            competingMoved = sourceDock.tasksModel.move(c, first);
+        };
+        sourceDock.tasksModel.rowsMoved.connect(movedHandler);
     }
     function armRefusal() {
         if (armed || observerCalls !== 0) throw new Error("observer_not_fresh");

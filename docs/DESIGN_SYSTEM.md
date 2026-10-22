@@ -160,6 +160,15 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   buttons as children. Name the existing ScrollView and its clipped content
   viewport; do not substitute the card or outer panel bounds for that viewport.
   Focus on any row control reveals the whole row, including its grip and arrows.
+- **App ordering.** Drag the existing app tile; keep its native click, keyboard
+  and context menu. Show one thin accent insertion line before/after the target,
+  without moving icons or saving while held. Crossing an internal gap clears only
+  the line. Escape, leaving the usable viewport, profile/model changes and window
+  loss cancel the intent. Commit one exact identity move on a valid release;
+  never adopt a second movement as the requested destination. Restore the moved
+  tile's existing focus only if the same window still owns it and no newer focus
+  occurred. Keep the menu actions as the keyboard alternative; preserve all dock
+  and event-lane geometry budgets.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the

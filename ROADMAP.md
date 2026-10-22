@@ -984,8 +984,7 @@ Essa falha permanece registrada. A nova espera pela gravação esperada passou
 dez casos simulados; os dois checks hospedados passaram no Source `f2a1086`.
 [Prova e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
 
-**Próximo aceite de C1/UX1:** arrastar aplicativos fixados, mantendo a alternativa
-por menu/teclado existente, sem ativar o app nem salvar durante hover. O
+**C1/UX1 — recuperação necessária ao arraste de apps (15/10):** o
 pré-requisito de recuperação foi reproduzido e corrigido: no TaskManager real,
 recarregar `launcherList` deixava os apps abertos visualmente invertidos após
 uma recusa. A reconciliação agora segue o perfil atual e adia recargas durante
@@ -994,7 +993,7 @@ movimento seguinte, janelas duplicadas e posições de apps não fixados em KWin
 isolado. A correção foi instalada com backup e uma recarga, preservando os 67
 arquivos/modos esperados, configuração, inventário e launcher; bloqueio automático
 continua desativado. O teste nativo reproduzível integra `tests/native/`.
-Isso não qualifica o gesto de arrastar apps, ainda não implementado. A suíte
+Essa prova de recuperação é distinta da prova do gesto abaixo. A suíte
 offscreen encontrou uma falha de popup também reproduzida na base anterior;
 não é uma suíte inteiramente aprovada. [Provas e limites](docs/validation/profiles-0.2.5.md#running-app-order-recovery--15-october-2026).
 Indicador mantido, contagem nativa de setters, renderização do
@@ -1002,6 +1001,28 @@ WidgetStrip e retorno de foco externo continuam sem qualificação neste fluxo.
 A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
 DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte
 [evidência, recuperação e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
+
+**C1/UX1 — arrastar apps na dock (15/10):** o gesto está no fonte, com uma linha
+fina de inserção nos temas claro e escuro. Pressionar e atravessar ícones não
+ativa apps, não move o modelo e não grava configurações; uma soltura válida salva
+uma vez, inclusive no legado. Escape, saída e retorno à dock, mudança de revisão
+e perda de foco cancelam. O ícone movido preserva o foco existente sem tomar um
+foco mais novo. Um movimento concorrente foi reproduzido e agora recusa a
+publicação e restaura a ordem salva. Passaram 12 casos de eventos Qt em KWin
+isolado, a regressão de recuperação e o caso concorrente publicados em
+`tests/native/task_order.py`; 48 testes e um skip por estilo Fusion/KDE, sete
+guardas, design sem problemas, galeria e build. A regressão completa ainda tem a
+mesma falha offscreen de popup da base anterior. O contrato visual foi registrado
+no design system para futuras contribuições de pessoas e IAs. A versão de 68
+arquivos foi instalada com backup e uma recarga; configuração, inventário,
+arquivos protegidos e launcher foram preservados, com bloqueio automático
+desativado.
+[Provas, capturas e limites](docs/validation/profiles-0.2.5.md#app-tile-dragging--15-october-2026).
+
+**Próximo aceite de C1/UX1:** gesto físico no painel instalado, overflow/rolagem,
+monitores adicionais e mudanças de contexto; tratar a falha offscreen de popup
+em separado. C1/UX1 continuam parciais e o goal mantém o roadmap completo,
+incluindo integrações opcionais, ecossistema, distribuição e IA.
 
 ## Prontidão e recomendação de execução
 
