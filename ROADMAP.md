@@ -1,9 +1,31 @@
 # Roadmap do Orla Desktop
 
-Revisão: 13/10/2026. Base auditada: CaioDock 0.2.0, publicado como Orla Dock 0.2.1 alpha, Plasma 6.7.5, Qt 6.11.2, Fedora 44, Wayland. A publicação alpha inclui identidade, instalador, documentação e CI; os marcos abaixo continuam sujeitos aos respectivos critérios de aceite.
+Revisão: 21/10/2026. Base auditada inicial: CaioDock 0.2.0, publicado como Orla Dock 0.2.1 alpha, Plasma 6.7.5, Qt 6.11.2, Fedora 44, Wayland. A publicação alpha inclui identidade, instalador, documentação e CI; os marcos abaixo continuam sujeitos aos respectivos critérios de aceite.
 
 
 **Direção atual de UX:** oferecer uma composição Orla opcional inspirada no macOS que substitui apenas os painéis KDE explicitamente selecionados e mantém recuperação do layout original. Dock Auto Hide, fundo translúcido e popups ancorados são a direção visual. Meta isolada abre Orla Search nesta instalação local após configuração explícita e reversível; o projeto mantém essa atribuição opt-in. QuotaLantern, PeriGauge e demais projetos pertencem ao futuro catálogo de módulos opcionais, desativados por padrão; os adaptadores locais existentes não constituem um marketplace implementado.
+
+**X4/DX4 — base experimental de addons de dados (21/10):** o
+[PR 102](https://github.com/caiolombello/orla-desktop/pull/102), em rascunho e
+dependente do PR 101, contém schemas JSON, aprovação pelos bytes exatos, CLI,
+serviço lazy limitado e registro pelo instalador. Nenhum pacote de produtor é
+distribuído ou ativado por padrão. Passaram 118 testes locais do núcleo/instalador,
+14 chamadas em D-Bus privado e o ciclo real de KPackage/ativação lazy em XDG
+temporário. Essas provas não qualificam a interface instalada. Seletor, foco,
+coordenação entre metadados e leitura de bateria e sua composição nas configurações
+seguem em revisão, para um PR dependente. O formato permanece experimental;
+SDK estável, catálogo, código de terceiros e pagamentos continuam pendentes.
+[Evidência e limites](docs/validation/addon-host-core.md).
+
+**I1 — exportação opcional do PeriGauge (21/10):** o
+[PR 4 do produtor](https://github.com/caiolombello/perigauge/pull/4), em rascunho,
+adiciona consentimento separado, projeção mínima e revogação explícita. A revisão
+independente aprovou o Source; no checkout integrado passaram 83 testes de
+biblioteca, formatação, build e 12 invocações privadas da CLI. As quatro fixtures
+produzidas também passaram pelo parser/store do Orla. Coleta normal real,
+hardware, notificações, atualização do serviço instalado e desinstalação continuam
+sem qualificação. A instalação local e suas permissões permanecem inalteradas;
+I1/X4/DX4 seguem parciais, e QuotaLantern permanece uma integração opcional separada.
 
 **Histórico de validação anterior ao modo Meta:** o launcher compacto de `43905da` passou ativação por Ctrl+Alt+Meta+O, consulta, ↓ e Escape com retorno à mesma janela de teste em dois processos independentes, em uma tela Wayland. Isso não qualifica Enter/execução, provedores reais ou múltiplos monitores. Dock Auto Hide e popups separados do dock foram observados nesta máquina; o Menu Orla isolado passou hover, duas aberturas e ↓/Escape em DPR 2. O helper final sem modificações passou aplicar → desativar → restaurar normalmente o layout original → reaplicar em uma tela Plasma 6.7.5/Wayland com DPR 2, preservando o dock independente e verificando a ordem dos cinco módulos. O ciclo não mostrou novo crash, mas crashes intermitentes anteriores em desligamentos rápidos do Plasma não foram resolvidos pela proteção contra o limite de partidas. Outras telas/ambientes e o aceite completo continuam abertos. Os assets publicados 0.2.9 permanecem inalterados e não incluem launcher, barra ou helper de layout. Os checklists abaixo mantêm o aceite completo, incluindo trabalho ainda não implementado.
 

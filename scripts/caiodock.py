@@ -24,6 +24,10 @@ THEME_SERVICE_NAME = "org.orla.Themes.service"
 THEME_SERVICE_MARKER = "# Managed by Orla Dock theme import\n"
 THEME_RUNTIME_FILES = {"contents/code/" + name for name in
                        ("theme_service.py", "theme_file.py", "theme_format.py")}
+ADDON_SERVICE_NAME = "org.orla.Addons.service"
+ADDON_SERVICE_MARKER = "# Managed by Orla Dock addon host\n"
+ADDON_RUNTIME_FILES = {"contents/code/" + name for name in
+                       ("addon_service.py", "addon_worker.py", "addon_format.py", "addon_io.py", "addon_store.py")}
 MINIMUM_PLASMA = (6, 7)
 OPTIONAL_INTEGRATION_DEPENDENCIES = {"busctl", "PySide6.QtDBus", "sessão D-Bus do usuário"}
 
@@ -184,6 +188,81 @@ def _configure_theme_service(data_home: Path, *, available: bool) -> bool:
     return True
 
 
+def _check_addon_directories(directory: Path) -> None:
+    # Check before resolving: resolving first would silently adopt linked parents.
+    absolute = directory.absolute()
+    for parent in reversed((absolute, *absolute.parents)):
+        try:
+            mode = parent.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISDIR(mode):
+            raise PackageError("refusing an unsafe addon service/runtime directory")
+
+
+def _addon_service(data_home: Path) -> tuple[Path, bytes]:
+    bridge = data_home.absolute() / "plasma/plasmoids" / PACKAGE_ID / "contents/code/addon_service.py"
+    if any(character in str(bridge) + sys.executable for character in ("\n", "\r", "\x00")):
+        raise PackageError("addon activation path contains unsupported characters")
+    if not Path(sys.executable).is_absolute():
+        raise PackageError("addon activation requires an absolute Python executable")
+    command = shlex.join([sys.executable, "-I", "-B", str(bridge), "--serve"])
+    content = ADDON_SERVICE_MARKER + "[D-BUS Service]\nName=org.orla.Addons\nExec=" + command + "\n"
+    return data_home / "dbus-1/services" / ADDON_SERVICE_NAME, content.encode("utf-8")
+
+
+def _check_addon_service(data_home: Path) -> tuple[Path, bytes]:
+    service, expected = _addon_service(data_home)
+    _check_addon_directories(service.parent)
+    try:
+        descriptor = os.open(service, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return service, expected
+    except OSError as exc:
+        raise PackageError("preserving an unreadable or symbolic-link addon service") from exc
+    info = os.fstat(descriptor)
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or info.st_uid != os.getuid() or info.st_mode & 0o022):
+        os.close(descriptor)
+        raise PackageError("preserving an unsafe addon service")
+    with os.fdopen(descriptor, "rb") as stream:
+        if stream.read(len(expected) + 1) != expected:
+            raise PackageError("preserving an addon service not exactly managed by Orla Dock")
+    return service, expected
+
+
+def _configure_addon_service(data_home: Path, *, available: bool) -> bool:
+    service, expected = _check_addon_service(data_home)
+    if not available:
+        if service.exists():
+            service.unlink()
+            return True
+        return False
+    installed = data_home / "plasma/plasmoids" / PACKAGE_ID
+    _check_addon_directories(installed / "contents/code")
+    for name in ADDON_RUNTIME_FILES:
+        try:
+            info = (installed / name).lstat()
+        except FileNotFoundError as exc:
+            raise PackageError("installed addon runtime is incomplete") from exc
+        if not stat.S_ISREG(info.st_mode):
+            raise PackageError("installed addon runtime must contain regular non-link files")
+    if service.exists():
+        return False
+    service.parent.mkdir(parents=True, exist_ok=True)
+    # Publish complete bytes atomically without replacing a concurrent mapping.
+    descriptor, temporary = tempfile.mkstemp(prefix=".org.orla.Addons-", dir=service.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(expected)
+        os.chmod(temporary, 0o644)
+        _check_addon_service(data_home)
+        os.link(temporary, service, follow_symlinks=False)
+    finally:
+        os.unlink(temporary)
+    return True
+
+
 def _archive_metadata(package: Path) -> tuple[dict, set[str]]:
     if package.is_symlink() or not package.is_file():
         raise PackageError(f"package archive must be a regular file: {package}")
@@ -195,6 +274,10 @@ def _archive_metadata(package: Path) -> tuple[dict, set[str]]:
                 mode = (info.external_attr >> 16) & 0o170000
                 if name.is_absolute() or ".." in name.parts or mode == 0o120000:
                     raise PackageError(f"unsafe path in package archive: {info.filename}")
+                if name.as_posix() in ADDON_RUNTIME_FILES:
+                    if (info.filename != name.as_posix() or info.is_dir()
+                            or mode not in (0, stat.S_IFREG) or info.filename in names):
+                        raise PackageError("unsafe or duplicate addon runtime archive member")
                 names.add(info.filename)
             required = {"metadata.json", "LICENSE", "contents/ui/main.qml", "contents/code/integrations.py"}
             if not required.issubset(names):
@@ -289,10 +372,15 @@ def install(package: Path, data_home: Path | None = None, *, with_integrations: 
     thematic = "contents/code/theme_service.py" in members
     if thematic and not THEME_RUNTIME_FILES.issubset(members):
         raise PackageError("package archive has an incomplete theme runtime")
+    addons = "contents/code/addon_service.py" in members or "contents/code/addon_worker.py" in members
+    if addons and not ADDON_RUNTIME_FILES.issubset(members):
+        raise PackageError("package archive has an incomplete addon runtime")
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
+    _check_addon_service(home)
     _check_service_path(home)
     _check_theme_service(home)
     theme_missing = _theme_dependencies() if thematic else []
+    addon_missing = _theme_dependencies() if addons else []
     integrations_available = _require_install_runtime(with_integrations=with_integrations)
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
     action = "--upgrade" if installed.exists() else "--install"
@@ -306,12 +394,21 @@ def install(package: Path, data_home: Path | None = None, *, with_integrations: 
         print("orla: importação de temas indisponível: " + ", ".join(theme_missing)
               + "; dock instalado; somente o registro de temas próprio anterior foi removido, se existia. "
                 "Instale as dependências e reinstale o pacote para ativar a importação.", file=sys.stderr)
+    try:
+        addon_changed = _configure_addon_service(home, available=addons and not addon_missing)
+    except (OSError, PackageError) as exc:
+        raise PackageError("dock instalado; registro de addons falhou; pacote não foi revertido: " + str(exc)) from exc
+    if addon_missing:
+        print("orla: addons indisponíveis: " + ", ".join(addon_missing)
+              + "; dock instalado; somente o registro de addons próprio anterior foi removido, se existia. "
+                "Instale as dependências e reinstale o pacote para registrar o serviço lazy.", file=sys.stderr)
     integration_registered = integrations_available and (installed / "contents/code/integrations.py").is_file()
     if integration_registered:
         enable_integrations(home)
-    refresh_needed = integration_registered or theme_changed or (thematic and not theme_missing)
+    refresh_needed = (integration_registered or theme_changed or (thematic and not theme_missing)
+                      or addon_changed or (addons and not addon_missing))
     if refresh_needed or _session_bus_available():
-        # Only refresh lazy activation mappings; never start either service.
+        # Only refresh lazy activation mappings; never start services.
         busctl = shutil.which("busctl")
         try:
             result = subprocess.run([busctl, "--user", "--timeout=8s", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
@@ -320,8 +417,8 @@ def install(package: Path, data_home: Path | None = None, *, with_integrations: 
         except (OSError, subprocess.TimeoutExpired):
             refreshed = False
         if not refreshed and refresh_needed:
-            print("orla: dock instalado; a sessão D-Bus não atualizou os registros locais de temas e integrações locais opcionais. "
-                  "Execute doctor na sessão KDE e reinstale para temas; reinstale com --with-integrations para integrações locais opcionais.", file=sys.stderr)
+            print("orla: dock instalado; a sessão D-Bus não atualizou os registros locais de temas, addons e integrações locais opcionais. "
+                  "Execute doctor na sessão KDE e reinstale para temas e addons; reinstale com --with-integrations para integrações locais opcionais.", file=sys.stderr)
     return action
 
 
@@ -341,6 +438,7 @@ def enable_integrations(data_home: Path) -> Path:
 
 def uninstall(data_home: Path | None = None) -> bool:
     home = data_home or Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")).expanduser()
+    _check_addon_service(home)
     service = _check_service_path(home)
     _check_theme_service(home)
     installed = home / "plasma" / "plasmoids" / PACKAGE_ID
@@ -348,11 +446,15 @@ def uninstall(data_home: Path | None = None) -> bool:
     if tool:
         env = environment_with(XDG_DATA_HOME=str(home))
         run_checked([tool, "--type", "Plasma/Applet", "--remove", PACKAGE_ID], env)
-    # A failed package removal leaves both activation mappings intact.
+    # A failed package removal leaves all activation mappings intact.
     try:
         _configure_theme_service(home, available=False)
     except (OSError, PackageError) as exc:
         raise PackageError("pacote removido ou ausente; registro de temas preservado: " + str(exc)) from exc
+    try:
+        _configure_addon_service(home, available=False)
+    except (OSError, PackageError) as exc:
+        raise PackageError("pacote removido ou ausente; registro de addons preservado: " + str(exc)) from exc
     if service.exists():
         service.unlink()
     # Do not remove Plasma configuration or any project cache/state.

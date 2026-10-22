@@ -54,6 +54,34 @@ jobs:
           unset DISPLAY WAYLAND_DISPLAY AT_SPI_BUS_ADDRESS SESSION_MANAGER
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_updates_desktop*.py' -v
 
+      - name: Run portable addon SDK, service and installer tests with isolated user state
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          ORLA_ADDONS_TEST_ROOT=$(mktemp -d "$RUNNER_TEMP/orla-addons-tests.XXXXXX")
+          trap 'rm -rf -- "$ORLA_ADDONS_TEST_ROOT"' EXIT
+          mkdir -p "$ORLA_ADDONS_TEST_ROOT"/{home,config,cache,data,state,runtime,tmp}
+          timeout --signal=TERM --kill-after=10s 180s env -i \
+            PATH=/usr/bin:/bin \
+            HOME="$ORLA_ADDONS_TEST_ROOT/home" \
+            XDG_CONFIG_HOME="$ORLA_ADDONS_TEST_ROOT/config" \
+            XDG_CONFIG_DIRS="$ORLA_ADDONS_TEST_ROOT/config" \
+            XDG_CACHE_HOME="$ORLA_ADDONS_TEST_ROOT/cache" \
+            XDG_DATA_HOME="$ORLA_ADDONS_TEST_ROOT/data" \
+            XDG_DATA_DIRS="$ORLA_ADDONS_TEST_ROOT/data" \
+            XDG_STATE_HOME="$ORLA_ADDONS_TEST_ROOT/state" \
+            XDG_RUNTIME_DIR="$ORLA_ADDONS_TEST_ROOT/runtime" \
+            TMPDIR="$ORLA_ADDONS_TEST_ROOT/tmp" TMP="$ORLA_ADDONS_TEST_ROOT/tmp" TEMP="$ORLA_ADDONS_TEST_ROOT/tmp" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=$ORLA_ADDONS_TEST_ROOT/absent-session" \
+            DBUS_SYSTEM_BUS_ADDRESS="unix:path=$ORLA_ADDONS_TEST_ROOT/absent-system" \
+            QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion \
+            QT_QPA_PLATFORMTHEME= PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 \
+            PYTHONPATH="$PWD:$PWD/tests" \
+            "$ORLA_CI_PYTHON" -B -s -m unittest \
+              test_addons test_addon_store test_addon_worker test_addon_service test_package_cli -v
+
       - name: Run portable tests
         run: |
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v

@@ -1,6 +1,6 @@
 # Extensões, temas e integrações de IA
 
-> **Proposta de ecossistema.** SDK, runtime de plugins e loja ainda são futuros. Temas experimentais e adaptadores locais já têm consumidores; consulte suas capacidades atuais no roadmap e nos guias. Os contratos propostos abaixo precisam de especificação versionada e testes antes de terceiros dependerem deles.
+> **Ecossistema em construção.** Há um núcleo experimental para complementos JSON de bateria, com schemas, CLI e serviço próprio. Sua interface e distribuição ainda estão em integração. SDK estável, execução de plugins de terceiros e loja continuam futuros. Os demais contratos propostos abaixo não são APIs publicadas.
 
 ## Objetivo
 
@@ -118,7 +118,80 @@ Assinatura ou sessão num produto CLI não significa autorização para automati
 - Respostas do modelo são conteúdo não confiável: não executá-las como shell, QML, JavaScript ou chamadas D-Bus. Converter para ações tipadas, conferir permissões e pedir confirmação conforme o efeito.
 - Sem telemetria de prompts por padrão. Se for considerada uma opção de diagnóstico, documentar conteúdo, destino, retenção e desligamento; não ligar silenciosamente.
 
-## SDK e contrato do host — proposta, não API publicada
+## Complementos de bateria — núcleo experimental disponível
+
+O formato `0.1-experimental` aceita somente metadados e uma fonte de dados
+normalizados. O renderer é `peripheral-battery`; a apresentação pertence ao
+Orla. O pacote não pode fornecer comandos, scripts, QML, JavaScript, caminhos
+de entrada ou ícones remotos. Sua origem, autoria e licença são declarações;
+o SHA-256 verifica os bytes aprovados, sem autenticar o publicador.
+
+Os contratos atuais estão nos schemas de [manifesto](../addons/schema/manifest-0.1.schema.json)
+e [leituras](../addons/schema/peripherals-0.1.schema.json). O parser do host
+também aplica limites de bytes/profundidade, rejeita chaves repetidas e confere
+relações entre campos que o schema sozinho não expressa. O
+[exemplo sintético](../addons/fixtures/peripherals-0.1.json) não é uma leitura
+de hardware nem um complemento instalado por padrão.
+
+No checkout, a CLI de desenvolvimento permite inspecionar e empacotar um
+manifesto local. Substitua os caminhos pelos seus; os diretórios de saída
+devem ser absolutos. `pack` não sobrescreve um arquivo existente.
+
+```sh
+python3 scripts/addons.py inspect file:///caminho/complemento.json
+python3 scripts/addons.py pack file:///caminho/complemento.json --output /caminho/dist
+python3 scripts/addons.py list
+```
+
+Instalar usa o SHA-256 dos **bytes exatos** mostrado por `inspect`. Um arquivo
+reformatado precisa de nova inspeção. Nos exemplos seguintes, substitua
+`SHA256_APROVADO` pelo digest completo de 64 caracteres e o ID pelo ID real:
+
+```sh
+python3 scripts/addons.py install file:///caminho/complemento.json --expected-sha256 SHA256_APROVADO
+python3 scripts/addons.py enable org.exemplo.bateria --expected-current-sha256 SHA256_APROVADO
+python3 scripts/addons.py disable org.exemplo.bateria --expected-current-sha256 SHA256_APROVADO
+python3 scripts/addons.py rollback org.exemplo.bateria --expected-current-sha256 SHA256_APROVADO
+python3 scripts/addons.py remove org.exemplo.bateria --expected-current-sha256 SHA256_APROVADO
+```
+
+Cada linha é uma operação independente. Depois de atualizar ou voltar uma
+versão, consulte `list` para obter o digest atual antes da próxima operação.
+Rollback exige uma versão anterior retida.
+Instalação, atualização e rollback deixam o complemento desativado. Ativação
+exige aprovação separada do pacote atual; só um provedor de bateria pode ficar
+ativado. A visibilidade no perfil e o compartilhamento autorizado no aplicativo
+produtor são escolhas adicionais. Nenhum desses comandos inicia o produtor.
+
+O namespace do manifesto determina somente
+`$XDG_STATE_HOME/<namespace>/exports/orla-peripherals-v1.json`, com o fallback
+XDG habitual. Orla não consulta caches privados do produtor por esse contrato.
+As leituras têm prazos de validade explícitos, sem nomes, aliases ou IDs de
+hardware. Percentual zero, nível aproximado, estimativa, ausência e observação
+antiga permanecem distintos. `snapshot` permite conferir a projeção passiva
+pela CLI depois de uma ativação explícita.
+
+O armazenamento em `$XDG_DATA_HOME/orla-desktop/addons` preserva preferências
+ao remover um pacote. Esta versão limita o registro a 32 IDs e retém até
+128 arquivos/8 MiB; remover não libera automaticamente essa capacidade.
+Uma falha de publicação pode deixar um arquivo desconhecido e bloquear o
+registro até recuperação explícita. Não há adoção ou reparo automático.
+Uma falha com `committed: true` exige reler o estado. No transporte do serviço,
+`null` indica resultado desconhecido e também exige releitura. Não repetir uma
+mutação automaticamente. As recusas da CLI usam códigos finitos; uma falha
+depois da publicação não promete que a operação foi desfeita.
+
+O serviço `org.orla.Addons` é separado da ponte legada. Seus métodos retornam
+JSON em uma string, com prazo e worker pertencente ao host. O núcleo passou
+por [testes privados e chamadas reais em barramento isolado](validation/addon-host-core.md); isso não qualifica
+a instalação na sessão do usuário, a interface completa ou a coleta real do
+produtor. O fluxo nas configurações, a extração do PeriGauge e sua validação
+local continuam em integração. QuotaLantern e FalaTrace mantêm o caminho
+experimental opcional descrito acima.
+
+## SDK de execução de provedores — proposta, não API publicada
+
+Esta proposta futura não é o formato de complemento JSON descrito acima.
 
 Manter o primeiro contrato reduzido: metadados, lista de capacidades solicitadas, contribuição de dados e ações tipadas. O host é dono do ciclo de vida, UI, configuração e permissões. Não exportar objetos Qt, componentes internos, paths de configuração ou chamadas D-Bus privadas.
 
