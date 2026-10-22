@@ -54,7 +54,7 @@ O editor usa três colunas/painéis adaptáveis: lista de módulos e layout; pr�
 
 Controles da primeira experiência personalizável: escala e tamanho; alinhamento, margem e espaçamento; forma/opacidade; tema e cores de realce; ordem e visibilidade dos widgets; animação; posição/monitor; itens fixados; módulos habilitados. Evitar controles que não possam ser mantidos nem validados. Perfil selecionado sempre visível e reversível.
 
-Presets iniciais: **Essencial** (dock e apps), **Maré** (dock com widgets), **Estúdio** (dock, barra compacta e foco em produtividade) e **Jogo** (dock/media/Steam). A composição **Inspirado no macOS** é uma escolha visual opcional e separada dos presets; reutiliza serviços e fluxos KDE. Meta → Orla Search exige escolha explícita e restauração do atalho anterior; ainda não está qualificada. Todos mostram a lista de mudanças; substituem somente os painéis explicitamente selecionados e preservam recuperação do layout original.
+Presets iniciais: **Essencial** (dock e apps), **Maré** (dock com widgets), **Estúdio** (dock, barra compacta e foco em produtividade) e **Jogo** (dock/media/Steam). A composição **Inspirado no macOS** é uma escolha visual opcional e separada dos presets; reutiliza serviços e fluxos KDE. Meta → Orla Search tem um fluxo explícito no fonte, descrito abaixo, e ainda exige qualificação própria. Todos mostram a lista de mudanças; substituem somente os painéis explicitamente selecionados e preservam recuperação do layout original.
 
 Importar/exportar configuração em arquivo declarativo versionado (por exemplo, JSON), com prévia de diferenças, validação de esquema e migração conhecida. Não importar segredos, tokens, conteúdo de calendário nem caminhos privados por padrão. Arquivo inválido não sobrescreve configuração válida. Permitir exportação seletiva de aparência/layout sem dados pessoais.
 
@@ -75,6 +75,27 @@ Desenvolvedores podem distribuir extensões gratuitas, cobrar licença fora do c
 ## Launcher e integrações de IA
 
 O launcher começa por busca e ações determinísticas. Resultados mostram origem (KRunner, Orla, extensão), atalho, escopo e disponibilidade. Digitar apenas consulta; Enter/clique executa o item selecionado. Nenhuma ação destrutiva ou externa roda como efeito colateral de completar texto.
+
+Windows/Meta é uma escolha independente de tema e preset. No fonte, a pessoa
+inicia `build/launcher/orla-launcher --managed-shortcuts`: uma única instância usa
+a ação persistente `org.orla.Launcher` / `orla-search-open`, inicialmente com
+Ctrl+Alt+Meta+O quando disponível. Com o launcher já ativo, consulta
+`python3 scripts/orla.py search-shortcut status` (somente leitura) e escolhe
+`enable` para acrescentar Meta isolada; iniciar o launcher não toma Meta.
+`disable` ou `recover` devolvem apenas Meta à ação anterior registrada e mantêm
+os demais atalhos atuais, inclusive alterações feitas depois da ativação.
+Um novo proprietário de Meta bloqueia a recuperação e mantém seu registro.
+
+O [fluxo completo e os limites](../launcher/README.md#windowsmeta-para-orla-search--escolha-explícita)
+incluem a necessidade do launcher ativo, ausência de autostart/instalador de
+serviço e recusa de contextos personalizados. KDE não oferece escrita condicional
+(CAS): uma edição concorrente na mesma ação entre consulta e gravação pode ser
+sobrescrita. A revisão local de 13/10 passou sete CTests e verificou Meta,
+consulta/↓/Enter de fixture própria, reabertura, Escape/foco, atalho alternativo,
+reinício do serviço e restauração do KRunner no Wayland, com DPR observado 1,45.
+Digitação antes de o foco chegar ainda precisa de qualificação: o probe sem pausa
+perdeu a primeira letra. A release
+pública 0.2.9 permanece sem launcher; não há nova API pública de extensões.
 
 IA é uma capacidade opt-in invocada para uma tarefa identificável, não uma tela de chat obrigatória nem dependência de dock. Em 0.3, spikes devem validar APIs e CLIs oficiais, elegibilidade, consentimento, custo, armazenamento de credenciais e limites de protocolo antes do desenho de integração. A integração MVP pode chegar a partir de 0.5 como módulo opcional e isolado; não depende da estabilização de um SDK de plugins de terceiros. Vias possíveis:
 

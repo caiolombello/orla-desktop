@@ -322,6 +322,11 @@ def parser() -> argparse.ArgumentParser:
     else:
         import panel_layout
     panel_layout.add_parser(subparsers)
+    if __package__:
+        from . import search_shortcut
+    else:
+        import search_shortcut
+    search_shortcut.add_parser(subparsers)
     return result
 
 
@@ -346,6 +351,15 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 return panel_layout.cli(args)
             except panel_layout.LayoutError as exc:
+                raise PackageError(str(exc)) from exc
+        elif args.command == "search-shortcut":
+            if __package__:
+                from . import search_shortcut
+            else:
+                import search_shortcut
+            try:
+                return search_shortcut.cli(args)
+            except search_shortcut.ShortcutError as exc:
                 raise PackageError(str(exc)) from exc
         else:
             if args.timeout is not None and args.timeout <= 0:
