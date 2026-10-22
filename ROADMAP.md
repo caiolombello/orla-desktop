@@ -698,6 +698,21 @@ builder continua `caller_assertion_unverified`, R2 permanece parcial e os assets
 públicos permanecem inalterados. Consulte o
 [comando e cobertura](launcher/README.md#inventário-direto-de-staging-e-arquivos-do-host--experimental).
 
+**R2 — política de grafo de catálogo no fonte (14/10):** o módulo interno
+`launcher/inventory_policy.py` resolve uma projeção finita de dependências
+fornecidas. Preserva ocorrências e ciclos, trata aliases e contradições como
+estados explícitos, propaga incerteza por raiz e prioriza partes necessárias
+antes das opcionais. Limites produzem fronteiras incompletas; uma ausência no
+catálogo não é declarada ausência no host. Passaram 22 testes offline e os
+56 testes existentes do pacote; a nova suíte entra na CI portátil. Regressões
+causais cobrem aliases, contexto compartilhado e declarações canônicas que
+antes podiam produzir uma conclusão incorreta. Host transitivo, loader, ABI
+e lifecycle permanecem `UNRUN` nessa prova. A sequência é ligar o coletor real
+delimitado, entregar o ciclo de instalação/atualização/remoção em usuário limpo
+e retomar os fluxos visíveis de busca/mídia. Inventário direto 0.1 e arquivos
+0.2/0.3 permanecem iguais; R2 continua parcial. Consulte a
+[política e seus limites](launcher/README.md#política-de-grafo-sobre-catálogo-fornecido--experimental).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
