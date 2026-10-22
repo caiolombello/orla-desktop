@@ -901,14 +901,99 @@ qualificada; suas tentativas e falhas de seletores permanecem registradas.
 Não há aceite de ponteiro, foco espontâneo, pixels nativos ou importação/seleção
 gerenciada na sessão real. Consulte o [registro e capturas](docs/validation/appearance-0.2.3.md#compact-preset-chooser--15-october-2026).
 
-**Próxima entrega de C1/UX1:** reorganizar widgets por arraste na aba Widgets,
-conservando as setas e o teclado. O gesto deve mostrar o destino e salvar uma vez
-apenas ao soltar; cancelar, sair da lista ou trocar de perfil/revisão não escreve.
-Reutilizar o writer atual, sem migrar preferências legadas ou criar outro formato.
-Antes de qualificar o arraste nativo, estabelecer a entrada precisa por ponteiro;
-a Tab legado→temas e a avaliação visual nativa também seguem abertas. Conferir
-350/420 px, ambos os esquemas, foco, cancelamento e preservação de outros perfis.
-C1, UX1 e DX2 seguem parciais; os demais gates do roadmap continuam ativos.
+**C1/UX1 — ordenar widgets por arraste, incremento de 15/10:** perfis gerenciados
+agora têm alças na aba Widgets, com destino visível e um commit guardado ao soltar.
+Não há gravação durante o movimento. Setas, visibilidade e prévia de Aparência
+continuam independentes. Clique, destino original, soltura fora, Escape,
+importação, readonly ou troca de perfil/revisão não gravam uma ordem antiga. O
+foco volta à alça reconstruída somente se o gesto ainda o possui. O teste KDE
+revelou que soltar durante a animação de fechamento ainda podia salvar; a edição
+agora cancela o gesto antes da animação terminar. As duas falhas iniciais foram
+preservadas e a regressão passou. A suíte final teve 100 aprovações e um skip
+Wayland em cada estilo Fusion/KDE, além de sete guardas e 70 PNGs de galeria.
+Cinco casos também entram na CI portátil pelo fixture existente de Settings.
+Oito capturas claras/escuras em 350/420 px mostram alças, rótulos e destino, sem
+alterar fontes, alvos ou orçamento. A instalação inicial passou com backup e um
+único stop/start; inventário, launcher e 132 arquivos/modos protegidos ficaram
+iguais. Isso ainda não prova arraste físico no popup instalado. Consulte
+[o registro e as capturas](docs/validation/profiles-0.2.5.md#widget-grip-reordering--15-october-2026).
+
+**Diagnóstico posterior de C1/UX1:** um pacote privado, alterado apenas pelas
+sondas em `DockView.qml`, recebeu arrastes reais com a dock temporariamente
+sempre visível. A tentativa final reutilizou o perfil sintético deixado por
+tentativas falhas e reportou troca/reversão e retorno ao legado. Não foram
+guardados todos os documentos intermediários, e somente o indicador reverso tem
+uma amostra fresca de destino válida. Essa evidência permanece instrumentada;
+contagem de gravações continua sendo evidência offscreen. A limpeza posterior
+falhou e deixou o Plasma parado. Uma recuperação separada devolveu o desktop,
+removeu somente a chave própria e confirmou sua ausência no runtime/disco, mapa
+de configuração original, pacote real, inventário, 132 hashes protegidos e
+launcher preservados. As falhas anteriores permanecem registradas.
+
+Os dois jobs do PR 75 passaram em `7c65859`. A falha anterior do PR 74 continua
+preservada: um experimento privado com o ELF KRunner 6.31 demonstrou que finalizar
+os workers entre `quit()` e as conexões tardias de limpeza produz o mesmo erro de
+destruição em 500 ms. Isso prova um mecanismo suficiente, sem reconstruir a ordem
+real da CI anterior. Nenhuma correção de framework, ampliação de prazo ou remoção
+da guarda foi adotada. A correção no proprietário do framework exige build e
+regressão próprias.
+
+**Entrada nativa de C1/UX1 — 15/10:** no pacote real, uma nova visita revelou a
+dock em autohide, abriu Settings por um clique de ponteiro virtual nas coordenadas
+acessíveis atuais, fechou com Escape e confirmou o recolhimento. A observação
+usou getters do KWin, sem instrumentar o applet. O diagnóstico corrigiu limitações
+do roteiro de input: geometria real do painel, contatos de borda distintos e
+movimentos relativos observáveis. As tentativas anteriores e seus timeouts
+permanecem registradas. Configuração, pacote, processo Plasma, launcher e 132
+hashes protegidos ficaram iguais; dispositivos e observador foram removidos e
+a acessibilidade foi restaurada. Nenhum perfil foi criado e não houve mudança
+no produto. Consulte a [prova delimitada](docs/validation/profiles-0.2.5.md#production-pointer-entry--15-october-2026).
+
+Uma visita adicional selecionou Widgets por clique e mediu as sete alças
+desativadas do legado. Só a primeira estava visível; a geometria do viewport
+não foi exposta pela acessibilidade. Escape, recolhimento e ausência posterior
+dos controles do popup foram verificados, sem mudar a configuração.
+
+**Acessibilidade e foco das linhas — instalados:** a inspeção seguinte encontrou
+o painel de rolagem, mas as linhas não tinham grupos acessíveis e o foco em uma
+opção podia deixar parte da linha cortada. A correção nomeia o viewport existente,
+agrupa cada widget e revela a linha inteira ao focar checkbox ou setas. Passaram
+63 testes e um skip por estilo Fusion/KDE, sete guardas e design sem problemas;
+as oito capturas de widgets permaneceram iguais em pixels. `aad9ca1` foi instalado
+com backup e uma recarga controlada, preservando o mapa de configuração,
+inventário, arquivos/modos protegidos e launcher. Em Wayland, depois do foco
+público no relógio, Tab focou Pomodoro e as duas linhas completas ficaram dentro
+do viewport real nomeado. Escape, ausência dos cabeçalhos do popup e recolhimento
+passaram. Perfis novos, arraste/reversão e demais caminhos de teclado continuam
+abertos. O diagnóstico também
+passou a usar os cabeçalhos do popup para abertura/fechamento, pois a aba Widgets
+fica selecionada ao reabrir e não contém o botão Cancelar de Aparência.
+
+**Arraste de widgets qualificado no pacote instalado — 15/10:** um episódio
+novo criou um único perfil pela interface, revelou e mediu as duas linhas
+completas e realizou um arraste de ida e outro de volta. O documento completo
+mudou somente a ordem do primeiro par e a reversão recuperou inclusive os bytes
+originais. A seleção de legado preservou o registro; Escape e recolhimento
+passaram. A limpeza removeu só a chave temporária com uma recarga controlada e
+confirmou o mapa original inteiro, ausência da chave em disco/runtime, pacote,
+inventário, arquivos/modos protegidos e launcher. O pacote estava sem
+instrumentação e em autohide normal, numa saída Wayland com escala fracionária.
+A tentativa anterior falhou antes de ack/arraste por ler o valor vazio anterior;
+o perfil apareceu depois e foi removido em recuperação independente verificada.
+Essa falha permanece registrada. A nova espera pela gravação esperada passou
+dez casos simulados; os dois checks hospedados passaram no Source `f2a1086`.
+[Prova e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
+
+**Próximo aceite de C1/UX1:** arrastar aplicativos fixados, mantendo a alternativa
+por menu/teclado existente, sem ativar o app nem salvar durante hover. Antes de
+implementar, verificar a recuperação da ordem manual do TaskManager se o save
+for recusado; pela leitura do [contrato KDE 6.7.5](https://github.com/KDE/plasma-workspace/blob/cc1ab7963f94a9b76836412855caed6b94066188/libtaskmanager/tasksmodel.h#L887-L911),
+recarregar apenas `launcherList` ainda não é uma recuperação comprovada para
+apps em execução. Indicador mantido, contagem nativa de setters, renderização do
+WidgetStrip e retorno de foco externo continuam sem qualificação neste fluxo.
+A Tab legado→temas e a avaliação visual nativa também seguem abertas. C1, UX1 e
+DX2 continuam parciais; os demais gates do roadmap permanecem ativos. Consulte
+[evidência, recuperação e limites](docs/validation/profiles-0.2.5.md#production-managed-profile-drag-and-reversal--15-october-2026).
 
 ## Prontidão e recomendação de execução
 

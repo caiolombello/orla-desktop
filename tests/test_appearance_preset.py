@@ -37,6 +37,16 @@ class AppearancePresetTests(unittest.TestCase):
     settle = fixtures.ProfilesDockTests.settle
     flat = fixtures.ProfilesDockTests.flat
 
+    widget_drag_points = fixtures.ProfilesDockTests.widget_drag_points
+    accessible_named = fixtures.ProfilesDockTests.accessible_named
+    test_widget_regions_and_rows_are_named_in_the_accessible_tree = fixtures.ProfilesDockTests.test_widget_regions_and_rows_are_named_in_the_accessible_tree
+    test_focused_widget_controls_reveal_the_whole_row_in_a_short_viewport = fixtures.ProfilesDockTests.test_focused_widget_controls_reveal_the_whole_row_in_a_short_viewport
+    test_widget_drag_restores_grip_focus_after_delegate_rebuild = fixtures.ProfilesDockTests.test_widget_drag_restores_grip_focus_after_delegate_rebuild
+    test_widget_drag_cannot_initialize_legacy_or_write_a_readonly_profile = fixtures.ProfilesDockTests.test_widget_drag_cannot_initialize_legacy_or_write_a_readonly_profile
+    test_widget_drag_commit_preserves_newer_unrelated_focus = fixtures.ProfilesDockTests.test_widget_drag_commit_preserves_newer_unrelated_focus
+    test_widget_drag_click_self_outside_and_escape_leave_saved_order_unchanged = fixtures.ProfilesDockTests.test_widget_drag_click_self_outside_and_escape_leave_saved_order_unchanged
+    test_widget_drag_invalidated_while_held_never_writes_a_stale_order = fixtures.ProfilesDockTests.test_widget_drag_invalidated_while_held_never_writes_a_stale_order
+
     def open_catalog(self):
         disclosure = self.owned_item('appearancePresetCatalogDisclosure')
         self.assertIsNotNone(disclosure)

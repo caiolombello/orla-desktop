@@ -9,10 +9,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DI
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl, Qt, QPointF, QCoreApplication, QEvent
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 
 
 class ProfilesDockTests(unittest.TestCase):
@@ -85,6 +85,99 @@ class ProfilesDockTests(unittest.TestCase):
         while not predicate() and time.monotonic() < deadline:
             QTest.qWait(10)
         self.assertTrue(predicate(), "Owned model must settle before its next gesture")
+
+    def widget_drag_points(self):
+        self.popup.setProperty("heightBudget", 420)
+        if not self.popup.property("visible"):
+            self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(30)  # Settle the short tab layout before revealing complete rows.
+        grip = self.owned_item("widgetDragclock")
+        target = self.owned_item("widgetDragpomodoro")
+        self.assertIsNotNone(grip, "The row must expose its real pointer grip")
+        self.assertIsNotNone(target)
+        self.focus(target)
+        self.focus(grip)
+        QTest.qWait(30)
+        start = grip.mapToScene(QPointF(grip.width() / 2, grip.height() / 2)).toPoint()
+        end = target.mapToScene(QPointF(target.width() / 2, target.height() * .75)).toPoint()
+        self.assertGreaterEqual(start.y(), 0)
+        self.assertLess(end.y(), self.window.height())
+        return start, end
+
+    def accessible_named(self, name, within=None):
+        root = within or QAccessible.queryAccessibleInterface(self.window)
+        self.assertIsNotNone(root)
+        pending, matches, visited = [root], [], 0
+        while pending:
+            item = pending.pop()
+            visited += 1
+            self.assertLess(visited, 2048)
+            if item.text(QAccessible.Text.Name) == name:
+                matches.append(item)
+            pending.extend(child for index in range(item.childCount())
+                           if (child := item.child(index)) is not None)
+        self.assertEqual(len(matches), 1, f"Expected one accessible {name}")
+        return matches[0]
+
+    def test_widget_regions_and_rows_are_named_in_the_accessible_tree(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(30)
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        options = self.accessible_named("Opções dos widgets")
+        viewport = self.accessible_named("Conteúdo das opções de widgets", options)
+        self.assertEqual(options.role(), QAccessible.Role.Pane)
+        self.assertEqual(viewport.role(), QAccessible.Role.Pane)
+        self.assertGreater(viewport.rect().height(), 0)
+        for label in ("Relógio e calendário", "Pomodoro", "Música (MPRIS)",
+                      "Bateria do computador", "QuotaLantern", "PeriGauge", "FalaTrace"):
+            row = self.accessible_named("Widget: " + label, viewport)
+            self.assertEqual(row.role(), QAccessible.Role.Grouping)
+            self.assertFalse(row.state().focusable)
+            controls = [row.child(index) for index in range(row.childCount())]
+            names = {item.text(QAccessible.Text.Name) for item in controls}
+            self.assertTrue({label, "Arrastar " + label + " para reordenar",
+                             "Mover " + label + " para antes", "Mover " + label + " para depois"} <= names)
+            self.assertTrue(self.accessible_named("Arrastar " + label + " para reordenar", row).state().disabled)
+            self.assertFalse(self.accessible_named(label, row).state().disabled)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.warnings, [])
+
+    def test_focused_widget_controls_reveal_the_whole_row_in_a_short_viewport(self):
+        previous = QAccessible.isActive()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, previous)
+        self.initialize()
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        raw = self.config.property("profilesJSON")
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        for width in (350, 420):
+            self.popup.setProperty("width", width)
+            QTest.qWait(30)
+            for control, label in (("widgetVisiblepomodoro", "Pomodoro"),
+                                   ("widgetVisiblesystemBattery", "Bateria do computador"),
+                                   ("widgetUpmusic", "Música (MPRIS)"),
+                                   ("widgetDownquota", "QuotaLantern"),
+                                   ("widgetDragclock", "Relógio e calendário")):
+                with self.subTest(width=width, control=control):
+                    self.focus(self.owned_item(control))
+                    QTest.qWait(10)
+                    viewport = self.accessible_named("Conteúdo das opções de widgets")
+                    row = self.accessible_named("Widget: " + label, viewport)
+                    self.assertTrue(viewport.rect().contains(row.rect()),
+                                    f"Focused row {row.rect()} must fit viewport {viewport.rect()}")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(writes.count(), 0)
+        self.assertEqual(self.warnings, [])
 
     def widgets(self, visible=True, reverse=False):
         ids = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"]
@@ -477,6 +570,219 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertLessEqual(point.y() + create.height(), ancestor.height() + 1)
         QTest.keyClick(self.window, Qt.Key_Space)
         self.assertNotIn(self.evaluate("profiles.activeProfileId"), ["legacy", "work", "personal", "games"])
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_saves_once_on_release_and_preserves_other_profile_data(self):
+        self.initialize()
+        start, end = self.widget_drag_points()
+        self.evaluate("appearance.setToken('radius',8)")
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        original_raw = self.config.property("profilesJSON")
+        original = json.loads(original_raw)
+        flat = self.flat()
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+        try:
+            QTest.mouseMove(self.window, end, 30)
+            QTest.qWait(20)
+            indicator = self.owned_item("widgetDropIndicatorpomodoro")
+            self.assertIsNotNone(indicator)
+            self.assertTrue(indicator.property("visible"), "Held drag must show its destination")
+            self.assertEqual(self.config.property("profilesJSON"), original_raw)
+            self.assertEqual(writes.count(), 0, "Moving must not write the profile")
+        finally:
+            QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, end)
+        self.settle(lambda: writes.count() == 1)
+        self.settle(lambda: self.window.activeFocusItem() is not None
+                    and self.window.activeFocusItem().objectName() == "widgetDragclock")
+        saved = json.loads(self.config.property("profilesJSON"))
+        old_work = next(p for p in original["profiles"] if p["id"] == "work")
+        new_work = next(p for p in saved["profiles"] if p["id"] == "work")
+        expected = [old_work["widgets"][1], old_work["widgets"][0], *old_work["widgets"][2:]]
+        self.assertEqual(new_work["widgets"], expected)
+        self.assertEqual({k: v for k, v in old_work.items() if k != "widgets"},
+                         {k: v for k, v in new_work.items() if k != "widgets"})
+        self.assertEqual([p for p in saved["profiles"] if p["id"] != "work"],
+                         [p for p in original["profiles"] if p["id"] != "work"])
+        self.assertEqual(saved["activeProfileId"], "work")
+        self.assertEqual(self.flat(), flat)
+        self.assertTrue(self.evaluate("appearance.dirty"))
+        self.assertLess(self.owned_item("pomodoroButton").x(), self.owned_item("clockTile").x())
+        self.assertEqual(writes.count(), 1)
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_restores_grip_focus_after_delegate_rebuild(self):
+        self.initialize()
+        start, end = self.widget_drag_points()
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+        try:
+            QTest.mouseMove(self.window, end, 30)
+        finally:
+            QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, end)
+        self.settle(lambda: writes.count() == 1)
+        self.settle(lambda: self.window.activeFocusItem() is not None
+                    and self.window.activeFocusItem().objectName() == "widgetDragclock")
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(presentation.widgets.slice(0,2).map(w=>w.id))")),
+                         ["pomodoro", "clock"])
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_commit_preserves_newer_unrelated_focus(self):
+        self.initialize()
+        start, end = self.widget_drag_points()
+        tabs = self.window.findChild(QObject, "settingsTabs")
+        original_raw = self.config.property("profilesJSON")
+        original = json.loads(original_raw)
+        newer_focus = self.evaluate("itemAt(1)", tabs)
+        self.assertIsNotNone(newer_focus)
+        self.assertTrue(newer_focus.isVisible())
+        self.assertTrue(newer_focus.isEnabled())
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        focus_changes = []
+
+        def newer_focus_during_write():
+            # Do not process events/reenter the writer inside this synchronous
+            # signal callback. This tab survives rebuilding the widget delegates.
+            newer_focus.forceActiveFocus(Qt.OtherFocusReason)
+            focus_changes.append(self.window.activeFocusItem() == newer_focus)
+
+        self.config.profilesJSONChanged.connect(newer_focus_during_write)
+        try:
+            QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+            try:
+                QTest.mouseMove(self.window, end, 30)
+                QTest.qWait(20)
+                self.assertTrue(self.owned_item("widgetDropIndicatorpomodoro").property("visible"))
+                self.assertEqual(self.config.property("profilesJSON"), original_raw)
+                self.assertEqual(writes.count(), 0)
+            finally:
+                QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, end)
+            self.settle(lambda: writes.count() == 1)
+            # Drain the queued delegate rebuild/focus-restoration work only
+            # AFTER the writer has returned, without focusing anything again.
+            QTest.qWait(40)
+            self.app.processEvents()
+            self.assertEqual(focus_changes, [True])
+            self.assertEqual(self.window.activeFocusItem(), newer_focus)
+            self.assertEqual(self.evaluate("itemAt(1)", tabs), newer_focus)
+            saved = json.loads(self.config.property("profilesJSON"))
+            old_work = next(p for p in original["profiles"] if p["id"] == "work")
+            new_work = next(p for p in saved["profiles"] if p["id"] == "work")
+            self.assertEqual(new_work["widgets"],
+                             [old_work["widgets"][1], old_work["widgets"][0], *old_work["widgets"][2:]])
+            self.assertEqual({k: v for k, v in new_work.items() if k != "widgets"},
+                             {k: v for k, v in old_work.items() if k != "widgets"})
+            self.assertEqual([p for p in saved["profiles"] if p["id"] != "work"],
+                             [p for p in original["profiles"] if p["id"] != "work"])
+            self.assertEqual(saved["activeProfileId"], "work")
+            self.assertEqual(writes.count(), 1)
+            self.assertEqual(self.warnings, [])
+        finally:
+            self.config.profilesJSONChanged.disconnect(newer_focus_during_write)
+
+    def test_widget_drag_click_self_outside_and_escape_leave_saved_order_unchanged(self):
+        self.initialize()
+        for mode in ("click", "self", "outside", "escape"):
+            with self.subTest(mode=mode):
+                start, end = self.widget_drag_points()
+                raw = self.config.property("profilesJSON")
+                writes = QSignalSpy(self.config.profilesJSONChanged)
+                release = start
+                QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+                try:
+                    if mode != "click":
+                        QTest.mouseMove(self.window, end, 30)
+                        QTest.qWait(20)
+                        self.assertTrue(self.owned_item("widgetDropIndicatorpomodoro").property("visible"))
+                        release = end
+                    if mode == "self":
+                        release = start
+                        QTest.mouseMove(self.window, release, 20)
+                    elif mode == "outside":
+                        scroll = self.owned_item("widgetScroll")
+                        release = scroll.mapToScene(QPointF(scroll.width() + 8, scroll.height() / 2)).toPoint()
+                        QTest.mouseMove(self.window, release, 20)
+                    elif mode == "escape":
+                        QTest.keyClick(self.window, Qt.Key_Escape)
+                        self.assertTrue(self.popup.property("visible"), "First Escape cancels only the held gesture")
+                        self.assertFalse(self.owned_item("widgetDropIndicatorpomodoro").property("visible"))
+                finally:
+                    QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, release)
+                QTest.qWait(20)
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+                self.assertEqual(writes.count(), 0)
+                self.assertFalse(self.owned_item("widgetDropIndicatorpomodoro").property("visible"))
+                if mode == "escape":
+                    QTest.keyClick(self.window, Qt.Key_Escape)
+                    self.settle(lambda: not self.popup.property("visible"))
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_invalidated_while_held_never_writes_a_stale_order(self):
+        self.initialize()
+        original = self.config.property("profilesJSON")
+        for mode in ("scope", "revision", "import", "readonly", "tab", "close"):
+            with self.subTest(mode=mode):
+                if self.popup.property("visible"):
+                    closed = QSignalSpy(self.popup.closed)
+                    self.evaluate("close()", self.popup)
+                    if not closed.count():
+                        self.assertTrue(closed.wait(1000))
+                self.config.setProperty("profilesJSON", original)
+                self.evaluate("appearancePreset.clearInput()")
+                start, end = self.widget_drag_points()
+                self.assertTrue(self.evaluate("appearance.editing"))
+                writes = QSignalSpy(self.config.profilesJSONChanged)
+                QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, start)
+                try:
+                    QTest.mouseMove(self.window, end, 30)
+                    QTest.qWait(20)
+                    self.assertTrue(self.owned_item("widgetDropIndicatorpomodoro").property("visible"))
+                    self.assertEqual(writes.count(), 0)
+                    if mode == "scope":
+                        self.assertTrue(self.command("select", "personal"))
+                    elif mode == "revision":
+                        self.assertTrue(self.evaluate("profiles.commitPresentation({calendarEvents:true},profiles.activeProfileId,profiles.revision)"))
+                    elif mode == "import":
+                        self.evaluate("appearancePreset.setInputText('{pending}')")
+                        self.assertTrue(self.evaluate("appearancePreset.pending"))
+                    elif mode == "readonly":
+                        self.config.setProperty("profilesJSON", '{"formatVersion":999}')
+                    elif mode == "tab":
+                        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 0)
+                    else:
+                        self.evaluate("close()", self.popup)
+                    expected_raw = self.config.property("profilesJSON")
+                    expected_writes = writes.count()
+                finally:
+                    QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, end)
+                QTest.qWait(30)
+                self.assertEqual(self.config.property("profilesJSON"), expected_raw)
+                self.assertEqual(writes.count(), expected_writes, "Invalidated release cannot add a profile write")
+        self.assertEqual(self.warnings, [])
+
+    def test_widget_drag_cannot_initialize_legacy_or_write_a_readonly_profile(self):
+        self.popup.setProperty("heightBudget", 420)
+        self.evaluate("open()", self.popup)
+        self.window.findChild(QObject, "settingsTabs").setProperty("currentIndex", 1)
+        QTest.qWait(30)
+        self.focus(self.owned_item("widgetVisibleclock"))
+        for mode in ("legacy", "readonly"):
+            with self.subTest(mode=mode):
+                if mode == "readonly":
+                    self.config.setProperty("profilesJSON", '{"formatVersion":999}')
+                grip = self.owned_item("widgetDragclock")
+                self.assertFalse(grip.isEnabled())
+                self.assertFalse(self.owned_item("widgetDownclock").isEnabled())
+                raw = self.config.property("profilesJSON")
+                flat = self.flat()
+                writes = QSignalSpy(self.config.profilesJSONChanged)
+                point = grip.mapToScene(QPointF(grip.width() / 2, grip.height() / 2)).toPoint()
+                QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, point)
+                QTest.mouseMove(self.window, point + QPointF(0, 45).toPoint(), 30)
+                QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+                self.assertEqual(self.flat(), flat)
+                self.assertEqual(writes.count(), 0)
         self.assertEqual(self.warnings, [])
 
     def test_widget_reorder_keyboard_and_appearance_draft_survive_tabs(self):
