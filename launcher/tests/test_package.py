@@ -950,5 +950,510 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(package.validate_runtime_inventory(runtime_inventory())["source"], "caller_assertion_unverified")
 
 
+class InventoryTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.stage = PackageTests().make_stage(self.root)
+        self.host = self.root / "synthetic-host"
+        self.host.mkdir()
+        self.routes = dict(package._EXACT_ASSET_PATHS)
+        self.optional = {
+            "style_fusion": "/usr/lib64/qt6/qml/QtQuick/Controls/Fusion/qmldir",
+            "style_kde": "/usr/lib64/qt6/qml/org/kde/desktop/qmldir",
+            "bwrap": "/usr/bin/bwrap",
+        }
+        for role, path in {**self.routes, **self.optional}.items():
+            destination = self.host / path.lstrip("/")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            module = {"qml_controls_qmldir": "QtQuick.Controls",
+                      "style_fusion": "QtQuick.Controls.Fusion", "style_kde": "org.kde.desktop"}.get(role)
+            destination.write_bytes(("module " + module + "\n").encode() if module else self.shared())
+        self.real_lstat = os.lstat
+        self.reader_name = "_inventory_read" if hasattr(package, "_inventory_read") else "_doctor_read"
+        self.real_read = getattr(package, self.reader_name)
+        self.real_open = os.open
+        self.after_rpm = lambda path: None
+        self.after_read = lambda path: None
+        self.rpm_error = None
+        self.reads = []
+        self.queries = []
+
+    @staticmethod
+    def shared(**kwargs):
+        image = bytearray(synthetic_elf(**kwargs))
+        # Independently remove PT_INTERP while retaining the fixture's other maps.
+        struct.pack_into("<I", image, 64 + 56, 0)
+        return bytes(image)
+
+    def physical(self, path):
+        value = str(path)
+        return self.host / value.lstrip("/") if value == "/usr" or value.startswith("/usr/") else path
+
+    def lstat(self, path, *args, **kwargs):
+        return self.real_lstat(self.physical(path), *args, **kwargs)
+
+    def read(self, path, limit, *args, **kwargs):
+        self.reads.append((path, limit))
+        result = self.real_read(path, limit, *args, **kwargs)
+        self.after_read(path)
+        return result
+
+    def rpm(self, path):
+        self.queries.append(path)
+        self.after_rpm(path)
+        if self.rpm_error == path:
+            package._reject("rpm_metadata_unknown")
+        return {"owner": "synthetic", "version": "1.0", "nevra": "synthetic-0:1.0-1.fc44.x86_64"}
+
+    def open(self, path, flags, **kwargs):
+        parent = kwargs.get("dir_fd")
+        if str(path) == "usr" and parent is not None:
+            status = os.fstat(parent)
+            root_status = self.real_lstat("/")
+            if (status.st_dev, status.st_ino) == (root_status.st_dev, root_status.st_ino):
+                return self.real_open(self.host / "usr", flags)
+        return self.real_open(self.physical(path), flags, **kwargs)
+
+    def collect(self, stage=None):
+        with mock.patch.object(package.os, "lstat", side_effect=self.lstat), \
+             mock.patch.object(package.os, "open", side_effect=self.open), \
+             mock.patch.object(package, self.reader_name, side_effect=self.read), \
+             mock.patch.object(package, "_doctor_rpm", side_effect=self.rpm), \
+             mock.patch.object(package.subprocess, "Popen", side_effect=AssertionError("no process admitted")):
+            return package.inventory(stage or self.stage)
+
+    def record(self, result, role):
+        return next(item for item in result["checks"] + result["capabilities"] if item["role"] == role)
+
+    def test_inventory_command_is_supported(self):
+        # Causal baseline RED: old argparse rejects inventory before any host work.
+        report = {"status": "ok", "schema": "orla-launcher-inventory-0.1"}
+        with mock.patch.object(package, "inventory", return_value=report, create=True) as collect, \
+             mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(package.main(["inventory", "--stage", str(self.stage)]), 0)
+            collect.assert_called_once_with(self.stage)
+            self.assertEqual(json.loads(output.getvalue()), report)
+
+    def test_declared_scope_exact_stage_hashes_and_not_queried_package(self):
+        result = self.collect()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["scope"], "declared_roots_direct_dynamic_tags")
+        self.assertEqual(len(result["checks"]), 14)
+        self.assertEqual(len(result["capabilities"]), 3)
+        self.assertEqual(set(result["coverage"].values()), {"UNRUN"})
+        for item, (relative, mode) in zip(result["checks"][:7], package.PAYLOAD):
+            self.assertEqual(item["sha256"], hashlib.sha256((self.stage / relative).read_bytes()).hexdigest())
+            self.assertEqual(item["mode"], f"{mode:04o}")
+            self.assertEqual(item["package"], {"state": "NOT_QUERIED"})
+        self.assertEqual(self.record(result, "qml_controls_plugin")["dynamicTags"]["interpreter"], None)
+        self.assertEqual(self.record(result, "staged_launcher")["dynamicTags"]["needed"], ["libQt6Core.so.6"])
+        self.assertEqual(len(self.queries), 10)
+        self.assertTrue(all(not path.startswith(str(self.stage)) for path in self.queries))
+
+    def test_optional_missing_does_not_block_and_unknown_precedes_known_missing(self):
+        self.physical(self.optional["bwrap"]).unlink()
+        result = self.collect()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(self.record(result, "bwrap")["state"], "missing")
+        self.physical(self.routes["krunner_calculator"]).unlink()
+        self.assertEqual(self.collect()["status"], "missing")
+        self.rpm_error = self.routes["qpa_wayland"]
+        self.assertEqual(self.collect()["status"], "unknown")
+
+    def test_invalid_stage_never_reads_host_or_queries_rpm(self):
+        for change in ("extra", "mode", "symlink", "malformed"):
+            with self.subTest(change=change):
+                root = self.root / change
+                root.mkdir()
+                stage = PackageTests().make_stage(root)
+                if change == "extra": (stage / "extra").write_bytes(b"x")
+                if change == "mode": os.chmod(stage / "LICENSE", 0o777)
+                if change == "symlink":
+                    (stage / "LICENSE").unlink(); (stage / "LICENSE").symlink_to(self.stage / "LICENSE")
+                if change == "malformed": (stage / "bin/orla-launcher").write_bytes(b"bad elf")
+                self.reads, self.queries = [], []
+                with self.assertRaises(package.PackageError): self.collect(stage)
+                self.assertFalse(self.queries)
+                self.assertTrue(all(not path.startswith("/usr/") for path, _limit in self.reads))
+        with self.assertRaises(package.PackageError): self.collect(Path("relative"))
+
+    def test_file_parent_and_stage_drift_after_metadata_never_claim_found(self):
+        path = self.routes["qpa_wayland"]
+        self.after_rpm = lambda selected: self.physical(path).write_bytes(b"changed") if selected == path else None
+        result = self.collect()
+        self.assertEqual(self.record(result, "qpa_wayland")["state"], "unknown")
+        self.physical(path).write_bytes(self.shared())
+        self.queries = []
+        self.after_rpm = lambda selected: (self.stage / "extra").write_bytes(b"changed") if selected == path else None
+        result = self.collect()
+        self.assertIn(path, self.queries)
+        self.assertEqual({item["state"] for item in result["checks"][:7]}, {"unknown"})
+
+    def test_prior_host_pin_is_rechecked_after_later_metadata(self):
+        victim = self.routes["krunner_calculator"]
+        trigger = self.optional["bwrap"]
+        self.after_rpm = lambda selected: self.physical(victim).write_bytes(b"changed") if selected == trigger else None
+        result = self.collect()
+        self.assertEqual(self.record(result, "krunner_calculator")["state"], "unknown")
+
+    def test_parent_symlink_is_unknown_without_metadata(self):
+        directory = self.physical(self.routes["qpa_wayland"]).parent
+        moved = directory.with_name("moved-platforms")
+        directory.rename(moved); directory.symlink_to(moved, target_is_directory=True)
+        result = self.collect()
+        self.assertEqual(self.record(result, "qpa_wayland")["code"], "asset_parent_unsafe")
+        self.assertNotIn(self.routes["qpa_wayland"], self.queries)
+
+    def test_stage_drift_during_stage_reads_stops_before_host(self):
+        def drift(path):
+            if path.endswith("/LICENSE"):
+                (self.stage / "libexec/ai.py").write_bytes(b"changed metadata and contents")
+        self.after_read = drift
+        with self.assertRaises(package.PackageError): self.collect()
+        self.assertFalse(self.queries)
+        self.assertFalse(any(path.startswith("/usr/") for path, _limit in self.reads))
+
+    def test_deadline_and_byte_budget_stop_admission(self):
+        with mock.patch.object(package, "INVENTORY_SECONDS", 0):
+            with self.assertRaises(package.PackageError) as caught: self.collect()
+            self.assertEqual(caught.exception.code, "inventory_deadline")
+        self.assertFalse(self.reads); self.assertFalse(self.queries)
+        with mock.patch.object(package, "INVENTORY_MAX_BYTES", 1):
+            with self.assertRaises(package.PackageError): self.collect()
+        self.assertFalse(self.queries)
+        budget = {"deadline": 10.0, "bytes": 0}
+        with mock.patch.object(package.time, "monotonic", return_value=7.0):
+            with self.assertRaises(package.PackageError): package._inventory_step(budget, 3.1)
+
+    def test_shared_parser_and_archive_interpreter_contract_remain_separate(self):
+        data = self.shared(needed=(), rpath=("$ORIGIN",), runpath=("/synthetic/lib",))
+        observed = package._inventory_dynamic(data)
+        self.assertEqual(observed["needed"], [])
+        self.assertEqual(observed["rpath"], ["$ORIGIN"])
+        with self.assertRaises(package.PackageError): package._inventory_dynamic(data, main=True)
+        with self.assertRaises(package.PackageError): package.parse_elf(data)
+        self.assertEqual(package._inventory_dynamic(synthetic_elf(), main=True)["interpreter"], "/lib64/ld-linux-x86-64.so.2")
+
+    def test_parser_adversarial_headers_tags_maps_and_strings(self):
+        base = synthetic_elf()
+        cases = []
+        def changed(offset, fmt, value):
+            data = bytearray(base); struct.pack_into(fmt, data, offset, value); return bytes(data)
+        cases += [changed(56, "<H", 129), changed(64 + 2 * 56 + 32, "<Q", 1024 * 1024 + 16),
+                  changed(0x380 + 16 + 8, "<Q", 1024 * 1024 + 1),
+                  changed(0x380 + 8, "<Q", 0xffffffffffffffff),
+                  changed(0x380 + 32, "<q", 5),
+                  changed(0x380 + 48, "<q", 1),
+                  changed(64 + 2 * 56 + 16, "<Q", 0x500000),
+                  changed(64 + 56, "<I", 1)]
+        cases += [self.shared(needed=("../unsafe",))]
+        for data in cases:
+            with self.subTest(size=len(data)):
+                with self.assertRaises(package.PackageError): package._inventory_dynamic(data)
+        with mock.patch.object(package, "MAX_MEMBER_BYTES", len(base) - 1):
+            with self.assertRaises(package.PackageError): package._inventory_dynamic(base)
+        self.assertEqual(package._inventory_dynamic(self.shared(needed=("libB.so", "libA.so")))["needed"], ["libB.so", "libA.so"])
+        self.assertEqual(package._inventory_dynamic(self.shared(needed=("repeat.so", "repeat.so")))["needed"], ["repeat.so", "repeat.so"])
+
+
+    def test_needed_limit_exactly_256_preserves_repeated_observed_names(self):
+        def image(count):
+            data = bytearray(synthetic_elf())
+            entries = [(5, 0x400280), (10, struct.unpack_from("<Q", data, 0x398)[0])]
+            entries += [(1, 1)] * count + [(0, 0)]
+            dynamic = b"".join(struct.pack("<qQ", *entry) for entry in entries)
+            data[0x380:] = dynamic
+            struct.pack_into("<Q", data, 64 + 32, len(data))
+            struct.pack_into("<Q", data, 64 + 40, len(data))
+            struct.pack_into("<Q", data, 64 + 2 * 56 + 32, len(dynamic))
+            struct.pack_into("<Q", data, 64 + 2 * 56 + 40, len(dynamic))
+            return bytes(data)
+        self.assertEqual(len(package._inventory_dynamic(image(256))["needed"]), 256)
+        with self.assertRaises(package.PackageError) as caught: package._inventory_dynamic(image(257))
+        self.assertEqual(caught.exception.code, "elf_needed")
+
+    def test_same_size_stage_drift_and_parent_replacement_are_unknown(self):
+        path = self.routes["qpa_wayland"]
+        victim = self.stage / "libexec/ai.py"
+        self.after_rpm = lambda selected: victim.write_bytes(b"x" * victim.stat().st_size) if selected == path else None
+        self.assertEqual(self.collect()["status"], "unknown")
+        self.after_rpm = lambda selected: None
+        directory = self.physical(path).parent
+        def replace(selected):
+            if selected == path:
+                directory.rename(directory.with_name("old-platforms"))
+                directory.mkdir()
+        self.after_rpm = replace
+        self.assertEqual(self.record(self.collect(), "qpa_wayland")["state"], "unknown")
+
+    def test_failed_read_reserves_bytes_before_admitting_next_file(self):
+        budget = {"deadline": 100.0, "bytes": 0}
+        path = self.stage / "LICENSE"
+        with mock.patch.object(package.time, "monotonic", return_value=0), \
+             mock.patch.object(package.os, "read", side_effect=package.PackageError("asset_changed")):
+            item = package._inventory_file("LICENSE", str(path), budget, [], staged_mode=0o644)
+        self.assertEqual(item["state"], "unknown")
+        self.assertEqual(budget["bytes"], path.stat().st_size + 1)
+
+
+    def test_invalid_stage_directory_symlink_never_enumerates_external_mirror(self):
+        for child in ("bin", "libexec"):
+            with self.subTest(child=child):
+                case_root = self.root / ("symlink-" + child)
+                case_root.mkdir()
+                stage = PackageTests().make_stage(case_root)
+                mirror = case_root / "external-owned-mirror"
+                (stage / child).rename(mirror)
+                (stage / child).symlink_to(mirror, target_is_directory=True)
+                enumerated = []
+                real_scan = os.scandir
+                def scan(selected):
+                    enumerated.append(selected)
+                    return real_scan(selected)
+                self.reads, self.queries = [], []
+                with mock.patch.object(package.os, "scandir", side_effect=scan):
+                    with self.assertRaises(package.PackageError): self.collect(stage)
+                # No directory can be enumerated until all stage dir types pass.
+                self.assertEqual(enumerated, [])
+                self.assertFalse(self.reads); self.assertFalse(self.queries)
+
+    def test_invalid_stage_child_type_precedes_all_directory_enumeration(self):
+        root = self.root / "wrong-child-type"
+        root.mkdir()
+        stage = PackageTests().make_stage(root)
+        (stage / "bin").rename(root / "external-bin")
+        (stage / "bin").write_bytes(b"not a directory")
+        with mock.patch.object(package.os, "scandir", wraps=os.scandir) as scans:
+            with self.assertRaises(package.PackageError): self.collect(stage)
+        scans.assert_not_called()
+        self.assertFalse(self.reads); self.assertFalse(self.queries)
+
+    def test_fixed_plugin_et_exec_is_unknown_but_main_and_optional_bwrap_allowed(self):
+        path = self.routes["qml_controls_plugin"]
+        data = bytearray(synthetic_elf())
+        struct.pack_into("<H", data, 16, 2)
+        self.physical(path).write_bytes(data)
+        (self.stage / "bin/orla-launcher").write_bytes(data)
+        self.physical(self.optional["bwrap"]).write_bytes(data)
+        result = self.collect()
+        self.assertEqual(self.record(result, "qml_controls_plugin")["state"], "unknown")
+        self.assertEqual(self.record(result, "qml_controls_plugin")["code"], "asset_elf_unsupported")
+        self.assertNotIn(path, self.queries)
+        self.assertEqual(self.record(result, "staged_launcher")["state"], "found")
+        self.assertEqual(self.record(result, "bwrap")["state"], "found")
+
+    def test_sentinel_reservation_rejects_payload_only_budget_before_reader(self):
+        path = self.stage / "LICENSE"
+        budget = {"deadline": 100.0, "bytes": 0}
+        with mock.patch.object(package.time, "monotonic", return_value=0), \
+             mock.patch.object(package, "INVENTORY_MAX_BYTES", path.stat().st_size), \
+             mock.patch.object(package.os, "read", wraps=package.os.read) as reads:
+            item = package._inventory_file("LICENSE", str(path), budget, [], staged_mode=0o644)
+        self.assertEqual(item["code"], "inventory_byte_limit")
+        reads.assert_not_called()
+        self.assertEqual(budget["bytes"], 0)
+
+    def test_growth_sentinel_reservation_exhausts_global_admission_budget(self):
+        path = self.stage / "LICENSE"
+        size = path.stat().st_size
+        budget = {"deadline": 100.0, "bytes": 0}
+        real_read = os.read
+        def grow(selected, limit):
+            with open(path, "ab") as stream: stream.write(b"x")
+            return real_read(selected, limit)
+        with mock.patch.object(package.time, "monotonic", return_value=0), \
+             mock.patch.object(package, "INVENTORY_MAX_BYTES", size + 1), \
+             mock.patch.object(package.os, "read", side_effect=grow) as reads:
+            first = package._inventory_file("LICENSE", str(path), budget, [], staged_mode=0o644)
+            second = package._inventory_file("LICENSE", str(path), budget, [], staged_mode=0o644)
+        self.assertEqual(first["state"], "unknown")
+        self.assertEqual(second["code"], "inventory_byte_limit")
+        self.assertEqual(budget["bytes"], size + 1)
+        self.assertEqual(reads.call_count, 1)
+
+    def test_optional_admission_preserves_mandatory_final_pin_deadline(self):
+        clock = [0.0]
+        last_primary = sorted(self.routes.items())[-1][1]
+        self.after_rpm = lambda selected: clock.__setitem__(0, 16.95) if selected == last_primary else None
+        with mock.patch.object(package.time, "monotonic", side_effect=lambda: clock[0]):
+            result = self.collect()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual({item["state"] for item in result["checks"]}, {"found"})
+        self.assertEqual({item["code"] for item in result["capabilities"]}, {"inventory_deadline"})
+        self.assertEqual(len(self.queries), 7)
+        optional_paths = set(self.optional.values())
+        self.assertFalse(any(path in optional_paths for path, _limit in self.reads))
+
+    def test_stage_directory_descriptors_closed_on_symlink_failure(self):
+        root = self.root / "descriptor-failure"
+        root.mkdir()
+        stage = PackageTests().make_stage(root)
+        (stage / "libexec").rename(root / "mirror")
+        (stage / "libexec").symlink_to(root / "mirror", target_is_directory=True)
+        opened, closed = [], []
+        real_open, real_close = os.open, os.close
+        def tracked_open(path, flags, **kwargs):
+            descriptor = real_open(path, flags, **kwargs)
+            opened.append(descriptor)
+            return descriptor
+        def tracked_close(descriptor):
+            closed.append(descriptor)
+            return real_close(descriptor)
+        with mock.patch.object(package.os, "open", side_effect=tracked_open), \
+             mock.patch.object(package.os, "close", side_effect=tracked_close):
+            with self.assertRaises(package.PackageError):
+                package._inventory_stage(stage, {"deadline": float("inf"), "bytes": 0})
+        self.assertEqual(sorted(opened), sorted(closed))
+
+
+    def test_parent_swap_after_snapshot_never_reads_external_mirror_bytes(self):
+        target = str(self.stage / "libexec/ai.py")
+        mirror = self.root / "external-content-mirror"
+        mirror.mkdir()
+        for name in ("ai.py", "steam.py", "ai_text_ollama.py", "ai_text_transport.py", "ai_text.py"):
+            (mirror / name).write_bytes(b"external synthetic mirror bytes\n")
+            os.chmod(mirror / name, 0o644)
+        external = {(entry.stat().st_dev, entry.stat().st_ino) for entry in mirror.iterdir()}
+        read_external = []
+        swapped = []
+        real_parents = package._inventory_parents
+        real_read = os.read
+        def parents(selected, budget):
+            result = real_parents(selected, budget)
+            if selected == target and not swapped:
+                (self.stage / "libexec").rename(self.root / "original-libexec")
+                (self.stage / "libexec").symlink_to(mirror, target_is_directory=True)
+                swapped.append(selected)
+            return result
+        def read(descriptor, count):
+            status = os.fstat(descriptor)
+            if (status.st_dev, status.st_ino) in external:
+                read_external.append((status.st_dev, status.st_ino, count))
+            return real_read(descriptor, count)
+        with mock.patch.object(package, "_inventory_parents", side_effect=parents), \
+             mock.patch.object(package.os, "read", side_effect=read):
+            with self.assertRaises(package.PackageError): self.collect()
+        self.assertEqual(swapped, [target])
+        self.assertEqual(read_external, [])
+        self.assertFalse(self.queries)
+
+    def test_anchored_content_reader_closes_all_descriptors_success_and_refusal(self):
+        path = str(self.stage / "LICENSE")
+        parents = package._inventory_parents(path, {"deadline": float("inf"), "bytes": 0})
+        for reject in (False, True):
+            with self.subTest(reject=reject):
+                opened, closed = [], []
+                real_open, real_close = os.open, os.close
+                def tracked_open(selected, flags, **kwargs):
+                    descriptor = real_open(selected, flags, **kwargs)
+                    opened.append(descriptor)
+                    return descriptor
+                def tracked_close(descriptor):
+                    closed.append(descriptor)
+                    return real_close(descriptor)
+                budget = {"deadline": float("inf"), "bytes": 0,
+                          "stagePins": package._inventory_stage(self.stage, {"deadline": float("inf"), "bytes": 0})}
+                with mock.patch.object(package.os, "open", side_effect=tracked_open), \
+                     mock.patch.object(package.os, "close", side_effect=tracked_close):
+                    if reject:
+                        with mock.patch.object(package.os, "read", side_effect=package.PackageError("synthetic_read_refusal")):
+                            with self.assertRaises(package.PackageError):
+                                package._inventory_read(path, 65536, budget, parents, expected_mode=0o644)
+                    else:
+                        data, pin = package._inventory_read(path, 65536, budget, parents, expected_mode=0o644)
+                        self.assertEqual(data, Path(path).read_bytes())
+                        self.assertEqual(pin, package._doctor_identity(os.lstat(path)))
+                self.assertEqual(sorted(opened), sorted(closed))
+                self.assertEqual(len(opened), len(set(opened)))
+
+
+    def test_observed_host_leaf_deleted_before_open_is_unknown(self):
+        path = self.routes["qpa_wayland"]
+        physical = self.physical(path)
+        original_open = self.open
+        triggered = []
+        def disappear(selected, flags, **kwargs):
+            if str(selected) == physical.name and "dir_fd" in kwargs and not triggered:
+                physical.unlink()
+                triggered.append(path)
+            return original_open(selected, flags, **kwargs)
+        with mock.patch.object(self, "open", side_effect=disappear):
+            result = self.collect()
+        self.assertEqual(triggered, [path])
+        self.assertEqual(self.record(result, "qpa_wayland")["state"], "unknown")
+        self.assertEqual(self.record(result, "qpa_wayland")["code"], "asset_changed")
+        self.assertNotIn(path, self.queries)
+
+    def test_observed_host_leaf_deleted_after_read_is_unknown(self):
+        path = self.routes["qpa_wayland"]
+        physical = self.physical(path)
+        pin = physical.stat()
+        original_read = os.read
+        triggered = []
+        def disappear(descriptor, count):
+            status = os.fstat(descriptor)
+            data = original_read(descriptor, count)
+            if not data and (status.st_dev, status.st_ino) == (pin.st_dev, pin.st_ino) and not triggered:
+                physical.unlink()
+                triggered.append(path)
+            return data
+        with mock.patch.object(package.os, "read", side_effect=disappear):
+            result = self.collect()
+        self.assertEqual(triggered, [path])
+        self.assertEqual(self.record(result, "qpa_wayland")["state"], "unknown")
+        self.assertEqual(self.record(result, "qpa_wayland")["code"], "asset_changed")
+        self.assertNotIn(path, self.queries)
+
+    def test_initial_absent_host_leaf_remains_known_missing(self):
+        path = self.routes["qpa_wayland"]
+        self.physical(path).unlink()
+        result = self.collect()
+        self.assertEqual(self.record(result, "qpa_wayland")["state"], "missing")
+        self.assertEqual(self.record(result, "qpa_wayland")["code"], "asset_missing")
+        self.assertEqual(result["status"], "missing")
+
+    def test_prepinned_host_parent_disappears_before_walk_is_unknown(self):
+        path = self.routes["qpa_wayland"]
+        directory = self.physical(path).parent
+        original_parents = package._inventory_parents
+        triggered = []
+        def disappear(selected, budget):
+            pins = original_parents(selected, budget)
+            if selected == path and not triggered:
+                directory.rename(directory.with_name("disappeared-platforms"))
+                triggered.append(path)
+            return pins
+        with mock.patch.object(package, "_inventory_parents", side_effect=disappear):
+            result = self.collect()
+        self.assertEqual(triggered, [path])
+        self.assertEqual(self.record(result, "qpa_wayland")["state"], "unknown")
+        self.assertEqual(self.record(result, "qpa_wayland")["code"], "asset_parent_changed")
+        self.assertNotIn(path, self.queries)
+
+    def test_stage_close_failure_attempts_all_descriptors_and_reports_json_unknown(self):
+        opened, closed = [], []
+        original_open, original_close = os.open, os.close
+        failed = []
+        def tracked_open(selected, flags, **kwargs):
+            descriptor = original_open(selected, flags, **kwargs)
+            opened.append(descriptor)
+            return descriptor
+        def tracked_close(descriptor):
+            closed.append(descriptor)
+            original_close(descriptor)
+            if not failed:
+                failed.append(descriptor)
+                raise OSError("synthetic already-closed cleanup uncertainty")
+        with mock.patch.object(package.os, "open", side_effect=tracked_open), \
+             mock.patch.object(package.os, "close", side_effect=tracked_close), \
+             mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(package.main(["inventory", "--stage", str(self.stage)]), 2)
+        self.assertEqual(json.loads(output.getvalue())["code"], "asset_cleanup_unknown")
+        self.assertEqual(sorted(opened), sorted(closed))
+        self.assertEqual(len(failed), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

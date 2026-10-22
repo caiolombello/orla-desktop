@@ -986,6 +986,454 @@ def doctor() -> dict:
                             "rpm_ownership_not_integrity", "host_distribution_not_attested", "not_runtime_inventory"]}
 
 
+def _inventory_dynamic(data: bytes, *, main: bool = False) -> dict:
+    if type(data) is not bytes or len(data) < 64 or len(data) > MAX_MEMBER_BYTES:
+        _reject("elf_malformed")
+    try:
+        header = struct.unpack("<16sHHIQQQIHHHHHH", data[:64])
+    except struct.error:
+        _reject("elf_malformed")
+    ident, elf_type, machine, version, _entry, phoff, _shoff, _flags, ehsize, phentsize, phnum, _a, _b, _c = header
+    if ident[:7] != b"\x7fELF\x02\x01\x01" or elf_type not in (2, 3) or machine != 62 or version != 1:
+        _reject("elf_unsupported")
+    if ehsize != 64 or phentsize != 56 or phnum < 1 or phnum > MAX_ELF_PROGRAM_HEADERS:
+        _reject("elf_malformed")
+    table = _slice(data, phoff, phnum * phentsize)
+    headers = []
+    try:
+        for index in range(phnum):
+            headers.append(struct.unpack("<IIQQQQQQ", table[index * 56:(index + 1) * 56]))
+    except struct.error:
+        _reject("elf_malformed")
+
+    loads = []
+    interpreters = []
+    dynamics = []
+    dynamic_maps = []
+    for kind, _flags, offset, virtual, _physical, file_size, memory_size, _align in headers:
+        if file_size > memory_size:
+            _reject("elf_malformed")
+        _slice(data, offset, file_size)
+        if virtual + memory_size > (1 << 64):
+            _reject("elf_malformed")
+        if kind == 1:
+            loads.append((virtual, offset, file_size))
+        elif kind == 3:
+            interpreters.append(_slice(data, offset, file_size))
+        elif kind == 2:
+            if file_size > MAX_ELF_DYNAMIC_BYTES or file_size % 16:
+                _reject("elf_malformed")
+            dynamics.append(_slice(data, offset, file_size))
+            dynamic_maps.append((virtual, offset, file_size))
+    if len(interpreters) > 1 or (main and len(interpreters) != 1) or len(dynamics) != 1 or not loads:
+        _reject("elf_malformed")
+
+    # Ambiguous/overlapping virtual maps cannot establish a unique observed table.
+    for index, (virtual, _offset, size) in enumerate(loads):
+        for other, _other_offset, other_size in loads[index + 1:]:
+            if virtual < other + other_size and other < virtual + size:
+                _reject("elf_malformed")
+
+    def terminated_ascii(raw: bytes, code: str, *, path: bool = False) -> str:
+        if not raw or raw[-1:] != b"\0" or b"\0" in raw[:-1]:
+            _reject(code)
+        try:
+            value = raw[:-1].decode("ascii")
+        except UnicodeDecodeError:
+            _reject(code)
+        if not value or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            _reject(code)
+        if path:
+            return _safe_absolute_path(value, code)
+        return value
+
+    interpreter = terminated_ascii(interpreters[0], "elf_interpreter", path=True) if interpreters else None
+    tags: list[tuple[int, int]] = []
+    terminated = False
+    for offset in range(0, len(dynamics[0]), 16):
+        tag, value = struct.unpack("<qQ", dynamics[0][offset:offset + 16])
+        if tag == 0:
+            terminated = True
+            break
+        tags.append((tag, value))
+    if not terminated:
+        _reject("elf_malformed")
+    scalar_tags = [tag for tag, _value in tags if tag != 1]
+    if len(scalar_tags) != len(set(scalar_tags)) or any(dynamics[0][offset + 16:]):
+        _reject("elf_malformed")
+    strtab_values = [value for tag, value in tags if tag == 5]
+    strsz_values = [value for tag, value in tags if tag == 10]
+    if len(strtab_values) != 1 or len(strsz_values) != 1 or not 0 < strsz_values[0] <= MAX_ELF_STRING_TABLE:
+        _reject("elf_malformed")
+
+    def virtual_to_offset(address: int, size: int) -> int:
+        matches = []
+        for virtual, offset, file_size in loads:
+            if virtual <= address and size <= file_size and address - virtual <= file_size - size:
+                matches.append(offset + address - virtual)
+        if len(matches) != 1:
+            _reject("elf_malformed")
+        return matches[0]
+
+    for virtual, offset, size in dynamic_maps:
+        if virtual_to_offset(virtual, size) != offset:
+            _reject("elf_malformed")
+    strings = _slice(data, virtual_to_offset(strtab_values[0], strsz_values[0]), strsz_values[0])
+
+    def string_at(index: int, code: str) -> str:
+        if index >= len(strings):
+            _reject(code)
+        end = strings.find(b"\0", index)
+        if end < 0 or end - index > 4096:
+            _reject(code)
+        return terminated_ascii(strings[index:end + 1], code)
+
+    needed = [string_at(value, "elf_needed") for tag, value in tags if tag == 1]
+    if len(needed) > 256 or any(_SONAME.fullmatch(item) is None for item in needed):
+        _reject("elf_needed")
+    rpath = [string_at(value, "elf_search_path") for tag, value in tags if tag == 15]
+    runpath = [string_at(value, "elf_search_path") for tag, value in tags if tag == 29]
+    if len(rpath) > 1 or len(runpath) > 1:
+        _reject("elf_search_path")
+    return {
+        "type": "shared_object" if elf_type == 3 else "executable",
+        "interpreter": interpreter,
+        "needed": needed,
+        "rpath": rpath,
+        "runpath": runpath,
+        "flags": [{"tag": tag, "value": value} for tag, value in tags if tag in (30, 0x6ffffffb)],
+        "unsupportedMechanisms": [{"tag": tag, "value": value} for tag, value in tags
+                                  if tag in (0x7fffffff, 0x7ffffffd, 0x6ffffefc, 0x6ffffefb)],
+    }
+
+
+INVENTORY_SCHEMA = "orla-launcher-inventory-0.1"
+INVENTORY_MAX_BYTES = 256 * 1024 * 1024
+INVENTORY_SECONDS = 20.0
+INVENTORY_RPM_RESERVE = 3.1
+
+
+def _inventory_step(budget: dict, reserve: float = 0.0) -> None:
+    # Cooperative checks bound admitted steps, not blocking filesystem syscalls.
+    if time.monotonic() + reserve + budget.get("finalReserve", 0.0) >= budget["deadline"]:
+        _reject("inventory_deadline")
+
+
+def _inventory_directory_identity(value: os.stat_result) -> tuple:
+    # Ancestor membership may change independently; identity and type must not.
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid)
+
+
+def _inventory_parents(path: str, budget: dict) -> list[tuple[str, tuple]]:
+    parents = []
+    for directory in reversed(Path(path).parents):
+        _inventory_step(budget)
+        try:
+            status = os.lstat(directory)
+        except FileNotFoundError:
+            _reject("asset_missing")
+        except OSError:
+            _reject("asset_unreadable")
+        if not stat.S_ISDIR(status.st_mode) or stat.S_ISLNK(status.st_mode):
+            _reject("asset_parent_unsafe")
+        parents.append((str(directory), _inventory_directory_identity(status)))
+        _inventory_step(budget)
+    return parents
+
+
+def _inventory_recheck(parents: list[tuple[str, tuple]], path: str,
+                       pin: tuple, budget: dict) -> None:
+    _inventory_step(budget)
+    try:
+        for directory, identity in parents:
+            if _inventory_directory_identity(os.lstat(directory)) != identity:
+                _reject("asset_parent_changed")
+        if _doctor_identity(os.lstat(path)) != pin:
+            _reject("asset_changed")
+    except OSError:
+        _reject("asset_changed")
+    _inventory_step(budget)
+
+
+
+def _inventory_stage(stage: Path, budget: dict) -> list[tuple[str, tuple]]:
+    # Traverse from / through NOFOLLOW directory descriptors. Validate all three
+    # stage directories before bounded enumeration, including on final recheck.
+    if not isinstance(stage, Path):
+        _reject("staging_path")
+    _safe_absolute_path(str(stage), "staging_path")
+    descriptors = []
+    parents = []
+    directories = []
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
+    try:
+        _inventory_step(budget)
+        descriptor = os.open("/", flags)
+        descriptors.append(descriptor)
+        parents.append(("/", descriptor, _inventory_directory_identity(os.fstat(descriptor))))
+        current = Path("/")
+        for component in stage.parts[1:]:
+            _inventory_step(budget)
+            descriptor = os.open(component, flags, dir_fd=descriptor)
+            descriptors.append(descriptor)
+            current = current / component
+            parents.append((str(current), descriptor, _inventory_directory_identity(os.fstat(descriptor))))
+            _inventory_step(budget)
+        stage_fd = descriptor
+        directories.append((str(stage), stage_fd, _doctor_identity(os.fstat(stage_fd))))
+        for child in ("bin", "libexec"):
+            _inventory_step(budget)
+            child_fd = os.open(child, flags, dir_fd=stage_fd)
+            descriptors.append(child_fd)
+            directories.append((str(stage / child), child_fd, _doctor_identity(os.fstat(child_fd))))
+            _inventory_step(budget)
+        expected = ({"bin", "libexec", "LICENSE"}, {"orla-launcher"},
+                    {"ai.py", "steam.py", "ai_text_ollama.py", "ai_text_transport.py", "ai_text.py"})
+        for (_path, selected_fd, _pin), names in zip(directories, expected):
+            _inventory_step(budget)
+            observed = set()
+            with os.scandir(selected_fd) as entries:
+                for count, entry in enumerate(entries, 1):
+                    _inventory_step(budget)
+                    if count > len(names):
+                        _reject("staging_layout")
+                    observed.add(entry.name)
+            if observed != names:
+                _reject("staging_layout")
+            _inventory_step(budget)
+        for path, selected_fd, pin in parents:
+            if _inventory_directory_identity(os.fstat(selected_fd)) != pin \
+                    or _inventory_directory_identity(os.lstat(path)) != pin:
+                _reject("staging_changed")
+            _inventory_step(budget)
+        for path, selected_fd, pin in directories:
+            if _doctor_identity(os.fstat(selected_fd)) != pin or _doctor_identity(os.lstat(path)) != pin:
+                _reject("staging_changed")
+            _inventory_step(budget)
+        return [(path, pin) for path, _selected_fd, pin in directories]
+    except OSError:
+        _reject("staging_layout")
+    finally:
+        cleanup_failed = False
+        for selected_fd in reversed(descriptors):
+            try:
+                os.close(selected_fd)
+            except OSError:
+                cleanup_failed = True
+        if cleanup_failed:
+            _reject("asset_cleanup_unknown")
+
+
+
+def _inventory_read(path: str, limit: int, budget: dict,
+                    parents: list[tuple[str, tuple]], *, expected_mode: int | None = None) -> tuple[bytes, tuple]:
+    # Bound content access to directory descriptors matching the earlier namespace
+    # observations. A swapped parent must fail before any leaf bytes are read.
+    descriptors = []
+    phase = "parent_walk"
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
+    parent_pins = dict(parents)
+    stage_pins = dict(budget.get("stagePins", []))
+    try:
+        _inventory_step(budget)
+        descriptor = os.open("/", flags)
+        descriptors.append(descriptor)
+        current = Path("/")
+        for component in (None, *Path(path).parts[1:-1]):
+            _inventory_step(budget)
+            if component is not None:
+                descriptor = os.open(component, flags, dir_fd=descriptor)
+                descriptors.append(descriptor)
+                current = current / component
+            opened = os.fstat(descriptor)
+            if _inventory_directory_identity(opened) != parent_pins.get(str(current)):
+                _reject("asset_parent_changed")
+            if str(current) in stage_pins and _doctor_identity(opened) != stage_pins[str(current)]:
+                _reject("staging_changed")
+            _inventory_step(budget)
+        name = Path(path).name
+        phase = "initial_leaf_stat"
+        expected = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        phase = "observed_leaf"
+        _inventory_step(budget)
+        if not stat.S_ISREG(expected.st_mode) or expected.st_size > limit:
+            _reject("asset_unsafe_or_oversized")
+        if expected_mode is not None and (stat.S_IMODE(expected.st_mode) != expected_mode or expected.st_size == 0):
+            _reject("staging_file")
+        remaining = INVENTORY_MAX_BYTES - budget["bytes"]
+        if expected.st_size + 1 > remaining:
+            _reject("inventory_byte_limit")
+        # Reserve payload plus the growth sentinel before admitting os.read.
+        budget["bytes"] += expected.st_size + 1
+        leaf = os.open(name, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+                       dir_fd=descriptor)
+        descriptors.append(leaf)
+        pin = _doctor_identity(expected)
+        if _doctor_identity(os.fstat(leaf)) != pin:
+            _reject("asset_changed")
+        _inventory_step(budget)
+        data = bytearray()
+        while True:
+            _inventory_step(budget)
+            chunk = os.read(leaf, min(128 * 1024, expected.st_size - len(data) + 1))
+            _inventory_step(budget)
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > expected.st_size:
+                _reject("asset_unsafe_or_oversized")
+        if len(data) != expected.st_size or _doctor_identity(os.fstat(leaf)) != pin \
+                or _doctor_identity(os.stat(name, dir_fd=descriptor, follow_symlinks=False)) != pin:
+            _reject("asset_changed")
+        _inventory_recheck(parents, path, pin, budget)
+        return bytes(data), pin
+    except FileNotFoundError:
+        # Only the first anchored leaf observation can establish known absence.
+        # Lost preobserved parents or a previously observed leaf are drift.
+        _reject("asset_parent_changed" if phase == "parent_walk" else
+                "asset_missing" if phase == "initial_leaf_stat" else "asset_changed")
+    except OSError:
+        _reject("asset_unreadable")
+    finally:
+        cleanup_failed = False
+        for selected_fd in reversed(descriptors):
+            try:
+                os.close(selected_fd)
+            except OSError:
+                cleanup_failed = True
+        if cleanup_failed:
+            _reject("asset_cleanup_unknown")
+
+
+def _inventory_file(role: str, path: str, budget: dict, pins: list,
+                    *, staged_mode: int | None = None, module: str | None = None) -> dict:
+    item = {"role": role, "path": path, "state": "unknown", "code": None,
+            "size": None, "mode": None, "sha256": None, "dynamicTags": None,
+            "package": {"state": "NOT_QUERIED"} if staged_mode is not None else None}
+    try:
+        parents = _inventory_parents(path, budget)
+        _inventory_step(budget)
+        limit = MAX_MANIFEST_BYTES if module is not None else MAX_MEMBER_BYTES
+        data, pin = _inventory_read(path, limit, budget, parents, expected_mode=staged_mode)
+        _inventory_step(budget)
+        _inventory_recheck(parents, path, pin, budget)
+        # Retain successful read pins even when parsing/metadata later fails.
+        pins.append((item, parents, path, pin))
+        item.update(size=len(data), mode=f"{stat.S_IMODE(pin[2]):04o}",
+                    sha256=hashlib.sha256(data).hexdigest())
+        if staged_mode is not None and (stat.S_IMODE(pin[2]) != staged_mode or not data):
+            _reject("staging_file")
+        if role == "staged_launcher" or (staged_mode is None and module is None):
+            item["dynamicTags"] = _inventory_dynamic(data, main=role == "staged_launcher")
+            if role in _EXACT_ASSET_PATHS and module is None \
+                    and item["dynamicTags"]["type"] != "shared_object":
+                _reject("asset_elf_unsupported")
+            if item["dynamicTags"]["unsupportedMechanisms"]:
+                _reject("elf_dynamic_mechanism_unknown")
+        if module is not None:
+            try:
+                modules = [line.split() for line in data.decode("utf-8").splitlines()
+                           if line.split()[:1] == ["module"]]
+            except UnicodeDecodeError:
+                _reject("asset_qmldir_unknown")
+            if modules != [["module", module]]:
+                _reject("asset_qmldir_unknown")
+        _inventory_step(budget)
+        if staged_mode is None:
+            _inventory_step(budget, INVENTORY_RPM_RESERVE)
+            item["package"] = _doctor_rpm(path)
+            _inventory_step(budget)
+        _inventory_recheck(parents, path, pin, budget)
+        item["state"] = "found"
+    except PackageError as error:
+        item["code"] = error.code
+        item["state"] = "missing" if error.code == "asset_missing" else "unknown"
+    return item
+
+
+def inventory(stage: Path) -> dict:
+    budget = {"deadline": time.monotonic() + INVENTORY_SECONDS, "bytes": 0}
+    _inventory_step(budget)
+    _safe_absolute_path(str(stage), "staging_path")
+    stage_directories = _inventory_stage(stage, budget)
+    budget["stagePins"] = stage_directories
+    _inventory_step(budget)
+    pins = []
+    stage_parents = _inventory_parents(str(stage / "LICENSE"), budget)
+    staged = [_inventory_file("staged_launcher" if relative == "bin/orla-launcher" else relative,
+                              str(stage / relative), budget, pins, staged_mode=mode)
+              for relative, mode in PAYLOAD]
+    # Validate the entire stage before any host read or package query is admitted.
+    for item in staged:
+        if item["state"] != "found":
+            _reject(item["code"] or "staging_file")
+    if _inventory_stage(stage, budget) != stage_directories:
+        _reject("staging_changed")
+    try:
+        for directory, pin in stage_directories:
+            if _doctor_identity(os.lstat(directory)) != pin:
+                _reject("staging_changed")
+    except OSError:
+        _reject("staging_changed")
+    for _item, parents, path, pin in pins:
+        _inventory_recheck(parents, path, pin, budget)
+    _inventory_step(budget)
+    checks = staged + [_inventory_file(role, path, budget, pins,
+                      module="QtQuick.Controls" if role == "qml_controls_qmldir" else None)
+                      for role, path in sorted(_EXACT_ASSET_PATHS.items())]
+    # Optional work must preserve time for mandatory finalization. Filesystem
+    # calls remain cooperative: an overrun still invalidates expired final pins.
+    budget["finalReserve"] = 3.1
+    capabilities = [
+        _inventory_file("style_fusion", "/usr/lib64/qt6/qml/QtQuick/Controls/Fusion/qmldir",
+                        budget, pins, module="QtQuick.Controls.Fusion"),
+        _inventory_file("style_kde", "/usr/lib64/qt6/qml/org/kde/desktop/qmldir",
+                        budget, pins, module="org.kde.desktop"),
+        _inventory_file("bwrap", "/usr/bin/bwrap", budget, pins),
+    ]
+    budget["finalReserve"] = 0.0
+    for item, parents, path, pin in pins:
+        try:
+            _inventory_recheck(parents, path, pin, budget)
+        except PackageError as error:
+            item.update(state="unknown", code=error.code)
+    try:
+        _inventory_step(budget)
+        for directory, pin in stage_parents:
+            if _inventory_directory_identity(os.lstat(directory)) != pin:
+                _reject("asset_parent_changed")
+        for directory, pin in stage_directories:
+            if _doctor_identity(os.lstat(directory)) != pin:
+                _reject("staging_changed")
+        if _inventory_stage(stage, budget) != stage_directories:
+            _reject("staging_changed")
+        _inventory_step(budget)
+    except (PackageError, OSError) as error:
+        for item in staged:
+            item.update(state="unknown", code=error.code if isinstance(error, PackageError) else "staging_changed")
+    states = {item["state"] for item in checks}
+    status = "unknown" if "unknown" in states else "missing" if "missing" in states else "ok"
+    return {"schema": INVENTORY_SCHEMA, "target": TARGET, "channel": CHANNEL,
+            "scope": "declared_roots_direct_dynamic_tags", "status": status,
+            "checks": checks, "capabilities": capabilities,
+            "limits": {"totalBytes": INVENTORY_MAX_BYTES, "admittedReadBytes": budget["bytes"],
+                       "elfBytes": MAX_MEMBER_BYTES, "qmldirBytes": MAX_MANIFEST_BYTES,
+                       "programHeaders": MAX_ELF_PROGRAM_HEADERS, "neededNames": 256,
+                       "dynamicBytes": MAX_ELF_DYNAMIC_BYTES, "stringTableBytes": MAX_ELF_STRING_TABLE,
+                       "cooperativeSeconds": INVENTORY_SECONDS, "rpmReserveSeconds": INVENTORY_RPM_RESERVE,
+                       "finalizationReserveSeconds": 3.1, "sentinelBytesPerRead": 1},
+            "coverage": {"transitiveTraversal": "UNRUN", "loaderResolution": "UNRUN",
+                         "abiSelection": "UNRUN", "qmlImports": "UNRUN",
+                         "pythonBuildProvenance": "UNRUN", "runtimeHealth": "UNRUN"},
+            "limitations": ["direct_tags_only_unresolved_dependencies", "no_loader_resolution",
+                            "no_library_or_plugin_execution", "no_abi_selection", "dynamic_flags_semantics_unrun",
+                            "no_qml_implementation_or_import_coverage", "no_python_build_provenance",
+                            "no_binary_or_session_health", "rpm_ownership_not_integrity",
+                            "host_distribution_not_attested", "cooperative_not_hard_filesystem_deadline",
+                            "optional_overrun_may_invalidate_mandatory_finalization",
+                            "not_runtime_inventory_caller_assertion_unverified"]}
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="package.py", description=__doc__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -1000,6 +1448,8 @@ def parser() -> argparse.ArgumentParser:
     verify_command.add_argument("archive", type=Path)
     verify_command.add_argument("--sha256", required=True)
     verify_command.add_argument("--commit", required=True)
+    inventory_command = commands.add_parser("inventory")
+    inventory_command.add_argument("--stage", required=True, type=Path)
     commands.add_parser("doctor")
     return result
 
@@ -1007,6 +1457,10 @@ def parser() -> argparse.ArgumentParser:
 def main(arguments: list[str] | None = None) -> int:
     options = parser().parse_args(arguments)
     try:
+        if options.command == "inventory":
+            result = inventory(options.stage)
+            print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+            return {"ok": 0, "missing": 1, "unknown": 2}[result["status"]]
         if options.command == "doctor":
             result = doctor()
             print(json.dumps(result, sort_keys=True, separators=(",", ":")))
