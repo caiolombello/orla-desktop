@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import QtQuick.Templates as Templates
 import "../code/Style.js" as Style
+import "../code/Appearance.js" as Appearance
 
 ColumnLayout {
     id: editor
@@ -13,6 +14,69 @@ ColumnLayout {
     signal canceled()
     spacing: Style.space.sm
     property var focusReveal: null
+    property bool advancedOpen: false
+    property bool themeOpen: false
+    readonly property string advancedColorField: {
+        if (!appearance || !appearance.draft) return "";
+        const result = Appearance.validateTokens(appearance.draft.tokens);
+        for (const issue of result.errors || []) {
+            const prefix = "$/tokens/";
+            if (!issue.field.startsWith(prefix)) continue;
+            const key = issue.field.substring(prefix.length);
+            if (Appearance.colorKeys.indexOf(key) >= 0) return key;
+        }
+        return "";
+    }
+    readonly property bool themeIssue: !!appearance && (appearance.themePending || appearance.themeError.length > 0)
+    readonly property bool themeAttention: themeIssue || (importing && appearance.themeText.length > 0)
+    readonly property bool advancedIssue: advancedColorField.length > 0 || themeAttention
+    onAdvancedColorFieldChanged: if (advancedColorField.length) showAdvancedIssue()
+    onThemeAttentionChanged: if (themeAttention) showAdvancedIssue()
+    onAppearanceChanged: resetSections()
+    onImportingChanged: if (!importing) showAdvancedIssue()
+    Component.onCompleted: { resetSections(); showAdvancedIssue(); }
+    Connections {
+        target: editor.appearance
+        function onEditingChanged() { editor.resetSections(); editor.showAdvancedIssue(); }
+    }
+    function restoreSectionFocus(section, target) {
+        const captured = focusReveal;
+        if (!captured || !captured.owner || !captured.owner.activeFocus) return;
+        let owner = captured.owner;
+        while (owner && owner !== section) owner = owner.parent;
+        if (!owner) return;
+        if (visible && appearance && appearance.editing && target.enabled)
+            target.forceActiveFocus(Qt.TabFocusReason);
+        if (focusReveal === captured) focusReveal = null;
+    }
+    function setThemeOpen(requested, reset = false, fallback = themeDisclosure) {
+        if (!themeDisclosure || !themeFields) return;
+        const next = !!requested || (!reset && themeAttention && appearance.editing);
+        // Move focus before visibility changes, including programmatic collapse.
+        if (!next) restoreSectionFocus(themeFields, fallback);
+        themeOpen = next;
+        themeDisclosure.checked = next;
+    }
+    function setAdvancedOpen(requested, reset = false, fallback = advancedDisclosure) {
+        if (!advancedDisclosure || !advancedFields) return;
+        const next = !!requested || (!reset && advancedIssue && appearance.editing);
+        if (!next) {
+            restoreSectionFocus(advancedFields, fallback);
+            setThemeOpen(false, true, fallback);
+        }
+        advancedOpen = next;
+        advancedDisclosure.checked = next;
+        if (next && themeAttention) setThemeOpen(true);
+    }
+    function resetSections(fallback = advancedDisclosure) {
+        if (!advancedDisclosure || !themeDisclosure) return;
+        setAdvancedOpen(false, true, fallback);
+        focusReveal = null;
+    }
+    function showAdvancedIssue() {
+        if (appearance && appearance.editing && (advancedColorField.length > 0 || themeAttention))
+            setAdvancedOpen(true);
+    }
     function reveal(control, owner) {
         focusReveal = {control:control, owner:owner || control};
         revealNow(control);
@@ -131,130 +195,6 @@ ColumnLayout {
                     }
                 }
             }
-            Controls.Button {
-                id: themeDisclosure
-                enabled: !editor.importing
-                objectName: "appearanceThemeJSON"
-                Layout.fillWidth: true
-                text: qsTr("Tema JSON experimental")
-                checkable: true
-                Accessible.name: text
-                Accessible.description: checked ? qsTr("Seção expandida") : qsTr("Seção recolhida")
-                KeyNavigation.tab: checked ? themeInput : null
-                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                visible: themeDisclosure.checked
-                enabled: !editor.importing
-                Controls.Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Cole o JSON de um tema 0.1-experimental. Usar na prévia substitui os ajustes desta prévia; Aplicar salva neste perfil.")
-                    wrapMode: Text.WordWrap
-                    textFormat: Text.PlainText
-                }
-                Controls.ScrollView {
-                    id: themeScroll
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 120
-                    Layout.minimumHeight: 120
-                    Layout.maximumHeight: 120
-                    contentWidth: availableWidth
-                    clip: true
-                    Controls.TextArea {
-                        id: themeInput
-                        objectName: "appearanceThemeInput"
-                        Accessible.name: qsTr("JSON do tema experimental")
-                        textFormat: TextEdit.PlainText
-                        wrapMode: TextEdit.Wrap
-                        selectByMouse: true
-                        text: editor.appearance.themeText
-                        enabled: editor.appearance.editing
-                        KeyNavigation.priority: KeyNavigation.BeforeItem
-                        KeyNavigation.tab: themePreview
-                        KeyNavigation.backtab: themeDisclosure
-                        onTextChanged: if (text !== editor.appearance.themeText) editor.appearance.setThemeText(text)
-                        onActiveFocusChanged: if (activeFocus) editor.reveal(themeScroll)
-                        onCursorRectangleChanged: {
-                            if (!activeFocus) return;
-                            const viewport = themeScroll.contentItem;
-                            if (cursorRectangle.y < viewport.contentY) viewport.contentY = cursorRectangle.y;
-                            else if (cursorRectangle.y + cursorRectangle.height > viewport.contentY + viewport.height)
-                                viewport.contentY = cursorRectangle.y + cursorRectangle.height - viewport.height;
-                        }
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Controls.Button {
-                        id: themePreview
-                        objectName: "appearanceThemePreview"
-                        text: qsTr("Usar na prévia")
-                        enabled: editor.appearance.editing && !editor.appearance.stale && editor.appearance.themeText.length > 0
-                        onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                        onClicked: {
-                            if (!editor.appearance.previewTheme()) themeInput.forceActiveFocus();
-                        }
-                    }
-                    Controls.Button {
-                        objectName: "appearanceThemeClear"
-                        text: qsTr("Limpar JSON")
-                        enabled: editor.appearance.editing
-                        onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                        onClicked: editor.appearance.clearThemeInput()
-                    }
-                }
-                Controls.Label {
-                    objectName: "appearanceThemeMetadata"
-                    Layout.fillWidth: true
-                    visible: editor.appearance.themeMetadata !== null
-                    text: editor.appearance.themeMetadata ?
-                        (editor.appearance.themeModified ? qsTr("Base importada: ") : qsTr("Tema: "))
-                        + editor.appearance.themeMetadata.name + "\n"
-                        + qsTr("Autor: ") + editor.appearance.themeMetadata.author + "\n"
-                        + qsTr("Versão: ") + editor.appearance.themeMetadata.version + " · "
-                        + qsTr("Licença: ") + editor.appearance.themeMetadata.license + "\n"
-                        + qsTr("Declarações do arquivo; direitos e identidade não verificados.") : ""
-                    wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                }
-            }
-            SectionLabel { text: qsTr("Cores · #RRGGBB") }
-            Card {
-                enabled: !editor.importing
-                Layout.fillWidth: true
-                padding: 0
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: 0
-                    Repeater {
-                        id: colorRows
-                        model: [{key: "foreground", label: qsTr("Texto")}, {key: "muted", label: qsTr("Texto secundário")},
-                            {key: "accent", label: qsTr("Destaque")}, {key: "surface", label: qsTr("Superfície")}, {key: "border", label: qsTr("Borda")}]
-                        FormRow {
-                            required property var modelData
-                            required property int index
-                            last: index === colorRows.count - 1
-                            Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-                            Rectangle {
-                                implicitWidth: Style.size.iconMd; implicitHeight: Style.size.iconMd; radius: width / 2
-                                color: editor.appearance.effective.tokens[modelData.key]
-                                border.color: Style.alpha(palette.windowText, 0.3)
-                            }
-                            Controls.TextField {
-                                objectName: "appearanceColor" + modelData.key
-                                Layout.preferredWidth: 96
-                                Accessible.name: modelData.label + qsTr(" · cor hexadecimal")
-                                selectByMouse: true
-                                maximumLength: 16
-                                text: editor.appearance.draft ? editor.appearance.draft.tokens[modelData.key] : ""
-                                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                                onTextEdited: editor.appearance.setToken(modelData.key, text)
-                            }
-                        }
-                    }
-                }
-            }
             SectionLabel { text: qsTr("Forma e movimento") }
             Card {
                 enabled: !editor.importing
@@ -291,6 +231,160 @@ ColumnLayout {
                             onActiveFocusChanged: if (activeFocus) editor.reveal(this)
                             onToggled: editor.appearance.setToken("reducedMotion", checked)
                         }
+                    }
+                }
+            }
+            OrlaButton {
+                id: advancedDisclosure
+                objectName: "appearanceAdvanced"
+                Layout.fillWidth: true
+                text: checked ? qsTr("Recolher ajustes avançados") : qsTr("Ajustes avançados")
+                checkable: true
+                enabled: !editor.importing || editor.themeAttention
+                Accessible.description: checked ? qsTr("Seção expandida") : qsTr("Seção recolhida")
+                onCheckedChanged: editor.setAdvancedOpen(checked)
+                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                Keys.onReturnPressed: event => { toggle(); event.accepted = true; }
+            }
+            ColumnLayout {
+                id: advancedFields
+                objectName: "appearanceAdvancedSection"
+                Layout.fillWidth: true
+                spacing: Style.space.sm
+                visible: editor.advancedOpen
+                SectionLabel { text: qsTr("Cores · #RRGGBB") }
+                Card {
+                    enabled: !editor.importing
+                    Layout.fillWidth: true
+                    padding: 0
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+                        Repeater {
+                            id: colorRows
+                            model: [{key: "foreground", label: qsTr("Texto")}, {key: "muted", label: qsTr("Texto secundário")},
+                                {key: "accent", label: qsTr("Destaque")}, {key: "surface", label: qsTr("Superfície")}, {key: "border", label: qsTr("Borda")}]
+                            FormRow {
+                                required property var modelData
+                                required property int index
+                                last: index === colorRows.count - 1
+                                Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                                Rectangle {
+                                    implicitWidth: Style.size.iconMd; implicitHeight: Style.size.iconMd; radius: width / 2
+                                    color: editor.appearance.effective.tokens[modelData.key]
+                                    border.color: Style.alpha(palette.windowText, 0.3)
+                                }
+                                Controls.TextField {
+                                    objectName: "appearanceColor" + modelData.key
+                                    Layout.preferredWidth: 96
+                                    Accessible.name: modelData.label + qsTr(" · cor hexadecimal")
+                                    selectByMouse: true
+                                    maximumLength: 16
+                                    text: editor.appearance.draft ? editor.appearance.draft.tokens[modelData.key] : ""
+                                    onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                                    onTextEdited: editor.appearance.setToken(modelData.key, text)
+                                }
+                            }
+                        }
+                    }
+                }
+                Controls.Button {
+                    id: themeDisclosure
+                    enabled: !editor.importing || editor.themeAttention
+                    objectName: "appearanceThemeJSON"
+                    Layout.fillWidth: true
+                    text: qsTr("Tema JSON experimental")
+                    checkable: true
+                    Accessible.name: text
+                    Accessible.description: checked ? qsTr("Seção expandida") : qsTr("Seção recolhida")
+                    KeyNavigation.tab: editor.themeOpen ? themeInput : null
+                    onCheckedChanged: editor.setThemeOpen(checked)
+                    Keys.onReturnPressed: event => { toggle(); event.accepted = true; }
+                    onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                }
+                ColumnLayout {
+                    id: themeFields
+                    Layout.fillWidth: true
+                    visible: editor.themeOpen
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Cole o JSON de um tema 0.1-experimental. Usar na prévia substitui os ajustes desta prévia; Aplicar salva neste perfil.")
+                        wrapMode: Text.WordWrap
+                        textFormat: Text.PlainText
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        visible: editor.themeAttention && (editor.importing || editor.appearance.themePending)
+                        text: editor.importing ? qsTr("Limpe este JSON de tema para continuar com a aparência portátil.")
+                            : qsTr("Use na prévia ou limpe o JSON para habilitar Aplicar.")
+                        wrapMode: Text.WordWrap
+                        textFormat: Text.PlainText
+                        font.pixelSize: Style.type.caption
+                    }
+                    Controls.ScrollView {
+                        id: themeScroll
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 120
+                        Layout.minimumHeight: 120
+                        Layout.maximumHeight: 120
+                        contentWidth: availableWidth
+                        clip: true
+                        Controls.TextArea {
+                            id: themeInput
+                            objectName: "appearanceThemeInput"
+                            Accessible.name: qsTr("JSON do tema experimental")
+                            textFormat: TextEdit.PlainText
+                            wrapMode: TextEdit.Wrap
+                            selectByMouse: true
+                            text: editor.appearance.themeText
+                            enabled: editor.appearance.editing && !editor.importing
+                            KeyNavigation.priority: KeyNavigation.BeforeItem
+                            KeyNavigation.tab: themePreview
+                            KeyNavigation.backtab: themeDisclosure
+                            onTextChanged: if (text !== editor.appearance.themeText) editor.appearance.setThemeText(text)
+                            onActiveFocusChanged: if (activeFocus) editor.reveal(themeScroll, themeInput)
+                            onCursorRectangleChanged: {
+                                if (!activeFocus) return;
+                                const viewport = themeScroll.contentItem;
+                                if (cursorRectangle.y < viewport.contentY) viewport.contentY = cursorRectangle.y;
+                                else if (cursorRectangle.y + cursorRectangle.height > viewport.contentY + viewport.height)
+                                    viewport.contentY = cursorRectangle.y + cursorRectangle.height - viewport.height;
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Controls.Button {
+                            id: themePreview
+                            objectName: "appearanceThemePreview"
+                            text: qsTr("Usar na prévia")
+                            enabled: editor.appearance.editing && !editor.importing && !editor.appearance.stale && editor.appearance.themeText.length > 0
+                            onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                            onClicked: {
+                                if (!editor.appearance.previewTheme()) themeInput.forceActiveFocus();
+                            }
+                        }
+                        Controls.Button {
+                            objectName: "appearanceThemeClear"
+                            text: qsTr("Limpar JSON")
+                            enabled: editor.appearance.editing && (!editor.preset || !editor.preset.busy)
+                            onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                            onClicked: editor.appearance.clearThemeInput()
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "appearanceThemeMetadata"
+                        Layout.fillWidth: true
+                        visible: editor.appearance.themeMetadata !== null
+                        text: editor.appearance.themeMetadata ?
+                            (editor.appearance.themeModified ? qsTr("Base importada: ") : qsTr("Tema: "))
+                            + editor.appearance.themeMetadata.name + "\n"
+                            + qsTr("Autor: ") + editor.appearance.themeMetadata.author + "\n"
+                            + qsTr("Versão: ") + editor.appearance.themeMetadata.version + " · "
+                            + qsTr("Licença: ") + editor.appearance.themeMetadata.license + "\n"
+                            + qsTr("Declarações do arquivo; direitos e identidade não verificados.") : ""
+                        wrapMode: Text.Wrap
+                        textFormat: Text.PlainText
                     }
                 }
             }

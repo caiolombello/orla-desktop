@@ -10,6 +10,7 @@ they would on that desktop. Writes one PNG per surface plus `index.png`.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -157,6 +158,90 @@ class Gallery:
         engine.deleteLater()
         QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
         QTest.qWait(10)
+
+    def appearance_advanced(self, host: str) -> None:
+        """Progressive appearance controls in the existing short popup fixture."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "QmlHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+
+        def evaluate(source):
+            expression = QQmlExpression(context, dock, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+
+        def control(name):
+            declared = window.findChild(QQuickItem, name)
+            if declared is not None:
+                return declared
+            # Repeater delegates have visual parents outside QObject.findChild.
+            # Traverse our editor in QML, avoiding Python wrappers for unrelated
+            # private native items in the complete Plasma fixture.
+            advanced = window.findChild(QQuickItem, "appearanceAdvanced")
+            if advanced is None:
+                raise RuntimeError("Missing appearance disclosure")
+            target = advanced.parentItem()
+            source = "(function find(item) { if (item.objectName === " + json.dumps(name) + ") return item; for (const child of item.children) { const found = find(child); if (found) return found; } return null; })(this)"
+            expression = QQmlExpression(QQmlEngine.contextForObject(target), target, source)
+            value, _ = expression.evaluate()
+            if expression.hasError() or value is None:
+                raise RuntimeError("Missing appearance gallery control: " + name)
+            return value
+
+        def focus(item):
+            assert item.isVisible()
+            item.forceActiveFocus(Qt.TabFocusReason)
+            QTest.qWait(60)  # Let the editor reveal its focused control.
+
+        try:
+            window.setProperty("width", 900)
+            window.setProperty("height", 900)
+            evaluate('root.anchors.centerIn=undefined;root.x=40;root.y=24;settings.popupType=0;'
+                     'settings.width=420;settings.heightBudget=420;'
+                     'profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);'
+                     'profiles.select("work",profiles.activeProfileId,profiles.revision);settings.open()')
+            QTest.qWait(60)
+            popup = window.findChild(QQuickItem, "settingsPopup")
+            advanced = control("appearanceAdvanced")
+            assert not advanced.property("checked")
+            assert not control("appearanceColorforeground").isVisible()
+            assert not control("appearanceThemeJSON").isVisible()
+            self.save(f"appearance-{host}-collapsed-420", window, self.scene_rect(popup))
+            focus(control("appearanceNumberopacity"))
+            self.save(f"appearance-{host}-common-420", window, self.scene_rect(popup))
+
+            focus(advanced)
+            QTest.keyClick(window, Qt.Key_Space)
+            assert advanced.property("checked")
+            focus(control("appearanceColorforeground"))
+            self.save(f"appearance-{host}-colors-420", window, self.scene_rect(popup))
+
+            theme = control("appearanceThemeJSON")
+            focus(theme)
+            QTest.keyClick(window, Qt.Key_Space)
+            assert theme.property("checked")
+            field = control("appearanceThemeInput")
+            assert field.isVisible()
+            field.setProperty("text", '{"name":"Tema sintético incompleto para revisão"}')
+            focus(control("appearanceThemePreview"))
+            QTest.keyClick(window, Qt.Key_Space)
+            QTest.qWait(60)
+            assert control("appearanceError").isVisible()
+            focus(field)
+            self.save(f"appearance-{host}-json-error-420", window, self.scene_rect(popup))
+            # No Apply: synthetic invalid input is discarded with this window.
+        finally:
+            window.close()
+            window.deleteLater()
+            QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
+            QTest.qWait(10)
+            engine.deleteLater()
+            QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
+            QTest.qWait(10)
 
     def bar(self, host: str) -> None:
         from test_bar import FixtureApplication, FixtureControlCenter, FixtureSession
@@ -491,6 +576,7 @@ def render(host: str, output: Path) -> int:
     gallery = Gallery(output)
     gallery.dock(host)
     gallery.appearance_catalog(host)
+    gallery.appearance_advanced(host)
     gallery.bar(host)
     if host == "dark":
         gallery.launcher()

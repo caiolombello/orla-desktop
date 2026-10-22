@@ -79,6 +79,11 @@ jobs:
         run: |
           $ORLA_CI_PYTHON -B -m unittest test_theme_consumer test_appearance_preset_parser test_appearance_preset -v
           $ORLA_CI_PYTHON -B -m unittest \
+            test_appearance.AppearanceTests.test_collapsed_advanced_skips_technical_fields_and_common_preview_cancels \
+            test_appearance.AppearanceTests.test_keyboard_expands_and_collapsing_focused_color_returns_to_disclosure \
+            test_appearance.AppearanceTests.test_theme_validation_reveals_collapsed_advanced_without_losing_invalid_text \
+            test_appearance.AppearanceTests.test_pending_theme_and_invalid_color_stay_recoverable_until_cleared \
+            test_appearance.AppearanceTests.test_apply_undo_preserve_disclosure_and_reopening_resets_it \
             test_appearance.AppearanceTests.test_theme_preview_preserves_base_and_only_apply_saves_normalized_tokens \
             test_appearance.AppearanceTests.test_theme_controls_use_keyboard_plain_text_and_tab_leaves_input \
             test_appearance.AppearanceTests.test_invalid_or_pending_theme_keeps_last_preview_and_clear_recovers \
