@@ -18,6 +18,8 @@ Item {
     property bool loading: false
     // Logical revocation does not settle callbacks already owned by the transport.
     readonly property bool callPending: internal.pendingCalls > 0
+    // A read refused only by admission (another reader's turn); the owner retries it once.
+    readonly property bool admissionWaiting: internal.admissionWaiting
     property string errorCode: ""
     readonly property string error: !errorCode ? "" : module === "quota"
         ? qsTr("Integração de quota indisponível.") : qsTr("Integração de periféricos indisponível.")
@@ -31,14 +33,17 @@ Item {
         property int pendingCalls: 0
         property int publishingPending: 0
         property bool refreshDeferred: false
+        property bool admissionWaiting: false
         property var accepted: null
         property var identity: null
         property double lastNow: -1
         property double freshnessFloor: -1
     }
+    function admitted() {
+        return admissionAllowed === null || (typeof admissionAllowed === "function" && admissionAllowed());
+    }
     function canRead() {
-        return !internal.revoking && internal.publishingPending === 0 && active && !suspended && (admissionAllowed === null
-            || (typeof admissionAllowed === "function" && admissionAllowed()));
+        return !internal.revoking && internal.publishingPending === 0 && active && !suspended && admitted();
     }
     function nowMs() { return nowMsOverride >= 0 ? nowMsOverride : Date.now(); }
     function emptyValue(isActive) { return module === "quota" ? Quota.empty(isActive) : Addon.empty(isActive); }
@@ -167,7 +172,13 @@ Item {
     }
     function refresh() {
         if (internal.publishingPending > 0) { internal.refreshDeferred = true; return; }
-        if (!internal.completed || !canRead() || internal.flight !== null) return;
+        if (!internal.completed || internal.flight !== null) return;
+        if (!canRead()) {
+            internal.admissionWaiting = !internal.revoking && internal.publishingPending === 0 && active && !suspended
+                && !admitted();
+            return;
+        }
+        internal.admissionWaiting = false;
         checkTime();
         if (!canRead() || internal.flight !== null) return;
         const operation = {generation: internal.generation, settling: false};

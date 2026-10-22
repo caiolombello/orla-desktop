@@ -47,8 +47,8 @@ Item {
         onLoadingChanged: root.addonLoading = loading || quotaAddon.loading
         onErrorCodeChanged: root.addonErrorChangedFrom(errorCode)
         onValueChanged: root.peripheralChanged(value)
-        // The host runs one worker at a time: the readers take turns.
-        onCallPendingChanged: if (!callPending) quotaAddon.refresh()
+        // The host runs one worker at a time: a reader refused for that reason reads next.
+        onCallPendingChanged: if (!callPending && quotaAddon.admissionWaiting) quotaAddon.refresh()
     }
     AddonPeripheralsState {
         id: quotaAddon
@@ -65,7 +65,7 @@ Item {
         onLoadingChanged: root.addonLoading = loading || addons.loading
         onErrorCodeChanged: root.quotaErrorChangedFrom(errorCode)
         onValueChanged: root.quotaReadingChanged(value)
-        onCallPendingChanged: if (!callPending) addons.refresh()
+        onCallPendingChanged: if (!callPending && addons.admissionWaiting) addons.refresh()
     }
     QtObject {
         id: internal

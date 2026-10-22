@@ -112,6 +112,27 @@ class QuotaDockRoutingTests(IntegrationStateCase):
         self.assertCountEqual(addon_calls, [[['peripherals']], [['quota']]])
         self.assertTrue(self.state.property('addonCallPending'))
 
+    def answer_addons_until_idle(self, limit=6):
+        """Answers the single pending addon read at a time; returns how many were answered."""
+        answered = 0
+        while self.state.property('addonCallPending') and answered < limit:
+            last = [args for service, args in self.routed() if service == self.ADDONS][-1]
+            frame = peripheral_frame() if last == [['peripherals']] else quota_frame()
+            self.evaluate(f'reply({json.dumps(json.dumps(frame))}, false, "{self.ADDONS}")', self.transport)
+            answered += 1
+        return answered
+
+    def test_a_round_of_turns_ends_instead_of_handing_the_turn_back(self):
+        # Native validation caught the two readers restarting each other forever.
+        self.select(['quota', 'peripherals'])
+        self.assertEqual(self.answer_addons_until_idle(), 2)
+        self.assertCountEqual([args for service, args in self.routed() if service == self.ADDONS],
+                              [[['peripherals']], [['quota']]])
+        # A periodic refresh runs exactly one more round.
+        self.evaluate('refresh()')
+        self.assertEqual(self.answer_addons_until_idle(), 2)
+        self.assertEqual(len([1 for service, _ in self.routed() if service == self.ADDONS]), 4)
+
     def test_opt_out_fixture_keeps_the_legacy_only_route(self):
         self.evaluate('addonQuotaEnabled = false')
         self.select(['quota'])
