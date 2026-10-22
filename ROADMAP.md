@@ -1,6 +1,8 @@
 # Roadmap do Orla Desktop
 
-Revisão: 21/10/2026. Base auditada inicial: CaioDock 0.2.0, publicado como Orla Dock 0.2.1 alpha, Plasma 6.7.5, Qt 6.11.2, Fedora 44, Wayland. A publicação alpha inclui identidade, instalador, documentação e CI; os marcos abaixo continuam sujeitos aos respectivos critérios de aceite.
+Revisão: 22/10/2026. Base auditada inicial: CaioDock 0.2.0, publicado como Orla Dock 0.2.1 alpha, Plasma 6.7.5, Qt 6.11.2, Fedora 44, Wayland. A publicação alpha inclui identidade, instalador, documentação e CI; os marcos abaixo continuam sujeitos aos respectivos critérios de aceite.
+
+**Alpha 0.2.10 (22/10):** reúne no `.plasmoid` e no ZIP o trabalho do dock integrado depois da 0.2.9 (PRs 23–114): controles diretos da Central de Controle (CC1-A a CC1-D), sistema visual unificado, arraste de widgets/apps, presets e importação de tema por arquivo, perfis automáticos opt-in, troca de área de trabalho e o host experimental de complementos de dados. Launcher, Menu Orla, composição Workspace e helper de layout continuam somente no Source. Nenhum marco abaixo fica concluído só por essa publicação; veja o [registro da release](docs/validation/release-0.2.10.md).
 
 
 **Direção atual de UX:** oferecer uma composição Orla opcional inspirada no macOS que substitui apenas os painéis KDE explicitamente selecionados e mantém recuperação do layout original. Dock Auto Hide, fundo translúcido e popups ancorados são a direção visual. Meta isolada abre Orla Search nesta instalação local após configuração explícita e reversível; o projeto mantém essa atribuição opt-in. QuotaLantern, PeriGauge e demais projetos pertencem ao futuro catálogo de módulos opcionais, desativados por padrão; os adaptadores locais existentes não constituem um marketplace implementado.
@@ -176,7 +178,7 @@ O planejamento cobre produto, experiência, arquitetura, distribuição, DX e co
 | [DX](docs/DX.md) | Fluxo atual, tooling proposto, mocks, galeria, contratos e contribuição sem API paga |
 | [Contribuição](CONTRIBUTING.md) e [identidade](docs/brand.md) | Entrada atual para colaboradores e assets próprios do projeto |
 
-Esses documentos especificam capacidades futuras. As releases públicas 0.2.5–0.2.9 não incluem SDK, runtime de plugins, catálogo, checkout ou integração de IA. O checkout de fonte contém uma fatia experimental de compatibilidade de provedores no launcher, integrada pelo [PR 20](https://github.com/caiolombello/orla-desktop/pull/20) e aprovada pela CI portátil; ela não implementa autenticação nem geração. O ZIP 0.2.9 inclui somente `scripts/ai.py` e `tests/test_ai.py`, sem painel do launcher. Repositório, landing e releases alpha já estão públicos; os novos marcos não equivalem a funcionalidades entregues.
+Esses documentos especificam capacidades futuras. As releases públicas 0.2.5–0.2.10 não incluem SDK, runtime de plugins, catálogo, checkout ou integração de IA. O checkout de fonte contém uma fatia experimental de compatibilidade de provedores no launcher, integrada pelo [PR 20](https://github.com/caiolombello/orla-desktop/pull/20) e aprovada pela CI portátil; ela não implementa autenticação nem geração. O ZIP 0.2.9 inclui somente `scripts/ai.py` e `tests/test_ai.py`, sem painel do launcher. Repositório, landing e releases alpha já estão públicos; os novos marcos não equivalem a funcionalidades entregues.
 
 ## O que já existe e o que falta
 
@@ -352,7 +354,7 @@ A release 0.2.9 cobre apenas a entrada global opcional, cards de Som/mídia e En
 
 **CC1-A no Source atual:** o card de áudio experimental acrescenta volume de 0% a 100%, mudo explícito e seleção da saída padrão, com IDs de alvo preservados, sincronização externa, readback, timeout e rollback por card. O comportamento de áudio congelado em nove caminhos recebeu aprovação independente no round 4; o freeze Source/mock histórico tem dez caminhos e acrescenta o teste de contraste para cores próprias do Orla sem recolorir botões/ComboBox. Os assets 0.2.9 permanecem CC0 e não contêm esses controles. Módulo privado do Plasma-PA, Pulse/PipeWire, barramento, compositor, seat, hardware, popups nativos, instalação e painel real continuam UNRUN. Microfone, brilho e Não perturbe ainda mantêm CC1 parcial. Consulte o [guia](docs/control-center.md) e a [validação Source](docs/validation/control-center-audio-source.md).
 
-- [ ] **CC0: Central de Controle de estado e atalhos.** A release 0.2.9 publicou botão global opcional com cards compartilhados de mídia/bateria e três atalhos explícitos às configurações KDE. CC0 segue parcial apesar da aprovação independente do Source; abertura real de KCM, popup/foco nativos, serviços e hardware não qualificados. Aceite completo exige estados independentes e acesso pelo dock sem a barra.
+- [ ] **CC0: Central de Controle de estado e atalhos.** A release 0.2.9 publicou botão global opcional com cards compartilhados de mídia/bateria e três atalhos explícitos às configurações KDE; a 0.2.10 acrescentou os controles diretos CC1-A a CC1-D. CC0 segue parcial apesar da aprovação independente do Source; abertura real de KCM, popup/foco nativos, serviços e hardware não qualificados. Aceite completo exige estados independentes e acesso pelo dock sem a barra.
 **CC1-B — brilho (21/10):** a Central ganhou o card **Tela**, com um slider por tela ajustável,
 leitura pelo modelo do PowerDevil e escrita confirmada pelo próprio serviço
 (`SetBrightnessWithContext`). Prova nativa com monitor externo: 98% e volta a 100%

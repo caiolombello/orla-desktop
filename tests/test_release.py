@@ -45,6 +45,7 @@ class ReleaseBundleTests(unittest.TestCase):
                 target=root/name;target.parent.mkdir(parents=True,exist_ok=True)
                 shutil.copyfile(source/name,target)
             shutil.copytree(source / "themes", root / "themes")
+            shutil.copytree(source / "addons", root / "addons")
             (root / "docs").mkdir(exist_ok=True)
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir(exist_ok=True)
@@ -79,6 +80,8 @@ class ReleaseBundleTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 required = ("themes/examples/essential.json", "themes/examples/mare.json",
                             "themes/schema/theme-0.1-experimental.schema.json",
+                            "addons/schema/manifest-0.1.schema.json", "addons/fixtures/peripherals-0.1.json",
+                            "addons/fixtures/quota-0.1.json",
                             "scripts/themes.py", "scripts/updates.py", "scripts/updates_contract.py", "scripts/__init__.py", "docs/theme-format.md", "tests/test_themes.py",
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
                             "package/contents/code/theme_format.py", "package/contents/code/theme_file.py",

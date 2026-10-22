@@ -9,7 +9,7 @@ rodada usou exclusivamente diretórios sintéticos próprios. Não houve leitura
 biblioteca pessoal nem chamada ao cliente Steam. A CLI está incluída no ZIP da
 prerelease 0.2.6. Os assets da
 release 0.2.5 publicada não a incluem. O Menu Orla experimental e o launcher
-continuam fora dos bundles públicos até 0.2.9.
+continuam fora dos bundles públicos até 0.2.10.
 
 O contrato JSON é `0.1-experimental`, independente da versão do Orla. O futuro
 consumidor deve tratar nomes como texto simples e distinguir inventário completo,

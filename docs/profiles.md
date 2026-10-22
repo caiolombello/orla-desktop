@@ -1,6 +1,6 @@
 # Manual dock profiles / Perfis manuais do dock
 
-Orla Dock profiles are alpha. P1/C1 are partial; this covers the dock. Current Source reads profile JSON `0.1-experimental` and `0.2-experimental`, independently versioned from Orla. New documents use `0.2-experimental`; loading an existing document does not migrate it. Grip reordering, profile rename and removal below are development increments, not part of the published 0.2.9 assets. Portable UI checks and installed/native qualification are separate.
+Orla Dock profiles are alpha. P1/C1 are partial; this covers the dock. Since 0.2.10, Orla reads profile JSON `0.1-experimental` and `0.2-experimental`, independently versioned from Orla. New documents use `0.2-experimental`; loading an existing document does not migrate it. Grip reordering, profile rename and removal below shipped in 0.2.10. Portable UI checks and installed/native qualification are separate.
 
 ## English
 

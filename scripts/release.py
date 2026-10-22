@@ -32,7 +32,9 @@ def bundle(root: Path) -> tuple[Path, Path, Path]:
         "LICENSE", "README.md", "README.pt-BR.md", "CONTRIBUTING.md",
         "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore",
     )]
-    for directory in (package, root / "scripts", root / "tests", root / "docs", root / "themes", root / "website", root / ".github"):
+    # addons/ holds the published add-on schemas and synthetic fixtures the bundled tests read.
+    for directory in (package, root / "scripts", root / "tests", root / "docs", root / "themes", root / "addons",
+                      root / "website", root / ".github"):
         sources.extend(path for path in directory.rglob("*")
                        if path.is_file() and not path.is_symlink()
                        and "__pycache__" not in path.parts

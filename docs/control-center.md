@@ -1,9 +1,8 @@
-# Central de Controle (Source experimental)
+# Central de Controle (experimental)
 
-Os assets publicados da alpha 0.2.9 continuam imutáveis: eles entregam a fatia
-CC0 de estado e atalhos, sem controles diretos. O Source atual acrescenta a
-primeira fatia CC1-A experimental para áudio. Essa mudança ainda não integra
-uma nova release.
+A alpha 0.2.9 entregou a fatia CC0 de estado e atalhos, sem controles diretos.
+A alpha 0.2.10 acrescenta os controles diretos experimentais descritos abaixo:
+áudio (CC1-A), brilho (CC1-B), Não perturbe (CC1-C) e microfone (CC1-D).
 
 Ative **Mostrar Central de Controle no dock (global)** em **Widgets** para
 exibir o botão opcional. A preferência herdada de CC0 é global, começa
@@ -26,8 +25,8 @@ exige uma única Orla Dock compatível; falta/ambiguidade deixa a entrada
 indisponível. A qualificação da barra na sessão real ainda é o gate S2, conforme
 o [registro Source compartilhado](validation/shared-control-center-source.md).
 
-Além dos cards compartilhados de mídia MPRIS e bateria, o card de áudio do
-Source atual permite:
+Além dos cards compartilhados de mídia MPRIS e bateria, o card de áudio
+permite:
 
 - ajustar o volume da saída padrão entre 0% e 100%;
 - silenciar ou reativar o som por ação explícita, sem ligar ou desligar o mudo
@@ -119,7 +118,8 @@ barramento da sessão, compositor, seat, hardware, popup nativo e painel
 instalado permanecem sem validação.
 
 Veja a [validação Source de áudio](validation/control-center-audio-source.md) e
-o [registro da alpha 0.2.9](validation/control-center-peripherals-0.2.9.md).
+os registros das alphas [0.2.9](validation/control-center-peripherals-0.2.9.md) e
+[0.2.10](validation/release-0.2.10.md).
 
 ## Microfone — CC1-D
 

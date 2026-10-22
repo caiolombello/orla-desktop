@@ -106,8 +106,8 @@ reaberturas a 50/100/500 ms passaram três vezes por intervalo; isso não garant
 50 ms em todos os ambientes. Não se observou janela ativa com a busca sem foco,
 e a ativação atual foi preservada. A prontidão visual deve acompanhar atividade
 da janela e foco real do campo; digitação sem intervalo e outros ambientes
-continuam sem qualificação. A release
-pública 0.2.9 permanece sem launcher; não há nova API pública de extensões.
+continuam sem qualificação. As releases
+públicas até 0.2.10 permanecem sem launcher; não há nova API pública de extensões.
 
 IA é uma capacidade opt-in invocada para uma tarefa identificável, não uma tela de chat obrigatória nem dependência de dock. Em 0.3, spikes devem validar APIs e CLIs oficiais, elegibilidade, consentimento, custo, armazenamento de credenciais e limites de protocolo antes do desenho de integração. A integração MVP pode chegar a partir de 0.5 como módulo opcional e isolado; não depende da estabilização de um SDK de plugins de terceiros. Vias possíveis:
 

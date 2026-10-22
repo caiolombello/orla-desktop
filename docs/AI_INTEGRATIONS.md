@@ -8,7 +8,7 @@ O checkout inclui um painel **IA** no launcher opcional. Todos os provedores con
 
 O helper reporta detecção/versão de Codex, Claude Code, OpenCode e LM Studio quando seus CLIs e formatos são reconhecidos. Ollama é somente presença: a versão não é consultada para evitar contato com um servidor. Esses estados não demonstram que uma conta, plano, API ou modelo possa ser usado. A1 ainda não foi concluída.
 
-O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.9; a experiência exige build separado do launcher. O ZIP inclui somente os helpers de detecção/teste e seus testes. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
+O painel está integrado ao repositório, mas não faz parte dos assets públicos 0.2.9 e 0.2.10; a experiência exige build separado do launcher. O ZIP inclui somente os helpers de detecção/teste e seus testes. O histórico abaixo continua sendo desenho futuro por rota, não evidência de integração de provedor. Veja a [validação Source delimitada](validation/ai-provider-source.md) para hashes, resultados, PR/CI e limitações.
 
 ### Fatia integrada nesta mudança Source: texto explícito via Ollama
 
