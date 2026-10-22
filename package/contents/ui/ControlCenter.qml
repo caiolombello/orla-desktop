@@ -122,19 +122,6 @@ Controls.Control {
                         displayText: currentIndex >= 0
                             ? root.boundedText(root.audio.outputs[currentIndex].label, 128)
                             : qsTr("Nenhuma saída")
-                        contentItem: TextInput {
-                            objectName: "controlCenterOutputDisplay"
-                            leftPadding: outputSelector.leftPadding
-                            rightPadding: outputSelector.rightPadding
-                            text: outputSelector.displayText
-                            enabled: false
-                            readOnly: true
-                            selectByMouse: false
-                            clip: true
-                            verticalAlignment: Text.AlignVCenter
-                            color: outputSelector.palette.buttonText
-                            font: outputSelector.font
-                        }
                         delegate: Controls.ItemDelegate {
                             required property var modelData
                             width: outputSelector.width

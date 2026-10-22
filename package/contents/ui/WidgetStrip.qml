@@ -57,7 +57,7 @@ Row {
             tooltip: wide ? info.tooltip : info.title + " · " + info.subtitle
             foreground: strip.dock.foreground; muted: strip.dock.muted; accent: strip.dock.accent
             animationDuration: strip.dock.motion
-            onClicked: strip.dock.openWidget(modelData.id)
+            onClicked: strip.dock.openWidget(modelData.id, this)
         }
     }
 }

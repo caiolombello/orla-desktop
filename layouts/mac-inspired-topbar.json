@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "preset": "mac-inspired-topbar",
+  "mode": "dock-plus-bar",
+  "screen": {
+    "connector": "SELECT-MONITOR"
+  },
+  "panel": {
+    "height": 32,
+    "location": "top",
+    "lengthMode": "fill",
+    "floating": false,
+    "opacity": "translucent",
+    "hiding": "none"
+  },
+  "replacePanelIds": [],
+  "reuseWidgetIds": {},
+  "modules": [
+    {
+      "key": "menu",
+      "enabled": true,
+      "config": {
+        "showMenuLabel": false,
+        "compactHeight": true
+      }
+    },
+    {
+      "key": "global-menu",
+      "enabled": true,
+      "config": {
+        "compactView": false,
+        "allScreens": true
+      }
+    },
+    {
+      "key": "spacer",
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "key": "tray",
+      "enabled": true,
+      "config": {
+        "controls": [
+          "audio",
+          "network"
+        ],
+        "overflow": []
+      }
+    },
+    {
+      "key": "clock",
+      "enabled": true,
+      "config": {
+        "showDate": false
+      }
+    }
+  ]
+}
