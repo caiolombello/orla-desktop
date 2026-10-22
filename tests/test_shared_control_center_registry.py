@@ -11,7 +11,7 @@ import shiboken6
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine, QQmlExpression
-from PySide6.QtQuick import QQuickItem
+from PySide6.QtQuick import QQuickItem, QQuickView, QQuickWindow
 
 
 class SharedControlCenterRegistryTests(unittest.TestCase):
@@ -24,6 +24,7 @@ class SharedControlCenterRegistryTests(unittest.TestCase):
         self.components = []
         self.contexts = []
         self.roots = []
+        self.native_windows = []
         self.warnings = []
         self.engine = self.new_engine()
         self.window, self.context = self.create(Path(__file__).with_name("SharedControlCenterRegistryHarness.qml"), self.engine)
@@ -67,6 +68,12 @@ class SharedControlCenterRegistryTests(unittest.TestCase):
                 if shiboken6.isValid(root):
                     root.deleteLater()
             self.drain()
+            if roots is self.roots:
+                for window in reversed(self.native_windows):
+                    if shiboken6.isValid(window):
+                        window.close()
+                        window.deleteLater()
+                self.drain()
         self.assertEqual(self.warnings, [])
 
     def owner(self, slot="a"):
@@ -75,6 +82,45 @@ class SharedControlCenterRegistryTests(unittest.TestCase):
 
     def open_a(self):
         return self.evaluate("clientA.open(host, anchor)")
+
+    def test_cpp_window_hosts_open_release_and_cancel_when_hidden(self):
+        owner = self.owner()
+        for window_type in (QQuickWindow, QQuickView):
+            with self.subTest(window=window_type.__name__):
+                window = window_type()
+                self.native_windows.append(window)
+                window.resize(240, 80)
+                window.show()
+                self.host.setParentItem(window.contentItem())
+                self.app.processEvents()
+                requests = owner.property("requestCount")
+                releases = owner.property("releaseCount")
+                try:
+                    self.assertEqual(self.host.window(), window)
+                    self.assertEqual(self.anchor.window(), window)
+                    self.assertTrue(self.evaluate("registry.validHost(host, anchor)"))
+                    self.assertTrue(self.open_a())
+                    self.drain()
+                    self.assertEqual(owner.property("requestCount"), requests + 1)
+                    self.assertTrue(self.client_a.property("isOpen"))
+                    self.evaluate("clientA.release()")
+                    self.assertFalse(self.client_a.property("isOpen"))
+                    self.assertEqual(owner.property("releaseCount"), releases + 1)
+
+                    self.assertTrue(self.open_a())
+                    self.drain()
+                    self.assertTrue(self.client_a.property("isOpen"))
+                    window.hide()
+                    self.drain()
+                    self.assertFalse(self.client_a.property("isOpen"))
+                    self.assertEqual(owner.property("requestCount"), requests + 2)
+                    self.assertEqual(owner.property("releaseCount"), releases + 2)
+                    self.assertIsNone(owner.property("pendingClient"))
+                    self.assertIsNone(owner.property("currentClient"))
+                finally:
+                    self.evaluate("clientA.release()")
+                    self.host.setParentItem(self.window.contentItem())
+                    window.close()
 
     def test_zero_late_one_two_owners_do_not_elect_or_construct_hardware(self):
         self.assertEqual(self.registry.property("status"), "unavailable")

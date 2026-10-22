@@ -75,9 +75,73 @@ real. O pequeno trecho no topo do crop pertence à âncora sintética.
 
 ## Gate seguinte: S2 nativo
 
-Comprovar o URL/engine e o dono do pacote efetivamente instalado; entrada à
-direita, posicionamento/escala, transient parent, clique/Escape/foco e remoção
-na sessão Plasma/Wayland. Depois, qualificar áudio real em prova separada com
-restauração exata do alvo observado. Um install ou PASS offscreen não encerra
-esses gates. Microfone, brilho, rede, Não perturbe, múltiplos docks/monitores e
-demais critérios CC0/CC1/T1 permanecem abertos.
+### Referência da janela do painel — correção em 13/10
+
+A sessão real confirmou o registro canônico e o estado compartilhado pela
+barra e pelo dock. A atualização gerenciada acrescentou a entrada ao mesmo
+painel, mantendo os cinco IDs anteriores e o banco original de recuperação.
+A abertura ainda não foi qualificada: o primeiro roteiro parou na guarda de
+hover; o segundo confirmou hover e envio do clique, mas não observou popup.
+Foco no botão e acknowledgment do dispositivo não comprovam `clicked`.
+
+Uma regressão isolada reproduziu uma causa de falha de abertura: `Window` do
+QML rejeita os hosts C++ `QQuickWindow` e `QQuickView` usados pelos painéis.
+A atribuição interrompia `ControlCenterEntry.open()` antes de encaminhar ao
+dono; a captura da exceção na barra podia deixar o botão sem ação nem erro.
+A referência agora usa `QtObject`, mantendo a identidade exata da janela e
+as guardas de visibilidade, destruição e release. O teste público reutiliza
+o cliente e verifica abrir, liberar, reabrir e cancelar ao ocultar cada host.
+
+O teste falhou nos dois hosts antes da correção. Depois passaram 57 testes
+(Registry 21, Session 29, composição 7) em Fusion e os mesmos 57 em
+`org.kde.desktop`, sem skips ou warnings. A galeria foi regenerada e revisada
+em claro e escuro; não houve mudança de composição visual. Essa prova usa
+hosts C++ offscreen. Abertura/foco com o código corrigido e áudio real
+têm provas nativas separadas, descritas abaixo.
+
+### Abertura pelas duas entradas — prova nativa delimitada
+
+Na sessão Plasma 6.7.5/Wayland, Qt 6.11.2, uma tela de 2648 × 1490 DIP com
+escala 2, o roteiro final de 18,61 s observou abertura, Tab e Escape tanto pela
+barra quanto pela dock retrátil. Tab levou foco ao volume pela barra e ao mudo
+pela dock; Escape ocultou o popup, desativou o áudio e devolveu foco à entrada
+correspondente. A janela de 378 × 542 DIP ficou dentro da tela: alinhada à
+barra direita e centralizada sobre o botão da dock, com transient parent
+correspondente ao painel de cada abertura.
+O registro canônico manteve dono único e as mesmas referências de popup,
+view e estado de áudio. Abrir e navegar produziram zero setters/retries.
+
+Os roteiros anteriores pararam na guarda de hover da dock, antes de enviar
+um clique a ela. O roteiro final incluiu dois movimentos na borda inferior,
+separados por 125 ms, compatíveis com a pressão exigida pelo KWin, e só clicou
+após observar hover real. Isso qualifica o fluxo final; não prova que todas
+as falhas anteriores tinham a mesma causa. Transferência com popup já aberto
+continua um gate próprio. Foram observadas duas criações
+cumulativas do backend para duas aberturas sequenciais; não se mediu a
+quantidade de backends simultâneos. Os dispositivos virtuais foram liberados e os arquivos
+de configuração, launcher, atalhos e recuperação permaneceram preservados.
+
+### Áudio e pacote final — prova nativa delimitada
+
+O roteiro de áudio final durou 18,36 s e acionou mudo com Space e um passo de
+volume com seta no controle focado. O serviço real confirmou cada efeito no
+mesmo alvo observado. O teste restaurou exatamente o mudo e os valores brutos
+dos canais originais, confirmou o fechamento por Escape e o foco no botão da
+barra, e liberou os dispositivos virtuais. Houve duas intenções de escrita
+pela interface e zero retries. A prova guarda apenas resultados e observações
+tipadas; nomes de dispositivos e valores privados permanecem em memória.
+Isso comprova efeito/readback nessa configuração, sem causalidade exclusiva
+ou garantia de compare-and-swap. A seleção de outra saída permanece UNRUN.
+O primeiro roteiro de áudio parou na guarda de hover antes de qualquer clique
+ou escrita; seu resultado foi preservado.
+
+A instrumentação temporária foi removida após essas provas. Os pacotes finais
+correspondem ao Source `204c16b` e mantêm a correção da janela. A verificação
+após recarga confirmou os seis itens da barra, dock, launcher, atalhos,
+configuração e banco de recuperação preservados. Essa recarga verifica pacote
+e composição instalada; não repete a prova de interação sem instrumentação.
+
+Ainda qualificar transferência com popup aberto, retirada da entrada da barra,
+seleção de saída, microfone, brilho, rede, Não perturbe, múltiplos docks/monitores
+e os demais critérios CC0/CC1/T1. Um install ou PASS offscreen não encerra
+esses gates.
