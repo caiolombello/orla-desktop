@@ -980,6 +980,7 @@ Item {
             contexts: contextState
             contextBindings: contextBindingsState
             desktopSwitch: desktopSwitchState
+            integrations: localIntegrations
             onAppearanceCanceled: settings.close()
         }
     }

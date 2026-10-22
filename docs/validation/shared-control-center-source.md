@@ -652,3 +652,50 @@ setter counts, independent keyboard-seat identity/focus return, pending audio
 and backend lifecycle in the installed panel remain separate gates. CC0/CC1/T1
 remain partial. The existing visual captures and public release assets are
 unchanged.
+
+
+## Native bar context-menu observation — 15 October 2026
+
+A no-edit attempt on the installed right-hand CC applet failed at
+`context_observation_deadline`. KWin observed a popup transient for the exact
+bar, while the AT-SPI application-child traversal found no menu. The original
+receipt's `popupAbsentFinal=true` only described that incomplete traversal: an
+independent, input-free KWin snapshot confirmed the same popup still visible.
+The resource-release and complete original-configuration preservation checks
+remain valid; visual cleanup was not established by the failed visitor. That
+receipt is retained unchanged.
+
+[Qt 6.11.2](https://github.com/qt/qtbase/blob/v6.11.2/src/gui/accessible/qaccessibleobject.cpp) excludes `Qt::Popup` from `QAccessibleApplication` child enumeration.
+The [native libplasma 6.7.5 menu](https://github.com/KDE/libplasma/blob/v6.7.5/src/plasmaquick/plasmoid/plasmoiditem.cpp) is a parentless QWidget with a QWindow transient
+parent; that relationship does not add it to the enumerated application children.
+Qt's AT-SPI bridge also ignores PopupMenuStart/End. The independent recovery used
+own-application showing/focus/children events and bounded actual parent traversal
+to retain a direct PopupMenu reference. Hovering the freshly identified popup
+produced that reference; the unique allowlisted Configure item was then hovered,
+its focused state rechecked, and Escape dispatched. No Configure activation,
+preference input or click occurred during recovery.
+
+The passing episode captured 12 own events and one direct menu root, using five
+relative nudges with total displacement five. A fresh post-Escape KWin observation
+and post-nudge snapshot excluded both the original UUID regardless of transient
+parent changes and any replacement popup parented to the bar. Full configuration
+bytes/map, installed packages, roles, launcher, protected files and layout banks
+remained equal; devices, event listeners, accessibility settings, observer and
+bus resources were released/restored. This used the preceding 68-file package,
+before the optional-module UI increment, without installing or reloading it.
+
+An earlier recovery candidate stopped before hover because its full-frame
+containment check rejected a fractional right edge slightly outside the output.
+The passing candidate admits only a hover point strictly inside both the exact
+known popup and output; action targets remain fully contained. Ten synthetic
+event/cleanup cases and three point-admission cases passed. The parent-only
+absence predicate's reparenting counterexample was detected and corrected before
+the passing execution. Failed attempts remain separate from this recovery.
+
+Private evidence: `.runtime/bar-config-20261015/root-context-native-r1/RESULT.json`,
+`root-menu-snapshot-r1/RESULT.json`, `root-recovery-native-r1/RESULT.json` and
+`root-recovery-native-r2/RESULT.json`. The last status is
+`PASS_INDEPENDENT_BAR49_MENU_RECOVERY`. This qualifies observation and cleanup of
+that menu, not opening the configuration dialog, its size-key footprint, native
+Apply/Cancel, preference persistence after restart or independent keyboard-seat
+ownership. Those bar-configuration gates remain open.
