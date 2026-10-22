@@ -411,6 +411,84 @@ Both hosted jobs also passed on the accessibility/focus Source checkpoint
 [run 38741910764](https://github.com/caiolombello/orla-desktop/actions/runs/38741910764).
 The subsequent native visits changed no product Source.
 
+### Running app order recovery — 15 October 2026
+
+An isolated KWin 6.7.5/Wayland experiment reproduced a distinction between the
+saved launcher list and the manual task map. With two dormant synthetic pins,
+assigning the original list restored their order. With both apps running, the
+same assignment left visible B/A while `launcherList` already reported A/B.
+Moving by current window identity restored A/B. This is consistent with the
+[KDE move/sync contract](https://github.com/KDE/plasma-workspace/blob/cc1ab7963f94a9b76836412855caed6b94066188/libtaskmanager/tasksmodel.h#L887-L911);
+list equality alone is not visual recovery evidence.
+
+The actual production DockView then reproduced the failure through its existing
+`moveTask` entrypoint. A one-shot `rowsMoved` observer committed an unrelated
+calendar preference, advancing the managed profile revision. The attempted move
+returned false and left the saved launcher bytes A/B intact, but the real task
+rows remained B/A. The candidate now postpones nested reloads until the native
+move/sync returns and reconciles the manual map against the newest saved
+authority. KDE's public `launcherPosition()` supplies the rank; only pinned slots
+are sorted, with window identities and within-pin order retained. This direction
+does not call `syncLaunchers()` or write configuration. Obsolete moves stop
+before their profile write; managed saves also recheck the current model.
+
+The same regression passed after the correction. Its repository version,
+`tests/native/task_order.py`, also failed on an isolated copy of the unchanged
+base with exit 1 and `SOURCE_REFUSAL_LEFT_RUNNING_ORDER_CHANGED`, then passed on
+the candidate with exit 0. Both recorded one fixture configuration signal from
+the unrelated observer, unchanged saved launcher bytes and the actual task-row
+order. These are Qt fixture setter counts, not native KConfig write counts.
+
+Additional isolated cases passed: selecting a newer profile from `rowsMoved`
+produced no launcher-list change inside that callback, no obsolete profile write
+and the newest profile's B/A display. Returning to A/B and performing a normal
+move then saved B/A once. A seven-window case included the fixture window, two
+windows for A, pinned B/C and unpinned U/V. Changing the authoritative pin order
+to C/B/A preserved the exact unpinned/fixture slots and A-window relative order;
+a following normal move/sync produced coherent saved/displayed order with one
+fixture setter. No TaskManager activation/close command or host input was requested.
+
+All experiments used a separate D-Bus session, virtual compositor and four
+private XDG directories. Interpreter metadata requested only
+`org_kde_plasma_window_management` through normal KWin permission checks. Earlier
+attempts that did not observe the windows remain FAILED; debug output identified
+a trailing semicolon being read as part of the permission token. Correcting that
+private metadata enabled the experiment without a permission bypass or KDE ID
+impersonation. Every run confirmed host shell/configuration unchanged and owned
+processes gone. The original model-only runner could exit 0 while its inner probe
+failed; acceptance consumed the inner result. The repository regression returns
+nonzero on failure.
+
+To repeat the repository regression, prepare fresh owned A/B desktop fixtures
+and interpreter metadata in an isolated KWin/D-Bus session. Set runtime, config,
+data and cache XDG paths to strict subdirectories of the same private area, then run
+`python3 -B tests/native/task_order.py --area /absolute/private/area` with an outer
+bounded compositor lifecycle. The script refuses ordinary non-private XDG paths
+and writes `PROBE-RESULT.json` exclusively. It requires the local KDE QML modules
+and is intentionally outside portable CI; it does not create its compositor or
+authorize a client in the user's session. A negative check confirmed that runtime
+equal to the area is refused before workers start, keeping readiness files inside
+the private area.
+
+Design check, seven design guards, gallery generation and the 67-file package
+build passed; the dark/light dock captures were inspected. The combined
+`test_profiles_dock test_qml` run had 56 tests, four skips and one failure in each
+Fusion/KDE style. The failure at `test_qml.py:300` was a native popup not becoming
+visible on the offscreen platform. The isolated Fusion test failed identically
+with both the candidate and the unchanged base. It remains a separate unresolved
+check; the suite is not reported as entirely green.
+
+Product Source `b32e1b0` was installed with backup and exactly one controlled shell
+stop/start. Fresh readback confirmed all 67 package hashes and modes, the original
+configuration map and inventory, protected files and resident launcher. Automatic
+locking remained false. No physical post-install input was performed for this
+increment. App dragging, cancellation/focus of that future gesture, preferred
+bindings/encoded aliases/unavailable pins in this new reconciliation, topology
+churn during reconciliation and other output/desktop configurations remain
+unqualified. C1/UX1 remain partial; no release asset changed. Private receipts:
+`.runtime/app-order-20261015/root-evidence-r1/`, `root-local-install-r1/` and the
+static Source/install reviews.
+
 ### Launcher CI diagnosis checkpoint
 
 Both hosted jobs passed on widget Source `7c658596275abc71a696b478a0586408dbcac292`

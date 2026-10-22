@@ -47,6 +47,8 @@ Item {
     readonly property var presentation: profileState.effective
     readonly property var displayWidgets: appearancePresetState.previewWidgets || presentation.widgets
     readonly property string launcherSnapshot: JSON.stringify(presentation.launchers)
+    property bool launcherOrderBusy: false
+    property bool launcherReloadPending: false
     property string selectedIntegration: "quota"
     readonly property bool light: appearanceState.effective.baseTheme === "paper"
     readonly property color foreground: appearanceState.effective.tokens.foreground
@@ -212,13 +214,73 @@ Item {
     onLauncherSnapshotChanged: if (ready) reloadLaunchers()
     // Use Qt's URL semantics for identity; keep the validated saved spelling.
     function launcherKey(url) { return String(Qt.resolvedUrl(url)); }
-    function reloadLaunchers() {
-        const nativeKeys = Array.from(tasks.launcherList).map(launcherKey);
-        const savedKeys = presentation.launchers.map(launcherKey).filter((key, index, keys) => keys.indexOf(key) === index);
-        if (JSON.stringify(nativeKeys) !== JSON.stringify(savedKeys)) tasks.launcherList = Profiles.copy(presentation.launchers);
+    function taskOrder() {
+        const rows = [], seen = [];
+        for (let row = 0; row < tasks.count; ++row) {
+            const index = tasks.makeModelIndex(row);
+            const url = String(tasks.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon) || "");
+            const window = Boolean(tasks.data(index, TaskManager.AbstractTasksModel.IsWindow));
+            const launcher = Boolean(tasks.data(index, TaskManager.AbstractTasksModel.IsLauncher));
+            const ids = Array.from(tasks.data(index, TaskManager.AbstractTasksModel.WinIdList) || []).map(String);
+            if ((!window && !launcher) || (window && ids.length === 0)) return null;
+            const identity = JSON.stringify(window ? ["window", ids, url] : ["launcher", url]);
+            if (seen.indexOf(identity) !== -1) return null;
+            seen.push(identity);
+            // KDE resolves preferred applications and equivalent launcher URLs.
+            rows.push({identity: identity, rank: tasks.launcherPosition(url), order: row});
+        }
+        return rows;
     }
-    function saveLaunchers(value, scope, revision) {
-        const saved = profileState.commitPresentation({launchers: value}, scope, revision);
+    function taskTopology(rows) {
+        return rows === null ? "" : JSON.stringify(rows.map(row => JSON.stringify([row.identity, row.rank])).sort());
+    }
+    function taskMembership(rows) {
+        return rows === null ? "" : JSON.stringify(rows.map(row => row.identity).sort());
+    }
+    function finishLauncherOrder() {
+        launcherOrderBusy = false;
+        if (launcherReloadPending) Qt.callLater(root.reloadLaunchers);
+    }
+    function reloadLaunchers() {
+        if (launcherOrderBusy) { launcherReloadPending = true; return; }
+        launcherReloadPending = false;
+        launcherOrderBusy = true;
+        const scope = profileState.activeProfileId, revision = profileState.revision;
+        const current = () => scope === profileState.activeProfileId && revision === profileState.revision;
+        try {
+            const nativeKeys = Array.from(tasks.launcherList).map(launcherKey);
+            const savedKeys = presentation.launchers.map(launcherKey).filter((key, index, keys) => keys.indexOf(key) === index);
+            if (JSON.stringify(nativeKeys) !== JSON.stringify(savedKeys)) tasks.launcherList = Profiles.copy(presentation.launchers);
+            if (!current()) { launcherReloadPending = true; return; }
+            const rows = taskOrder();
+            if (rows === null) return;
+            const topology = taskTopology(rows);
+            const pinned = rows.filter(row => row.rank >= 0).sort((left, right) => left.rank - right.rank || left.order - right.order);
+            const target = rows.map(row => row.rank >= 0 ? pinned.shift().identity : row.identity);
+            for (let position = 0; position < target.length; ++position) {
+                if (!current()) { launcherReloadPending = true; return; }
+                const before = taskOrder();
+                if (taskTopology(before) !== topology) { launcherReloadPending = true; return; }
+                const from = before.findIndex(row => row.identity === target[position]);
+                if (from === position) continue;
+                if (from < position || !tasks.move(from, position)) {
+                    notice = qsTr("Não foi possível restaurar a ordem dos apps. Tente novamente.");
+                    return;
+                }
+                if (!current()) { launcherReloadPending = true; return; }
+                const after = taskOrder();
+                if (taskTopology(after) !== topology) { launcherReloadPending = true; return; }
+                if (after.slice(0, position + 1).some((row, index) => row.identity !== target[index])) {
+                    notice = qsTr("A lista de janelas mudou. Tente organizar os apps novamente.");
+                    return;
+                }
+            }
+            // Authority flows from the saved list into the manual map here.
+            // syncLaunchers exports the opposite direction and can drop hidden order.
+        } finally { finishLauncherOrder(); }
+    }
+    function saveLaunchers(value, scope, revision, continuationGuard) {
+        const saved = profileState.commitPresentation({launchers: value}, scope, revision, continuationGuard);
         if (!saved) { reloadLaunchers(); notice = profileState.error; }
         return saved;
     }
@@ -250,21 +312,38 @@ Item {
     }
     function moveTask(from, to) {
         const scope = profileState.activeProfileId, revision = profileState.revision;
-        if (!profileState.writable) return false;
+        if (!profileState.writable || launcherOrderBusy) return false;
         const original = Profiles.copy(presentation.launchers);
         const before = Array.from(tasks.launcherList);
         if (from < 0 || to < 0 || from >= tasks.count || to >= tasks.count) return false;
-        const changed = tasks.move(from, to);
-        tasks.syncLaunchers();
-        if (!changed) return false;
-        const originalKeys = original.map(launcherKey), beforeKeys = before.map(launcherKey);
-        const orderedKeys = Array.from(tasks.launcherList).map(launcherKey)
-            .filter((key, index, keys) => originalKeys.indexOf(key) !== -1 && keys.indexOf(key) === index);
-        const ordered = [];
-        for (const key of orderedKeys)
-            for (const url of original) if (launcherKey(url) === key) ordered.push(url);
-        const candidate = original.map(url => beforeKeys.indexOf(launcherKey(url)) !== -1 && orderedKeys.indexOf(launcherKey(url)) !== -1 ? ordered.shift() : url);
-        return saveLaunchers(candidate, scope, revision);
+        const membership = taskMembership(taskOrder());
+        if (membership === "") return false;
+        launcherOrderBusy = true;
+        const current = () => scope === profileState.activeProfileId && revision === profileState.revision;
+        try {
+            if (!tasks.move(from, to)) return false;
+            if (!current()) {
+                launcherReloadPending = true;
+                notice = qsTr("A configuração mudou. Tente organizar os apps novamente.");
+                return false;
+            }
+            tasks.syncLaunchers();
+            if (!current() || taskMembership(taskOrder()) !== membership) {
+                launcherReloadPending = true;
+                notice = qsTr("A lista de janelas mudou. Tente organizar os apps novamente.");
+                return false;
+            }
+            const originalKeys = original.map(launcherKey), beforeKeys = before.map(launcherKey);
+            const orderedKeys = Array.from(tasks.launcherList).map(launcherKey)
+                .filter((key, index, keys) => originalKeys.indexOf(key) !== -1 && keys.indexOf(key) === index);
+            const ordered = [];
+            for (const key of orderedKeys)
+                for (const url of original) if (launcherKey(url) === key) ordered.push(url);
+            const candidate = original.map(url => beforeKeys.indexOf(launcherKey(url)) !== -1 && orderedKeys.indexOf(launcherKey(url)) !== -1 ? ordered.shift() : url);
+            const post = JSON.stringify(taskOrder());
+            const guard = scope === "legacy" ? undefined : () => current() && JSON.stringify(taskOrder()) === post;
+            return saveLaunchers(candidate, scope, revision, guard);
+        } finally { finishLauncherOrder(); }
     }
     function removeLauncher(url, expectedScope, expectedRevision) {
         const scope = expectedScope === undefined ? profileState.activeProfileId : expectedScope;
