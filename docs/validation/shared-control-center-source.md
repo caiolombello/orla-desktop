@@ -699,3 +699,74 @@ Private evidence: `.runtime/bar-config-20261015/root-context-native-r1/RESULT.js
 that menu, not opening the configuration dialog, its size-key footprint, native
 Apply/Cancel, preference persistence after restart or independent keyboard-seat
 ownership. Those bar-configuration gates remain open.
+
+## Installed bar configuration: opening and accessible Cancel — 15 October 2026
+
+With the 70-file dock from `655b5ec`, unchanged 14-file bar and a freshly verified
+original configuration, synthetic Wayland input opened the right-hand Central de Controle
+applet's context menu and activated its uniquely identified Configure action.
+One new own-process configuration window appeared. Its named controls showed
+Central de Controle enabled and Menu Orla disabled, matching that applet's role;
+Apply was disabled and Cancel enabled under the same accessible window ancestor.
+No preference, preset, Apply or OK action was performed.
+
+The pointer-driven Open/Cancel canary **did not pass**. Its first episode stopped
+before Configure because synchronous AT-SPI reads advanced while asyncio had not
+yet delivered the KWin observer record. The initial absence flag survived the
+cleanup exception and was not valid final evidence. A separate input-free KWin
+snapshot confirmed the menu still visible; an independent, exact-UUID recovery
+then closed it through focused Escape, with zero clicks or Configure activations.
+Original configuration bytes/map, packages, launcher and banks remained equal.
+The failed receipt is retained unchanged. A causal test of the actual async join
+fails before the scheduling correction and passes with queued/delayed records;
+ambiguous records still fail and no input is retried by that join.
+
+The second episode reached the actual configuration page, then stopped at its
+coordinate/ancestor guards. The reader reported its frame as `(0,0,810,630)` and
+Cancel as `(710,588,92,34)`, while KWin independently placed the client at
+`(918,459.275862...)` with size `(810.344827...,630.344827...)` at output scale
+1.45. These observations do not establish a coordinate transformation or justify
+rounding. The reader also counted the desktop, dock and bar as accessible frames,
+and the configuration's Appearance category matched its dock-settings header
+heuristic. Zero-frame and header-name-only absence rules therefore cannot be
+used for this native page. These are limitations of the canary, not demonstrated
+product defects.
+
+A separate recovery re-read the two role controls, unique clean Cancel/disabled
+Apply and their shared ancestor, then dispatched exactly one native accessibility
+press action on Cancel. A fresh independent KWin snapshot confirmed the exact
+configuration UUID removed, with no own normal window or popup remaining. The
+known configuration controls disappeared. The immediate whole-map readback was
+equal to the original; dock/bar packages, roles, launcher and protected layout
+banks were preserved and accessibility settings restored. This was a point-in-time
+readback, not a final persistence proof. It qualifies the accessible Cancel action
+and cleanup, not a mouse click, keyboard-seat ownership or focus return.
+
+The ConfigDialog group was absent in those initial readbacks. A later independent
+final check found exactly `DialogWidth=810` and `DialogHeight=630` under the target
+applet's ConfigDialog group. All other semantic fields, packages, roles, launcher
+and protected banks still matched the original. The final full map is therefore
+**not identical**. Those integers do not equal the independently observed fractional
+KWin client pair; no rounding or coordinate transformation was accepted. The
+predeclared size-correlation gate remains unqualified. The original baseline and
+all earlier receipts are immutable. No repair removed those keys or rewrote the
+original banks.
+
+The page's [native Apply/Cancel controls](https://github.com/KDE/plasma-desktop/blob/v6.7.5/desktoppackage/contents/configuration/AppletConfiguration.qml)
+were identified from the installed shell and its PT-BR translation catalogue,
+without guessing object names. Twenty-seven synthetic predicate cases and three
+observer contrasts cover the prepared canary's safeguards; they do not validate
+its real coordinate model. Before another pointer visit, establish that model
+independently, retain the initial accessible-frame baseline, and identify the
+configuration by its exact ancestor and role controls. Apply/off-on persistence,
+size writes, other outputs and the full bar-configuration gate remain open.
+
+Private evidence under `.runtime/bar-open-cancel-20261015/`: `root-native-r1`
+and `root-native-r2` remain FAILED; `root-snapshot-r1` confirmed the first leftover;
+`root-recovery-r1` passed menu recovery; `root-before-config-cancel` and
+`root-after-config-cancel` are independent input-free snapshots;
+`root-config-recovery-r1/RESULT.json` is `PASS_INDEPENDENT_A11Y_CLEAN_CANCEL`.
+Both recoveries restored resources; neither changes the failed visitor's status.
+The late diff and final projection are `root/LATE-CONFIG-DIFF.json` and
+`root/FINAL-STATE.json`. The accessible recovery receipt's original-map flag is
+valid only for its immediate readback, and is not proof of final equality.
