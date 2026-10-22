@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <KConfig>
+#include "AliasStore.h"
 #include <KRunner/ResultsModel>
 #include <KRunner/RunnerManager>
 
@@ -19,14 +20,26 @@ class LauncherController final : public QObject
     Q_PROPERTY(int selectedIndex READ selectedIndex NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
+    Q_PROPERTY(QString aliasRevision READ aliasRevision NOTIFY changed)
+    Q_PROPERTY(bool aliasesWritable READ aliasesWritable NOTIFY changed)
+    Q_PROPERTY(QString aliasError READ aliasError NOTIFY changed)
+    Q_PROPERTY(QVariantList aliases READ aliases NOTIFY changed)
 public:
-    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr);
+    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr, const QString &aliasPath = QString());
     QString query() const { return m_query; }
     quint64 generation() const { return m_generation; }
     QVariantList rows() const { return m_rows; }
     int selectedIndex() const { return m_selected; }
     QString status() const;
     QString error() const { return m_error; }
+    QString aliasRevision() const { return m_aliases.revision(); }
+    bool aliasesWritable() const { return m_aliases.writable(); }
+    QString aliasError() const { return m_aliases.error(); }
+    QVariantList aliases() const { return m_aliasPresentation; }
+    Q_INVOKABLE bool saveAlias(int row, quint64 generation, const QString &id, const QString &alias, const QString &revision);
+    Q_INVOKABLE bool renameAlias(const QString &oldAlias, const QString &appId, const QString &newAlias, quint64 generation, const QString &revision);
+    Q_INVOKABLE bool removeAlias(const QString &alias, const QString &appId, quint64 generation, const QString &revision);
+    Q_INVOKABLE void reloadAliases();
     void setQuery(const QString &query);
     Q_INVOKABLE void select(int row);
     Q_INVOKABLE void moveSelection(int delta);
@@ -40,15 +53,21 @@ private:
     friend class LauncherControllerTestOwner;
     void refresh();
     void steamChanged();
+    void aliasesChanged();
+    bool refreshAliasPresentation();
     QString resultId(const QModelIndex &index) const;
     KConfig m_config;
     KConfig m_state;
     KRunner::ResultsModel m_model;
+    AliasStore m_aliases;
     QTimer m_debounce;
     QString m_query;
     QString m_error;
     QString m_selectedId;
     QVariantList m_rows;
+    QVariantList m_aliasPresentation;
+    bool m_collectingAliasPresentation = false;
+    bool m_aliasRefreshPending = false;
     QList<int> m_backendRows;
     SteamProviderController *m_steam;
     quint64 m_generation = 0;

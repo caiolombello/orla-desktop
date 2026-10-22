@@ -1,6 +1,6 @@
 # Launcher: painel completo de ações
 
-O botão **Ações** e **Ctrl+K** abrem todas as ações anunciadas pelo resultado selecionado, na ordem do provedor. O menu mostra resultado e origem, mantém os textos limitados e oferece rolagem e foco visível. ↑/↓ navegam; Enter ou clique executam somente a ação escolhida. Escape ou Ctrl+K fecham primeiro o menu, preservando busca e seleção; outro Escape fecha o launcher. Resultados sem ações mantêm o botão desativado.
+O botão **Ações** e **Ctrl+K** abrem todas as ações anunciadas pelo resultado selecionado, na ordem do provedor. O menu mostra resultado e origem, mantém os textos limitados e oferece rolagem e foco visível. ↑/↓ navegam; Enter ou clique executam somente a ação escolhida. Escape ou Ctrl+K fecham primeiro o menu, preservando busca e seleção; outro Escape fecha o launcher. O Source posterior acrescenta preferências de aliases, inclusive sem ações extras ou consulta; os recibos abaixo preservam o comportamento anterior. Consulte a [validação de aliases](launcher-aliases-source.md).
 
 O menu usa `QtQuick.Templates.Menu/MenuItem` com `Popup.Item`, os tokens existentes e o protocolo de execução já presente. Controladores, provedores e barreira de fechamento mantêm suas implementações. Cada pressionamento guarda o ticket e o episódio do menu: callbacks antigos não podem executar depois de fechar, reabrir, mudar a consulta ou sair para IA/Steam. Não há callback de foco enfileirado após o fechamento.
 

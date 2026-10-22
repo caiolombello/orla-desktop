@@ -606,9 +606,14 @@ o painel permaneceu oculto, compatível com a política de bordas de clientes
 do KWin; revelar nesse cenário como desejado ainda está aberto. Os demais
 popups, esquema claro, escalas e monitores mantêm seus aceites separados.
 Consulte a [prova da dock e Central](docs/validation/shared-control-center-source.md).
-Em paralelo, a próxima fatia de L2 é salvar/remover aliases de aplicativos com
-identificador estável, resolução exata e zero execução durante a pesquisa; a
-compatibilidade KService/KRunner está em preparação isolada, ainda não entregue.
+Aliases de aplicativos com ID estável foram entregues no Source `4cf638f` e
+instalados localmente: adicionar, renomear/remover, alvos indisponíveis, leitura
+passiva e resolução exata. A interface mantém o sistema visual e recusa intents
+antigos. Os oito CTests da versão final passaram nos dois estilos; KF6 6.31 tem
+composição privada qualificada com a ressalva do contexto `--init`. O fluxo de
+aliases por gestos reais no Wayland é a próxima prova de L2/UX2, ainda UNRUN;
+favoritos e comandos internos continuam abertos. Consulte a
+[validação](docs/validation/launcher-aliases-source.md).
 Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.

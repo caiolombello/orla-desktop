@@ -2,10 +2,45 @@
 #include "SteamProviderController.h"
 #include <KConfigGroup>
 #include <KRunner/AbstractRunner>
+#include <KService>
+#include <QFileInfo>
+#include <QScopedValueRollback>
+#include <KSycoca>
 
-LauncherController::LauncherController(SteamProviderController *steam, QObject *parent)
+namespace {
+KService::Ptr aliasService(const QString &appId)
+{
+    if (!AliasStore::validAppId(appId)) return {};
+    KSycoca::self()->ensureCacheValid();
+    const auto service = KService::serviceByStorageId(appId);
+    if (!service || service->storageId() != appId || !QFileInfo(service->entryPath()).isFile()) return {};
+    // Sycoca throttles checks. Refuse removed or changed desktop entries until
+    // its cached launch metadata agrees with the current installed descriptor.
+    const KService current(service->entryPath());
+    if (!current.isValid() || !current.isApplication() || current.noDisplay()
+        || !current.showInCurrentDesktop() || !current.showOnCurrentPlatform()
+        || current.exec() != service->exec() || current.workingDirectory() != service->workingDirectory()
+        || current.terminal() != service->terminal() || current.terminalOptions() != service->terminalOptions()
+        || current.substituteUid() != service->substituteUid() || current.username() != service->username()
+        || current.runOnDiscreteGpu() != service->runOnDiscreteGpu()
+        || current.name() != service->name() || current.icon() != service->icon()
+        || current.property<bool>(QStringLiteral("DBusActivatable")) != service->property<bool>(QStringLiteral("DBusActivatable"))) return {};
+    return service->isApplication() && !service->noDisplay() && service->showInCurrentDesktop()
+        && service->showOnCurrentPlatform() ? service : KService::Ptr{};
+}
+QString appForMatch(const KRunner::QueryMatch &match)
+{
+    if (!match.runner() || match.runner()->id() != QStringLiteral("krunner_services")) return {};
+    const QUrl data = match.data().toUrl();
+    if (data.scheme() != QStringLiteral("applications") || !data.authority().isEmpty() || data.hasQuery() || data.hasFragment()) return {};
+    return aliasService(data.path()) ? data.path() : QString();
+}
+}
+
+
+LauncherController::LauncherController(SteamProviderController *steam, QObject *parent, const QString &aliasPath)
     : QObject(parent), m_config(QString(), KConfig::SimpleConfig), m_state(QString(), KConfig::SimpleConfig),
-      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_steam(steam)
+      m_model(m_config.group("Plugins"), m_state.group("General"), nullptr), m_aliases(aliasPath), m_steam(steam)
 {
     // Supply anonymous groups to ResultsModel as well: its default constructor opens KRunner's user state.
     m_model.runnerManager()->setHistoryEnabled(false);
@@ -30,6 +65,19 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
         refresh();
     });
     if (m_steam) connect(m_steam, &SteamProviderController::changed, this, &LauncherController::steamChanged);
+    connect(KSycoca::self(), &KSycoca::databaseChanged, this, [this] {
+        if (m_aliases.entries().isEmpty()) return;
+        if (!m_collectingAliasPresentation) { aliasesChanged(); return; }
+        // Sycoca may notify synchronously while collecting the view snapshot.
+        // Keep notification outside collection; a property read never resolves services.
+        if (m_aliasRefreshPending) return;
+        m_aliasRefreshPending = true;
+        QMetaObject::invokeMethod(this, [this] {
+            m_aliasRefreshPending = false;
+            aliasesChanged();
+        }, Qt::QueuedConnection);
+    });
+    refreshAliasPresentation();
 }
 
 QString LauncherController::status() const
@@ -48,6 +96,7 @@ QString LauncherController::resultId(const QModelIndex &index) const
 
 void LauncherController::refresh()
 {
+    refreshAliasPresentation();
     m_rows.clear();
     m_backendRows.clear();
     if (m_launchedGeneration != m_generation || m_model.queryString() != m_query.trimmed()) {
@@ -58,6 +107,23 @@ void LauncherController::refresh()
     QList<int> applicationBackends;
     QVariantList calculatorRows;
     QList<int> calculatorBackends;
+    for (const auto &entry : m_aliases.entries()) {
+        const auto alias = entry.toMap();
+        if (AliasStore::key(alias.value("alias").toString()) != AliasStore::key(m_query)) continue;
+        const QString appId = alias.value("appId").toString();
+        const auto service = aliasService(appId);
+        const bool runnerReady = m_model.runnerManager()->runner(QStringLiteral("krunner_services")) != nullptr;
+        applicationRows.append(QVariantMap{{"id", QStringLiteral("alias:") + AliasStore::key(alias.value("alias").toString())},
+            {"generation", m_generation}, {"title", service ? service->name() : alias.value("alias").toString()},
+            {"description", !runnerReady ? tr("O provedor de aplicativos está indisponível.")
+                : !service ? tr("Aplicativo indisponível") : tr("Alias: %1").arg(alias.value("alias").toString())},
+            {"iconName", service ? service->icon() : QStringLiteral("application-x-executable")},
+            {"enabled", m_aliases.writable() && service && runnerReady}, {"kind", QStringLiteral("alias")},
+            {"category", QStringLiteral("aliases")}, {"categoryLabel", tr("ALIASES")},
+            {"source", tr("Alias salvo por você")}, {"alias", alias.value("alias")}, {"appId", appId},
+            {"aliasRevision", m_aliases.revision()}, {"actions", QVariantList{}}});
+        applicationBackends.append(-1);
+    }
     for (int row = 0; row < m_model.rowCount() && row < 40; ++row) {
         const auto index = m_model.index(row, 0);
         const auto match = m_model.getQueryMatch(index);
@@ -66,6 +132,7 @@ void LauncherController::refresh()
             actions.append(QVariantMap{{"id", action.id()}, {"text", action.text()},
                                       {"resultId", resultId(index)}, {"generation", m_generation}, {"row", row}});
         }
+        const QString appId = appForMatch(match);
         const bool calculator = match.runner() && match.runner()->id() == QStringLiteral("calculator");
         QVariantMap result{{"id", resultId(index)}, {"generation", m_generation},
             {"title", m_model.data(index, Qt::DisplayRole)},
@@ -76,7 +143,7 @@ void LauncherController::refresh()
             {"category", calculator ? QStringLiteral("calculator") : QStringLiteral("applications")},
             {"categoryLabel", calculator ? tr("CALCULADORA") : tr("APLICATIVOS")},
             {"source", calculator ? tr("KRunner · Calculadora") : tr("KRunner · Aplicativos")},
-            {"actions", actions}};
+            {"actions", actions}, {"appId", appId}, {"aliasEligible", !appId.isEmpty()}};
         if (calculator) { calculatorRows.append(result); calculatorBackends.append(row); }
         else { applicationRows.append(result); applicationBackends.append(row); }
     }
@@ -144,8 +211,77 @@ void LauncherController::steamChanged()
     refresh();
 }
 
+void LauncherController::aliasesChanged()
+{
+    ++m_generation;
+    if (!m_query.trimmed().isEmpty() && !m_debounce.isActive()
+        && m_model.queryString() == m_query.trimmed()) m_launchedGeneration = m_generation;
+    refresh();
+}
+
+bool LauncherController::refreshAliasPresentation()
+{
+    QScopedValueRollback<bool> collecting(m_collectingAliasPresentation, true);
+    QVariantList snapshot;
+    for (const auto &entry : m_aliases.entries()) {
+        auto item = entry.toMap();
+        const auto service = aliasService(item.value("appId").toString());
+        item.insert("title", service ? service->name() : tr("Aplicativo indisponível"));
+        item.insert("iconName", service && !service->icon().isEmpty() ? service->icon() : QStringLiteral("application-x-executable"));
+        item.insert("available", bool(service));
+        snapshot.append(item);
+    }
+    if (snapshot == m_aliasPresentation) return false;
+    m_aliasPresentation = snapshot;
+    return true;
+}
+
+void LauncherController::reloadAliases()
+{
+    const bool preferencesChanged = m_aliases.reload();
+    const bool presentationChanged = refreshAliasPresentation();
+    if (preferencesChanged || presentationChanged) aliasesChanged();
+}
+
+bool LauncherController::saveAlias(int row, quint64 generation, const QString &id, const QString &alias, const QString &revision)
+{
+    reloadAliases();
+    if (generation != m_generation || m_launchedGeneration != m_generation || status() != QStringLiteral("ready")
+        || row != m_selected || row < 0 || row >= m_rows.size() || id != m_selectedId
+        || !m_rows[row].toMap().value("enabled").toBool() || m_backendRows.value(row, -1) < 0) return false;
+    const auto index = m_model.index(m_backendRows[row], 0);
+    if (!index.isValid() || resultId(index) != id) return false;
+    const QString appId = appForMatch(m_model.getQueryMatch(index));
+    if (appId.isEmpty() || generation != m_generation || id != m_selectedId) return false;
+    const bool saved = m_aliases.save(alias, appId, revision);
+    if (saved) aliasesChanged();
+    else { reloadAliases(); emit changed(); }
+    return saved;
+}
+
+bool LauncherController::renameAlias(const QString &oldAlias, const QString &appId, const QString &newAlias, quint64 generation, const QString &revision)
+{
+    reloadAliases();
+    if (generation != m_generation) return false;
+    const bool renamed = m_aliases.rename(oldAlias, appId, newAlias, revision);
+    if (renamed) aliasesChanged();
+    else { reloadAliases(); emit changed(); }
+    return renamed;
+}
+
+bool LauncherController::removeAlias(const QString &alias, const QString &appId, quint64 generation, const QString &revision)
+{
+    reloadAliases();
+    if (generation != m_generation) return false;
+    const bool removed = m_aliases.remove(alias, appId, revision);
+    if (removed) aliasesChanged();
+    else { reloadAliases(); emit changed(); }
+    return removed;
+}
+
 void LauncherController::setQuery(const QString &query)
 {
+    reloadAliases();
     if (query == m_query) return;
     m_debounce.stop();
     m_query = query;
@@ -187,6 +323,24 @@ bool LauncherController::execute(int row, quint64 generation, const QString &id,
     if (generation != m_generation || m_launchedGeneration != m_generation || status() != QStringLiteral("ready")
         || row < 0 || row >= m_rows.size() || row != m_selected || id.isEmpty() || id != m_selectedId) return false;
     const QVariantMap selected = m_rows[row].toMap();
+    if (selected.value("kind").toString() == QStringLiteral("alias")) {
+        if (!actionId.isEmpty()) return false;
+        if (m_aliases.reload()) { aliasesChanged(); return false; }
+        if (!m_aliases.writable() || selected.value("aliasRevision").toString() != m_aliases.revision()) return false;
+        const QString appId = selected.value("appId").toString();
+        const auto service = aliasService(appId);
+        auto *runner = m_model.runnerManager()->runner(QStringLiteral("krunner_services"));
+        if (!service || !runner || generation != m_generation || row != m_selected || id != m_selectedId) return false;
+        KRunner::QueryMatch match(runner);
+        QUrl data;
+        data.setScheme(QStringLiteral("applications"));
+        data.setPath(appId);
+        match.setData(data);
+        match.setText(service->name());
+        const bool close = m_model.runnerManager()->run(match);
+        if (close && generation == m_generation) dismiss();
+        return close;
+    }
     if (selected.value(QStringLiteral("kind")).toString() == QStringLiteral("steam")) {
         if (!actionId.isEmpty() || !m_steam) return false;
         const bool opened = m_steam->openGame(selected.value(QStringLiteral("appid")).toString(),
