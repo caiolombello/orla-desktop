@@ -45,6 +45,7 @@ Item {
     property var controlCenterBackendOverride: null
     property var audioBackendOverride: null
     property var brightnessBackendOverride: null
+    property var doNotDisturbBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -288,7 +289,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
-        || brightnessControlState.pendingAny
+        || brightnessControlState.pendingAny || doNotDisturbState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1140,6 +1141,19 @@ Item {
         active: controlCenterPopup.visible
         backend: root.brightnessBackendOverride !== null ? root.brightnessBackendOverride : nativeBrightnessBackend.item
     }
+    Loader {
+        id: nativeDoNotDisturbBackend
+        objectName: "controlCenterDoNotDisturbNativeLoader"
+        // Plasma's notification manager is only meaningful inside plasmashell.
+        active: controlCenterPopup.visible && root.doNotDisturbBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativeDoNotDisturb.qml") : ""
+    }
+    DoNotDisturbState {
+        id: doNotDisturbState
+        objectName: "doNotDisturbState"
+        active: controlCenterPopup.visible
+        backend: root.doNotDisturbBackendOverride !== null ? root.doNotDisturbBackendOverride : nativeDoNotDisturbBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1171,6 +1185,7 @@ Item {
         playing: root.mediaPlaying
         audio: audioControlState
         brightness: brightnessControlState
+        doNotDisturb: doNotDisturbState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

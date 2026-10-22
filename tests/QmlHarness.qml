@@ -123,6 +123,13 @@ Window {
             {id: "display0", label: "Tela sintética", value: 7000, max: 10000, internal: false}]})
         function setBrightness(id, raw) { calls = calls.concat([{id: id, raw: raw}]); return true; }
     }
+    QtObject {
+        id: doNotDisturbBackend
+        objectName: "dockDoNotDisturbBackend"
+        property var calls: []
+        property var snapshot: ({status: "ready", inhibited: false, until: 0, byApplication: false, applications: []})
+        function setDoNotDisturb(on) { calls = calls.concat([on]); return true; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -152,6 +159,7 @@ Window {
         controlCenterBackendOverride: controlCenterBackend
         audioBackendOverride: audioBackend
         brightnessBackendOverride: brightnessBackend
+        doNotDisturbBackendOverride: doNotDisturbBackend
         integrations.active: false
         integrations.transport: addonTransport
         addonTransportOverride: addonTransport

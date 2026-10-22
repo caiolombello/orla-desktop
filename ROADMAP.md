@@ -355,8 +355,13 @@ A release 0.2.9 cobre apenas a entrada global opcional, cards de Som/mídia e En
 **CC1-B — brilho (21/10):** a Central ganhou o card **Tela**, com um slider por tela ajustável,
 leitura pelo modelo do PowerDevil e escrita confirmada pelo próprio serviço
 (`SetBrightnessWithContext`). Prova nativa com monitor externo: 98% e volta a 100%
-pelo teclado, sem erro, e mudança externa refletida. Microfone e Não perturbe seguem
-abertos; CC1 permanece parcial. [Detalhes](docs/control-center.md#brilho-da-tela--cc1-b).
+pelo teclado, sem erro, e mudança externa refletida. Microfone segue
+aberto; CC1 permanece parcial. [Detalhes](docs/control-center.md#brilho-da-tela--cc1-b).
+**CC1-C — Não perturbe (21/10):** o card usa as configurações e regras do applet de
+notificações do Plasma, então os dois toggles são um só estado; a mudança conclui quando
+o servidor publica o novo estado. Prova nativa: liga/desliga pelo teclado, `Inhibited`
+acompanhou e `plasmanotifyrc` ficou idêntico. Falta o microfone para fechar os cards
+básicos do CC1. [Detalhes](docs/control-center.md#não-perturbe--cc1-c).
 
 - [ ] **CC1: controles diretos básicos.** Cards de volume/saída de áudio, microfone/mudo, brilho quando disponível, mídia, bateria/energia e Não perturbe. Sincronizar com mudanças feitas fora do Orla. Aceite: valores refletem o KDE, hardware ausente desativa somente o card correspondente e cada alteração resulta de uma ação do usuário, confirmada pelo serviço.
 - [ ] **CC2: conexões e energia.** Wi-Fi/rede, Bluetooth, perfil de energia e acesso às configurações detalhadas. Reusar serviços e os fluxos nativos de autenticação. Aceite: conectar/desconectar e trocar dispositivo respeita permissões; erro não fica com aparência de sucesso. HUD será conectado a esses controles na etapa seguinte.
