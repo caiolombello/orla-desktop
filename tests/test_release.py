@@ -38,10 +38,16 @@ class ReleaseBundleTests(unittest.TestCase):
                 target = root / "package" / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source / "package" / name, target)
+            profile_files=("scripts/generate_addon_text_profile.py","scripts/data/addon-text-unicode16.json",
+                           "package/contents/code/addon_format.py","package/contents/code/AddonText.js",
+                           "docs/ADDON_TEXT_PROFILE.md","tests/test_addon_text_profile.py")
+            for name in profile_files:
+                target=root/name;target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(source/name,target)
             shutil.copytree(source / "themes", root / "themes")
-            (root / "docs").mkdir()
+            (root / "docs").mkdir(exist_ok=True)
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
-            (root / "tests").mkdir()
+            (root / "tests").mkdir(exist_ok=True)
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
             for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
                          "test_workspace_setup.py", "test_workspace_view.py",
@@ -82,7 +88,7 @@ class ReleaseBundleTests(unittest.TestCase):
                             "package/contents/ui/ControlCenterEntry.qml", "package/contents/ui/ControlCenterPopup.qml",
                             "package/contents/ui/ControlCenterSession.qml",
                             "package/contents/config/main.xml")
-                for name in required:
+                for name in (*required,*profile_files):
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
                 with zipfile.ZipFile(root / "dist/orla-dock-1.2.3.plasmoid") as package_archive:
                     for name in ("contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
@@ -90,10 +96,15 @@ class ReleaseBundleTests(unittest.TestCase):
                                  "contents/controlcenter/qmldir", "contents/controlcenter/Registry.qml",
                                  "contents/ui/ControlCenterEntry.qml", "contents/ui/ControlCenterPopup.qml",
                                  "contents/ui/ControlCenterSession.qml",
-                                 "contents/config/main.xml"):
+                                 "contents/config/main.xml", "contents/code/addon_format.py", "contents/code/AddonText.js"):
                         self.assertEqual(package_archive.read(name), (root / "package" / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
+                profile=json.loads(archive.read(prefix+"scripts/data/addon-text-unicode16.json"))
+                for name,comment in (("package/contents/code/addon_format.py","# "),("package/contents/code/AddonText.js","// ")):
+                    text=archive.read(prefix+name).decode()
+                    body=text.split(comment+"BEGIN UNICODE LICENSE\n",1)[1].split(comment+"END UNICODE LICENSE",1)[0]
+                    self.assertEqual(''.join(line[len(comment):] for line in body.splitlines(True)),profile['license'])
                 for name in ("bar/main.qml", "scripts/updates_desktop.py", "scripts/updates_desktop_state.py",
                              "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/BarHarness.qml",
                              "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
@@ -107,6 +118,9 @@ class ReleaseBundleTests(unittest.TestCase):
                 unpacked = root / "unpacked"
                 archive.extractall(unpacked)
             kit = unpacked / "orla-dock-1.2.3"
+            profile_checked=subprocess.run([sys.executable,"-I","-B",str(kit/"scripts/generate_addon_text_profile.py"),"--check"],
+                                           cwd=unpacked,capture_output=True,text=True,timeout=15)
+            self.assertEqual(profile_checked.returncode,0,profile_checked.stderr)
             for name in ("essential.json", "mare.json"):
                 result = subprocess.run([
                     sys.executable, "-I", "-B", str(kit / "scripts/themes.py"), "validate",

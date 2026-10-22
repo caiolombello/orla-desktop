@@ -133,6 +133,14 @@ relações entre campos que o schema sozinho não expressa. O
 [exemplo sintético](../addons/fixtures/peripherals-0.1.json) não é uma leitura
 de hardware nem um complemento instalado por padrão.
 
+Texto segue o perfil fixo [orla-addon-text-16.0.0-r1](ADDON_TEXT_PROFILE.md),
+com categorias L/M/N/P/S do Unicode 16.0.0 e espaço ASCII. Python e Qt não
+reclassificam o contrato ao serem atualizados. O perfil também vale para a
+origem após decodificação percent-encoded estrita; limites e padrões ASCII
+continuam iguais. Bytes existentes fora do perfil recebem recusa finita,
+sem reescrever objetos, recibos, hashes ou consentimento. Uma ampliação futura
+exige revisão explícita do contrato e da compatibilidade experimental.
+
 No checkout, a CLI de desenvolvimento permite inspecionar e empacotar um
 manifesto local. Substitua os caminhos pelos seus; os diretórios de saída
 devem ser absolutos. `pack` não sobrescreve um arquivo existente.
