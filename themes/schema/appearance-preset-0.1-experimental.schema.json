@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orla:appearance-preset:0.1-experimental",
+  "title": "Experimental Orla appearance preset 0.1",
+  "description": "Saved appearance and widget presentation only. Parser additionally enforces strict JSON, unique decoded keys, valid Unicode, finite numbers, UTF-8 byte size and nesting limits.",
+  "x-maxBytes": 65536,
+  "x-maxDepth": 4,
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "kind",
+    "appearance",
+    "widgets"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "0.1-experimental"
+    },
+    "kind": {
+      "const": "orla-appearance-preset"
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "baseTheme",
+        "tokens"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": "0.1-experimental"
+        },
+        "baseTheme": {
+          "enum": [
+            "glass",
+            "midnight",
+            "paper"
+          ]
+        },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "foreground",
+            "muted",
+            "accent",
+            "surface",
+            "border",
+            "radius",
+            "spacing",
+            "opacity",
+            "iconSize",
+            "reducedMotion"
+          ],
+          "properties": {
+            "foreground": {
+              "$ref": "#/$defs/color"
+            },
+            "muted": {
+              "$ref": "#/$defs/color"
+            },
+            "accent": {
+              "$ref": "#/$defs/color"
+            },
+            "surface": {
+              "$ref": "#/$defs/color"
+            },
+            "border": {
+              "$ref": "#/$defs/color"
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 32
+            },
+            "spacing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0.4,
+              "maximum": 1
+            },
+            "iconSize": {
+              "type": "number",
+              "minimum": 24,
+              "maximum": 64
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "widgets": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "visible"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "clock",
+              "pomodoro",
+              "music",
+              "systemBattery",
+              "quota",
+              "peripherals",
+              "recording"
+            ]
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "clock"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "pomodoro"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "music"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "systemBattery"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "quota"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "peripherals"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "recording"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "color": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 7,
+      "pattern": "^#[0-9A-Fa-f]{6}(?![\\s\\S])"
+    }
+  }
+}

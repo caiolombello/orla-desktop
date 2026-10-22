@@ -44,6 +44,9 @@ function validate(value) {
     return {value: result, error: "", errors: []};
 }
 function parse(text) {
+    return parseDocument(text, validate, rootFields.concat(tokenFields));
+}
+function parseDocument(text, validator, knownFields) {
     if (typeof text !== "string") return failure("$", "type", "Cole um documento JSON.");
     if (text.length > maxBytes) return failure("$", "size", "Use até 65536 bytes UTF-8 equivalentes.");
     let bytes = 0;
@@ -96,7 +99,7 @@ function parse(text) {
                     const raw = string();
                     if (raw === null) return false;
                     const key = JSON.parse(raw);
-                    childField = rootFields.concat(tokenFields).indexOf(key) === -1 ? field : field + "/" + key;
+                    childField = knownFields.indexOf(key) === -1 ? field : field + "/" + key;
                     if (seen.has(key)) return reject(childField, "duplicate_key", "Remova as chaves duplicadas.");
                     seen.add(key);
                     whitespace();
@@ -160,6 +163,6 @@ function parse(text) {
             parts.push(text.slice(previous));
             document = parts.join("");
         }
-        return validate(JSON.parse(document));
+        return validator(JSON.parse(document));
     } catch (_) { return failure("$", "json", "Use um único documento JSON válido, sem BOM."); }
 }

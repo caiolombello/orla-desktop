@@ -1,10 +1,26 @@
 #include <QtTest>
+#include <QSemaphore>
+#include <QThread>
+#include <QThreadStorage>
+#include <atomic>
+#include <thread>
 #include "LauncherController.h"
 #include "LauncherControllerTestOwner.h"
 #include "SteamProviderController.h"
 #include "BusChecks.h"
 
 namespace {
+struct RunnerTlsTail {
+    QSemaphore &entered;
+    QSemaphore &release;
+    std::atomic_bool &complete;
+    ~RunnerTlsTail()
+    {
+        entered.release(2);
+        release.tryAcquire(1, 300);
+        complete.store(true);
+    }
+};
 QString writeSteamHelper(QTemporaryDir &directory)
 {
     const QByteArray document = R"({"apps":[{"appid":"42","library":"library-0","name":"Synthetic Steam Game","ownership":"unknown","source":"local_manifest","status":"installed_candidate"}],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
@@ -24,6 +40,55 @@ class LauncherTests final : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void initTestCase() { verifyPrivateTestBus(); }
+    void ownedRunnerTlsCleanupCompletesBeforeOwnerReturns()
+    {
+        QSemaphore installed, entered, release, ownerReturned, runnersDestroyed;
+        std::atomic_bool complete = false, finished = false;
+        bool teardownBoundaryReached = false;
+        QThreadStorage<RunnerTlsTail *> tls;
+        auto owner = std::make_unique<LauncherControllerTestOwner>();
+        const auto runners = owner->observedRunners();
+        QVERIFY(!runners.isEmpty());
+        for (const auto &ownedRunner : runners)
+            connect(ownedRunner, &QObject::destroyed, this, [&] { runnersDestroyed.release(); }, Qt::DirectConnection);
+        connect(&owner->controller(), &QObject::destroyed, this, [&, runnerCount = runners.size()] {
+            const QDeadlineTimer boundaryDeadline(400, Qt::PreciseTimer);
+            teardownBoundaryReached = runnersDestroyed.tryAcquire(runnerCount, boundaryDeadline)
+                && entered.tryAcquire(1, boundaryDeadline);
+        }, Qt::DirectConnection);
+        auto *runner = runners.first().data();
+        QVERIFY(runner);
+        QVERIFY(runner->thread() != QThread::currentThread());
+        const QPointer<QThread> workerThread = runner->thread();
+        connect(workerThread, &QThread::finished, this, [&] { finished.store(true); }, Qt::DirectConnection);
+        QVERIFY(QMetaObject::invokeMethod(runner, [&] {
+            tls.setLocalData(new RunnerTlsTail{entered, release, complete});
+            installed.release();
+        }, Qt::QueuedConnection));
+        QVERIFY(installed.tryAcquire(1, 500));
+        // Hold a real owned runner's TLS after finished/deferred runner deletion.
+        // Release on owner return (old guard), or within its existing deadline.
+        std::thread helper([&] {
+            if (entered.tryAcquire(1, 500)) ownerReturned.tryAcquire(1, 100);
+            release.release();
+        });
+        owner.reset();
+        const bool cleanupCompleteAtReturn = complete.load();
+        const bool finishedAtReturn = finished.load();
+        bool runnersDestroyedAtReturn = true;
+        for (const auto &ownedRunner : runners) runnersDestroyedAtReturn &= ownedRunner.isNull();
+        qInfo() << "ORLA_TEST_TLS_BOUNDARY" << "finished=" << finishedAtReturn
+                << "runners_destroyed=" << runnersDestroyedAtReturn
+                << "tls_complete_at_owner_return=" << cleanupCompleteAtReturn;
+        ownerReturned.release();
+        helper.join();
+        QVERIFY(!workerThread || workerThread->wait(QDeadlineTimer(500, Qt::PreciseTimer)));
+        QVERIFY(complete.load());
+        QVERIFY(teardownBoundaryReached);
+        QVERIFY(finishedAtReturn);
+        QVERIFY(runnersDestroyedAtReturn);
+        QVERIFY2(cleanupCompleteAtReturn, "Owner returned before its runner TLS cleanup completed");
+    }
     void editingClearsOldResultsBeforeReplacementArrives()
     {
         LauncherControllerTestOwner controllerOwner;
