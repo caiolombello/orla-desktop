@@ -9,10 +9,13 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import selectors
 import stat
 import struct
+import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 import zlib
 
@@ -795,6 +798,169 @@ def _load_inventory(path: Path) -> object:
     return _strict_json(data)
 
 
+def _doctor_identity(value: os.stat_result) -> tuple:
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid,
+            value.st_nlink, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _doctor_read(path: str, limit: int) -> tuple[bytes, tuple]:
+    fd = None
+    try:
+        before = os.lstat(path)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+            _reject("asset_unsafe_or_oversized")
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
+        pin = _doctor_identity(before)
+        if _doctor_identity(os.fstat(fd)) != pin:
+            _reject("asset_changed")
+        data = bytearray()
+        while True:
+            chunk = os.read(fd, min(128 * 1024, limit - len(data) + 1))
+            if not chunk: break
+            data.extend(chunk)
+            if len(data) > limit: _reject("asset_unsafe_or_oversized")
+        if len(data) != before.st_size or _doctor_identity(os.fstat(fd)) != pin or _doctor_identity(os.lstat(path)) != pin:
+            _reject("asset_changed")
+        return bytes(data), pin
+    except FileNotFoundError:
+        _reject("asset_missing")
+    except OSError:
+        _reject("asset_unreadable")
+    finally:
+        if fd is not None: os.close(fd)
+
+
+def _doctor_elf(data: bytes) -> dict:
+    # Plugins have no PT_INTERP. Keep the executable archive parser unchanged;
+    # this checks only bounded ELF headers/segments, never loadability or ABI.
+    if len(data) < 64: _reject("asset_elf_malformed")
+    try:
+        header = struct.unpack("<16sHHIQQQIHHHHHH", data[:64])
+    except struct.error:
+        _reject("asset_elf_malformed")
+    ident, kind, machine, version, _entry, offset, _sections, _flags, size, entry_size, count, *_rest = header
+    if ident[:7] != b"\x7fELF\x02\x01\x01" or kind not in (2, 3) or machine != 62 or version != 1:
+        _reject("asset_elf_unsupported")
+    if size != 64 or entry_size != 56 or not 1 <= count <= MAX_ELF_PROGRAM_HEADERS:
+        _reject("asset_elf_malformed")
+    table = _slice(data, offset, count * entry_size, "asset_elf_malformed")
+    for n in range(count):
+        _type, _flags, start, _virtual, _physical, file_size, memory_size, _align = struct.unpack("<IIQQQQQQ", table[n * 56:(n + 1) * 56])
+        if file_size > memory_size: _reject("asset_elf_malformed")
+        _slice(data, start, file_size, "asset_elf_malformed")
+    return {"class": "ELF64", "machine": "x86_64", "type": "shared_object" if kind == 3 else "executable"}
+
+
+def _doctor_rpm(path: str) -> dict:
+    # Explicit null config/macro lists and a non-directory HOME exclude caller
+    # configuration; no shell, plugins, inherited environment or file discovery.
+    command = ["/usr/bin/rpm", "--rcfile", "/dev/null", "--macros", "/dev/null",
+               "--dbpath", "/var/lib/rpm", "--noplugins", "--nosignature", "--nohdrchk",
+               "--query", "--file", path,
+               "--queryformat", "%{NAME}\t%{EPOCHNUM}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\n"]
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, cwd="/", bufsize=0,
+                                   env={"HOME": "/dev/null", "LC_ALL": "C", "PATH": "/usr/bin:/bin"})
+    except OSError:
+        _reject("rpm_unavailable")
+    data = bytearray()
+    completed = False
+    failure = None
+    deadline = time.monotonic() + 2.0
+    try:
+        if process.stdout is None: _reject("rpm_pipe_unknown")
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0: _reject("rpm_timeout")
+                if not selector.select(remaining): continue
+                chunk = os.read(process.stdout.fileno(), min(4096, 16384 - len(data)))
+                if not chunk: break
+                data.extend(chunk)
+                if len(data) >= 16384: _reject("rpm_output_limit")
+        code = process.wait(timeout=max(0.001, deadline - time.monotonic()))
+        completed = True
+        if code != 0: _reject("rpm_query_unknown")
+    except subprocess.TimeoutExpired:
+        failure = "rpm_timeout"
+    except PackageError as error:
+        failure = error.code
+    except OSError:
+        failure = "rpm_io_unknown"
+    finally:
+        if not completed:
+            try:
+                process.kill()
+            except OSError:
+                failure = "rpm_cleanup_unknown"
+            try:
+                process.wait(timeout=1.0)
+            except (OSError, subprocess.TimeoutExpired):
+                failure = "rpm_cleanup_unknown"
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                failure = "rpm_cleanup_unknown"
+    if failure: _reject(failure)
+    try:
+        lines = data.decode("ascii").splitlines()
+        if len(lines) != 1: _reject("rpm_metadata_unknown")
+        name, epoch, version, release, arch = lines[0].split("\t")
+    except (UnicodeDecodeError, ValueError):
+        _reject("rpm_metadata_unknown")
+    if not _OWNER.fullmatch(name) or not re.fullmatch(r"[0-9]{1,10}", epoch) \
+            or any(not re.fullmatch(r"[A-Za-z0-9+_.~^:-]{1,128}", field) for field in (version, release)) \
+            or arch not in ("x86_64", "noarch"):
+        _reject("rpm_metadata_unknown")
+    if not release.endswith(".fc44"): _reject("rpm_target_unknown")
+    return {"owner": name, "version": version, "nevra": f"{name}-{epoch}:{version}-{release}.{arch}"}
+
+
+def _doctor_asset(role: str, path: str, module: str | None = None) -> dict:
+    item = {"role": role, "path": path, "state": "unknown", "code": None,
+            "sha256": None, "elf": None, "package": None}
+    try:
+        data, pin = _doctor_read(path, MAX_MEMBER_BYTES if module is None else MAX_MANIFEST_BYTES)
+        if module is None:
+            item["elf"] = _doctor_elf(data)
+            if role != "bwrap" and item["elf"]["type"] != "shared_object": _reject("asset_elf_unsupported")
+        else:
+            try:
+                modules = [line.split() for line in data.decode("utf-8").splitlines() if line.split()[:1] == ["module"]]
+            except UnicodeDecodeError:
+                _reject("asset_qmldir_unknown")
+            if modules != [["module", module]]: _reject("asset_qmldir_unknown")
+        item["sha256"] = hashlib.sha256(data).hexdigest()
+        item["package"] = _doctor_rpm(path)
+        if _doctor_identity(os.lstat(path)) != pin: _reject("asset_changed")
+        item["state"] = "found"
+    except PackageError as error:
+        item["code"] = error.code
+        item["state"] = "missing" if error.code == "asset_missing" else "unknown"
+    except OSError:
+        item["code"] = "asset_changed"
+    return item
+
+
+def doctor() -> dict:
+    checks = [_doctor_asset(role, path, "QtQuick.Controls" if role == "qml_controls_qmldir" else None)
+              for role, path in sorted(_EXACT_ASSET_PATHS.items())]
+    capabilities = [
+        _doctor_asset("style_fusion", "/usr/lib64/qt6/qml/QtQuick/Controls/Fusion/qmldir", "QtQuick.Controls.Fusion"),
+        _doctor_asset("style_kde", "/usr/lib64/qt6/qml/org/kde/desktop/qmldir", "org.kde.desktop"),
+        _doctor_asset("bwrap", "/usr/bin/bwrap"),
+    ]
+    states = {item["state"] for item in checks}
+    status = "unknown" if "unknown" in states else "missing" if "missing" in states else "ok"
+    return {"status": status, "target": TARGET, "scope": "fixed_assets_metadata_only",
+            "checks": checks, "capabilities": capabilities,
+            "limitations": ["no_library_loading", "no_transitive_closure", "no_binary_or_session_health",
+                            "rpm_ownership_not_integrity", "host_distribution_not_attested", "not_runtime_inventory"]}
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="package.py", description=__doc__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -817,7 +983,9 @@ def main(arguments: list[str] | None = None) -> int:
     options = parser().parse_args(arguments)
     try:
         if options.command == "doctor":
-            _reject("unsupported_doctor")
+            result = doctor()
+            print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+            return {"ok": 0, "missing": 1, "unknown": 2}[result["status"]]
         if options.command == "build":
             digest = build(options.stage, options.output, version=options.version, commit=options.commit,
                            ci_image_digest=options.ci_image_digest,

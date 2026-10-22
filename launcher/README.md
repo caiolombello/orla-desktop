@@ -269,9 +269,10 @@ Depois da decodificação limitada, confere o commit esperado no manifesto, alé
 de nomes, modos, hashes, CRC e limites reais de descompactação. Ele não extrai nem executa o payload.
 
 O inventário de dependências ainda é uma declaração fornecida pelo chamador
-(`caller_assertion_unverified`); não foi coletado do ambiente. `doctor` retorna
-`unsupported_doctor`. Staging CMake, resolução relocável dos helpers, coleta
-RPM, diagnóstico do host e artifact hospedado continuam pendentes. Essa fatia
+(`caller_assertion_unverified`); não foi coletado do ambiente. A consulta de
+metadados descrita abaixo não produz esse inventário. Staging CMake, resolução
+relocável dos helpers, coleta transitiva, qualificação em usuário limpo e
+artifact hospedado continuam pendentes. Essa fatia
 não instala o launcher e não altera dados do usuário. O ZIP Source gerado pela
 CI continua excluindo `launcher/`, inclusive este empacotador. Ele inclui os
 helpers-fonte de texto da IA em `scripts/` e seus testes em `tests/`; isso não
@@ -281,9 +282,38 @@ os transforma em recursos instalados.
 python3 -B -m unittest discover -s launcher/tests -p 'test_package.py' -v
 ```
 
-Os 17 testes mantidos usam ELF e inventários sintéticos, com ZIPs adversariais e
+Os 24 testes usam ELF e inventários sintéticos, com ZIPs adversariais e
 verificação de determinismo. O checksum precisa vir de um canal confiável;
 um `SHA256SUMS` ao lado do arquivo, sozinho, não autentica sua origem.
+
+### Diagnóstico de arquivos e metadados — experimental
+
+```sh
+python3 -B launcher/package.py doctor
+```
+
+A consulta tem alvo fixo Fedora 44/x86_64. Confere sete caminhos conhecidos
+de Wayland, Qt Quick/Controls/Layouts e runners de aplicativos/calculadora;
+informa separadamente os estilos Fusion/KDE e bwrap. O JSON apresenta
+`found`, `missing` ou `unknown`, hash do arquivo, cabeçalho ELF quando aplicável
+e metadados do pacote RPM. O código de saída é 0 para os arquivos necessários
+encontrados, 1 para ausência conhecida e 2 para informação inconclusiva;
+um recurso opcional ausente não bloqueia o resultado principal.
+
+As leituras são limitadas e não carregam bibliotecas nem executam os arquivos
+consultados. RPM usa consulta de proprietário/versão com configuração isolada;
+avisos, respostas ambíguas, timeout e limpeza inconclusiva permanecem `unknown`.
+A consulta não verifica assinatura ou integridade dos pacotes, ABI carregada,
+dependências transitivas nem saúde da sessão. Também não atesta a distribuição
+do host e não substitui o inventário exigido pelo builder.
+
+Na leitura local de 14/10, os sete caminhos necessários e os três opcionais
+foram encontrados; 1.488 arquivos/241 diretórios protegidos e o banco RPM
+permaneceram iguais. O candidato inicial retornou `unknown` por mensagens de
+chaveiro/lock geradas pela configuração RPM isolada; o caso foi reproduzido
+com mocks antes da correção. Os 24 testes passaram, sem processos RPM reais
+nos testes. Build/verify, schema e payload existentes foram preservados.
+Este comando no fonte não instala nem atualiza o launcher ou os helpers.
 
 ## Compilar e testar
 

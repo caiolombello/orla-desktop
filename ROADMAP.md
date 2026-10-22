@@ -84,7 +84,7 @@ Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado
 
 **Base histórica de texto da IA (PR 28):** o [PR 28](https://github.com/caiolombello/orla-desktop/pull/28) integrou contratos e parsers offline para respostas textuais de Ollama e OpenAI. A [CI](https://github.com/caiolombello/orla-desktop/actions/runs/38126133261) passou os 23 testes de texto e os cinco CTests do launcher. O entrypoint direto continua retornando `unsupported_transport`; naquela fatia, conexão, autenticação, geração, assinaturas e UI de texto estavam abertas. Os assets publicados 0.2.9 permanecem inalterados; veja a [validação Source](docs/validation/ai-provider-source.md).
 
-**Fundações posteriores à alpha 0.2.9, somente no fonte:** o [PR 29](https://github.com/caiolombello/orla-desktop/pull/29) separou o runtime temporário dos helpers dos arquivos do launcher; a CI aprovada executou os cinco CTests em 48,52 s. O [PR 30](https://github.com/caiolombello/orla-desktop/pull/30) publicou o lifecycle de texto testado com conectores simulados e o verificador de pacote do launcher. Sua [CI](https://github.com/caiolombello/orla-desktop/actions/runs/38132537208) aprovou 69 testes dessas fundações e os cinco CTests em 49,35 s. O inventário do pacote continua uma declaração não verificada do chamador; coleta de dependências, `doctor` e instalação do launcher ainda estão abertos. Não houve conexão ou geração de IA. Os assets públicos 0.2.9 permanecem inalterados; consulte o [launcher](launcher/README.md) e a [validação de IA](docs/validation/ai-provider-source.md).
+**Fundações posteriores à alpha 0.2.9, somente no fonte:** o [PR 29](https://github.com/caiolombello/orla-desktop/pull/29) separou o runtime temporário dos helpers dos arquivos do launcher; a CI aprovada executou os cinco CTests em 48,52 s. O [PR 30](https://github.com/caiolombello/orla-desktop/pull/30) publicou o lifecycle de texto testado com conectores simulados e o verificador de pacote do launcher. Sua [CI](https://github.com/caiolombello/orla-desktop/actions/runs/38132537208) aprovou 69 testes dessas fundações e os cinco CTests em 49,35 s. O inventário do pacote continua uma declaração não verificada do chamador; a consulta delimitada de metadados do doctor está descrita abaixo, e coleta transitiva e instalação em usuário limpo continuam abertas. Não houve conexão ou geração de IA. Os assets públicos 0.2.9 permanecem inalterados; consulte o [launcher](launcher/README.md) e a [validação de IA](docs/validation/ai-provider-source.md).
 
 **Fatia de texto da IA integrada nesta mudança Source:** depois do adaptador HTTPS privado do OpenAI integrado historicamente pelo [PR 34](https://github.com/caiolombello/orla-desktop/pull/34), que continua sem entrypoint, credenciais ou UI, esta mudança integra somente Ollama numérico em loopback ao painel do launcher. A pessoa informa `127.0.0.1` ou `::1`, porta, modelo, tarefa, texto e idioma, revisa destino/dados/custo desconhecido e consente por sessão; só **Gerar** executa. Há streaming, cancelamento, parcial revisável e cópia manual. A composição inicial passou build normal, seis CTests isolados e 90 testes Python (6 shim, 23 T1 e 61 T2; UI 10 e controller 12).
 
@@ -647,11 +647,24 @@ O botão **Abrir** também passou a exigir disponibilidade da seleção, após
 o ensaio revelar seu estado visual incorreto. Testes de clique/Enter e os
 nove CTests passaram nos dois estilos; o novo estado visual foi revisado
 na galeria, sem promovê-lo a uma nova prova Wayland.
+
 Consulte a [validação Source](docs/validation/launcher-aliases-source.md)
 e a [primeira prova nativa](docs/validation/launcher-aliases-native.md).
 Seleção de saída e os demais controles
 de hardware continuam provas próprias; o dono do estado de áudio permanece
 na dock.
+
+**R2 — diagnóstico delimitado no fonte (14/10):** `launcher/package.py doctor`
+consulta sete caminhos conhecidos e três recursos opcionais para Fedora
+44/x86_64. Ausência conhecida e informação inconclusiva têm estados e saídas
+distintos; opcionais não bloqueiam o núcleo. Os 24 testes passaram com mocks;
+a leitura real encontrou os dez itens e preservou os arquivos protegidos e o
+banco RPM. Esse resultado é de arquivos/metadados, sem carregar bibliotecas,
+verificar integridade/assinaturas ou produzir inventário transitivo. Build,
+verify, schema e payload permanecem iguais. R2 continua parcial: staging,
+helpers relocáveis, dependências em execução, instalação/atualização/remoção
+em usuário limpo e artifact hospedado mantêm seus aceites. Consulte o
+[comando e seus limites](launcher/README.md#diagnóstico-de-arquivos-e-metadados--experimental).
 
 ## Prontidão e recomendação de execução
 

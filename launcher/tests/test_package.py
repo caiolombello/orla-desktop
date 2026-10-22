@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import stat
 import struct
+import subprocess
+from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest import mock
@@ -563,13 +565,6 @@ class PackageTests(unittest.TestCase):
         del inventory["elf_direct"]["needed"][0]["owner"]
         self.assert_code("inventory_dependency", lambda: package.validate_runtime_inventory(inventory))
 
-    def test_doctor_is_explicitly_unsupported_without_subprocess_support(self):
-        output = io.StringIO()
-        with mock.patch("sys.stdout", output):
-            self.assertEqual(package.main(["doctor"]), 2)
-        self.assertEqual(json.loads(output.getvalue()), {"status": "error", "code": "unsupported_doctor"})
-        self.assertNotIn("subprocess", package.__dict__)
-
     def test_build_and_verify_commands_use_only_explicit_inputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -594,6 +589,224 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(json.loads(output.getvalue()), {
                 "status": "ok", "commit": "a" * 40, "schema": "orla-launcher-package-0.2",
             })
+
+
+class DoctorTests(unittest.TestCase):
+    required = {
+        "qpa_wayland", "qml_qtquick_plugin", "qml_controls_plugin", "qml_controls_qmldir",
+        "qml_layouts_plugin", "krunner_services", "krunner_calculator",
+    }
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.routes = dict(package._EXACT_ASSET_PATHS)
+        self.optional = {
+            "style_fusion": "/usr/lib64/qt6/qml/QtQuick/Controls/Fusion/qmldir",
+            "style_kde": "/usr/lib64/qt6/qml/org/kde/desktop/qmldir",
+            "bwrap": "/usr/bin/bwrap",
+        }
+        self.logical = {}
+        for role, path in {**self.routes, **self.optional}.items():
+            target = self.root / role
+            content = (b"module QtQuick.Controls\n" if role == "qml_controls_qmldir" else
+                       b"module QtQuick.Controls.Fusion\n" if role == "style_fusion" else
+                       b"module org.kde.desktop\n" if role == "style_kde" else synthetic_elf())
+            target.write_bytes(content)
+            self.logical[path] = target
+        self.processes, self.commands = [], []
+        self.rpm_output = b"synthetic-qt\t0\t6.11.2\t1.fc44\tx86_64\n"
+        self.rpm_exit = 0
+        self.rpm_timeout = False
+        self.clock = 100.0
+        self.spawn_error = False
+        self.wait_timeout = False
+        self.after_spawn = None
+        self.require_readonly_flags = False
+
+    def doctor(self):
+        original_open, original_lstat, original_read = os.open, os.lstat, os.read
+        def mapped(path):
+            # Unknown host/personal paths must never be touched by this test.
+            self.assertIn(os.fsdecode(path), self.logical)
+            return self.logical[os.fsdecode(path)]
+        def open_file(path, flags, *args, **kwargs):
+            self.assertFalse(flags & (os.O_CREAT | os.O_WRONLY | os.O_RDWR | os.O_TRUNC))
+            return original_open(mapped(path), flags, *args, **kwargs)
+        def popen(command, **kwargs):
+            self.commands.append((command, kwargs))
+            if self.spawn_error: raise OSError("synthetic executable unavailable")
+            if self.after_spawn: self.after_spawn(command[command.index("--file") + 1])
+            process = mock.Mock()
+            process.stdout.fileno.return_value = 910007
+            process.wait.return_value = self.rpm_exit
+            if self.wait_timeout: process.wait.side_effect = subprocess.TimeoutExpired(command, 2)
+            process.output = self.rpm_output
+            if self.require_readonly_flags and not {"--nosignature", "--nohdrchk"}.issubset(command):
+                process.output = (b"warning: unknown keyring type: , using rpmdb\n"
+                                  b"error: can't create transaction lock on // (Is a directory)\n" + self.rpm_output)
+            process.cursor = 0
+            self.processes.append(process)
+            return process
+        def read(fd, count):
+            if fd != 910007: return original_read(fd, count)
+            process = self.processes[-1]
+            data = process.output[process.cursor:process.cursor + count]
+            process.cursor += len(data)
+            return data
+        def select(timeout):
+            if self.rpm_timeout: self.clock += timeout + 0.1; return []
+            return [(SimpleNamespace(fileobj=self.processes[-1].stdout), 1)]
+        selector = mock.MagicMock()
+        selector.__enter__.return_value = selector
+        selector.select.side_effect = select
+        output = io.StringIO()
+        # ALL external process creation is mocked; these tests never invoke RPM.
+        with mock.patch("subprocess.Popen", side_effect=popen), \
+             mock.patch("subprocess.run", side_effect=AssertionError("unexpected process API")), \
+             mock.patch("os.open", side_effect=open_file), \
+             mock.patch("os.lstat", side_effect=lambda path: original_lstat(mapped(path))), \
+             mock.patch("os.read", side_effect=read), \
+             mock.patch("selectors.DefaultSelector", return_value=selector), \
+             mock.patch("time.monotonic", side_effect=lambda: self.clock), \
+             mock.patch("sys.stdout", output):
+            code = package.main(["doctor"])
+        return code, json.loads(output.getvalue())
+
+    def test_complete_fixed_assets_reports_metadata_not_runtime_health_and_never_writes(self):
+        before = {p.name: (p.read_bytes(), p.stat().st_mode, p.stat().st_mtime_ns) for p in self.root.iterdir()}
+        code, result = self.doctor()
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["target"], "fedora44-x86_64")
+        self.assertEqual(result["scope"], "fixed_assets_metadata_only")
+        self.assertEqual({x["role"] for x in result["checks"]}, self.required)
+        self.assertTrue(all(x["state"] == "found" for x in result["checks"]))
+        self.assertIn("no_library_loading", result["limitations"])
+        self.assertIn("no_transitive_closure", result["limitations"])
+        self.assertIn("not_runtime_inventory", result["limitations"])
+        self.assertNotIn("runtime_inventory", result)
+        with self.assertRaises(package.PackageError) as invalid_inventory:
+            package.validate_runtime_inventory(result)
+        self.assertEqual(invalid_inventory.exception.code, "inventory_schema")
+        self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mode, p.stat().st_mtime_ns) for p in self.root.iterdir()})
+        for command, options in self.commands:
+            self.assertEqual(command[0], "/usr/bin/rpm")
+            self.assertIn("--query", command); self.assertIn("--file", command)
+            self.assertEqual(command[command.index("--rcfile") + 1], "/dev/null")
+            self.assertEqual(command[command.index("--macros") + 1], "/dev/null")
+            self.assertEqual(command[command.index("--dbpath") + 1], "/var/lib/rpm")
+            self.assertIn("--noplugins", command)
+            self.assertNotIn("shell", options)
+            self.assertEqual(options["env"]["HOME"], "/dev/null")
+            self.assertEqual(options["cwd"], "/")
+        for process in self.processes:
+            process.wait.assert_called(); process.stdout.close.assert_called()
+
+    def test_readonly_query_avoids_keyring_lock_path_without_discarding_diagnostics(self):
+        # Model the pinned RPM6.0.2 CLI/verification/keyring path and Root's
+        # preserved R1 warning. No RPM invocation or library is executed here.
+        self.require_readonly_flags = True
+        code, result = self.doctor()
+        self.assertEqual(code, 0)
+        self.assertTrue(all(x["state"] == "found" for x in result["checks"]))
+        self.assertIn("rpm_ownership_not_integrity", result["limitations"])
+        for command, _options in self.commands:
+            self.assertIn("--nosignature", command)
+            self.assertIn("--nohdrchk", command)
+            self.assertNotIn("--define", command)
+            self.assertNotIn("_rpmlock_path", " ".join(command))
+        # A different diagnostic despite these flags still refuses metadata.
+        self.rpm_output = b"warning: synthetic RPM diagnostic\n" + self.rpm_output
+        code, result = self.doctor()
+        self.assertEqual(code, 2)
+        self.assertEqual(result["status"], "unknown")
+        self.assertTrue(all(x["state"] == "unknown" for x in result["checks"]))
+
+    def test_required_missing_is_distinct_from_optional_missing(self):
+        for role in self.optional: self.logical[self.optional[role]].unlink()
+        code, result = self.doctor()
+        self.assertEqual(code, 0)
+        self.assertEqual({x["state"] for x in result["capabilities"]}, {"missing"})
+        self.logical[self.routes["krunner_calculator"]].unlink()
+        code, result = self.doctor()
+        self.assertEqual(code, 1)
+        self.assertEqual(result["status"], "missing")
+        by_role = {x["role"]: x for x in result["checks"]}
+        self.assertEqual(by_role["krunner_calculator"]["state"], "missing")
+        self.assertEqual(by_role["krunner_services"]["state"], "found")
+
+    def test_unsafe_malformed_oversized_or_incompatible_assets_are_unknown(self):
+        role = "qml_controls_plugin"; asset = self.logical[self.routes[role]]
+        original = asset.read_bytes()
+        for content in [b"not ELF", bytes(original[:18] + b"\x03\x00" + original[20:]), bytes(original[:16] + b"\x02\x00" + original[18:])]:
+            with self.subTest(kind=len(content)):
+                asset.write_bytes(content)
+                code, result = self.doctor()
+                self.assertEqual(code, 2); self.assertEqual(result["status"], "unknown")
+                self.assertEqual(next(x for x in result["checks"] if x["role"] == role)["state"], "unknown")
+        with asset.open("wb") as oversized: oversized.truncate(64 * 1024 * 1024 + 1)
+        self.assertEqual(self.doctor()[0], 2)
+        asset.unlink(); referent = self.root / "referent"; referent.write_bytes(original); asset.symlink_to(referent)
+        code, result = self.doctor()
+        self.assertEqual(code, 2); self.assertEqual(referent.read_bytes(), original)
+        asset.unlink(); asset.write_bytes(original)
+        self.logical[self.routes["qml_controls_qmldir"]].write_bytes(b"module Other.Module\n")
+        self.assertEqual(self.doctor()[0], 2)
+
+    def test_rpm_unknown_ambiguous_timeout_and_overflow_do_not_claim_found(self):
+        for output, exit_code, timeout in [
+            (b"owner missing", 1, False), (self.rpm_output * 2, 0, False),
+            (b"owner\t0\t6.11.2\t1.fc44\tother\n", 0, False),
+            (b"x" * 16385, 0, False), (b"", 0, True),
+        ]:
+            with self.subTest(output=len(output), exit=exit_code, timeout=timeout):
+                self.rpm_output, self.rpm_exit, self.rpm_timeout = output, exit_code, timeout
+                self.processes, self.commands = [], []
+                code, result = self.doctor()
+                self.assertEqual(code, 2); self.assertEqual(result["status"], "unknown")
+                self.assertTrue(all(x["state"] == "unknown" for x in result["checks"]))
+                if timeout or len(output) > 16384:
+                    for process in self.processes: process.kill.assert_called_once(); process.wait.assert_called()
+
+    def test_unavailable_rpm_or_unconfirmed_owned_cleanup_remains_unknown(self):
+        self.spawn_error = True
+        code, result = self.doctor()
+        self.assertEqual(code, 2)
+        self.assertEqual({x["code"] for x in result["checks"]}, {"rpm_unavailable"})
+        self.spawn_error = False; self.wait_timeout = True
+        self.processes, self.commands = [], []
+        code, result = self.doctor()
+        self.assertEqual(code, 2)
+        self.assertEqual({x["code"] for x in result["checks"]}, {"rpm_cleanup_unknown"})
+        for process in self.processes:
+            process.kill.assert_called_once()
+            self.assertEqual(process.wait.call_count, 2)
+            process.stdout.close.assert_called_once()
+
+    def test_asset_drift_during_metadata_query_is_not_reported_found(self):
+        path = self.routes["qml_controls_plugin"]
+        def drift(selected):
+            if selected == path:
+                asset = self.logical[path]
+                asset.write_bytes(asset.read_bytes() + b"changed")
+        self.after_spawn = drift
+        code, result = self.doctor()
+        self.assertEqual(code, 2)
+        record = next(x for x in result["checks"] if x["role"] == "qml_controls_plugin")
+        self.assertEqual(record["state"], "unknown")
+        self.assertEqual(record["code"], "asset_changed")
+        self.assertTrue(all(x["state"] == "found" for x in result["checks"] if x["role"] != record["role"]))
+
+    def test_optional_unknown_metadata_does_not_block_core_or_become_required(self):
+        self.logical[self.optional["style_kde"]].write_bytes(b"not a qmldir\n")
+        code, result = self.doctor()
+        self.assertEqual(code, 0)
+        self.assertEqual(result["status"], "ok")
+        kde = next(x for x in result["capabilities"] if x["role"] == "style_kde")
+        self.assertEqual(kde["state"], "unknown")
+        self.assertEqual(package.validate_runtime_inventory(runtime_inventory())["source"], "caller_assertion_unverified")
 
 
 if __name__ == "__main__":
