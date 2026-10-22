@@ -102,15 +102,25 @@ QtObject {
         internal.message = captured.message;
         return true;
     }
-    function select(id, expectedScope, expectedRevision) {
+    function select(id, expectedScope, expectedRevision, continuationGuard) {
+        if (continuationGuard !== undefined && typeof continuationGuard !== "function") return false;
         if (!check(expectedScope, expectedRevision, true)) return false;
         if (typeof id !== "string" || (id !== "legacy"
                 && (!internal.document || !internal.document.profiles.some(profile => profile.id === id))))
             return fail(qsTr("O perfil selecionado não existe."));
-        if (id === activeProfileId) return true;
+        const beforeWrite = () => {
+            if (!writable || expectedScope !== activeProfileId || expectedRevision !== revision) return false;
+            if (continuationGuard !== undefined) {
+                try { if (continuationGuard() !== true) return false; }
+                catch (_) { return false; }
+            }
+            // A caller may synchronously select or edit another profile.
+            return writable && expectedScope === activeProfileId && expectedRevision === revision;
+        };
+        if (id === activeProfileId) return beforeWrite();
         const document = Profiles.copy(internal.document);
         document.activeProfileId = id;
-        return store(document);
+        return store(document, beforeWrite);
     }
     // Patches are plain data; configuration is the typed, writable KConfig map.
     // Legacy field writes are not a backend transaction if a setter throws.
