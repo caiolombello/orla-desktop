@@ -115,6 +115,166 @@ private Q_SLOTS:
         QTest::newRow("standard") << 660;
     }
 
+    void allResultActionsAreReachableByKeyboard_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::newRow("narrow") << 440;
+        QTest::newRow("standard") << 660;
+    }
+
+    void allResultActionsAreReachableByKeyboard()
+    {
+        QFETCH(int, width);
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/owned-ai.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/owned-text.py"));
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/owned-steam.py"));
+        std::unique_ptr<QObject> launcher;
+        QQmlApplicationEngine engine;
+        QQmlComponent fixture(&engine);
+        fixture.setData(R"QML(
+            import QtQuick
+            QtObject {
+                signal changed()
+                property string query: "owned"
+                property string status: "ready"
+                property string error: ""
+                property int selectedIndex: 0
+                property int dismissed: 0
+                property var executed: []
+                property var rows: [{id: "owned", title: "Aplicativo sintético", description: "Descrição independente da origem",
+                    source: "KRunner · Aplicativos", kind: "app", categoryLabel: "APLICATIVOS", enabled: true, generation: 7,
+                    actions: [
+                        {id: "first", text: "Primeira ação", row: 0, generation: 7, resultId: "owned"},
+                        {id: "second", text: "Segunda ação", row: 0, generation: 7, resultId: "owned"},
+                        {id: "third", text: "Terceira ação com um nome longo para conferir navegação e limites", row: 0, generation: 7, resultId: "owned"}]}]
+                function select(row) { selectedIndex = row; changed(); }
+                function setQuery(value) { query = value; changed(); }
+                function execute(row, generation, id, actionId) {
+                    executed = executed.concat([{row:row, generation:generation, id:id, actionId:actionId}]);
+                }
+                function dismiss() { dismissed++; }
+            }
+        )QML", QUrl());
+        launcher.reset(fixture.create());
+        QVERIFY2(launcher, qPrintable(fixture.errorString()));
+        engine.rootContext()->setContextProperty("launcher", launcher.get());
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        window->resize(width, 380);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(search);
+        search->forceActiveFocus();
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        auto *panel = window->findChild<QObject *>(QStringLiteral("resultActionsMenu"));
+        QVERIFY2(panel && panel->property("visible").toBool(), "All existing result actions need an explicit reachable panel");
+        auto *origin = window->findChild<QQuickItem *>(QStringLiteral("resultActionsOrigin"));
+        QVERIFY(origin && origin->isVisible());
+        QCOMPARE(origin->property("text").toString(), QStringLiteral("Origem: KRunner · Aplicativos"));
+        const auto calls = [&] { return launcher->property("executed").value<QJSValue>().toVariant().toList(); };
+        QCOMPARE(calls().size(), 0);
+        auto *third = window->findChild<QQuickItem *>(QStringLiteral("launcherAction2"));
+        QVERIFY(third && third->isVisible());
+        QTest::keyClick(window, Qt::Key_Down);
+        QTest::keyClick(window, Qt::Key_Down);
+        QVERIFY(third->property("highlighted").toBool() && panel->property("activeFocus").toBool());
+        QCOMPARE(calls().size(), 0);
+        auto *viewport = panel->property("contentItem").value<QQuickItem *>();
+        QVERIFY(viewport);
+        const auto thirdBounds = [&] { return third->mapRectToItem(viewport, QRectF(0, 0, third->width(), third->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0, 0, viewport->width(), viewport->height()).contains(thirdBounds()), 1000);
+        QCOMPARE(QQmlProperty(third->property("background").value<QObject *>(), QStringLiteral("border.width")).read().toInt(), 2);
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(calls().size(), 1);
+        QCOMPARE(calls().first().toMap().value("actionId").toString(), QStringLiteral("third"));
+        QCOMPARE(calls().first().toMap().value("id").toString(), QStringLiteral("owned"));
+        QCOMPARE(calls().first().toMap().value("generation").toInt(), 7);
+        QCOMPARE(launcher->property("dismissed").toInt(), 0);
+        QVERIFY(!panel->property("visible").toBool());
+        QVERIFY(search->hasActiveFocus());
+        auto *entry = window->findChild<QQuickItem *>(QStringLiteral("actionsButton"));
+        QVERIFY(entry && entry->isEnabled());
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, entry->mapToScene(QPointF(entry->width() / 2, entry->height() / 2)).toPoint());
+        QVERIFY(panel->property("visible").toBool());
+        third = window->findChild<QQuickItem *>(QStringLiteral("launcherAction2"));
+        QVERIFY(third && third->isVisible());
+        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, third->mapToScene(QPointF(third->width() / 2, third->height() / 2)).toPoint());
+        const QVariant pressedTicket = third->property("executionTicket");
+        QVERIFY(pressedTicket.isValid());
+        QTest::keyClick(window, Qt::Key_Escape);
+        QVERIFY(!panel->property("visible").toBool());
+        QTest::mouseRelease(window, Qt::LeftButton);
+        QVERIFY(QMetaObject::invokeMethod(third, "triggered"));
+        QCOMPARE(calls().size(), 1); // A delayed delivery cannot revive the closed local intent.
+        QVERIFY(search->hasActiveFocus());
+        QCOMPARE(launcher->property("query").toString(), QStringLiteral("owned"));
+        QCOMPARE(launcher->property("selectedIndex").toInt(), 0);
+        QCOMPARE(launcher->property("dismissed").toInt(), 0);
+        QPointer<QQuickItem> oldAction(third);
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QVERIFY(panel->property("visible").toBool());
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QVERIFY(!panel->property("visible").toBool());
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QVERIFY(panel->property("visible").toBool());
+        if (oldAction) QVERIFY(QMetaObject::invokeMethod(oldAction, "triggered"));
+        QCOMPARE(calls().size(), 1); // Reopening is a new intent, even for the same result generation.
+        // Menu's own triggered handler may dismiss; only a new user press may dispatch.
+        if (panel->property("visible").toBool()) QTest::keyClick(window, Qt::Key_Escape);
+        for (const QString &destination : {QStringLiteral("ai"), QStringLiteral("steam"), QStringLiteral("query")}) {
+            search->forceActiveFocus();
+            QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+            third = window->findChild<QQuickItem *>(QStringLiteral("launcherAction2"));
+            QVERIFY(third && third->isVisible());
+            QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, third->mapToScene(QPointF(third->width() / 2, third->height() / 2)).toPoint());
+            QPointer<QQuickItem> pressedAction(third);
+            if (destination == QStringLiteral("query")) {
+                QVERIFY(QMetaObject::invokeMethod(launcher.get(), "setQuery", Q_ARG(QVariant, QVariant(QStringLiteral("new owned query")))));
+            } else {
+                auto *entry = window->findChild<QQuickItem *>(destination == QStringLiteral("ai")
+                    ? QStringLiteral("aiEntryButton") : QStringLiteral("steamEntryButton"));
+                QVERIFY(entry && QMetaObject::invokeMethod(entry, "click"));
+            }
+            QVERIFY(!panel->property("visible").toBool());
+            QTest::mouseRelease(window, Qt::LeftButton);
+            QVERIFY(pressedAction && QMetaObject::invokeMethod(pressedAction, "triggered"));
+            QCOMPARE(calls().size(), 1);
+            if (destination != QStringLiteral("query")) {
+                auto *back = window->findChild<QQuickItem *>(destination == QStringLiteral("ai")
+                    ? QStringLiteral("aiBackButton") : QStringLiteral("steamBackButton"));
+                QVERIFY(back && QMetaObject::invokeMethod(back, "click"));
+            }
+        }
+        QCOMPARE(launcher->property("query").toString(), QStringLiteral("new owned query"));
+        auto *context = QQmlEngine::contextForObject(launcher.get());
+        QQmlExpression manyActions(context, launcher.get(), QStringLiteral(
+            "rows[0].actions = Array.from({length:12}, (_, i) => ({id:'many-' + i, text:'Ação sintética longa para conferir a lista completa ' + i, row:0, generation:7, resultId:'owned'})); rows = rows.slice(); changed()"));
+        manyActions.evaluate();
+        QVERIFY2(!manyActions.hasError(), qPrintable(manyActions.error().toString()));
+        search->forceActiveFocus();
+        QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+        QVERIFY(panel->property("visible").toBool());
+        auto *last = window->findChild<QQuickItem *>(QStringLiteral("launcherAction11"));
+        QVERIFY(last);
+        for (int index = 0; index < 11; ++index) QTest::keyClick(window, Qt::Key_Down);
+        QTRY_VERIFY(last->property("highlighted").toBool() && panel->property("activeFocus").toBool());
+        const auto lastBounds = [&] { return last->mapRectToItem(viewport, QRectF(0, 0, last->width(), last->height())); };
+        QTRY_VERIFY_WITH_TIMEOUT(QRectF(0, 0, viewport->width(), viewport->height()).contains(lastBounds()), 1000);
+        QCOMPARE(calls().size(), 1);
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, last->mapToScene(QPointF(last->width() / 2, last->height() / 2)).toPoint());
+        QCOMPARE(calls().size(), 2);
+        QCOMPARE(calls().last().toMap().value("actionId").toString(), QStringLiteral("many-11"));
+        QCOMPARE(launcher->property("dismissed").toInt(), 0);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QCOMPARE(launcher->property("dismissed").toInt(), 1);
+    }
+
     void nonselectedResultShowsKeyboardFocusWithoutChangingGeometry()
     {
         AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
@@ -1305,7 +1465,11 @@ private Q_SLOTS:
         const bool actionRoute = route == QStringLiteral("action");
         QTRY_VERIFY_WITH_TIMEOUT((mainButton = findControl(false, false)), 1000);
         QTRY_VERIFY_WITH_TIMEOUT((delegate = findControl(true, false)), 1000);
-        if (route == QStringLiteral("action")) QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
+        if (actionRoute) {
+            search->forceActiveFocus();
+            QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
+            QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
+        }
         QPointer<QQuickItem> target = route.contains(QStringLiteral("delegate")) ? delegate
             : route == QStringLiteral("action") ? action : mainButton;
         const auto center = [](QQuickItem *item) {
@@ -1359,7 +1523,7 @@ private Q_SLOTS:
             // Challenge a delayed delivery using the real stored onPressed ticket and QML handler.
             QVERIFY(target);
             QCOMPARE(scriptMap(target->property("executionTicket")), pressedTicket);
-            QVERIFY(QMetaObject::invokeMethod(target, "clicked"));
+            QVERIFY(QMetaObject::invokeMethod(target, actionRoute ? "triggered" : "clicked"));
         } else if (route == QStringLiteral("main") || route == QStringLiteral("delegate")) {
             target = findControl(route == QStringLiteral("delegate"), false);
             QVERIFY(target);
@@ -1389,8 +1553,11 @@ private Q_SLOTS:
         QVERIFY(mainButton && !mainButton->isEnabled());
         QVERIFY(delegate && !delegate->isEnabled());
         if (actionRoute) {
-            QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
             QVERIFY(action && !action->isEnabled());
+            auto *panel = window->findChild<QObject *>(QStringLiteral("resultActionsMenu"));
+            auto *entry = window->findChild<QQuickItem *>(QStringLiteral("actionsButton"));
+            QVERIFY(panel && !panel->property("visible").toBool());
+            QVERIFY(entry && !entry->isEnabled());
         }
         auto *waiting = window->findChild<QQuickItem *>(QStringLiteral("executionWaiting"));
         QVERIFY(waiting && waiting->isVisible());
@@ -1418,8 +1585,12 @@ private Q_SLOTS:
             QVERIFY(window->isVisible());
             QTRY_VERIFY((mainButton = findControl(false, false)) && mainButton->isEnabled());
             if (actionRoute) {
+                auto *entry = window->findChild<QQuickItem *>(QStringLiteral("actionsButton"));
+                QVERIFY(entry && entry->isEnabled());
+                search->forceActiveFocus();
+                QTest::keyClick(window, Qt::Key_K, Qt::ControlModifier);
                 QTRY_VERIFY_WITH_TIMEOUT((action = findControl(false, true)), 1000);
-                QVERIFY(action && action->isEnabled()); // Restore the action affordance without copying to any clipboard.
+                QVERIFY(action && action->isEnabled()); // Reopening does not copy to any clipboard.
             }
             QVERIFY(!waiting->isVisible());
             if (calculator) {

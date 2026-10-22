@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.impl as ControlsImpl
 import QtQuick.Layouts
+import QtQuick.Templates as Templates
 import "Style.js" as Style
 
 Window {
@@ -35,6 +36,21 @@ Window {
         if (selectRow) launcher.select(ticket.row)
         launcher.execute(ticket.row, ticket.generation, ticket.id, ticket.actionId || "")
     }
+    readonly property bool canOpenActions: activePanel === "search" && launcher.status === "ready"
+        && !executionBlocked && selectedRow && selectedRow.enabled && selectedRow.actions.length > 0
+    property var actionsRow: null
+    property int actionsEpisode: 0
+    function openResultActions() {
+        if (!canOpenActions) return
+        const row = selectedRow
+        actionsEpisode++
+        actionsRow = {title: row.title, source: row.source, actions: row.actions.slice()}
+        resultActions.open()
+        resultActions.currentIndex = 2
+        if (resultActions.itemAt(2)) resultActions.itemAt(2).forceActiveFocus(Qt.PopupFocusReason)
+    }
+    onExecutionBlockedChanged: if (executionBlocked) resultActions.close()
+    onActivePanelChanged: if (activePanel !== "search") resultActions.close()
     function executeSelection() {
         const row = selectedRow
         if (row) executeTicket({ row: launcher.selectedIndex, generation: row.generation, id: row.id }, false)
@@ -67,16 +83,144 @@ Window {
         if (aiReady && textReady && steamReady) finishPendingClose()
         return !pendingDismiss
     }
-    onActiveChanged: if (active && activePanel === "search") search.forceActiveFocus()
+    onActiveChanged: {
+        if (!active) resultActions.close()
+        else if (activePanel === "search" && !resultActions.visible) search.forceActiveFocus()
+    }
     onClosing: function(close) {
         close.accepted = requestDismiss(true)
     }
     Shortcut {
-        sequence: "Escape"; context: Qt.WindowShortcut
+        sequence: "Escape"; context: Qt.WindowShortcut; enabled: !resultActions.visible
         onActivated: {
             if (window.activePanel === "ai") window.closeAiPanel()
             else if (window.activePanel === "steam") window.closeSteamPanel()
             else window.requestDismiss(false)
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+K"; context: Qt.WindowShortcut
+        enabled: window.canOpenActions && !resultActions.visible
+        onActivated: window.openResultActions()
+    }
+    Templates.Menu {
+        id: resultActions
+        objectName: "resultActionsMenu"
+        // Keep the actions inside this glass window, including under KDE's style.
+        popupType: Popup.Item
+        parent: glass
+        x: glass.width - width - Style.space.md
+        y: glass.height - height - Style.space.md
+        width: Math.min(Style.size.popupWidth, glass.width - 2 * Style.space.md)
+        height: Math.min(contentItem.implicitHeight + 2 * padding, glass.height - 2 * Style.space.md)
+        padding: Style.space.sm
+        leftPadding: Style.space.sm
+        rightPadding: Style.space.sm
+        topPadding: Style.space.sm
+        bottomPadding: Style.space.sm
+        palette.window: ui.raised
+        palette.text: ui.text
+        palette.highlight: ui.accent
+        palette.highlightedText: ui.onAccent
+        margins: window.shadowMargin + Style.space.md
+        modal: true
+        dim: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        enter: Transition { }
+        exit: Transition { }
+        onClosed: {
+            window.actionsEpisode++
+            if (window.active && window.activePanel === "search" && !window.pendingDismiss) search.forceActiveFocus()
+        }
+        background: Rectangle {
+            radius: Style.radius.module
+            color: ui.raised
+            border.width: 1
+            border.color: ui.borderStrong
+        }
+        contentItem: ListView {
+            implicitHeight: contentHeight
+            model: resultActions.contentModel
+            currentIndex: resultActions.currentIndex
+            highlightMoveDuration: 0
+            highlightResizeDuration: 0
+            clip: true
+            ScrollIndicator.vertical: ScrollIndicator { }
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+                    resultActions.close()
+                    event.accepted = true
+                }
+            }
+        }
+        Templates.MenuItem {
+            id: actionTitle
+            text: qsTr("Ações de %1").arg(window.actionsRow ? String(window.actionsRow.title).slice(0, 512) : "")
+            enabled: false
+            implicitHeight: contentItem.implicitHeight + 2 * Style.space.xs
+            height: implicitHeight
+            contentItem: Text {
+                text: actionTitle.text
+                color: ui.text; font.pixelSize: Style.type.body; font.weight: Style.weight.demiBold
+                textFormat: Text.PlainText; elide: Text.ElideRight
+            }
+            background: Item { }
+        }
+        Templates.MenuItem {
+            id: actionOrigin
+            text: qsTr("Origem: %1").arg(window.actionsRow ? String(window.actionsRow.source).slice(0, 256) : "")
+            enabled: false
+            implicitHeight: contentItem.implicitHeight + 2 * Style.space.xs
+            height: implicitHeight
+            contentItem: Text {
+                objectName: "resultActionsOrigin"
+                text: actionOrigin.text
+                color: ui.textMuted; font.pixelSize: Style.type.caption
+                textFormat: Text.PlainText; elide: Text.ElideRight
+            }
+            background: Item { }
+        }
+        Instantiator {
+            model: window.actionsRow ? window.actionsRow.actions : []
+            delegate: Templates.MenuItem {
+                id: actionItem
+                required property var modelData
+                required property int index
+                objectName: "launcherAction" + index
+                property var executionTicket: null
+                property int pressedEpisode: -1
+                text: String(modelData.text).slice(0, 512)
+                enabled: window.canOpenActions
+                focusPolicy: Qt.StrongFocus
+                implicitHeight: Math.max(Style.size.target, contentItem.implicitHeight + 2 * Style.space.sm)
+                height: implicitHeight
+                leftPadding: Style.space.sm
+                rightPadding: Style.space.sm
+                onPressed: {
+                    pressedEpisode = window.actionsEpisode
+                    executionTicket = {row: modelData.row, generation: modelData.generation,
+                        id: modelData.resultId, actionId: modelData.id}
+                }
+                // A closed or reopened menu cannot revive an earlier press.
+                onTriggered: {
+                    if (resultActions.visible && window.canOpenActions && pressedEpisode === window.actionsEpisode)
+                        window.executeTicket(executionTicket, false)
+                }
+                contentItem: Text {
+                    text: actionItem.text; color: ui.text
+                    font.pixelSize: Style.type.body; textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    radius: Style.radius.control
+                    color: actionItem.highlighted ? Style.alpha(ui.accent, Style.state.selected) : "transparent"
+                    border.width: resultActions.activeFocus && actionItem.highlighted ? 2 : 0
+                    border.color: ui.focus
+                }
+            }
+            onObjectAdded: (index, object) => resultActions.insertItem(index + 2, object)
+            onObjectRemoved: (index, object) => resultActions.removeItem(object)
         }
     }
     Shortcut { sequence: "Ctrl+Q"; context: Qt.WindowShortcut; onActivated: window.requestDismiss(true) }
@@ -97,6 +241,7 @@ Window {
     Connections {
         target: launcher
         function onChanged() {
+            resultActions.close()
             if (search.text !== launcher.query) search.text = launcher.query
             if (launcher.selectedIndex >= 0) results.positionViewAtIndex(launcher.selectedIndex, ListView.Contain)
         }
@@ -371,22 +516,17 @@ Window {
             spacing: 8
             Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
-            Repeater {
-                model: window.selectedRow ? window.selectedRow.actions.slice(0, window.width < 560 ? 1 : 2) : []
-                delegate: Button {
-                    required property var modelData
-                    property var executionTicket: null
-                    text: modelData.text
-                    enabled: launcher.status === "ready" && !window.executionBlocked
-                    onPressed: executionTicket = { row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id }
-                    onClicked: window.executeTicket(executionTicket, false)
-                    leftPadding: Style.space.md
-                    rightPadding: Style.space.md
-                    Layout.preferredHeight: Style.size.iconButton + Style.space.xs
-                    contentItem: Text { text: parent.text; color: parent.enabled ? ui.accent : ui.textMuted; font.pixelSize: Style.type.label; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText; elide: Text.ElideRight }
-                    background: Rectangle { radius: height / 2; color: Style.alpha(ui.text, Style.state.hover); border.color: parent.activeFocus ? ui.focus : "transparent"; border.width: 2 }
-                    Layout.maximumWidth: window.width < 560 ? 118 : 150
-                }
+            Button {
+                objectName: "actionsButton"
+                text: qsTr("Ações · Ctrl+K")
+                enabled: window.canOpenActions
+                onClicked: window.openResultActions()
+                leftPadding: Style.space.md
+                rightPadding: Style.space.md
+                Layout.preferredHeight: Style.size.iconButton + Style.space.xs
+                contentItem: Text { text: parent.text; color: parent.enabled ? ui.accent : ui.textMuted; font.pixelSize: Style.type.label; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText; elide: Text.ElideRight }
+                background: Rectangle { radius: height / 2; color: Style.alpha(ui.text, Style.state.hover); border.color: parent.activeFocus ? ui.focus : "transparent"; border.width: 2 }
+                Layout.maximumWidth: window.width < 560 ? 118 : 150
             }
             Button {
                 property var executionTicket: null
