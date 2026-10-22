@@ -98,6 +98,32 @@ Somente um resultado atual com estado `installed_candidate` pode encaminhar `ste
 
 Essa integração permanece fora dos assets públicos 0.2.5–0.2.9, não foi executada contra raízes pessoais e não qualifica Steam native/Flatpak, biblioteca desmontada, dois jogos reais ou gesto humano Wayland. Os testes usam árvores e processos próprios, opener injetado e D-Bus/XDG privados; nunca chamam o handler Steam real.
 
+## Comandos Orla — catálogo inicial experimental (L1)
+
+Digitar **bateria**, **periféricos**, **battery**, **mouse** ou outro termo do catálogo
+lista **Bateria de periféricos** na categoria ORLA. Pesquisar só lista: o host de
+complementos não é chamado, e a disponibilidade dele é conferida no barramento uma
+vez por sessão do launcher. Sem `org.orla.Addons` registrado ou ativável, a linha
+aparece desativada com o motivo.
+
+Enter/clique na linha atual pede ao mesmo host que a dock usa uma leitura passiva:
+`org.orla.Addons1.SnapshotFor(["peripherals"])`, assíncrona, com prazo de 3 segundos
+e resposta de até 256 KiB. O launcher continua aberto e o painel valida a resposta
+com uma cópia byte a byte do parser da dock (`launcher/AddonPeripherals.js`, mantida
+por `python3 scripts/design.py sync` e conferida pelo `check`). Ele mostra
+dispositivos, percentuais, carga, leitura antiga e o horário do compartilhamento, ou
+o motivo da ausência: complemento não instalado, desativado, sem exportação ou
+exportação inválida. **Ler novamente** repete a leitura; Escape e **← Busca**
+voltam à busca e descartam respostas pendentes, assim como fechar o launcher.
+
+O launcher não inicia o produtor, não altera o complemento, não grava estado e não
+respeita a visibilidade do widget no perfil da dock: ele lê o que o complemento
+ativado já compartilha. Uma prova sem janela, contra o host real desta sessão e sem
+complemento instalado, recebeu o snapshot e mostrou “Nenhum complemento de bateria
+instalado”, sem criar o armazenamento. Os CTests usam transporte injetado e um host
+sintético no D-Bus privado; o fluxo com o launcher instalado, atalho e Wayland não
+foi qualificado. Quotas e o estado de gravação continuam fora do catálogo.
+
 ## Experimento de compatibilidade com provedores de IA — somente no fonte
 
 O código do launcher inclui um painel experimental **IA**. Ele é separado do dock, começa desligado e não faz parte dos assets publicados 0.2.5–0.2.9. Abrir o painel não inicia helper nem cliente. **Verificar clientes instalados** é uma ação local explícita: consulta uma lista fixa (Codex, Claude Code, OpenCode, Ollama e LM Studio) e mantém todos desativados. Ollama é apenas detecção de presença, pois consultar sua versão pode contatar um servidor.

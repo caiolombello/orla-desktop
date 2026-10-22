@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep Orla's visual system consistent: token copies, style lint, contrast and gallery.
 
-    python3 scripts/design.py sync     # copy the canonical tokens to bar/ and launcher/
+    python3 scripts/design.py sync     # copy the canonical tokens/shared parsers to bar/ and launcher/
     python3 scripts/design.py check    # fail on drift, hardcoded style values or low contrast
     python3 scripts/design.py gallery  # render every surface to PNGs for visual review
 
@@ -22,6 +22,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = Path("package/contents/code/Style.js")
 COPIES = (Path("bar/contents/code/Style.js"), Path("launcher/Style.js"))
+# Byte-identical shared copies. The launcher validates peripheral batteries
+# with the dock's own parser instead of a second implementation.
+SHARED = ((CANONICAL, COPIES),
+          (Path("package/contents/code/AddonPeripherals.js"), (Path("launcher/AddonPeripherals.js"),)))
 LINTED_GLOBS = ("package/contents/ui/*.qml", "bar/contents/ui/*.qml", "launcher/*.qml", "workspace/*.qml")
 # Persisted user tokens and the token file itself are the only places for raw colors.
 JS_COLOR_ALLOWLIST = (CANONICAL, *COPIES, Path("package/contents/code/Appearance.js"))
@@ -49,21 +53,25 @@ def _relative(path: Path) -> str:
 
 
 def sync(root: Path = ROOT) -> list[Path]:
-    source = root / CANONICAL
     written = []
-    for copy in COPIES:
-        target = root / copy
-        if not target.exists() or target.read_bytes() != source.read_bytes():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
-            written.append(target)
+    for canonical, copies in SHARED:
+        source = root / canonical
+        for copy in copies:
+            target = root / copy
+            if not target.exists() or target.read_bytes() != source.read_bytes():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                written.append(target)
     return written
 
 
 def copy_errors(root: Path = ROOT) -> list[str]:
-    source = (root / CANONICAL).read_bytes()
-    return [f"{copy}: differs from {CANONICAL}; run `python3 scripts/design.py sync`."
-            for copy in COPIES if not (root / copy).exists() or (root / copy).read_bytes() != source]
+    errors = []
+    for canonical, copies in SHARED:
+        source = (root / canonical).read_bytes()
+        errors += [f"{copy}: differs from {canonical}; run `python3 scripts/design.py sync`."
+                   for copy in copies if not (root / copy).exists() or (root / copy).read_bytes() != source]
+    return errors
 
 
 def lint_text(name: str, text: str, javascript: bool = False) -> list[str]:

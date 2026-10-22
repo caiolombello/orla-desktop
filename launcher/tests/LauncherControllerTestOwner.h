@@ -17,12 +17,13 @@
 class LauncherControllerTestOwner final
 {
 public:
-    explicit LauncherControllerTestOwner(SteamProviderController *steam = nullptr, const QString &aliasPath = QString(), const QString &favoritePath = QString())
+    explicit LauncherControllerTestOwner(SteamProviderController *steam = nullptr, const QString &aliasPath = QString(), const QString &favoritePath = QString(),
+                                         OrlaCommandController *commands = nullptr)
     {
         if (s_activeOwner || s_teardownFailed)
             qFatal("A previous test controller's owned runners have not been destroyed");
         s_activeOwner = true;
-        m_controller = std::make_unique<LauncherController>(steam, nullptr, aliasPath, favoritePath);
+        m_controller = std::make_unique<LauncherController>(steam, nullptr, aliasPath, favoritePath, commands);
         // ResultsModel normally preloads these same allowed runners on a zero
         // timer. Eager test-only loading captures their identities even on an
         // early assertion return, without creating cleanup-time runners.

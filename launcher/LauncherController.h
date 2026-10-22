@@ -10,6 +10,7 @@
 #include <KRunner/RunnerManager>
 
 class SteamProviderController;
+class OrlaCommandController;
 
 // Private C++/QML boundary, experimental with this optional executable.
 class LauncherController final : public QObject
@@ -29,8 +30,10 @@ class LauncherController final : public QObject
     Q_PROPERTY(bool favoritesWritable READ favoritesWritable NOTIFY changed)
     Q_PROPERTY(QString favoriteError READ favoriteError NOTIFY changed)
     Q_PROPERTY(QVariantList favorites READ favorites NOTIFY changed)
+    // Optional Orla command catalog; QML hosts without it show no command rows.
+    Q_PROPERTY(QObject *commands READ commands CONSTANT)
 public:
-    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr, const QString &aliasPath = QString(), const QString &favoritePath = QString());
+    explicit LauncherController(SteamProviderController *steam = nullptr, QObject *parent = nullptr, const QString &aliasPath = QString(), const QString &favoritePath = QString(), OrlaCommandController *commands = nullptr);
     QString query() const { return m_query; }
     quint64 generation() const { return m_generation; }
     QVariantList rows() const { return m_rows; }
@@ -49,6 +52,7 @@ public:
     bool favoritesWritable() const { return m_favorites.writable(); }
     QString favoriteError() const { return m_favorites.error(); }
     QVariantList favorites() const { return m_favoritePresentation; }
+    QObject *commands() const;
     Q_INVOKABLE bool pinFavorite(int row, quint64 generation, const QString &id, const QString &revision);
     Q_INVOKABLE bool removeFavorite(const QString &appId, quint64 generation, const QString &revision);
     Q_INVOKABLE void reloadFavorites();
@@ -85,6 +89,7 @@ private:
     bool m_savedRefreshPending = false;
     QList<int> m_backendRows;
     SteamProviderController *m_steam;
+    OrlaCommandController *m_commands = nullptr;
     quint64 m_generation = 0;
     quint64 m_launchedGeneration = 0;
     int m_selected = -1;

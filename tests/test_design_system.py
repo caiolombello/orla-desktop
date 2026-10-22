@@ -18,7 +18,8 @@ spec.loader.exec_module(design)
 class DesignSystemTests(unittest.TestCase):
     def copy_tree(self, directory):
         root = Path(directory)
-        for relative in (design.CANONICAL, *design.COPIES, Path("package/contents/code/Appearance.js")):
+        shared = [path for canonical, copies in design.SHARED for path in (canonical, *copies)]
+        for relative in (*shared, Path("package/contents/code/Appearance.js")):
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, root / relative)
         return root
@@ -70,6 +71,11 @@ class DesignSystemTests(unittest.TestCase):
             errors = design.copy_errors(root)
             self.assertEqual(len(errors), 1)
             self.assertIn(design.COPIES[0].as_posix(), errors[0])
+            design.sync(root)
+            self.assertEqual(design.copy_errors(root), [])
+            parser = Path("launcher/AddonPeripherals.js")
+            (root / parser).write_text("// stale\n", encoding="utf-8")
+            self.assertEqual([parser.as_posix() in error for error in design.copy_errors(root)], [True])
             design.sync(root)
             self.assertEqual(design.copy_errors(root), [])
 

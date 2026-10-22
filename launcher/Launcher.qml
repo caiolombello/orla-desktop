@@ -27,6 +27,8 @@ Window {
             windowSession.setBlurRegion(Qt.rect(glass.x, glass.y, glass.width, glass.height), glass.radius)
     }
     property string activePanel: "search"
+    // Optional: hosts without the Orla command catalog show no command rows.
+    readonly property var commands: launcher.commands || null
     property bool pendingDismiss: false
     property bool pendingQuit: false
     readonly property bool executionBlocked: pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy
@@ -34,7 +36,13 @@ Window {
     function executeTicket(ticket, selectRow) {
         if (!ticket || aliasPreferences.visible || pendingDismiss || aiProviders.busy || aiText.busy || steamProvider.busy) return
         if (selectRow) launcher.select(ticket.row)
-        launcher.execute(ticket.row, ticket.generation, ticket.id, ticket.actionId || "")
+        const row = launcher.rows[ticket.row]
+        const started = launcher.execute(ticket.row, ticket.generation, ticket.id, ticket.actionId || "")
+        // A command read keeps the launcher open and shows the provider's answer.
+        if (started && row && row.kind === "command" && commands) {
+            activePanel = "command"
+            commandPanel.focusFirst()
+        }
     }
     readonly property bool canOpenActions: activePanel === "search" && !executionBlocked && !aliasPreferences.visible
     readonly property bool canAddAlias: canOpenActions && launcher.aliasesWritable === true
@@ -64,7 +72,10 @@ Window {
         if (resultActions.itemAt(first)) resultActions.itemAt(first).forceActiveFocus(Qt.PopupFocusReason)
     }
     onExecutionBlockedChanged: if (executionBlocked) resultActions.close()
-    onActivePanelChanged: if (activePanel !== "search") resultActions.close()
+    onActivePanelChanged: {
+        if (activePanel !== "search") resultActions.close()
+        if (activePanel !== "command" && commands) commands.cancelAll()
+    }
     function executeSelection() {
         const row = selectedRow
         if (row) executeTicket({ row: launcher.selectedIndex, generation: row.generation, id: row.id }, false)
@@ -72,6 +83,11 @@ Window {
     function closeAiPanel() {
         aiProviders.cancelAll()
         aiText.cancelAll()
+        activePanel = "search"
+        search.forceActiveFocus()
+    }
+    function closeCommandPanel() {
+        if (commands) commands.cancelAll()
         activePanel = "search"
         search.forceActiveFocus()
     }
@@ -94,7 +110,8 @@ Window {
         const aiReady = aiProviders.requestClose()
         const textReady = aiText.requestClose()
         const steamReady = steamProvider.requestClose()
-        if (aiReady && textReady && steamReady) finishPendingClose()
+        const commandsReady = !commands || commands.requestClose()
+        if (aiReady && textReady && steamReady && commandsReady) finishPendingClose()
         return !pendingDismiss
     }
     onActiveChanged: {
@@ -109,6 +126,7 @@ Window {
         onActivated: {
             if (window.activePanel === "ai") window.closeAiPanel()
             else if (window.activePanel === "steam") window.closeSteamPanel()
+            else if (window.activePanel === "command") window.closeCommandPanel()
             else window.requestDismiss(false)
         }
     }
@@ -447,7 +465,7 @@ Window {
         RowLayout {
             visible: window.activePanel === "search"
             Layout.fillWidth: true
-            Text { text: qsTr("APLICATIVOS · CALCULADORA · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
+            Text { text: window.commands ? qsTr("APLICATIVOS · CALCULADORA · STEAM · ORLA") : qsTr("APLICATIVOS · CALCULADORA · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
             Item { Layout.fillWidth: true }
             Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: ui.accent; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
         }
@@ -479,7 +497,8 @@ Window {
                     // Leave the scrollbar its own lane.
                     width: results.width - (results.ScrollBar.vertical.visible ? results.ScrollBar.vertical.width + Style.space.xs : 0)
                     readonly property bool selected: launcher.selectedIndex === result.index
-                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink" : "sea"]
+                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink"
+                        : rowData.kind === "command" ? Style.widgetTiles.peripherals : "sea"]
                     height: Style.size.target + Style.space.md
                     enabled: rowData.enabled && !window.executionBlocked && !aliasPreferences.visible
                     hoverEnabled: true
@@ -516,7 +535,7 @@ Window {
                                 }
                                 border.width: 1
                                 border.color: Style.alpha(Style.glass.highlight, 0.18)
-                                Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : "▦"; color: result.tile.ink; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
+                                Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : result.rowData.kind === "command" ? "%" : "▦"; color: result.tile.ink; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
                             }
                         }
                         ColumnLayout {
@@ -603,6 +622,16 @@ Window {
             textController: aiText
             operationStartBlocked: window.pendingDismiss
             onBackRequested: window.closeAiPanel()
+        }
+        OrlaCommandPanel {
+            id: commandPanel
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            visible: window.activePanel === "command"
+            controller: window.commands
+            operationStartBlocked: window.pendingDismiss
+            onBackRequested: window.closeCommandPanel()
         }
         SteamSettings {
             id: steamPanel
