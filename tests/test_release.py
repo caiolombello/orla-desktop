@@ -28,6 +28,7 @@ class ReleaseBundleTests(unittest.TestCase):
             }), encoding="utf-8")
             (root / "package/contents/ui/main.qml").write_text("Item {}\n", encoding="utf-8")
             for name in ("contents/code/Theme.js", "contents/code/Appearance.js",
+                         "contents/code/theme_format.py", "contents/code/theme_file.py",
                          "contents/ui/AppearanceState.qml", "contents/ui/AppearanceEditor.qml",
                          "contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
                          "contents/controlcenter/qmldir", "contents/controlcenter/Registry.qml",
@@ -71,6 +72,7 @@ class ReleaseBundleTests(unittest.TestCase):
                             "themes/schema/theme-0.1-experimental.schema.json",
                             "scripts/themes.py", "docs/theme-format.md", "tests/test_themes.py",
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
+                            "package/contents/code/theme_format.py", "package/contents/code/theme_file.py",
                             "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml",
                             "package/contents/ui/EventState.qml", "package/contents/ui/EventSurface.qml",
                             "package/contents/controlcenter/qmldir", "package/contents/controlcenter/Registry.qml",
@@ -81,6 +83,7 @@ class ReleaseBundleTests(unittest.TestCase):
                     self.assertEqual(archive.read(prefix + name), (root / name).read_bytes())
                 with zipfile.ZipFile(root / "dist/orla-dock-1.2.3.plasmoid") as package_archive:
                     for name in ("contents/ui/EventState.qml", "contents/ui/EventSurface.qml",
+                                 "contents/code/theme_format.py", "contents/code/theme_file.py",
                                  "contents/controlcenter/qmldir", "contents/controlcenter/Registry.qml",
                                  "contents/ui/ControlCenterEntry.qml", "contents/ui/ControlCenterPopup.qml",
                                  "contents/ui/ControlCenterSession.qml",
@@ -99,10 +102,15 @@ class ReleaseBundleTests(unittest.TestCase):
             kit = unpacked / "orla-dock-1.2.3"
             for name in ("essential.json", "mare.json"):
                 result = subprocess.run([
-                    sys.executable, str(kit / "scripts/themes.py"), "validate",
+                    sys.executable, "-I", "-B", str(kit / "scripts/themes.py"), "validate",
                     str(kit / "themes/examples" / name), "--json"
-                ], check=True, capture_output=True, text=True, timeout=10)
+                ], cwd=unpacked, check=True, capture_output=True, text=True, timeout=10)
                 self.assertTrue(json.loads(result.stdout)["valid"])
+                loaded = subprocess.run([
+                    sys.executable, "-I", "-B", str(kit / "package/contents/code/theme_file.py"),
+                    (kit / "themes/examples" / name).as_uri()
+                ], cwd=unpacked, check=True, capture_output=True, text=True, timeout=10)
+                self.assertEqual(json.loads(loaded.stdout)["theme"], json.loads(result.stdout)["theme"])
             for line in first["SHA256SUMS"].decode("utf-8").splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(hashlib.sha256(first[name]).hexdigest(), digest)

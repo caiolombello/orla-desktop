@@ -1422,3 +1422,14 @@ antes de compilar ou executar testes; uma nova preparação incluiu esses arquiv
 Esse resultado qualifica os registros, sem identificar a causa exclusiva da CI
 anterior ou corrigir o framework. A importação de temas segue no próximo
 incremento; seletor, serviço instalado e foco Wayland continuam pendentes.
+
+**X1/X2 — base de leitura de temas, incremento Source de 16/10:** o parser Python
+passou a ser distribuído no applet como implementação canônica, mantendo a API e
+CLI anteriores. Um leitor dedicado aceita uma URL de arquivo local, valida bytes
+e schema e devolve somente tema válido ou erro estruturado; não grava configuração
+e não depende do launcher ou das integrações opcionais. A revisão corrigiu uma
+colisão de namespace Python com teste causal. Passaram 51 testes locais de parser,
+leitor, paridade JS, CLI, pacote e kit extraído, incluindo execução isolada dos
+dois módulos distribuídos. A CI ganhou a suíte do leitor. Esse incremento ainda
+não oferece o botão de importação: serviço lazy, seletor, prévia integrada e prova
+de foco no Wayland são as próximas fatias. C1/X1/X2 e DX2 continuam parciais.

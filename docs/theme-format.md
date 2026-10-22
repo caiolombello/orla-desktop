@@ -130,6 +130,11 @@ are annotations. Use the CLI or Python parser for complete validation.
 
 ## API, erros e artefato / API, errors and artifact
 
+The canonical Python implementation now ships in
+`package/contents/code/theme_format.py`. The `scripts/themes.py` facade retains
+the CLI and documented exports below, including when called from another working
+directory. The format and validation rules are unchanged.
+
 `from scripts import themes` exposes these experimental functions:
 
 - `parse_theme(data: bytes) -> dict`: bounded strict decode, parse and validation.
@@ -148,6 +153,25 @@ known field names. Messages never echo rejected values. Example:
 ```json
 {"valid":false,"formatVersion":"0.1-experimental","errors":[{"field":"$/tokens/opacity","code":"range","message":"Use a number from 0.4 to 1."}]}
 ```
+
+**Base do leitor local / Local reader foundation:** o pacote também contém
+`theme_file.py`, um leitor interno experimental de uma única URL `file:///`
+absoluta e percent-encoded. O limite da URL é 16.384 bytes; host, query, fragmento,
+escapes inválidos e controles são recusados antes de abrir o arquivo. O caminho
+é decodificado uma vez em UTF-8 estrito e passa pelo leitor regular e parser de
+65.536 bytes existentes. A CLI recebe uma URL e retorna somente
+`{valid, formatVersion, theme}` ou `{valid, formatVersion, errors}`, com códigos
+de saída 0/1/2 para sucesso, validação/I/O e uso inválido. O resultado não
+acrescenta caminho, nome do arquivo ou conteúdo inválido aos erros.
+
+The installed reader and parser run together with Python's standard library,
+without the source checkout, Qt, launcher or optional integrations. This is a
+foundation for a future chooser: no Import file button or D-Bus activation ships
+in this increment, and it never saves appearance or configuration. Parent paths
+may resolve symlinks; only the final opened path rejects a symlink. A concurrent
+write is not an atomic snapshot, and the bounded read does not guarantee a hard
+deadline for a stalled filesystem. The future service must own its worker and
+timeout. Chooser focus/return on Wayland remains unqualified.
 
 `validate --json` writes `{valid, formatVersion, theme}` on success or
 `{valid, formatVersion, errors}` on failure. Exit statuses: `0` success, `1`
