@@ -232,9 +232,9 @@ Achados desta rodada:
    arrastar a janela continuam funcionando. Em um KWin aninhado com D-Bus
    privado, um `FileDialog` com `parentWindow: null` também se tornou transitório
    da janela ativa e foi centralizado sobre ela; remover o pai não resolve. O
-   seletor de temas usa o mesmo arranjo e não foi exercido nesta rodada. A
-   correção depende de mudar de onde o seletor é aberto e fica para decisão de
-   design.
+   seletor de temas usa o mesmo arranjo e não foi exercido nesta rodada.
+   Decisão de 21/10: documentar o contorno nos guias de complementos e de temas
+   em vez de mudar de onde o seletor abre.
 2. **Contorno ausente após Escape no seletor.** O foco continua em
    **Adicionar arquivo…**, mas o contorno só volta no Tab seguinte. O modelo de
    foco não reacende o contorno depois que a janela perde ativação, e o seletor

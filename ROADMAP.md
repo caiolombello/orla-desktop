@@ -42,8 +42,9 @@ curto. A camada do PR 104 foi instalada localmente com backup e conferência de
 91 arquivos; o Plasma voltou ativo após recarga. Na instalação, entrada virtual
 qualificou revelação pela borda, hover, foco por teclado, seletor modal,
 recusa de arquivo inválido e prévia sem instalar. Em auto hide, a dock cobre
-os botões do seletor, e o contorno só volta no Tab seguinte após cancelar;
-ambos aguardam decisão. O host deixou de consumir CPU parado em `8c169cb`.
+os botões do seletor, e o contorno só volta no Tab seguinte após cancelar.
+O contorno do seletor (Enter, Escape, clique duplo) foi documentado por decisão
+de 21/10; o foco após cancelar segue a regra atual. O host deixou de consumir CPU parado em `8c169cb`.
 Acessibilidade, uso contínuo e matriz de monitores permanecem gates próprios.
 Consulte a
 [evidência delimitada](docs/validation/addon-host-core.md); não há catálogo ou
