@@ -15,6 +15,14 @@ QtObject {
     property QtObject internal: QtObject {
         property bool completed: false
         property int revision: 0
+        property int commandEpoch: 0
+        property int authorityEpoch: 0
+        // A value restored inside a callback is still a newer authority event.
+        property var authorityWitness: [state.configuration, state.profiles, state.contexts,
+            state.savedJSON, state.profiles.savedJSON, state.profiles.configuration,
+            state.profiles.activeProfileId, state.profiles.revision, state.profiles.writable,
+            state.contexts.revision]
+        onAuthorityWitnessChanged: authorityEpoch++
         property string savedError: ""
         property string commandError: ""
         property var document: Contexts.emptyDocument()
@@ -54,7 +62,7 @@ QtObject {
         return true;
     }
     function store(document, expectedProfileScope, expectedProfileRevision, expectedContextRevision,
-                   expectedRevision, requiredProfileId) {
+                   expectedRevision, requiredProfileId, beforeWrite) {
         const validated = Contexts.validate(document);
         if (validated.error) return fail(validated.error);
         const raw = JSON.stringify(validated.value);
@@ -62,12 +70,14 @@ QtObject {
         if (requiredProfileId && !currentProfileExists(requiredProfileId))
             return fail(qsTr("O perfil escolhido não existe."));
         if (!check(expectedProfileScope, expectedProfileRevision, expectedContextRevision, expectedRevision)) return false;
+        if (beforeWrite !== undefined && beforeWrite() !== true) return false;
         try { configuration.contextsJSON = raw; }
         catch (_) { return fail(qsTr("Não foi possível salvar a associação de contexto.")); }
         return configuration.contextsJSON === raw;
     }
     function bind(kind, context, profileId, expectedProfileScope, expectedProfileRevision,
                   expectedContextRevision, expectedRevision) {
+        internal.commandEpoch++;
         const captured = captureCallerContext(context);
         if (captured.error) return fail(captured.error);
         if (!check(expectedProfileScope, expectedProfileRevision, expectedContextRevision, expectedRevision)) return false;
@@ -85,13 +95,35 @@ QtObject {
             expectedContextRevision, expectedRevision, profileId);
     }
     function unbind(kind, contextId, expectedProfileScope, expectedProfileRevision,
-                    expectedContextRevision, expectedRevision) {
+                    expectedContextRevision, expectedRevision, continuationGuard) {
+        const command = ++internal.commandEpoch;
+        if (continuationGuard !== undefined && typeof continuationGuard !== "function") return false;
+        const owner = configuration, profileOwner = profiles, contextOwner = contexts;
+        const raw = savedJSON, profileRaw = profiles.savedJSON, profileConfiguration = profiles.configuration;
+        const authority = internal.authorityEpoch;
         if (!check(expectedProfileScope, expectedProfileRevision, expectedContextRevision, expectedRevision)) return false;
-        const result = Contexts.unbind(internal.document, kind, contextId);
+        const parsed = Contexts.parse(raw);
+        if (parsed.error) return fail(parsed.error);
+        const result = Contexts.unbind(parsed.value, kind, contextId);
         if (result.error) return fail(result.error);
-        if (!result.changed) return true;
+        const current = () => internal.commandEpoch === command && internal.authorityEpoch === authority
+            && configuration === owner && profiles === profileOwner && contexts === contextOwner
+            && profiles.configuration === profileConfiguration
+            && (continuationGuard === undefined || profileConfiguration === undefined || profileConfiguration === owner)
+            && writable && savedJSON === raw && profiles.savedJSON === profileRaw
+            && profiles.activeProfileId === expectedProfileScope && profiles.revision === expectedProfileRevision
+            && contexts.revision === expectedContextRevision && revision === expectedRevision;
+        const beforeWrite = () => {
+            if (!current()) return false;
+            if (continuationGuard !== undefined) {
+                try { if (continuationGuard() !== true) return false; }
+                catch (_) { return false; }
+            }
+            return current();
+        };
+        if (!result.changed) return beforeWrite();
         return store(result.value, expectedProfileScope, expectedProfileRevision,
-            expectedContextRevision, expectedRevision, "");
+            expectedContextRevision, expectedRevision, "", beforeWrite);
     }
     function load() {
         const result = Contexts.parse(savedJSON);

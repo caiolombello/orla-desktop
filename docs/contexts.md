@@ -20,9 +20,17 @@ Se o KDE não informar uma Activity atual, **Activity e áreas** aguarda mesmo q
 
 As opções do modo são globais entre os perfis desta dock e salvas imediatamente em `autoContextEnabled`, `autoContextDefaultProfile` e `autoContextPolicy`; Cancelar aparência não as desfaz. Mudar a base da regra retoma o automático após terminar a interação, inclusive fechar as configurações; uma escolha manual mais recente prevalece. A política começa em `activity-desktop`; a alternativa é `desktop`. Valor desconhecido fica preservado, pausa o automático e aparece sem opção selecionada para permitir uma escolha válida. O modo não troca Activity, área, monitor, janelas, barra ou launcher. O Pomodoro continua no mesmo objeto/prazo. Comportamento por monitor e a jornada completa no painel do usuário permanecem abertos.
 
-As associações usam identificadores estáveis. Renomear ou remover um contexto não apaga a associação salva; IDs ausentes da lista atual são preservados e aparecem apenas como uma contagem de associações antigas. A aba não oferece remoção individual dessas associações antigas; **Remover** atua sobre o contexto atual. Se o documento estiver inválido ou em versão futura, seus bytes são preservados e a gravação de associações e o automático ficam bloqueados. A chave separada `contextsJSON` começa vazia; não há migração automática dos perfis.
+As associações usam identificadores estáveis. Renomear ou remover um contexto não apaga a associação salva; IDs ausentes da lista atual são preservados. **Remover** nos cartões de contexto continua atuando sobre o contexto atual; a seção experimental **Associações salvas** permite escolher uma entrada salva individualmente. Se o documento estiver inválido ou em versão futura, seus bytes são preservados e a gravação de associações e o automático ficam bloqueados. A chave separada `contextsJSON` começa vazia; não há migração automática dos perfis.
 
 Remover um perfil na aba **Perfis** preserva suas referências. A aba Contextos mostra separadamente quantas associações de Activity e área apontam para perfis indisponíveis, inclusive em contextos antigos. Para um contexto disponível, escolha outro perfil e associe novamente ou remova a associação atual. Se o padrão foi removido, escolha outro padrão válido; sem perfis restantes, crie um na aba Perfis. Corrigir o padrão não ativa o automático nem libera uma escolha manual no mesmo contexto.
+
+### Associações salvas (Source experimental)
+
+Abra **Associações salvas** e escolha uma entrada. A seção começa recolhida e sem seleção; navegar e abrir o seletor não grava. Confira o domínio (Activity ou área), o último nome salvo, o identificador completo e o perfil associado. Nomes iguais não representam a mesma associação: a identidade é domínio + ID. A lista inclui contextos não observados agora e perfis indisponíveis; ausência na descoberta não significa que um contexto foi excluído.
+
+**Remover associação** exige confirmação explícita e apaga somente essa entrada, sem apagar perfil ou contexto. Não há Desfazer. **Cancelar** descarta a pergunta sem gravar e permite escolher outra entrada. Mudar de aba mantém a pergunta; fechar as configurações a descarta. Escape fecha primeiro o menu do seletor e depois cancela a pergunta. Alterações externas deixam a confirmação antiga bloqueada: cancele e escolha novamente.
+
+A remoção salva apenas `contextsJSON`, preservando as outras associações, o padrão, a política, o modo ligado/desligado e o Pomodoro. Uma prévia de aparência não precisa ser descartada. Ao terminar a interação, o automático pode usar outra associação ou o padrão conforme sua regra; a escolha manual no mesmo contexto continua valendo. Remover explicitamente uma associação órfã pode liberar esse fallback; enquanto ela estiver salva e for usada pela regra, o perfil ausente continua pausando a troca. Esta entrega de desenvolvimento não integra os assets publicados 0.2.9; testes Source e qualificação instalada são etapas separadas.
 
 O documento de associações não armazena as preferências do automático. A configuração global de avisos locais do Pomodoro continua independente e desligada por padrão. As provas de Source incluem precedência, escolhas manuais, reentrada, documentos inválidos e bloqueios na composição real da dock com backends sintéticos; não comprovam a jornada nativa.
 
@@ -42,8 +50,32 @@ A manual profile choice wins until a required context ID changes, **Retomar auto
 
 `autoContextEnabled` (false by default), `autoContextDefaultProfile` (initially empty) and `autoContextPolicy` (`activity-desktop` by default, or `desktop`) are per-dock preferences shared across profiles and saved immediately. Appearance Cancel does not undo them. A committed policy change resumes the rule after interactions and Settings close; a newer manual choice wins. An unknown policy remains raw, pauses automation and leaves the selector unselected but repairable. Automation does not change KDE contexts, monitors, app windows, bar or launcher. Pomodoro retains its object/deadline. Complete user-panel and per-monitor journeys remain open.
 
-Associations use stable IDs. Renaming or removing a context preserves the association. Missing IDs appear only as a count of old associations; the tab does not remove them individually. **Remover** applies to the current context. Invalid or future-format documents retain their bytes and block binding writes and automation. `contextsJSON` starts empty; profiles are not implicitly migrated.
+Associations use stable IDs. Renaming or removing a context preserves the association, including IDs absent from current discovery. **Remover** in each context card still applies to the current context; experimental **Associações salvas** selects individual saved entries. Invalid or future-format documents retain their bytes and block binding writes and automation. `contextsJSON` starts empty; profiles are not implicitly migrated.
 
 Removing a profile in **Perfis** preserves its references. Contexts separately counts Activity/desktop associations targeting unavailable profiles, including old contexts. For an available context, select another profile and bind again or remove its current association. Replace a removed default with a valid one; if no profiles remain, create one in Perfis first. Repairing the default neither enables automation nor releases a manual choice in the same context.
 
+### Saved associations (experimental Source)
+
+Open **Associações salvas**, then choose one entry. The section starts collapsed and unselected; opening or navigating its selector does not save. Check the domain (Activity/desktop), last saved name, full ID and associated profile. Identity is domain + ID, including when names match. The list includes contexts not observed now and unavailable profiles; failed discovery does not establish that a context was deleted.
+
+Explicit **Remover associação** confirmation deletes only that entry, keeping the profile and KDE context. There is no Undo. **Cancelar** discards the question without saving and allows another choice. Tabs keep the question; closing Settings discards it. Escape closes the native selector menu first, then cancels the question. External authority changes block the old confirmation: cancel and choose again.
+
+Removal writes only `contextsJSON`, preserving other entries, default/policy/enabled preferences and Pomodoro. An appearance preview can remain open. When the interaction ends, automation may use another binding or its default; a manual choice in the same context still wins. Explicitly removing an orphan binding can allow that fallback; retaining a missing target used by the rule continues to pause switching. This development increment is absent from published 0.2.9 assets; Source and installed qualification remain separate.
+
 The binding document does not contain automation preferences. Local Pomodoro notices remain independently off by default. Source tests cover priority, manual choices, reentrancy, invalid documents and dock composition using synthetic backends; they do not establish native acceptance.
+
+## Experimental internal removal contract
+
+`ContextBindingsState.unbind(kind, contextId, expectedProfileScope,
+expectedProfileRevision, expectedContextRevision, expectedRevision,
+continuationGuard)` adds an optional synchronous predicate. Existing six-argument
+callers retain their behavior. A supplied non-function refuses the request;
+an eligible predicate runs once and only boolean `true` accepts it. A throw
+refuses it. A missing-entry no-op still validates the predicate and preserves
+the original raw bytes and revision without a write.
+
+The state revalidates owners, raw documents, scope, revisions and monotonic
+authority/command epochs after the predicate, immediately before its single
+`contextsJSON` assignment. Newer reentrant operations are preserved rather than
+rolled back. The UI owns the captured domain/ID, impact and session validation;
+a successful return does not establish ownership after setter callbacks.

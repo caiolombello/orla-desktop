@@ -11,6 +11,30 @@ Controls.ScrollView {
     required property var bindingsState
     required property var profiles
     property bool active: false
+    property var configuration: null
+    property bool sessionOpen: false
+    property bool savedOpen: false
+    property var savedIntent: null
+    property int savedTicket: 0
+    property int savedImpactEpoch: 0
+    property bool savedRemoving: false
+    property string savedError: ""
+    // Restoring a preference or owner inside a callback is still newer authority.
+    property var savedAuthority: [configuration, bindingsState, profiles, contexts,
+        profiles ? profiles.configuration : null, bindingsState ? bindingsState.configuration : null,
+        bindingsState ? bindingsState.profiles : null, bindingsState ? bindingsState.contexts : null,
+        configuration ? configuration.autoContextEnabled : undefined,
+        configuration ? configuration.autoContextDefaultProfile : undefined,
+        configuration ? configuration.autoContextPolicy : undefined]
+    onSavedAuthorityChanged: savedImpactEpoch++
+    readonly property bool savedWritable: Boolean(configuration && profiles && contexts && bindingsState
+        && profiles.configuration === configuration && bindingsState.configuration === configuration
+        && bindingsState.profiles === profiles && bindingsState.contexts === contexts && bindingsState.writable)
+    readonly property var savedEntries: !savedWritable ? [] :
+        bindingsState.bindings.activityBindings.map(entry => savedOption("activity", entry))
+        .concat(bindingsState.bindings.desktopBindings.map(entry => savedOption("desktop", entry)))
+    readonly property string savedProblem: savedIntent && !savedCurrent(savedIntent)
+        ? qsTr("A associação ou configuração mudou. Cancele e escolha novamente.") : savedError
     property string pendingActivityProfileId: ""
     property string pendingDesktopProfileId: ""
     property var activityIntent: null
@@ -19,6 +43,126 @@ Controls.ScrollView {
     contentWidth: availableWidth
     clip: true
 
+    function savedOption(kind, entry) {
+        const domain = kind === "activity" ? qsTr("Activity") : qsTr("Área");
+        const name = entry.lastKnownName || (kind === "activity" ? qsTr("Activity sem nome") : qsTr("Área sem nome"));
+        return {kind: kind, entry: entry, label: domain + " · " + name};
+    }
+    function savedOwners(intent) {
+        return savedWritable && configuration === intent.configuration && bindingsState === intent.bindings
+            && profiles === intent.profiles && contexts === intent.contexts && savedImpactEpoch === intent.impact
+            && profiles.savedJSON === intent.profileRaw && profiles.activeProfileId === intent.scope
+            && profiles.revision === intent.profileRevision && contexts.revision === intent.contextRevision;
+    }
+    function savedCurrent(intent) {
+        return Boolean(intent && savedOwners(intent) && bindingsState.savedJSON === intent.raw
+            && bindingsState.revision === intent.revision);
+    }
+    function resetSaved() {
+        savedTicket++;
+        savedIntent = null;
+        savedError = "";
+        savedSelector.currentIndex = -1;
+    }
+    function toggleSaved() {
+        if (!sessionOpen || !visible) return;
+        if (savedOpen) {
+            const window = controls.Window.window;
+            const focused = window ? window.activeFocusItem : null;
+            const owned = focused === savedSelector || focused === savedCancel || focused === savedRemove;
+            if (owned) savedToggle.forceActiveFocus(Qt.TabFocusReason);
+            resetSaved();
+            savedOpen = false;
+        } else {
+            resetSaved();
+            savedOpen = true;
+            revealSaved(savedToggle);
+        }
+    }
+    function selectSaved(index) {
+        if (!sessionOpen || !visible || !savedOpen || savedIntent || !savedWritable
+                || index < 0 || index >= savedEntries.length) return;
+        const option = savedEntries[index];
+        const entry = JSON.parse(JSON.stringify(option.entry));
+        const document = JSON.parse(JSON.stringify(bindingsState.bindings));
+        const key = option.kind === "activity" ? "activityBindings" : "desktopBindings";
+        document[key] = document[key].filter(value => value.contextId !== entry.contextId);
+        savedTicket++;
+        savedError = "";
+        savedIntent = {configuration: configuration, bindings: bindingsState, profiles: profiles, contexts: contexts,
+            kind: option.kind, entry: entry, label: option.label, profileName: profileName(entry.profileId),
+            raw: bindingsState.savedJSON, revision: bindingsState.revision, profileRaw: profiles.savedJSON,
+            scope: profiles.activeProfileId, profileRevision: profiles.revision, contextRevision: contexts.revision,
+            impact: savedImpactEpoch, expected: JSON.stringify(document), options: savedEntries};
+        // The selector becomes disabled; continue at the safe explicit action.
+        if (savedSelector.activeFocus) savedCancel.forceActiveFocus(Qt.TabFocusReason);
+    }
+    function cancelSaved() {
+        const window = controls.Window.window;
+        const focused = window ? window.activeFocusItem : null;
+        const owned = focused === savedSelector || focused === savedCancel || focused === savedRemove;
+        const ticket = savedTicket;
+        resetSaved();
+        if (sessionOpen && visible && savedOpen && savedTicket === ticket + 1 && !savedIntent
+                && window && window.activeFocusItem === focused && owned)
+            (savedSelector.enabled ? savedSelector : savedToggle).forceActiveFocus(Qt.TabFocusReason);
+    }
+    function removeSaved() {
+        const intent = savedIntent, ticket = savedTicket;
+        if (savedRemoving || !sessionOpen || !visible || !savedOpen || !savedRemove.visible || !savedCurrent(intent)) return;
+        const window = controls.Window.window, focused = window ? window.activeFocusItem : null;
+        const valid = () => Boolean(sessionOpen && visible && savedOpen && savedIntent === intent
+            && savedTicket === ticket && savedRemove.visible && savedCurrent(intent));
+        let accepted = false;
+        savedRemoving = true;
+        try { accepted = intent.bindings.unbind(intent.kind, intent.entry.contextId, intent.scope,
+            intent.profileRevision, intent.contextRevision, intent.revision, valid) === true; }
+        catch (_) { accepted = false; }
+        finally { savedRemoving = false; }
+        if (!sessionOpen || !visible || !savedOpen || savedIntent !== intent || savedTicket !== ticket) return;
+        // The own write advances bindings. A true return never owns newer UI callbacks.
+        if (accepted && savedOwners(intent) && bindingsState.savedJSON === intent.expected
+                && bindingsState.revision === intent.revision + 1) {
+            resetSaved();
+            if (sessionOpen && visible && savedOpen && savedTicket === ticket + 1 && !savedIntent && window
+                    && controls.Window.window === window && (window.activeFocusItem === focused || window.activeFocusItem === savedCard)
+                    && (focused === savedCancel || focused === savedRemove))
+                (savedSelector.enabled ? savedSelector : savedToggle).forceActiveFocus(Qt.TabFocusReason);
+        } else savedError = bindingsState.error || qsTr("Não foi possível remover a associação. Cancele e escolha novamente.");
+    }
+    function revealSaved(control) {
+        const owner = controls, ticket = savedTicket, window = controls.Window.window;
+        Qt.callLater(() => {
+            if (!Qt.isQtObject(owner) || !Qt.isQtObject(control) || !owner.sessionOpen || !owner.visible
+                    || owner.savedTicket !== ticket || owner.Window.window !== window || !control.visible || !control.activeFocus) return;
+            const viewport = owner.contentItem, rim = Style.space.xs;
+            const target = control === savedToggle && owner.savedOpen ? savedCard
+                : control === savedCancel || control === savedRemove ? savedRecovery : control;
+            const item = target.height + rim * 2 <= viewport.height ? target : control;
+            const point = item.mapToItem(viewport, 0, 0);
+            if (point.y - rim < 0) viewport.contentY += point.y - rim;
+            else if (point.y + item.height + rim > viewport.height)
+                viewport.contentY += point.y + item.height + rim - viewport.height;
+        });
+    }
+    onSessionOpenChanged: {
+        if (!sessionOpen) { resetSaved(); savedOpen = false; }
+        else if (savedToggle.activeFocus) revealSaved(savedToggle);
+    }
+    Keys.onEscapePressed: event => {
+        if (savedSelector.popup.visible) { savedSelector.popup.close(); event.accepted = true; }
+        else if (savedIntent) { cancelSaved(); event.accepted = true; }
+        else event.accepted = false;
+    }
+    Connections {
+        target: controls.contentItem
+        function onContentHeightChanged() {
+            if (savedToggle.activeFocus) controls.revealSaved(savedToggle);
+            if (controls.savedOpen)
+                for (const control of [savedSelector, savedCancel, savedRemove])
+                    if (control.activeFocus) controls.revealSaved(control);
+        }
+    }
     function currentChoice(id) { return choices.findIndex(choice => choice.id === id); }
     function ensureChoice(kind) {
         const pending = kind === "activity" ? pendingActivityProfileId : pendingDesktopProfileId;
@@ -133,6 +277,144 @@ Controls.ScrollView {
                 .arg(activityCount).arg(desktopCount)
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
+        }
+
+        Card {
+            id: savedCard
+            Layout.fillWidth: true
+            contentItem: ColumnLayout {
+                spacing: Style.space.sm
+                OrlaButton {
+                    id: savedToggle
+                    objectName: "savedContextToggle"
+                    Layout.fillWidth: true
+                    variant: "ghost"
+                    text: qsTr("Associações salvas")
+                    checkable: true
+                    checked: controls.savedOpen
+                    onClicked: controls.toggleSaved()
+                    onActiveFocusChanged: if (activeFocus) controls.revealSaved(this)
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: controls.savedOpen
+                    spacing: Style.space.sm
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        objectName: "savedContextAvailability"
+                        visible: !controls.savedWritable || controls.savedEntries.length === 0
+                        text: !controls.savedWritable ? qsTr("As associações estão protegidas ou indisponíveis. Confira os avisos e a configuração dos perfis.")
+                            : qsTr("Nenhuma associação salva.")
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                    }
+                    Controls.Label { visible: controls.savedEntries.length > 0; text: qsTr("Associação salva"); textFormat: Text.PlainText }
+                    Controls.ComboBox {
+                        id: savedSelector
+                        objectName: "savedContextSelector"
+                        Layout.fillWidth: true
+                        enabled: controls.savedWritable && controls.savedEntries.length > 0 && !controls.savedIntent
+                        model: controls.savedIntent ? controls.savedIntent.options : controls.savedEntries
+                        textRole: "label"
+                        currentIndex: -1
+                        displayText: currentIndex < 0 ? qsTr("Escolha uma associação") : currentText
+                        popup.focus: false
+                        Accessible.name: qsTr("Associação salva para revisar")
+                        Accessible.onPressAction: {
+                            if (!enabled || !visible || !controls.sessionOpen || !controls.savedOpen) return;
+                            forceActiveFocus(Qt.OtherFocusReason);
+                            if (popup.visible) popup.close(); else popup.open();
+                        }
+                        onActivated: index => controls.selectSaved(index)
+                        onModelChanged: if (!controls.savedIntent) currentIndex = -1
+                        onActiveFocusChanged: if (activeFocus) controls.revealSaved(this)
+                        delegate: Controls.MenuItem {
+                            id: savedOption
+                            required property var modelData
+                            required property int index
+                            objectName: "savedContextOption" + index
+                            width: savedSelector.width
+                            text: modelData.label
+                            Accessible.description: modelData.kind + " · " + modelData.entry.contextId + " · " + controls.profileName(modelData.entry.profileId)
+                            contentItem: Text { text: parent.text; textFormat: Text.PlainText; color: savedSelector.palette.text; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: -Style.space.xxs
+                            color: "transparent"
+                            radius: Style.radius.control
+                            border.width: savedSelector.activeFocus ? 2 : 0
+                            border.color: savedSelector.palette.highlight
+                        }
+                    }
+                    Controls.Label {
+                        id: savedDetails
+                        objectName: "savedContextDetails"
+                        Layout.fillWidth: true
+                        visible: Boolean(controls.savedIntent)
+                        text: controls.savedIntent ? qsTr("%1\nIdentificador: %2\nPerfil: %3").arg(controls.savedIntent.label)
+                            .arg(controls.savedIntent.entry.contextId).arg(controls.savedIntent.profileName) : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                    }
+                    ColumnLayout {
+                        id: savedRecovery
+                        Layout.fillWidth: true
+                        visible: Boolean(controls.savedIntent)
+                        spacing: Style.space.sm
+                        Controls.Label {
+                            objectName: "savedContextQuestion"
+                            Layout.fillWidth: true
+                            text: qsTr("Remover esta associação?")
+                            font.bold: true
+                            textFormat: Text.PlainText
+                        }
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            text: qsTr("O perfil e o contexto não serão apagados. Se usada pelo automático, outras associações ou o padrão poderão valer ao terminar esta interação.")
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                        }
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Para escolher outra associação, cancele esta confirmação.")
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            OrlaButton {
+                                id: savedCancel
+                                objectName: "savedContextCancel"
+                                variant: "ghost"
+                                text: qsTr("Cancelar")
+                                onClicked: if (visible && controls.sessionOpen) controls.cancelSaved()
+                                onActiveFocusChanged: if (activeFocus) controls.revealSaved(this)
+                            }
+                            OrlaButton {
+                                id: savedRemove
+                                objectName: "savedContextRemove"
+                                Layout.fillWidth: true
+                                variant: "secondary"
+                                text: qsTr("Remover associação")
+                                enabled: controls.savedCurrent(controls.savedIntent)
+                                Accessible.description: savedDetails.text
+                                onClicked: controls.removeSaved()
+                                onActiveFocusChanged: if (activeFocus) controls.revealSaved(this)
+                            }
+                        }
+                        Controls.Label {
+                            objectName: "savedContextStatus"
+                            Layout.fillWidth: true
+                            visible: text.length > 0
+                            text: controls.savedProblem
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                            Accessible.role: Accessible.AlertMessage
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
