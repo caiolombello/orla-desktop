@@ -16,9 +16,10 @@ PRIVATE=Path(__file__).resolve().parent
 parser=argparse.ArgumentParser();parser.add_argument("--area",required=True)
 cases=parser.add_mutually_exclusive_group()
 cases.add_argument("--gesture",action="store_true",help="exercise pointer/keyboard cancellation on the owned fixture")
+cases.add_argument("--viewport",action="store_true",help="exercise scrolled/clipped/event-covered drags on three owned apps")
 cases.add_argument("--competing-move",action="store_true",help="refuse a synchronous second native move")
 args=parser.parse_args();AREA=Path(args.area)
-IDS=("org.orla.ModelA","org.orla.ModelB") + (("org.orla.ModelC",) if args.competing_move else ())
+IDS=("org.orla.ModelA","org.orla.ModelB") + (("org.orla.ModelC",) if args.competing_move or args.viewport else ())
 ORIGINAL=["applications:"+id+".desktop" for id in IDS]
 workers=[];warnings=[];facts=[];errors=[];app=None;engine=None;root=None;dock=None
 result={"status":"PREPARING","scope":"Actual Source moveTask refusal, synthetic isolated-session windows only"}
@@ -56,7 +57,9 @@ try:
         assert directory!=sandbox and directory.is_relative_to(sandbox),"private_xdg_required"
     assert os.environ.get("WAYLAND_DISPLAY") and os.environ.get("DBUS_SESSION_BUS_ADDRESS"),"isolated_session_required"
     for id in IDS:assert (Path(os.environ["XDG_DATA_HOME"])/"applications"/(id+".desktop")).is_file()
-    app=QGuiApplication([]);result["platformName"]=app.platformName();engine=QQmlApplicationEngine();engine.warnings.connect(warning)
+    app=QGuiApplication([])
+    if args.viewport: QGuiApplication.setDesktopFileName("org.orla.ModelProbe")
+    result["platformName"]=app.platformName();engine=QQmlApplicationEngine();engine.warnings.connect(warning)
     engine.load(QUrl.fromLocalFile(str(PRIVATE/"TaskOrderHarness.qml")))
     assert len(engine.rootObjects())==1,"model_component_unavailable"
     root=engine.rootObjects()[0]
@@ -68,6 +71,10 @@ try:
         value=QQmlExpression(engine.rootContext(),dock,expression);answer,_=value.evaluate()
         if value.hasError():raise RuntimeError(value.error().toString()[:512])
         return answer
+    if args.viewport:
+        for flag in ("showClock", "showMusic", "showSystemBattery", "showPomodoro", "showQuota",
+                     "showPeripherals", "showRecording", "showControlCenter", "showLocalToasts", "showAudioHud"):
+            config.setProperty(flag, False)
     assert dock_eval("profiles.initializeDefaults(profiles.activeProfileId,profiles.revision)") is True
     assert dock_eval("profiles.select('work',profiles.activeProfileId,profiles.revision)") is True
     wait(lambda s:len(s["rows"])==len(IDS) and all(r["IsLauncher"] and not r["IsWindow"] for r in s["rows"]))
@@ -78,6 +85,12 @@ try:
     wait(lambda s:len(s["rows"])==len(IDS) and {r["id"] for r in s["rows"]}==set(IDS) and all(r["IsWindow"] and r["HasLauncher"] for r in s["rows"]))
     if args.competing_move: dock_eval("reloadLaunchers()")
     current=record("running-source-baseline");indices=own_rows(current)
+    if args.viewport:
+        for position, identity in enumerate(IDS):
+            current = snapshot(); current_indices = own_rows(current)
+            if current_indices[identity] != position:
+                assert evaluate("normalize(%d,%d)" % (current_indices[identity], position)) is True
+        current = snapshot(); indices = own_rows(current)
     if indices[IDS[0]]>indices[IDS[1]]:
         assert evaluate("normalize(%d,%d)"%(indices[IDS[0]],indices[IDS[1]])) is True
     current=record("running-normalized-source-baseline");indices=own_rows(current)
@@ -85,7 +98,14 @@ try:
     expected=json.dumps(ORIGINAL,separators=(",",":"))
     result["savedLaunchersBefore"]=evaluate("savedLaunchers()")
     assert result["savedLaunchersBefore"]==expected,"setup_saved_order_not_AB"
-    if args.competing_move:
+    if args.viewport:
+        from task_viewport import run_viewport
+        result["scope"]="Source viewport Qt pointer gesture matrix; three owned synthetic apps in isolated KWin only"
+        result["failureStage"]="VIEWPORT_GESTURE_MATRIX"
+        run_viewport(root,config,dock,dock_eval,snapshot,record,result)
+        assert not warnings,"qml_warnings"
+        result["status"]="PASS_SOURCE_TASK_VIEWPORT_GESTURES"
+    elif args.competing_move:
         evaluate("armCompeting()")
         writes=QSignalSpy(config.profilesJSONChanged)
         result["failureStage"]="ASSERT_COMPETING_MOVE_REFUSAL"
@@ -161,4 +181,4 @@ finally:
         engine.deleteLater();QCoreApplication.sendPostedEvents(engine,QEvent.DeferredDelete)
     if app is not None:app.processEvents()
     with (AREA/"PROBE-RESULT.json").open("x") as stream:json.dump(result,stream,indent=2);stream.write("\n")
-sys.exit(0 if result["status"] in ("PASS_SOURCE_REFUSAL_RESTORES_RUNNING_ORDER", "PASS_SOURCE_TASK_DRAG_GESTURES", "PASS_SOURCE_COMPETING_MOVE_REFUSED") else 1)
+sys.exit(0 if result["status"] in ("PASS_SOURCE_REFUSAL_RESTORES_RUNNING_ORDER", "PASS_SOURCE_TASK_DRAG_GESTURES", "PASS_SOURCE_COMPETING_MOVE_REFUSED", "PASS_SOURCE_TASK_VIEWPORT_GESTURES") else 1)
