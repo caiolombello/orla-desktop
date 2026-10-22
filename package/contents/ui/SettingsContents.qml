@@ -420,6 +420,7 @@ ColumnLayout {
                     feedback: session ? session.feedback : ""
                     feedbackKind: state ? state.feedbackKind : "status"
                     profilePeripheralVisible: settings.profiles.effective.widgets.some(row => row.id === "peripherals" && row.visible)
+                    profileQuotaVisible: settings.profiles.effective.widgets.some(row => row.id === "quota" && row.visible)
                     onChooseFileRequested: if (settings.addonsAvailable()) settings.addonFileRequested()
                     onInstallRequested: sha => { if (settings.addonsAvailable()) state.installAddon(sha); }
                     onEnableRequested: (id, sha) => { if (settings.addonsAvailable()) state.enableAddon(id, sha); }

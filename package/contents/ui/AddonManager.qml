@@ -15,6 +15,7 @@ Controls.Control {
     property string feedback: ""
     property string feedbackKind: "status"
     property bool profilePeripheralVisible: true
+    property bool profileQuotaVisible: true
     property var trackedFocus: null
     property bool focusOwned: false
     property int focusSerial: 0
@@ -247,7 +248,7 @@ Controls.Control {
         Controls.Label {
             color: root.palette.windowText
             Layout.fillWidth: true
-            text: qsTr("Bateria de periféricos, a partir de dados locais compartilhados por outro aplicativo.")
+            text: qsTr("Bateria de periféricos e uso de quota de IA, a partir de dados locais compartilhados por outro aplicativo.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }
@@ -345,7 +346,10 @@ Controls.Control {
                 focusManager: root
                 busy: root.busy || root.loading
                 profilePeripheralVisible: root.profilePeripheralVisible
-                providerAvailable: !root.addons.some(function(row) { return row.enabled === true && row.id !== modelData.id; })
+                profileQuotaVisible: root.profileQuotaVisible
+                // One active addon per module: a battery addon never blocks a quota one.
+                providerAvailable: !root.addons.some(function(row) {
+                    return row.enabled === true && row.id !== modelData.id && row.renderer === modelData.renderer; })
                 onEnableRequested: function(addonId, sha256) { root.enableRequested(addonId, sha256); }
                 onDisableRequested: function(addonId, sha256) { root.disableRequested(addonId, sha256); }
                 onRemoveRequested: function(addonId, sha256) { root.removeRequested(addonId, sha256); }

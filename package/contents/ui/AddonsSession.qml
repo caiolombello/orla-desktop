@@ -23,6 +23,8 @@ Item {
     property bool sourceChanged: false
     property var physical: null
     property var identity: null
+    // Quota addons keep their own pin; hosts without quota routing ignore it.
+    property var quotaIdentity: null
     property int lifetime: 0
     signal originApproved(string origin)
 
@@ -46,6 +48,10 @@ Item {
         const addon = dataState.peripherals.addon;
         if (identity === null && !dataState.addonError && addon)
             identity = Object.freeze({generation: addon.generation, sha256: addon.sha256});
+        if (!callbacks.alive) return;
+        const quota = dataState.quotaAddonValue !== undefined && dataState.quotaAddonValue ? dataState.quotaAddonValue.addon : null;
+        if (quotaIdentity === null && !dataState.quotaAddonError && quota)
+            quotaIdentity = Object.freeze({generation: quota.generation, sha256: quota.sha256});
         if (!callbacks.alive) return;
         paused = true;
         if (!callbacks.alive) return;
@@ -91,6 +97,7 @@ Item {
         if (paused) {
             const current = lifetime;
             if (identity !== null) dataState.addonIdentity = identity;
+            if (quotaIdentity !== null && dataState.quotaIdentity !== undefined) dataState.quotaIdentity = quotaIdentity;
             if (!callbacks.alive || current !== lifetime || surfaceActive && Qt.isQtObject(owner) || recovery || needsMetadata) return;
             paused = false;
             if (!callbacks.alive || current !== lifetime) return;
@@ -103,11 +110,16 @@ Item {
         // Finish the manager's publication before our observers can retire its context.
         if (callbacks.publishing) { callbacks.metadata = true; return; }
         const current = lifetime;
-        const enabled = managerState.addons.find(row => row.enabled === true);
+        const enabled = managerState.addons.find(row => row.enabled === true && row.renderer !== "quota-usage");
+        const enabledQuota = managerState.addons.find(row => row.enabled === true && row.renderer === "quota-usage");
         const next = Object.freeze({generation: managerState.generation, sha256: enabled ? enabled.sha256 : null});
+        const nextQuota = Object.freeze({generation: managerState.generation, sha256: enabledQuota ? enabledQuota.sha256 : null});
         identity = next;
+        quotaIdentity = nextQuota;
         if (!callbacks.alive || current !== lifetime || !managerState.valid) return;
         dataState.addonIdentity = next;
+        if (!callbacks.alive || current !== lifetime || !managerState.valid) return;
+        if (dataState.quotaIdentity !== undefined) dataState.quotaIdentity = nextQuota;
         if (!callbacks.alive || current !== lifetime || !managerState.valid) return;
         needsMetadata = false;
         if (!callbacks.alive) return;
@@ -154,6 +166,21 @@ Item {
         function onAddonCallPendingChanged() { session.schedule(); }
         function onAddonErrorCodeChanged() {
             if (lifecycle && lifecycle.completed && session.running && session.dataState.addonErrorCode === "source_changed") {
+                const callbacks = lifecycle.callbacks;
+                session.sourceChanged = true;
+                if (!callbacks.alive) return;
+                session.needsMetadata = true;
+                if (!callbacks.alive) return;
+                session.pause();
+            }
+        }
+    }
+    Connections {
+        target: session.dataState
+        ignoreUnknownSignals: true
+        // A quota source change needs the same metadata review as a battery one.
+        function onQuotaAddonErrorCodeChanged() {
+            if (lifecycle && lifecycle.completed && session.running && session.dataState.quotaAddonErrorCode === "source_changed") {
                 const callbacks = lifecycle.callbacks;
                 session.sourceChanged = true;
                 if (!callbacks.alive) return;
