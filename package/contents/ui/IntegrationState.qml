@@ -112,6 +112,14 @@ Item {
         if (peripherals.limited === true) parts.push(qsTr("modelo limitado"));
         return parts.join(" · ");
     }
+    readonly property string quotaMetadataSummary: {
+        if (quota.source !== "addon") return "";
+        const parts = [qsTr("exportação local")];
+        const updated = quota.updatedAt ? new Date(quota.updatedAt) : null;
+        if (updated && isFinite(updated.getTime()))
+            parts.push(qsTr("atualizado em %1").arg(updated.toLocaleString(Qt.locale(), "d MMM, HH:mm")));
+        return parts.join(" · ");
+    }
     readonly property string recordingSummary: recording.state === "stopped" ? qsTr("Sessão encerrada")
         : recording.state === "recording" ? qsTr("Estado salvo · gravando")
         : recording.state === "starting" ? qsTr("Estado salvo · iniciando")

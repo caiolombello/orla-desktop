@@ -343,9 +343,15 @@ respondeu `not_installed`. O popup de quota da dock mostrou as janelas com
 duração e horário de reinício, e o journal do plasmashell não registrou erro da dock.
 As capturas têm dados reais e ficaram somente na máquina.
 
-Observações para depois: **Recarregar complementos** volta a rolagem para
-cima, e o popup de quota mantém textos do caminho legado (“Reler cache
-local”, “Leituras já coletadas”) quando a fonte é o complemento.
+Duas observações da rodada foram tratadas em seguida:
+
+- **Rolagem presa no topo.** **Recarregar complementos** deixava a rolagem das
+  configurações no topo, porque a lista some enquanto o host responde. Agora
+  a altura fica reservada até a resposta ser exibida.
+- **Popup de quota.** Com a fonte no complemento, o popup ainda nomeava o
+  QuotaLantern, oferecia o link fixo do projeto e não mostrava origem,
+  horário nem a orientação para recarregar. Agora segue o popup de bateria.
+  O botão continua “Reler cache local”, porque só relê os dados locais.
 
 Não executado: instalar pelo seletor de arquivos das configurações (a rodada
 usou a CLI), desativar a exportação na sessão de uso, esquema claro, leitor de

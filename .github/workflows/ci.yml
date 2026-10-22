@@ -96,7 +96,7 @@ jobs:
                   test_addon_manager test_addon_peripherals \
                   test_addon_composition.AddonCompositionTests \
                   test_addon_composition.AddonSessionInitializationTests \
-                  test_addon_composition.AddonSessionLifetimeTests test_addon_quota_dock -v
+                  test_addon_composition.AddonSessionLifetimeTests test_addon_quota_dock test_peripherals_ui -v
               fi
             ' -- "$ORLA_CI_PYTHON"
 

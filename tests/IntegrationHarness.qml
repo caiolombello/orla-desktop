@@ -24,13 +24,23 @@ DockUI.IntegrationState {
         property var messages: []
         function asyncCall(message, resolve, reject) {
             messages = messages.concat([message]);
-            queue = queue.concat([{resolve: resolve, reject: reject}]);
+            queue = queue.concat([{service: message.service, resolve: resolve, reject: reject}]);
         }
-        function reply(text) {
-            const next = queue[0];
-            queue = queue.slice(1);
+        function reply(text, service) {
+            const index = service ? queue.findIndex(item => item.service === service) : 0;
+            const next = queue[index];
+            queue = queue.filter((item, i) => i !== index);
             next.resolve({value: text});
         }
+    }
+    QtObject {
+        id: sessionFixture
+        objectName: "sessionFixture"
+        property bool reloadRequired: false
+        property bool busy: false
+        property string feedback: "O complemento mudou fora desta janela."
+        property int reloads: 0
+        function reload() { reloads++; return true; }
     }
     QtObject {
         id: dockFixture
@@ -43,5 +53,13 @@ DockUI.IntegrationState {
         dock: dockFixture
         integrations: integrations
         selected: "peripherals"
+    }
+    DockUI.IntegrationDetails {
+        objectName: "quotaDetailsUnderTest"
+        width: parent.width
+        dock: dockFixture
+        integrations: integrations
+        selected: "quota"
+        addonsSession: sessionFixture
     }
 }

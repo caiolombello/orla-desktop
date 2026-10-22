@@ -10,6 +10,10 @@ ColumnLayout {
     property string selected: "quota"
     property var addonsSession: null
     readonly property string project: selected === "quota" ? "quotalantern" : "falatrace"
+    // Batteries always, and quota once an active addon replaced the legacy cache.
+    readonly property bool addonRoute: selected === "peripherals"
+        || (selected === "quota" && integrations.quotaAddonActive === true)
+    readonly property bool reloadRequired: addonRoute && addonsSession !== null && addonsSession.reloadRequired === true
     spacing: Style.space.md
 
     function stateText(modelData) {
@@ -27,7 +31,9 @@ ColumnLayout {
     Controls.Label {
         objectName: "integrationDescription"
         Layout.fillWidth: true
-        text: root.integrations.errorFor(root.selected) || (root.selected === "quota" ? qsTr("Leituras já coletadas pelo QuotaLantern. Cada janela é independente; custos não são percentuais de quota.")
+        text: root.integrations.errorFor(root.selected) || (root.selected === "quota" ? (root.addonRoute
+                ? qsTr("Uso de quota compartilhado por um aplicativo externo. Cada janela é independente; custos não fazem parte do compartilhamento.")
+                : qsTr("Leituras já coletadas pelo QuotaLantern. Cada janela é independente; custos não são percentuais de quota."))
             : root.selected === "peripherals" ? qsTr("Baterias compartilhadas por um aplicativo externo. Estimativas e dados antigos são identificados.")
             : qsTr("Último estado salvo pelo FalaTrace. A atividade da captura não foi verificada. Abra o aplicativo para controlar a gravação."))
         wrapMode: Text.WordWrap
@@ -35,10 +41,10 @@ ColumnLayout {
         color: root.dock.muted
     }
     Controls.Label {
-        objectName: "peripheralsMetadata"
+        objectName: root.selected === "quota" ? "quotaMetadata" : "peripheralsMetadata"
         Layout.fillWidth: true
-        visible: root.selected === "peripherals" && text.length > 0
-        text: root.integrations.peripheralsMetadataSummary || ""
+        visible: root.addonRoute && text.length > 0
+        text: (root.selected === "quota" ? root.integrations.quotaMetadataSummary : root.integrations.peripheralsMetadataSummary) || ""
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         color: root.dock.muted
@@ -49,12 +55,15 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.selected === "quota" ? !(root.integrations.quota.windows || []).length
             : root.selected === "peripherals" ? !(root.integrations.peripherals.devices || []).length : true
-        text: root.selected === "quota" ? qsTr("Sem quota recente. Abra o QuotaLantern para atualizar suas leituras.")
-            : root.selected === "peripherals" ? (root.integrations.peripherals.status === "missing"
-                ? qsTr("Sem dados compartilhados. Confira a ativação do complemento e a permissão no aplicativo de origem.") : root.integrations.peripherals.status === "invalid"
-                ? qsTr("Os dados compartilhados são inválidos.") : root.integrations.peripherals.status === "stale"
-                ? qsTr("Dados desatualizados. Aguarde uma nova coleta no aplicativo de origem.") : qsTr("Sem bateria externa disponível."))
-            : root.integrations.recordingSummary
+        text: {
+            if (root.selected === "recording") return root.integrations.recordingSummary;
+            if (!root.addonRoute) return qsTr("Sem quota recente. Abra o QuotaLantern para atualizar suas leituras.");
+            const status = root.selected === "quota" ? root.integrations.quota.status : root.integrations.peripherals.status;
+            return status === "missing" ? qsTr("Sem dados compartilhados. Confira a ativação do complemento e a permissão no aplicativo de origem.")
+                : status === "invalid" ? qsTr("Os dados compartilhados são inválidos.")
+                : status === "stale" ? qsTr("Dados desatualizados. Aguarde uma nova coleta no aplicativo de origem.")
+                : root.selected === "quota" ? qsTr("Sem quota disponível.") : qsTr("Sem bateria externa disponível.");
+        }
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         color: root.dock.foreground
@@ -122,26 +131,25 @@ ColumnLayout {
         OrlaButton {
             objectName: "refreshCacheButton"
             Layout.fillWidth: true
-            text: root.selected === "peripherals" && root.addonsSession && root.addonsSession.reloadRequired
-                ? qsTr("Recarregar complementos") : qsTr("Reler cache local")
-            enabled: !(root.selected === "peripherals" ? root.integrations.addonLoading : root.integrations.legacyLoading)
-                && !(root.addonsSession && root.selected === "peripherals" && root.addonsSession.busy)
+            text: root.reloadRequired ? qsTr("Recarregar complementos") : qsTr("Reler cache local")
+            enabled: !(root.addonRoute ? root.integrations.addonLoading : root.integrations.legacyLoading)
+                && !(root.addonRoute && root.addonsSession && root.addonsSession.busy)
             onClicked: {
-                if (root.selected === "peripherals" && root.addonsSession && root.addonsSession.reloadRequired) root.addonsSession.reload();
+                if (root.reloadRequired) root.addonsSession.reload();
                 else root.integrations.refresh();
             }
         }
         OrlaButton {
             objectName: "legacyProjectLink"
             Layout.fillWidth: true
-            visible: root.selected !== "peripherals"
+            visible: !root.addonRoute
             text: qsTr("Projeto GitHub")
             onClicked: Qt.openUrlExternally("https://github.com/caiolombello/" + root.project)
         }
         Controls.Label {
             objectName: "addonReloadGuidance"
             Layout.fillWidth: true
-            visible: root.selected === "peripherals" && root.addonsSession !== null && root.addonsSession.reloadRequired
+            visible: root.reloadRequired
             text: root.addonsSession ? root.addonsSession.feedback : ""
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap

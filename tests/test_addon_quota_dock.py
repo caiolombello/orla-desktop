@@ -288,5 +288,68 @@ class QuotaCoordinatorIdentityTests(unittest.TestCase):
         self.assertEqual(self.value('data.quotaIdentity'), dict(generation='c' * 32, sha256=None))
 
 
+import test_peripherals_ui as details_ui
+from PySide6.QtCore import QObject
+
+
+class QuotaDetailsTests(unittest.TestCase):
+    """The quota popup follows the battery one once quota comes from an addon."""
+    setUpClass = classmethod(details_ui.PeripheralsUiTests.setUpClass.__func__)
+    setUp = details_ui.PeripheralsUiTests.setUp
+    tearDown = details_ui.PeripheralsUiTests.tearDown
+    evaluate = details_ui.PeripheralsUiTests.evaluate
+
+    def quota_details(self):
+        details = self.integration.findChild(QObject, 'quotaDetailsUnderTest')
+        self.assertIsNotNone(details)
+        return details
+
+    def part(self, name):
+        part = self.quota_details().findChild(QObject, name)
+        self.assertIsNotNone(part, name)
+        return part
+
+    def answer_addon(self, frame):
+        self.evaluate('addonQuotaEnabled = true; enabledModules = ["quota"]; active = true')
+        transport = self.integration.findChild(QObject, 'fixtureTransport')
+        self.evaluate('reply(%s, "org.orla.Addons")' % json.dumps(json.dumps(frame)), transport)
+
+    def test_legacy_quota_keeps_the_project_and_cache_wording(self):
+        self.evaluate('enabledModules = ["quota"]; active = true')
+        self.assertIn('QuotaLantern', self.part('integrationDescription').property('text'))
+        self.assertTrue(self.part('legacyProjectLink').property('visible'))
+        self.assertFalse(self.part('quotaMetadata').property('visible'))
+        self.assertEqual(self.part('refreshCacheButton').property('text'), 'Reler cache local')
+
+    def test_addon_quota_shows_origin_and_time_without_naming_or_linking_a_project(self):
+        self.answer_addon(quota_frame())
+        self.assertTrue(self.integration.property('quotaAddonActive'))
+        self.assertNotIn('QuotaLantern', self.part('integrationDescription').property('text'))
+        metadata = self.part('quotaMetadata')
+        self.assertTrue(metadata.property('visible'))
+        self.assertIn('exportação local', metadata.property('text'))
+        self.assertIn('atualizado em', metadata.property('text'))
+        self.assertFalse(self.part('legacyProjectLink').property('visible'))
+
+    def test_addon_quota_without_shared_data_points_to_the_sharing_permission(self):
+        frame = quota_frame()
+        frame['quota'].update(status='missing', generatedAt=None, source=None, producerVersion=None, limited=False,
+                              providers=[], generatedAtMs=None, expiresAtMs=None, leaseMs=None)
+        frame['quota']['addon']['reason'] = 'export_missing'
+        self.answer_addon(frame)
+        self.assertTrue(self.integration.property('quotaAddonActive'))
+        self.assertIn('permissão no aplicativo de origem', self.part('integrationEmptyState').property('text'))
+
+    def test_addon_quota_changed_outside_settings_offers_the_reload(self):
+        self.answer_addon(quota_frame())
+        session = self.integration.findChild(QObject, 'sessionFixture')
+        session.setProperty('reloadRequired', True)
+        button = self.part('refreshCacheButton')
+        self.assertEqual(button.property('text'), 'Recarregar complementos')
+        self.assertTrue(self.part('addonReloadGuidance').property('visible'))
+        self.evaluate('clicked()', button)
+        self.assertEqual(session.property('reloads'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
