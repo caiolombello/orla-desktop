@@ -123,3 +123,38 @@ com HOME/XDG/TMPDIR privados, buses ausentes e Qt offscreen/software. A galeria
 inclui estados de consulta, histórico, falha e foco curto, em claro/escuro.
 As APIs de sessão são as de [QProcess no PySide6 6.11](https://doc.qt.io/qtforpython-6.11/PySide6/QtCore/QProcess.html):
 `CreateNewSession` e `CloseFileDescriptors`, sem modificador Python entre fork/exec.
+
+## Dock instalada para o usuário — fase C
+
+Ao abrir e antes de cada consulta, a janela lê somente
+`$XDG_DATA_HOME/plasma/plasmoids/org.caiodock.dock/metadata.json` (padrão
+`~/.local/share`). A leitura usa os mesmos limites do histórico: 16 KiB, arquivo
+regular e nenhum link no caminho. Ela não cria arquivos, não consulta o Plasma e
+não inicia processos. Com ID `org.caiodock.dock` e versão SemVer válidos, essa
+dock passa a ser a referência da consulta, com a origem **dock instalada para
+este usuário**. O histórico é separado por referência: o resultado salvo da cópia
+fonte ou do bundle não é apresentado como resultado da dock instalada.
+
+Sem esse arquivo, ou com metadados inválidos, a referência continua sendo o pacote
+fonte ou a cópia verificada do Workspace. **Sobre os componentes** diz qual dos
+três casos ocorreu e mostra a outra referência quando a dock instalada é usada.
+Uma atualização entre abrir a janela e consultar é percebida, porque a leitura se
+repete antes de iniciar a CLI.
+
+**Ler versão em execução**, dentro de Sobre os componentes, é a única ação que
+pergunta ao Plasma. Ela envia por D-Bus um script fixo e somente leitura a
+`org.kde.PlasmaShell.evaluateScript`, com prazo de 3 segundos, e recebe as versões
+dos widgets `org.caiodock.dock` carregados. A resposta precisa ser um objeto
+exato com até 16 versões SemVer; qualquer outra coisa vira “não foi possível ler
+agora”. Sem dock carregada, a linha diz isso. Quando a versão carregada difere da
+instalada, a janela sugere recarregar o Plasma ou entrar de novo na sessão. Abrir
+a janela, trocar o canal ou consultar releases nunca faz essa leitura.
+
+Limites: uma dock instalada para todo o sistema não é lida, e a leitura em
+execução reflete os metadados que o Plasma carregou, não a integridade dos
+arquivos. Metadados não autenticam o publicador.
+
+Uma prova sem janela, com os dados reais deste usuário e configuração/cache
+temporários, leu a dock 0.2.9 instalada e consultou o canal beta anonimamente:
+`up_to_date`, com a release 0.2.9. Uma leitura sob pedido, também sem janela, recebeu
+do Plasma a dock 0.2.9 em execução e não gravou arquivos.

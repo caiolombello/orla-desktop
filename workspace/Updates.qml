@@ -78,6 +78,26 @@ Controls.ApplicationWindow {
         if (result.status === "unavailable") return qsTr("A consulta não produziu um resultado válido. Você pode tentar novamente.");
         return "";
     }
+    function componentText() {
+        const status = window.state.installedStatus;
+        let text = status === "found" ? qsTr("Dock instalada: %1 · metadados deste usuário").arg(window.state.installedVersion)
+            : status === "invalid" ? qsTr("Dock instalada: metadados inválidos")
+            : qsTr("Dock instalada: não encontrada para este usuário");
+        const running = window.state.runningStatus;
+        const versions = window.state.runningVersions || [];
+        text += "\n" + (running === "found" ? qsTr("Dock em execução: %1 · lida do Plasma").arg(versions.join(", "))
+            : running === "absent" ? qsTr("Dock em execução: não carregada no Plasma")
+            : running === "unavailable" ? qsTr("Dock em execução: não foi possível ler agora")
+            : qsTr("Dock em execução: não verificada"));
+        if (window.state.otherRole === "source") text += "\n" + qsTr("Pacote fonte do dock: %1").arg(window.state.otherVersion);
+        else if (window.state.otherRole === "bundle") text += "\n" + qsTr("Esta cópia do Workspace: %1").arg(window.state.otherVersion);
+        return text;
+    }
+    function runningDiffers() {
+        const versions = window.state.runningVersions || [];
+        return window.state.installedStatus === "found" && window.state.runningStatus === "found"
+            && (versions.length !== 1 || versions[0] !== window.state.installedVersion);
+    }
     function displayDate(value) {
         return new Date(value).toLocaleString(Qt.locale(), Locale.ShortFormat);
     }
@@ -128,7 +148,8 @@ Controls.ApplicationWindow {
                     Copy {
                         objectName: "updatesReferenceOrigin"
                         visible: !!window.state.version
-                        text: window.state.role === "source" ? qsTr("pacote fonte do dock") : qsTr("esta cópia do Workspace · bundle verificado")
+                        text: window.state.role === "installed" ? qsTr("dock instalada para este usuário")
+                            : window.state.role === "source" ? qsTr("pacote fonte do dock") : qsTr("esta cópia do Workspace · bundle verificado")
                         color: window.ui.textMuted
                     }
                 }
@@ -207,15 +228,34 @@ Controls.ApplicationWindow {
                 spacing: Style.space.sm
                 Copy {
                     objectName: "updatesComponentVersions"
-                    text: qsTr("Dock instalada: não verificada") + "\n" + qsTr("Dock em execução: não verificada")
+                    text: window.componentText()
+                }
+                Copy {
+                    objectName: "updatesRunningDiffers"
+                    visible: window.runningDiffers()
+                    text: qsTr("A dock carregada difere da instalada. Recarregue o Plasma ou entre de novo na sessão para usar a versão instalada.")
+                }
+                Orla.OrlaButton {
+                    id: readRunning
+                    objectName: "updatesReadRunning"
+                    Layout.fillWidth: true
+                    // Room for the 2 px focus ring inside the scroll viewport.
+                    Layout.leftMargin: Style.space.xs
+                    Layout.rightMargin: Style.space.xs
+                    implicitHeight: Math.max(Style.size.target, implicitContentHeight + verticalPadding * 2)
+                    text: controller.readingRunning ? qsTr("Lendo versão em execução…") : qsTr("Ler versão em execução")
+                    enabled: !controller.readingRunning && !controller.closePending
+                    onClicked: controller.readRunning()
+                    Keys.onReturnPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
+                    Keys.onEnterPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
                 }
                 Copy {
                     objectName: "updatesComponentScope"
-                    text: qsTr("Esta consulta compara a referência acima. Não confirma a versão carregada no Plasma.")
+                    text: qsTr("Esta consulta compara a referência acima. Ler a versão em execução pergunta ao Plasma quais docks ele carregou; nada é alterado.")
                     color: window.ui.textMuted
                 }
                 Copy {
-                    text: qsTr("Dock, Menu Orla, Launcher e Workspace são componentes distintos. Esta referência não comprova suas versões instaladas ou em execução. Uma release da família não garante arquivos compatíveis para cada componente. Histórico e hashes não autenticam o publicador.")
+                    text: qsTr("Dock, Menu Orla, Launcher e Workspace são componentes distintos. A versão da dock não comprova a dos demais, e uma dock instalada para todo o sistema não é lida. Uma release da família não garante arquivos compatíveis para cada componente. Histórico e hashes não autenticam o publicador.")
                     color: window.ui.textMuted
                 }
                 Copy {

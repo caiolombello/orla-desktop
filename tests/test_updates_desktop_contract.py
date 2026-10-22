@@ -32,6 +32,19 @@ class ContractTests(unittest.TestCase):
         for raw in ('{"x":1,"x":2}', '{"x":NaN}', '{} {}', 'x' * 17000):
             self.assertRaises(ValueError, strict_json, raw)
 
+    def test_running_reply_is_strict_and_bounded(self):
+        from scripts.updates_desktop import parse_running, RUNNING_SCRIPT
+        self.assertEqual(parse_running('{"docks":["0.2.9"]}'), ('found', ['0.2.9']))
+        self.assertEqual(parse_running('{"docks":["0.2.9","0.2.8","0.2.9"]}'), ('found', ['0.2.8', '0.2.9']))
+        self.assertEqual(parse_running('{"docks":[]}'), ('absent', []))
+        for reply in (None, 7, '', 'x', '[]', '{"docks":"0.2.9"}', '{"docks":[1]}', '{"docks":["0.2"]}',
+                      '{"docks":[],"x":1}', '{"docks":[],"docks":[]}', '{"docks":["0.2.9"]} {}',
+                      '{"docks":' + json.dumps(['0.2.9'] * 17) + '}', '{"docks":["' + 'x' * 17000 + '"]}'):
+            with self.subTest(reply=str(reply)[:40]):
+                self.assertRaises((ValueError, TypeError), parse_running, reply)
+        # The script only reads widget types and versions; it never assigns to Plasma objects.
+        self.assertNotIn('=', RUNNING_SCRIPT.replace('===', '').replace('var v=', '').replace('function(', ''))
+
     def test_bundle_reference_injection_does_not_infer_installed_dock(self):
         from scripts.updates_desktop import UpdatesController
         reference = dict(REF, role='bundle', component='workspace', origin='verified-manifest', commit='c' * 40)
@@ -42,4 +55,9 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(host.state['version'], '1.2.3')
             reference['version'] = '9.9.9'
             self.assertEqual(host.state['version'], '1.2.3')
-            self.assertFalse(any(('installed' in key or 'running' in key for key in host.state)))
+            # Installed fields come only from the user's own package metadata,
+            # never from the injected bundle reference; nothing claims the running dock.
+            self.assertEqual((host.state['installedStatus'], host.state['installedVersion']), ('absent', ''))
+            self.assertEqual((host.state['otherRole'], host.state['otherVersion']), ('', ''))
+            # The running dock is read only on an explicit request.
+            self.assertEqual((host.state['runningStatus'], host.state['runningVersions']), ('unread', []))

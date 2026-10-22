@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, Property, Signal, Slot, QUrl, QProcess, QTim
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from scripts.updates_desktop_state import source_reference, strict_json, LIMIT, Store, history_key, valid_reference
-from scripts.updates_contract import validate_result, result, safe_release_url, utc_time
+from scripts.updates_contract import validate_result, result, safe_release_url, utc_time, parse_version
 from datetime import datetime, timezone
 
 def now():
@@ -179,20 +179,67 @@ class CheckProcess(QObject):
         except (ValueError, TypeError, UnicodeError, RecursionError):
             data = result('unavailable', self.failure or 'invalid_result', self.reference['version'], self.channel, self.attempted_at)
         self.done.emit(data)
+# Fixed, read-only Plasma script: versions of the dock widgets Plasma has loaded.
+RUNNING_SCRIPT = ('var v=[];panels().forEach(function(p){p.widgets().forEach(function(w){'
+                  'if(w.type==="org.caiodock.dock")v.push(String(w.version));});});'
+                  'print(JSON.stringify({docks:v}));')
+RUNNING_LIMIT = 16
+
+
+def parse_running(text):
+    """Strict reply → ('found', sorted distinct versions) or ('absent', [])."""
+    if not isinstance(text, str):
+        raise ValueError('reply type')
+    value = strict_json(text)
+    if not isinstance(value, dict) or set(value) != {'docks'} or not isinstance(value['docks'], list):
+        raise ValueError('reply shape')
+    docks = value['docks']
+    if len(docks) > RUNNING_LIMIT or any(not isinstance(v, str) or parse_version(v) is None for v in docks):
+        raise ValueError('reply versions')
+    return ('found', sorted(set(docks))) if docks else ('absent', [])
+
+
+def plasma_running_probe(parent, done, timeout_ms=3000):
+    """Ask Plasma, asynchronously and only on request, which dock versions it loaded."""
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusPendingCallWatcher
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        done('unavailable', [])
+        return
+    message = QDBusMessage.createMethodCall('org.kde.plasmashell', '/PlasmaShell', 'org.kde.PlasmaShell', 'evaluateScript')
+    message.setArguments([RUNNING_SCRIPT])
+    watcher = QDBusPendingCallWatcher(bus.asyncCall(message, timeout_ms), parent)
+
+    def finished(call):
+        reply = call.reply()
+        call.deleteLater()
+        arguments = reply.arguments() if reply.type() == QDBusMessage.ReplyMessage else []
+        try:
+            status, versions = parse_running(arguments[0] if len(arguments) == 1 else None)
+        except (ValueError, TypeError, RecursionError):
+            status, versions = 'unavailable', []
+        done(status, versions)
+    watcher.finished.connect(finished)
+
+
 _UNSET = object()
 
 class UpdatesController(QObject):
     changed = Signal()
     closeReady = Signal()
 
-    def __init__(self, root, reference=_UNSET, *, runner=None, storage_root=None, opener=None, watchdog_ms=15000, parent=None):
+    def __init__(self, root, reference=_UNSET, *, runner=None, storage_root=None, opener=None, watchdog_ms=15000, running_probe=None, parent=None):
         super().__init__(parent)
         self.root = Path(root).resolve()
-        self.reference = source_reference(self.root) if reference is _UNSET else dict(reference) if isinstance(reference, dict) else None
-        if not valid_reference(self.reference):
-            self.reference = None
         self._source = reference is _UNSET
+        self._explicit = None if self._source else dict(reference) if isinstance(reference, dict) else None
+        self._fallback = None
+        self._installed_status = 'absent'
+        self.reference = None
         self._runner = runner or cli_command
+        self._running_probe = running_probe or plasma_running_probe
+        self._running = dict(status='unread', versions=[])
+        self._running_token = None
         self._opener = opener
         self._watchdog_ms = watchdog_ms
         self._process = None
@@ -204,6 +251,7 @@ class UpdatesController(QObject):
         self._status = 'idle'
         self._record = {}
         self._store = Store(storage_root)
+        self.resolve_reference()
         self._records, self._channel, self._storage_warning = self._store.load()
         self._historical = True
         self._last_completed = {}
@@ -222,12 +270,45 @@ class UpdatesController(QObject):
         return self._closing
 
     @Property(bool, notify=changed)
+    def readingRunning(self):
+        return self._running_token is not None
+
+    @Slot()
+    def readRunning(self):
+        """Explicit request only: opening the window never asks Plasma."""
+        if self._running_token is not None or self._closing:
+            return
+        token = object()
+        self._running_token = token
+
+        def done(status, versions):
+            if self._running_token is not token:
+                return
+            self._running_token = None
+            self._running = dict(status=status, versions=list(versions))
+            self.changed.emit()
+        self.changed.emit()
+        try:
+            self._running_probe(self, done)
+        except (OSError, ValueError, TypeError, RuntimeError, ImportError):
+            done('unavailable', [])
+
+    @Property(bool, notify=changed)
     def canCheck(self):
         return self.reference is not None and (not self._busy) and (not self._closing)
 
+    def resolve_reference(self):
+        """Prefer the dock installed for this user; otherwise the source or bundle copy."""
+        fallback = source_reference(self.root) if self._source else self._explicit
+        self._fallback = fallback if valid_reference(fallback) else None
+        self._installed_status, installed = self._store.installed_dock()
+        self.reference = installed if installed and valid_reference(installed) else self._fallback
+
     @Property('QVariantMap', notify=changed)
     def state(self):
-        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record())
+        installed = self.reference if self.reference and self.reference['role'] == 'installed' else None
+        other = self._fallback if installed else None
+        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', installedStatus=self._installed_status, installedVersion=installed['version'] if installed else '', otherRole=other['role'] if other else '', otherVersion=other['version'] if other else '', runningStatus=self._running['status'], runningVersions=list(self._running['versions']), record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record())
 
     def restore_record(self):
         entry = self._records.get(self._channel, {})
@@ -256,13 +337,12 @@ class UpdatesController(QObject):
     def check(self):
         if not self.canCheck:
             return
-        if self._source:
-            self.reference = source_reference(self.root)
-            if not self.reference:
-                self.restore_record()
-                self.changed.emit()
-                return
-            self.restore_record()
+        # Re-read right before the query: an update may have replaced either copy.
+        self.resolve_reference()
+        self.restore_record()
+        if not self.reference:
+            self.changed.emit()
+            return
         self._busy = True
         self._status = 'checking'
         self._opening_failed = False

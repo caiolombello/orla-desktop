@@ -201,9 +201,9 @@ class ViewTests(process.ProcessFixture):
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.qWait(40)
         self.assertTrue(unknowns.isVisible())
-        self.assertEqual(unknowns.property('text'), 'Dock instalada: não verificada\nDock em execução: não verificada')
+        self.assertEqual(unknowns.property('text'), 'Dock instalada: não encontrada para este usuário\nDock em execução: não verificada')
         self.assertTrue(details.hasActiveFocus())
-        self.assertIn('Não confirma a versão carregada no Plasma', self.item('updatesComponentScope').property('text'))
+        self.assertIn('pergunta ao Plasma quais docks ele carregou', self.item('updatesComponentScope').property('text'))
         self.assertEqual(self.argv, [])
         self.host.reference = dict(process.REF, role='bundle', component='workspace', origin='verified-manifest')
         self.host.changed.emit()
@@ -211,7 +211,7 @@ class ViewTests(process.ProcessFixture):
         self.assertEqual(reference.property('text'), '1.2.3')
         self.assertIn('esta cópia do Workspace', self.item('updatesReferenceOrigin').property('text'))
         self.assertIn('bundle verificado', self.item('updatesReferenceOrigin').property('text'))
-        self.assertEqual(unknowns.property('text'), 'Dock instalada: não verificada\nDock em execução: não verificada')
+        self.assertEqual(unknowns.property('text'), 'Dock instalada: não encontrada para este usuário\nDock em execução: não verificada')
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.qWait(40)
         self.assertFalse(unknowns.isVisible())
@@ -219,6 +219,67 @@ class ViewTests(process.ProcessFixture):
         QTest.keyClick(self.window, Qt.Key_Backtab)
         QTest.qWait(35)
         self.assertTrue(self.item('updatesChannel').hasActiveFocus())
+        self.assertEqual(self.argv, [])
+
+    def test_installed_dock_becomes_the_reference_with_its_origin(self):
+        package = self.path / 'data/plasma/plasmoids/org.caiodock.dock'
+        package.mkdir(parents=True)
+        (package / 'metadata.json').write_text(json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9'}}))
+        self.host.resolve_reference()
+        self.host.changed.emit()
+        QTest.qWait(30)
+        self.assertEqual(self.item('updatesReference').property('text'), '0.2.9')
+        self.assertEqual(self.item('updatesReferenceOrigin').property('text'), 'dock instalada para este usuário')
+        self.focus(self.item('updatesDetails'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(40)
+        versions = self.item('updatesComponentVersions')
+        self.assertTrue(versions.isVisible())
+        self.assertEqual(versions.property('text'), 'Dock instalada: 0.2.9 · metadados deste usuário\n'
+                         'Dock em execução: não verificada\nPacote fonte do dock: 1.2.3')
+        self.assertEqual(self.argv, [])
+
+    def test_running_dock_is_read_only_on_request_and_reports_each_state(self):
+        requests = []
+        self.host._running_probe = lambda parent, done: requests.append(done)
+        package = self.path / 'data/plasma/plasmoids/org.caiodock.dock'
+        package.mkdir(parents=True)
+        (package / 'metadata.json').write_text(json.dumps({'KPlugin': {'Id': 'org.caiodock.dock', 'Version': '0.2.9'}}))
+        self.host.resolve_reference()
+        self.host.changed.emit()
+        self.focus(self.item('updatesDetails'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(40)
+        versions, button, differs = self.item('updatesComponentVersions'), self.item('updatesReadRunning'), self.item('updatesRunningDiffers')
+        self.assertEqual(requests, [])
+        self.assertIn('Dock em execução: não verificada', versions.property('text'))
+        self.focus(button)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.window, Qt.Key_Return)
+        QTest.qWait(30)
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(self.host.readingRunning)
+        self.assertFalse(button.property('enabled'))
+        cases = [('found', ['0.2.9'], 'Dock em execução: 0.2.9 · lida do Plasma', False),
+                 ('found', ['0.2.8'], 'Dock em execução: 0.2.8 · lida do Plasma', True),
+                 ('found', ['0.2.8', '0.2.9'], 'Dock em execução: 0.2.8, 0.2.9 · lida do Plasma', True),
+                 ('absent', [], 'Dock em execução: não carregada no Plasma', False),
+                 ('unavailable', [], 'Dock em execução: não foi possível ler agora', False)]
+        for index, (status, found, line, mismatch) in enumerate(cases):
+            with self.subTest(status=status, found=found):
+                if index:
+                    self.host.readRunning()
+                requests[-1](status, found)
+                requests[-1](status, ['9.9.9'])  # a duplicate callback is ignored
+                QTest.qWait(30)
+                self.assertEqual(len(requests), index + 1)
+                self.assertFalse(self.host.readingRunning)
+                self.assertEqual(versions.property('text').split('\n')[1], line)
+                self.assertEqual(differs.isVisible(), mismatch)
+        self.host._running_probe = lambda parent, done: (_ for _ in ()).throw(RuntimeError('no bus'))
+        self.host.readRunning()
+        QTest.qWait(30)
+        self.assertEqual(versions.property('text').split('\n')[1], 'Dock em execução: não foi possível ler agora')
         self.assertEqual(self.argv, [])
 
     def test_future_saved_clock_stays_unreliable_after_formatting(self):
@@ -287,7 +348,7 @@ class ViewTests(process.ProcessFixture):
             for width in (320, 350, 420):
                 self.window.resize(width, 240)
                 self.focus(self.item('updatesCheck'))
-                for name in ('updatesChannel', 'updatesDetails', 'updatesRelease'):
+                for name in ('updatesChannel', 'updatesDetails', 'updatesReadRunning', 'updatesRelease'):
                     QTest.keyClick(self.window, Qt.Key_Tab)
                     QTest.qWait(40)
                     control = self.item(name)
@@ -298,7 +359,7 @@ class ViewTests(process.ProcessFixture):
                     self.assertLessEqual(point.x() + control.width() + 3, viewport.width() + 1, (scale, width, name))
                     self.assertGreaterEqual(point.y() - 3, -1, (scale, width, name))
                     self.assertLessEqual(point.y() + control.height() + 3, viewport.height() + 1, (scale, width, name))
-                for name in ('updatesDetails', 'updatesChannel', 'updatesCheck'):
+                for name in ('updatesReadRunning', 'updatesDetails', 'updatesChannel', 'updatesCheck'):
                     QTest.keyClick(self.window, Qt.Key_Backtab)
                     QTest.qWait(40)
                     self.assertTrue(self.item(name).hasActiveFocus(), (scale, width, name))

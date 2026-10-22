@@ -44,18 +44,39 @@ def read_regular(path):
     finally:
         os.close(fd)
 
+def _dock_reference(raw, role, origin):
+    plugin = strict_json(raw)['KPlugin']
+    if plugin['Id'] != 'org.caiodock.dock' or parse_version(plugin.get('Version')) is None:
+        return None
+    return dict(role=role, component='dock', origin=origin, version=plugin['Version'], commit=None, digest=hashlib.sha256(raw).hexdigest())
+
 def source_reference(root):
     try:
         path = Path(root) / 'package/metadata.json'
         if path.parent.is_symlink():
             return None
-        raw = read_regular(path)
-        plugin = strict_json(raw)['KPlugin']
-        if plugin['Id'] != 'org.caiodock.dock' or parse_version(plugin.get('Version')) is None:
-            return None
-        return dict(role='source', component='dock', origin='source-metadata', version=plugin['Version'], commit=None, digest=hashlib.sha256(raw).hexdigest())
+        return _dock_reference(read_regular(path), 'source', 'source-metadata')
     except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return None
+
+def installed_dock(data_home):
+    """Passive read of the dock installed for this user: (status, reference).
+
+    Only the user's own package directory is read. A system-wide package,
+    the copy Plasma has loaded and the publisher remain unverified.
+    """
+    path = Path(data_home) / 'plasma/plasmoids/org.caiodock.dock/metadata.json'
+    try:
+        raw = read_regular(path)
+    except FileNotFoundError:
+        return ('absent', None)
+    except (OSError, ValueError):
+        return ('invalid', None)
+    try:
+        reference = _dock_reference(raw, 'installed', 'user-plasmoid-metadata')
+    except (ValueError, KeyError, TypeError, RecursionError):
+        reference = None
+    return ('found', reference) if reference else ('invalid', None)
 CACHE_SCHEMA = 'orla-updates-desktop-cache-0.1'
 PREF_SCHEMA = 'orla-updates-preferences-0.1'
 
@@ -69,7 +90,10 @@ def valid_reference(value):
     commit = value['commit']
     if commit is not None and (not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit)):
         return False
-    return (value['role'], value['component'], value['origin']) == ('source', 'dock', 'source-metadata') and commit is None or (value['role'], value['component'], value['origin']) == ('bundle', 'workspace', 'verified-manifest')
+    kind = (value['role'], value['component'], value['origin'])
+    if kind in (('source', 'dock', 'source-metadata'), ('installed', 'dock', 'user-plasmoid-metadata')):
+        return commit is None
+    return kind == ('bundle', 'workspace', 'verified-manifest')
 
 def history_key(reference, channel):
     return dict(schema=CACHE_SCHEMA, source=SOURCE, channel=channel, reference=dict(reference))
@@ -193,6 +217,7 @@ class Store:
             return path if value and path.is_absolute() else home / default
         config = Path(root) / 'config' if root is not None else xdg('XDG_CONFIG_HOME', '.config')
         cache = Path(root) / 'cache' if root is not None else xdg('XDG_CACHE_HOME', '.cache')
+        self.data = Path(root) / 'data' if root is not None else xdg('XDG_DATA_HOME', '.local/share')
         self.preferences = config / 'orla/updates.json'
         self.cache = cache / 'orla/updates-desktop.json'
         self.blocked = set()
@@ -216,6 +241,9 @@ class Store:
                 self.blocked.add(path)
                 warning = 'read'
         return (channels, channel, warning)
+
+    def installed_dock(self):
+        return installed_dock(self.data)
 
     def save_preference(self, channel):
         if self.preferences in self.blocked:
