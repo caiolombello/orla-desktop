@@ -255,7 +255,10 @@ Fora do escopo de complementos, a mesma rodada observou dois defeitos anteriores
 da dock. O rótulo de hover troca o texto, mas permanece onde apareceu enquanto
 continua visível; volta ao lugar certo depois que um popup fecha, e o Qt
 Wayland registrou que o popup do rótulo não tinha pai transitório. O cabeçalho do
-calendário aparece em inglês acima do mês em português.
+calendário aparece em inglês acima do mês em português. Os dois foram
+corrigidos na camada seguinte (`115399a`, `6a5439d`) e conferidos na
+instalação após recarregar o Plasma: o rótulo acompanhou quatro blocos sem o
+aviso do Qt Wayland, e o título passou a “Outubro 2026”.
 
 Não houve instalação ou ativação de complemento, produtor ou exportação,
 esquema claro nativo, leitor de tela, vários monitores, troca de escala,

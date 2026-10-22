@@ -1077,7 +1077,9 @@ Item {
         id: calendarPopup
         objectName: "calendarPopup"
         dock: root
-        title: Qt.formatDate(root.now, "MMMM yyyy")
+        // Format strings in Qt.formatDate use the C locale; month names follow the user.
+        title: { const text = root.now.toLocaleDateString(Qt.locale(), "MMMM yyyy");
+            return text.charAt(0).toLocaleUpperCase() + text.slice(1); }
         CalendarAgenda {
             objectName: "calendarAgenda"
             dock: popupContext

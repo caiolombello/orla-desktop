@@ -95,7 +95,7 @@ ColumnLayout {
         if (isNaN(start.getTime())) return qsTr("Horário não disponível");
         if (isNaN(end.getTime())) return Qt.formatTime(start, "HH:mm");
         const endLabel = start.toDateString() === end.toDateString()
-            ? Qt.formatTime(end, "HH:mm") : Qt.formatDateTime(end, "d MMM, HH:mm");
+            ? Qt.formatTime(end, "HH:mm") : end.toLocaleString(Qt.locale(), "d MMM, HH:mm");
         return Qt.formatTime(start, "HH:mm") + " – " + endLabel;
     }
     onFixtureEventsChanged: refreshAgenda()

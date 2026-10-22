@@ -107,7 +107,7 @@ ColumnLayout {
                     Controls.Label {
                         Layout.fillWidth: true
                         visible: root.selected === "quota" && Boolean(modelData.resetAt || modelData.resetDescription)
-                        text: modelData.resetAt ? qsTr("Reinicia: %1").arg(Qt.formatDateTime(new Date(modelData.resetAt), "d MMM, HH:mm")) : modelData.resetDescription || ""
+                        text: modelData.resetAt ? qsTr("Reinicia: %1").arg(new Date(modelData.resetAt).toLocaleString(Qt.locale(), "d MMM, HH:mm")) : modelData.resetDescription || ""
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.dock.muted
