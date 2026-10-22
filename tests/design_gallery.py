@@ -30,6 +30,7 @@ from PySide6.QtTest import QTest, QSignalSpy
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS))
 MARGIN = 12
 POPUPS = (
@@ -826,6 +827,64 @@ class Gallery:
         window.close()
         engine.deleteLater()
 
+    def workspace(self, host: str) -> None:
+        """Real companion view/controller; no native layout or session access."""
+        from test_workspace_view import FixtureSession
+        from scripts.workspace_setup import WorkspaceController
+        session = FixtureSession()
+        template = json.loads((ROOT / "layouts/mac-inspired-topbar.json").read_text())
+        controller = WorkspaceController(session, template, ["DP-1"])
+        engine = self.engine()
+        engine.rootContext().setContextProperty("workspaceController", controller)
+        engine.load(QUrl.fromLocalFile(str(ROOT / "workspace/Workspace.qml")))
+        if not engine.rootObjects():
+            raise RuntimeError("workspace gallery window did not load")
+        window = engine.rootObjects()[0]
+        view = window.findChild(QQuickItem, "compositionView")
+
+        def wait():
+            for _ in range(200):
+                QTest.qWait(10)
+                if not controller.busy:
+                    return
+            raise RuntimeError("synthetic composition did not finish")
+
+        try:
+            controller.refresh("DP-1"); wait()
+            view.setProperty("connector", "DP-1")
+            view.setProperty("selectedPanels", [28])
+            for width in (350, 420):
+                window.resize(width, 620)
+                self.save(f"workspace-{host}-selection-{width}", window)
+            controller.prepareApply("DP-1", [28]); wait()
+            for width in (350, 420):
+                window.resize(width, 620)
+                self.save(f"workspace-{host}-review-{width}", window)
+            window.resize(350, 240)
+            focus = window.findChild(QQuickItem, "compositionConfirm")
+            QQmlExpression(QQmlEngine.contextForObject(focus), focus, "forceActiveFocus(Qt.TabFocusReason)").evaluate()
+            self.save(f"workspace-{host}-short-focus", window)
+            controller.discard()
+            session.phase = "COMMITTED"
+            controller.refresh("DP-1"); wait()
+            focus = window.findChild(QQuickItem, "compositionRestore")
+            QQmlExpression(QQmlEngine.contextForObject(focus), focus, "forceActiveFocus(Qt.TabFocusReason)").evaluate()
+            self.save(f"workspace-{host}-committed-short-focus", window)
+            window.resize(350, 620)
+            self.save(f"workspace-{host}-committed", window)
+            session.read_override = {"phase": "COMMITTED", "verificationUnavailable": True}
+            controller.refresh(""); wait()
+            self.save(f"workspace-{host}-unverified", window)
+            session.read_override = None
+            session.phase = "RECOVERY_REQUIRED"
+            controller.refresh("DP-1"); wait()
+            window.resize(350, 620)
+            self.save(f"workspace-{host}-recovery", window)
+        finally:
+            window.close()
+            engine.deleteLater()
+            QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
+
     def launcher(self) -> None:
         engine = self.engine()
         stubs = QQmlComponent(engine)
@@ -1132,6 +1191,7 @@ def render(host: str, output: Path) -> int:
     gallery.widget_order(host)
     gallery.bar(host)
     gallery.bar_settings(host)
+    gallery.workspace(host)
     if host == "dark":
         gallery.launcher()
     app.processEvents()

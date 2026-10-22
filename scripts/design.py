@@ -22,7 +22,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = Path("package/contents/code/Style.js")
 COPIES = (Path("bar/contents/code/Style.js"), Path("launcher/Style.js"))
-LINTED_GLOBS = ("package/contents/ui/*.qml", "bar/contents/ui/*.qml", "launcher/*.qml")
+LINTED_GLOBS = ("package/contents/ui/*.qml", "bar/contents/ui/*.qml", "launcher/*.qml", "workspace/*.qml")
 # Persisted user tokens and the token file itself are the only places for raw colors.
 JS_COLOR_ALLOWLIST = (CANONICAL, *COPIES, Path("package/contents/code/Appearance.js"))
 EXEMPT = "design-exempt:"

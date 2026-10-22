@@ -493,6 +493,13 @@ C1/X1/X2/DX2 continuam parciais. A sequência de produto é:
    optativa Só dock ↔ Dock + barra, mostrando o plano e reutilizando o helper e
    os bancos existentes; preservar painéis não selecionados. A opção de launcher
    continua independente e sujeita ao seu gate de pacote/instalação.
+   A primeira [janela de composição](docs/workspace-composition.md) já liga
+   seleção, revisão, apply/disable/restore e recuperação ao helper no checkout,
+   com testes sintéticos, foco e temas claro/escuro. Ainda exige serviço explícito,
+   Plasma 6.7.5 e widgets instalados; não é um companion distribuído/instalado.
+   Falta qualificar o fluxo nativo completo e a distribuição sem Source. Reativar
+   após desativar exige restaurar e revisar um novo plano; criação aditiva e
+   reativação direta continuam pendentes, sem um toggle que prometa essas transições.
 2. **Saber a versão e consultar updates no desktop (U1):** versão instalada/em
    execução com origem definida, canal, última consulta/cache e falhas explícitas;
    reutilizar a CLI limitada em processo próprio. Consultar não instala, e U2

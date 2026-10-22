@@ -11,9 +11,10 @@ import zipfile
 import caiodock
 
 
-# The optional menu is Source-only; its fixtures need bar/, which is not bundled.
+# The optional menu/window need bar/ and workspace/, which are not bundled.
 # Design checks and the gallery compare the bar and launcher token copies too.
-SOURCE_ONLY_TESTS = frozenset(("tests/test_bar.py", "tests/BarHarness.qml",
+SOURCE_ONLY_TESTS = frozenset(("tests/test_workspace_setup.py", "tests/test_workspace_view.py",
+                               "tests/test_bar.py", "tests/BarHarness.qml",
                                "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
                                "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",
                                "tests/native/run_control_center_audio.py", "tests/native/control_center_audio.conf.in",
