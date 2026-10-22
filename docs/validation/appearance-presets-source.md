@@ -175,7 +175,49 @@ preferências anteriores. Os valores parseados dos dois arquivos de configuraç�
 Plasma, barra, bancos/layout, launcher e seus três bindings permaneceram iguais,
 inclusive após a observação da UI. Nenhum perfil foi criado automaticamente.
 
-Escolher/Aplicar/Cancelar/Desfazer deste novo catálogo em perfil gerenciado
-continuam UNRUN no KDE real. Os testes e a prova nativa anterior da transação
-não substituem esse gesto novo. A captura nativa é privada e limitada à área
-de conteúdo; a galeria pública acima permanece sintética.
+Nesse primeiro ensaio, Escolher/Aplicar/Cancelar/Desfazer do novo catálogo em
+perfil gerenciado ficaram UNRUN. Os testes e a prova anterior da transação não
+substituíam esse gesto novo. A galeria acima permanece sintética.
+
+### Canary do catálogo gerenciado — 14/10/2026
+
+Na mesma sessão Plasma 6.7.5/Wayland, uma tela de 3840×2160 físicos e
+2648×1490 lógicos, foi criado pela UI um único perfil sintético. Não houve
+inicialização dos três perfis padrão, clipboard ou importação de JSON colado.
+Os quatro payloads foram obtidos do catálogo pela engine QML na Source
+congelada, idêntica ao catálogo instalado, e comparados com readbacks
+independentes do applet e do KConfig.
+
+| Escolha | Resultado delimitado |
+|---|---|
+| Essencial | Prévia sem gravação, Cancelar, Aplicar e Desfazer passaram. O popup mostrou o nome e a descrição em prévia. |
+| Maré | Tab/Espaço acionaram a escolha; prévia, Cancelar, Aplicar e Desfazer passaram. |
+| Estúdio | Tab/Shift+Tab/Enter, prévia, Cancelar e Aplicar passaram. Desfazer passou na recuperação com o painel temporariamente visível. |
+| Jogo | Tab/Espaço, prévia, Escape, Aplicar e Desfazer passaram. |
+
+Cada aplicação mudou somente `appearanceJSON` e os widgets do perfil próprio,
+mantendo os demais campos. Cada reversão confirmada devolveu o documento
+anterior, inclusive o JSON de aparência vazio. Dois cliques emitidos para
+Desfazer de Estúdio deixaram o documento aplicado intacto; os ACKs do bridge
+não testemunham o callback ou o controle atingido. A reabertura retrátil nesse
+estado também não foi qualificada. Tornar o painel visível permitiu observar
+o controle e confirmar a reversão. Não se atribui a falha anterior ao código
+de Undo ou a coordenadas sem uma reprodução causal.
+
+O auto-hide original foi restaurado. O primeiro readback físico ainda refletia
+a gravação anterior do Plasma; uma leitura posterior confirmou os mapas e
+modos originais, sem relaxar guardas. A volta a Preferências anteriores pela
+UI passou após selecionar a opção no dropdown observado; o roteiro inicial
+de teclado abriu o dropdown sem trocar o perfil e permanece registrado como
+falha. O cleanup removeu somente a chave própria `profilesJSON`, com Plasma
+parado, e iniciou o serviço uma vez. Configurações, dock de 67 arquivos, barra,
+launcher/CLI e bancos permaneceram preservados, sem substituir configurações
+inteiras. O serviço terminou ativo, com `Result=success` e `NRestarts=0`;
+dispositivos e janela de teste próprios foram removidos.
+
+![Prévia Essencial no KDE, perfil sintético](../screenshots/preset-catalog/native-essential-preview.png)
+
+Captura limitada ao popup próprio. Foco de retorno, número exato de setters,
+tecnologia assistiva, outras telas/escalas e o fluxo retrátil completo de
+Estúdio continuam sem qualificação. Não houve alteração de QML/JS neste lote;
+as suítes Source anteriores não foram repetidas. C1/UX1/X1 permanecem parciais.
