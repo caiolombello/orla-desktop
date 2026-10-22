@@ -133,6 +133,29 @@ class QuotaDockRoutingTests(IntegrationStateCase):
         self.assertEqual(self.answer_addons_until_idle(), 2)
         self.assertEqual(len([1 for service, _ in self.routed() if service == self.ADDONS]), 4)
 
+    def answer_round(self, percent):
+        """Answers one round in the order the host received it; returns that order."""
+        order = []
+        while self.state.property('addonCallPending') and len(order) < 3:
+            last = [args for service, args in self.routed() if service == self.ADDONS][-1]
+            order.append(last[0][0])
+            frame = peripheral_frame(percent=percent) if last == [['peripherals']] else quota_frame()
+            self.evaluate(f'reply({json.dumps(json.dumps(frame))}, false, "{self.ADDONS}")', self.transport)
+        return order
+
+    def test_the_reader_that_hands_over_its_turn_keeps_its_own_result(self):
+        # Installed dock: the waiting reader started inside the first one's settlement,
+        # and the first then dropped its validated result as if it had lost admission.
+        self.select(['quota', 'peripherals'])
+        self.assertEqual(self.answer_round(70), ['quota', 'peripherals'])
+        self.assertTrue(self.state.property('quotaAddonActive'))
+        self.assertEqual(self.evaluate('quota.source'), 'addon')
+        self.assertEqual(self.evaluate('peripherals.devices[0].percent'), 70)
+        self.evaluate('refresh()')
+        self.assertEqual(self.answer_round(60), ['peripherals', 'quota'])
+        self.assertEqual(self.evaluate('peripherals.devices[0].percent'), 60)
+        self.assertEqual(self.evaluate('quota.source'), 'addon')
+
     def test_opt_out_fixture_keeps_the_legacy_only_route(self):
         self.evaluate('addonQuotaEnabled = false')
         self.select(['quota'])

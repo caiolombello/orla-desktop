@@ -48,7 +48,7 @@ Item {
         onErrorCodeChanged: root.addonErrorChangedFrom(errorCode)
         onValueChanged: root.peripheralChanged(value)
         // The host runs one worker at a time: a reader refused for that reason reads next.
-        onCallPendingChanged: if (!callPending && quotaAddon.admissionWaiting) quotaAddon.refresh()
+        onCallPendingChanged: if (!callPending && quotaAddon.admissionWaiting) root.handTurnTo(quotaAddon)
     }
     AddonPeripheralsState {
         id: quotaAddon
@@ -65,7 +65,7 @@ Item {
         onLoadingChanged: root.addonLoading = loading || addons.loading
         onErrorCodeChanged: root.quotaErrorChangedFrom(errorCode)
         onValueChanged: root.quotaReadingChanged(value)
-        onCallPendingChanged: if (!callPending && addons.admissionWaiting) addons.refresh()
+        onCallPendingChanged: if (!callPending && addons.admissionWaiting) root.handTurnTo(addons)
     }
     QtObject {
         id: internal
@@ -212,6 +212,12 @@ Item {
         if (generation === internal.generation) { internal.legacy = value; syncSnapshot(); }
     }
     function unavailable(message) { publish(emptySnapshot(legacyModules), message); }
+    function handTurnTo(reader) {
+        // Wait until the finishing reader has handled its own result: starting now
+        // would make that reader see the other in flight and drop what it just read.
+        const lifetime = callbackLifetime;
+        Qt.callLater(function() { if (lifetime.alive && reader.admissionWaiting) reader.refresh(); });
+    }
     function queueLegacyRefresh(generation) {
         const lifetime = callbackLifetime;
         Qt.callLater(function() {
