@@ -18,6 +18,7 @@ Window {
     property var receipts: []
     property var openedHosts: []
     property bool clientsValid: true
+    property QtObject backendLifetimeFixture: null
     property alias popup: boundary
     property alias audio: audioState
     property alias backend: audioBackend
@@ -41,6 +42,7 @@ Window {
                 owner: ownerRoot
                 popup: boundary
                 audio: audioState
+                backendLifetime: fixture.backendLifetimeFixture
                 validateClient: candidate => fixture.clientsValid && (candidate === fixture.firstClient || candidate === fixture.secondClient)
                 performOpen: (host, anchor) => {
                     boundary.anchorControl = anchor;
@@ -67,7 +69,7 @@ Window {
         property alias nativeDialog: nativeBoundary
         signal aboutToHide()
         signal closed()
-        QtObject { id: nativeBoundary; property bool visible: false }
+        QtObject { id: nativeBoundary; property bool visible: false; property bool active: false }
         function open() { closing = false; nativeBoundary.visible = true; visible = true; }
         function close() {
             if (!visible || closing) return;

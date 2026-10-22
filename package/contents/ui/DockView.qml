@@ -814,6 +814,7 @@ Item {
             percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
         playing: root.mediaPlaying
         audio: audioControlState
+        backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available
                 && SharedControls.Registry.status === "ready" && SharedControls.Registry.owner === root;

@@ -10,6 +10,7 @@ DockPopup {
     property var player: null
     property var battery: null
     property var audio: null
+    property QtObject backendLifetime: null
     property bool playing: false
     property var validateClient: function(client) { return false; }
     readonly property alias host: session.host
@@ -42,6 +43,7 @@ DockPopup {
         owner: rootPopup.owner
         popup: rootPopup
         audio: rootPopup.audio
+        backendLifetime: rootPopup.backendLifetime
         validateClient: rootPopup.validateClient
         performOpen: function(host, anchor) {
             if (rootPopup.nativeBackend && !rootPopup.nativeDialog) return false;
