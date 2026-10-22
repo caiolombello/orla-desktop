@@ -19,6 +19,17 @@ mudança no launcher instalado ou qualificação de seu encerramento nativo.
 Nova CI e os gates de personalização continuam separados. Veja o
 [registro](docs/validation/appearance-presets-source.md).
 
+**Steam — navegação por teclado:** o teste Wayland do candidato instalado
+encontrou Tab sendo inserido no campo de raízes. A correção Source define
+Tab/Shift+Tab, pula ações indisponíveis e revela o controle focado após mudanças
+do conteúdo. Regressões causais e capturas em 440/660 px passaram nos estilos
+Fusion/KDE. O canary `c71ab6d` foi instalado e validado em Wayland: Localizar
+encontrou uma raiz sem ler jogos; Carregar mostrou 12 jogos e zero avisos,
+com Downloads inteiramente visível ao receber foco. Configuração Plasma,
+dock e barra permaneceram iguais. Seleção de jogo, execução, cliente e matriz
+de bibliotecas ainda estão abertos; S1 permanece parcial. Veja o
+[registro](docs/validation/steam-root-discovery-source.md).
+
 ## Resultado esperado
 
 Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado no Raycast e notificações configuráveis, integração com os projetos do Caio e instalação acessível para outras pessoas. A identidade Orla continua própria, com uma interface bonita, consistente e personalizável. Temas, widgets, comandos e provedores de IA poderão ser ampliados pela comunidade; autores poderão distribuir addons gratuitos ou comerciais conforme os contratos e políticas abaixo. Caio decide as prioridades e valida o uso diário. Este documento define a sequência proposta; os números de versão são marcos, sem promessa de datas.
