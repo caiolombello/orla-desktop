@@ -12,17 +12,21 @@ from datetime import datetime, timezone
 from http.client import HTTPException
 import json
 import multiprocessing
-import re
 import sys
 import time
 from typing import Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-SOURCE = "https://api.github.com/repos/caiolombello/orla-desktop/releases"
-RELEASE_PAGE_PREFIX = "/caiolombello/orla-desktop/releases/tag/"
+# Direct isolated-file execution resolves only this kit's pure contract.
+if not __package__:
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.updates_contract import (SOURCE, RELEASE_PAGE_PREFIX, MAX_VERSION_LENGTH,
+    SEMVER, parse_version as _parse_version, compare_versions as _compare,
+    safe_release_url as _safe_release_url, result as _result)
+
 API_VERSION = "2022-11-28"
 RESULTS_PER_PAGE = 50
 MAX_PAGES = 2
@@ -31,15 +35,6 @@ MAX_TOTAL_BYTES = 384 * 1024
 REQUEST_TIMEOUT_SECONDS = 5.0
 TOTAL_TIMEOUT_SECONDS = 12.0
 WORKER_REAP_SECONDS = 0.5
-MAX_VERSION_LENGTH = 128
-
-SEMVER = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
-    r"(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
-    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?"
-    r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
-)
-
 Transport = Callable[[str, float], tuple[int, dict[str, str], bytes]]
 
 
@@ -118,75 +113,6 @@ def _bounded_fetch(url: str, timeout: float, *, worker=_network_worker):
             process.join(WORKER_REAP_SECONDS)
             if process.is_alive():
                 raise OSError("network worker cleanup failed")
-
-
-def _parse_version(value: object, *, tag: bool = False):
-    if not isinstance(value, str) or not value or len(value) > MAX_VERSION_LENGTH:
-        return None
-    raw = value[1:] if tag and value.startswith("v") else value
-    if tag and not value.startswith("v"):
-        return None
-    match = SEMVER.fullmatch(raw)
-    if not match:
-        return None
-    major, minor, patch, prerelease, build = match.groups()
-    identifiers = tuple(prerelease.split(".")) if prerelease else ()
-    return raw, (int(major), int(minor), int(patch)), identifiers, build
-
-
-def _compare(left, right) -> int:
-    if left[1] != right[1]:
-        return -1 if left[1] < right[1] else 1
-    left_pre, right_pre = left[2], right[2]
-    if not left_pre or not right_pre:
-        if left_pre == right_pre:
-            return 0
-        return -1 if left_pre else 1
-    for a, b in zip(left_pre, right_pre):
-        if a == b:
-            continue
-        a_number, b_number = a.isdigit(), b.isdigit()
-        if a_number and b_number:
-            return -1 if int(a) < int(b) else 1
-        if a_number != b_number:
-            return -1 if a_number else 1
-        return -1 if a < b else 1
-    if len(left_pre) == len(right_pre):
-        return 0
-    return -1 if len(left_pre) < len(right_pre) else 1
-
-
-def _safe_release_url(value: object, tag: str) -> str | None:
-    if (not isinstance(value, str) or len(value) > 512
-            or any(ord(character) <= 32 or ord(character) == 127 for character in value)):
-        return None
-    try:
-        parsed = urlsplit(value)
-        hostname = parsed.hostname
-        port = parsed.port
-    except ValueError:
-        return None
-    expected_path = RELEASE_PAGE_PREFIX + tag
-    if (parsed.scheme != "https" or hostname != "github.com" or port is not None
-            or parsed.username is not None or parsed.password is not None
-            or parsed.query or parsed.fragment or unquote(parsed.path) != expected_path):
-        return None
-    return "https://github.com" + expected_path
-
-
-def _result(status: str, reason: str | None, installed: str | None, channel: str,
-            checked_at: str, available: str | None = None,
-            available_url: str | None = None) -> dict[str, object]:
-    return {
-        "status": status,
-        "reason": reason,
-        "source": SOURCE,
-        "installed_version": installed,
-        "available_version": available,
-        "available_url": available_url,
-        "channel": channel,
-        "checked_at": checked_at,
-    }
 
 
 def check_updates(installed_version: str, channel: str = "stable", *,

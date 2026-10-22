@@ -885,6 +885,68 @@ class Gallery:
             engine.deleteLater()
             QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
 
+    def updates(self, host: str) -> None:
+        """Actual service-free update window, synthetic separate CLI and history."""
+        from scripts.updates_desktop import UpdatesController
+        from scripts.updates_desktop_state import Store, history_key
+        from scripts.updates_contract import result
+        from datetime import datetime, timezone
+        reference=dict(role='source', component='dock', origin='source-metadata',
+                       version='1.2.3', commit=None, digest='a'*64)
+        mode={'status':'update_available'}
+        with tempfile.TemporaryDirectory(prefix='orla-updates-gallery-') as directory:
+            root=Path(directory)
+            def runner(_root, _reference, channel):
+                status=mode['status'];version='2.0.0' if status=='update_available' else None
+                url='https://github.com/caiolombello/orla-desktop/releases/tag/v2.0.0' if version else None
+                reason='network_error' if status=='unavailable' else 'rate_limit' if status=='rate_limited' else None
+                stamp=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+                data=result(status,reason,'1.2.3',channel,stamp,version,url)
+                helper=root/'fixture.py'
+                helper.write_text('import time;time.sleep(.7);print('+repr(json.dumps(data))+');raise SystemExit('+str(2 if reason else 0)+')')
+                return sys.executable,['-I','-B',str(helper)]
+            controller=UpdatesController(ROOT,reference,runner=runner,storage_root=root,opener=lambda url:True)
+            engine=self.engine();engine.rootContext().setContextProperty('updatesController',controller)
+            engine.load(QUrl.fromLocalFile(str(ROOT/'workspace/Updates.qml')))
+            if not engine.rootObjects():raise RuntimeError('updates gallery window did not load')
+            window=engine.rootObjects()[0]
+            def wait():
+                for _ in range(300):
+                    if not controller.busy:return
+                    QTest.qWait(10)
+                raise RuntimeError('synthetic check did not finish')
+            try:
+                for width in (320,350,420):
+                    window.resize(width,720);self.save(f'updates-{host}-initial-{width}',window)
+                window.resize(350,720);controller.check()
+                self.save(f'updates-{host}-checking',window);wait()
+                self.save(f'updates-{host}-newer',window)
+                mode['status']='no_release';controller.check();wait()
+                self.save(f'updates-{host}-no-release',window)
+                mode['status']='rate_limited';controller.check();wait()
+                self.save(f'updates-{host}-rate-limit',window)
+                stale=result('update_available',None,'1.2.3','stable','2026-01-01T12:00:00Z',
+                             '2.0.0','https://github.com/caiolombello/orla-desktop/releases/tag/v2.0.0')
+                record=dict(attemptedAt=stale['checked_at'],completedAt='2026-01-01T12:00:01Z',result=stale)
+                Store(root).save_history({'stable':dict(key=history_key(reference,'stable'),attempt=record,lastCompleted=record)})
+                old_controller=controller
+                controller=UpdatesController(ROOT,reference,runner=runner,storage_root=root,opener=lambda url:True)
+                window.setProperty('controller',controller)
+                self.save(f'updates-{host}-saved-stale-history',window)
+                mode['status']='unavailable';controller.check();wait()
+                self.save(f'updates-{host}-offline-history',window)
+                window.resize(350,240)
+                focus=window.findChild(QQuickItem,'updatesChannel');focus.forceActiveFocus(Qt.TabFocusReason)
+                self.save(f'updates-{host}-short-channel',window)
+                focus=window.findChild(QQuickItem,'updatesCheck');focus.forceActiveFocus(Qt.TabFocusReason)
+                self.save(f'updates-{host}-short-retry',window)
+                window.resize(420,720)
+                font=window.property('font');font.setPointSizeF(font.pointSizeF()*2);window.setProperty('font',font)
+                self.save(f'updates-{host}-large-text',window)
+            finally:
+                wait();window.close();engine.deleteLater()
+                QCoreApplication.sendPostedEvents(engine,QEvent.DeferredDelete)
+
     def launcher(self) -> None:
         engine = self.engine()
         stubs = QQmlComponent(engine)
@@ -1192,6 +1254,7 @@ def render(host: str, output: Path) -> int:
     gallery.bar(host)
     gallery.bar_settings(host)
     gallery.workspace(host)
+    gallery.updates(host)
     if host == "dark":
         gallery.launcher()
     app.processEvents()
@@ -1218,6 +1281,20 @@ def host_environment(host: str, config: Path) -> dict[str, str]:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv)>2 and argv[1]=='--render-updates':
+        app=QGuiApplication.instance() or QGuiApplication([])
+        gallery=Gallery(Path(argv[3]));gallery.updates(argv[2]);app.processEvents()
+        if gallery.warnings:
+            raise RuntimeError("\n".join(gallery.warnings))
+        return 0
+    if len(argv)>2 and argv[1]=='--updates-only':
+        output=Path(argv[2]);output.mkdir(parents=True,exist_ok=True)
+        for host in ('dark','light'):
+            with tempfile.TemporaryDirectory(prefix='orla-updates-scheme-') as config:
+                result=subprocess.run([sys.executable,'-B',__file__,'--render-updates',host,str(output)],
+                    cwd=ROOT,env=host_environment(host,Path(config)),timeout=60)
+                if result.returncode:return result.returncode
+        return 0
     if len(argv) > 2 and argv[1] == "--render":
         return render(argv[2], Path(argv[3]))
     output = Path(argv[1]) if len(argv) > 1 else ROOT / ".runtime/design-gallery"

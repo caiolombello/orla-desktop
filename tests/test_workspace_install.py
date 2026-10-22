@@ -1,5 +1,6 @@
-"""Private synthetic distribution tests; never launch a desktop or contact a bus."""
+"""Private distribution fixtures and offscreen GUI tests; no live desktop or bus."""
 import hashlib
+import importlib.util
 from contextlib import contextmanager
 import fcntl
 import io
@@ -17,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from unittest import mock
 
 from workspace import package
 from workspace import install
@@ -603,7 +605,7 @@ runpy.run_path(sys.argv[0],run_name='__main__')
         result = subprocess.run(['/bin/sh', '-c', 'set -- ' + decoded + '; printf "%s\\0" "$@"'],
                                 env=self.env, cwd=self.base, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.split(b'\0'), [os.fsencode(self.home / '.local/bin/orla-workspace'), b''])
+        self.assertEqual(result.stdout.split(b'\0'), [os.fsencode(self.home / '.local/bin/orla-workspace'), b'--updates', b''])
         self.assertFalse((self.base / 'PWN').exists())
 
     def test_old_tree_drift_prevents_destructive_staging_recovery(self):
@@ -848,6 +850,256 @@ class RecordWriteTests(unittest.TestCase):
         install._atomic(self.path, {'selector': 'new'})
         self.assertEqual(json.loads(self.path.read_bytes()), {'selector': 'new'})
         self.assertEqual(list(self.directory.iterdir()), [self.path])
+
+
+# Reuse the existing excluded suite: the dock contributor kit has no Workspace.
+
+def document_tree(root):
+    return {p.relative_to(root).as_posix():(p.read_bytes() if p.is_file() else None,
+                                           p.stat().st_mode,p.stat().st_ino)
+            for p in root.rglob('*')}
+
+
+def load(path,name):
+    spec=importlib.util.spec_from_file_location(name,path)
+    module=importlib.util.module_from_spec(spec);sys.modules[name]=module
+    spec.loader.exec_module(module)
+    return module
+
+
+class InstalledUpdatesFixture(unittest.TestCase):
+    def setUp(self):
+        self.fixture=InstallTests()
+        self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
+        self.base=self.fixture.base;self.paths=self.fixture.paths;self.env=self.fixture.env
+        self.home=self.fixture.home;self.archive=self.fixture.archive;self.sha=self.fixture.sha
+        # These GUI cases remain private even without the outer evidence runner.
+        for key, name in (("XDG_CACHE_HOME", "cache"), ("XDG_RUNTIME_DIR", "runtime")):
+            path=self.home/name;path.mkdir(mode=0o700)
+            self.env[key]=str(path)
+        self.env.update(QT_QPA_PLATFORM="offscreen",QT_QUICK_BACKEND="software",
+                        AT_SPI_BUS_ADDRESS="unix:path="+str(self.base/"absent-bus"))
+        environment=mock.patch.dict(os.environ,self.env,clear=True)
+        environment.start();self.addCleanup(environment.stop)
+
+    def put(self):return self.fixture.put()
+
+
+
+class UpdatesInstallTests(InstalledUpdatesFixture):
+    def test_three_receipted_outputs_route_menu_to_updates_and_action_to_composition(self):
+        self.put()
+        desktop=(self.paths.data_home/'applications/org.orla.Workspace.desktop').read_text()
+        self.assertIn('Name=Sobre e atualizações do Orla\n',desktop)
+        self.assertIn('Actions=Composition;\n',desktop)
+        action=desktop.split('[Desktop Action Composition]\n')[1]
+        self.assertIn('Name=Composição Orla\n',action)
+        execs=[line[5:] for line in desktop.splitlines() if line.startswith('Exec=')]
+        self.assertEqual(len(execs),2)
+        self.assertEqual(execs[0],execs[1]+' --updates')
+        selection=json.loads((self.paths.state/'current.json').read_text())
+        receipt=json.loads((self.paths.state/'receipts'/(selection['receipt']+'.json')).read_text())
+        self.assertEqual({p for p in receipt['files'] if not p.startswith(('tools/','versions/'))},{'controller','launcher','desktop'})
+        captured=[]
+        with mock.patch.object(install,'_supervise',side_effect=lambda command,**kw:captured.append((command,kw)) or 0):
+            self.assertEqual(install.launch(self.paths,updates=True),0)
+            self.assertEqual(install.launch(self.paths),0)
+        self.assertEqual(captured[0][0][-1],'--updates')
+        self.assertNotIn('--service',captured[0][0])
+        self.assertEqual(captured[1][0][-2:],['--service','test-plasma.service'])
+        self.assertIsInstance(captured[0][1]['lease'],int)
+
+    def test_mixed_flags_refuse_before_reading_state(self):
+        command=[sys.executable,'-I','-S','-B',str(SOURCE/'workspace/install.py'),'launch','--updates','--service','literal.service']
+        result=subprocess.run(command,env=self.env,cwd='/',capture_output=True,text=True,timeout=5)
+        self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+        self.assertFalse(self.paths.state.exists())
+        with self.assertRaisesRegex(install.InstallError,'invalid_arguments'):
+            install.launch(self.paths,updates=True,service='literal.service')
+
+    def test_actual_generated_desktop_opens_production_main_and_releases_lease(self):
+        self.put()
+        desktop=(self.paths.data_home/'applications/org.orla.Workspace.desktop').read_text()
+        encoded=next(line[5:] for line in desktop.splitlines() if line.startswith('Exec='))
+        general={'n':'\n','r':'\r','t':'\t','s':' ','\\':'\\'}
+        decoded=re.sub(r'\\([nrts\\])',lambda m:general[m[1]],encoded).replace('%%','%')
+        # Decode argument syntax only; do not execute interpolated desktop text.
+        result=subprocess.run(['/bin/sh','-c','set -- '+decoded+'; printf "%s\\0" "$@"'],env=self.env,cwd=self.base,capture_output=True,timeout=5)
+        argv=[os.fsdecode(value) for value in result.stdout.split(b'\0')[:-1]]
+        self.assertEqual(argv,[str(self.home/'.local/bin/orla-workspace'),'--updates'])
+        process=subprocess.Popen(argv,env=self.env,cwd='/',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        try:
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline:
+                # Wait for main to import its actual production GUI and signal handler.
+                children=Path('/proc',str(process.pid),'task',str(process.pid),'children').read_text().split()
+                if children:
+                    maps=Path('/proc',children[0],'maps')
+                    if maps.exists() and 'Qt6Quick' in maps.read_text():
+                        time.sleep(.3);break
+                self.assertIsNone(process.poll())
+                time.sleep(.02)
+            else:self.fail('installed production Qt surface did not start')
+            process.send_signal(signal.SIGTERM)
+            out,err=process.communicate(timeout=8)
+            self.assertEqual(process.returncode,0,out+err)
+            self.assertNotIn(b'Destroyed while process',err)
+        finally:
+            if process.poll() is None:process.send_signal(signal.SIGTERM)
+            process.communicate(timeout=8)
+        self.assertFalse(install.uninstall(self.paths)['installed'])
+
+    def test_shared_lease_survives_real_updates_close_and_check_cleanup(self):
+        self.put()
+        driver=self.base/'gui-fixture.py';helper=self.base/'offline-check.py'
+        marker=self.base/'gui.json';started=self.base/'check.pid';closing=self.base/'closing';barrier=self.base/'barrier'
+        helper.write_text("""import os,time,json,signal,sys
+marker,barrier=sys.argv[1:]
+child=os.fork()
+if child==0:
+ while True:time.sleep(.01)
+with open(marker,'w') as f:json.dump(dict(parent=os.getpid(),child=child),f)
+while not os.path.exists(barrier):time.sleep(.01)
+os.kill(child,signal.SIGKILL);os.waitpid(child,0)
+print(json.dumps(dict(status='no_release',reason=None,source='https://api.github.com/repos/caiolombello/orla-desktop/releases',installed_version='0.2.9',available_version=None,available_url=None,channel='stable',checked_at='2026-10-20T12:00:00Z')))
+""")
+        driver.write_text(r'''import json,os,sys,runpy
+from pathlib import Path
+root,helper,marker,started,closing,barrier=map(Path,sys.argv[1:])
+sys.path.insert(0,str(root))
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import qmlContext
+from PySide6.QtQuick import QQuickItem
+from scripts import updates_desktop
+updates_desktop.cli_command=lambda *_:(sys.executable,['-I','-B',str(helper),str(started),str(barrier)])
+app=QGuiApplication([]);timer=QTimer();clicked=False;errors=[]
+def inspect():
+ global clicked
+ try:
+  windows=[w for w in app.topLevelWindows() if w.objectName()=='updatesWindow']
+  if not windows:return
+  window=windows[0];host=qmlContext(window).contextProperty('updatesController')
+  assert not any(n in sys.modules for n in ('scripts.workspace_setup','scripts.panel_layout','workspace.install'))
+  if not clicked:
+   clicked=True
+   marker.write_text(json.dumps(dict(pid=os.getpid(),reference=host.reference)))
+   window.findChild(QQuickItem,'updatesCheck').clicked.emit()
+  if host.closePending:
+   assert host.busy,'close barrier must still own the active helper'
+   closing.touch();timer.stop()
+ except BaseException as error:errors.append(repr(error));app.exit(90)
+timer.timeout.connect(inspect);timer.start(20)
+QTimer.singleShot(12000,lambda:app.exit(91))
+sys.argv=[str(root/'workspace/main.py'),'--updates']
+try:runpy.run_path(sys.argv[0],run_name='__main__')
+except SystemExit as error:code=error.code
+assert not errors,errors
+raise SystemExit(code)
+''')
+        program=r'''import importlib.util,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installed_manager',sys.argv[1]);module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;spec.loader.exec_module(module)
+def command(root,service):
+ assert service is None
+ return [sys.executable,'-I','-B',sys.argv[2],str(root),*sys.argv[3:]]
+raise SystemExit(module.launch(module.InstallPaths.from_environment(),updates=True,command_factory=command))
+'''
+        for orphan in (False,True):
+            with self.subTest(supervisor_dies=orphan):
+                for path in (marker,started,closing,barrier):path.unlink(missing_ok=True)
+                command=[sys.executable,'-I','-B','-c',program,str(self.paths.base/'tools/install.py'),str(driver),str(helper),str(marker),str(started),str(closing),str(barrier)]
+                process=subprocess.Popen(command,env=self.env,cwd='/',stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                try:
+                    self.fixture.wait_file(started,process)
+                    gui=json.loads(marker.read_text())['pid']
+                    if orphan:
+                        process.kill();process.wait(timeout=3)
+                        os.kill(gui,signal.SIGTERM)
+                    else:process.send_signal(signal.SIGTERM)
+                    self.fixture.wait_file(closing,None if orphan else process)
+                    for action in (install.recover,install.rollback,install.uninstall):
+                        with self.assertRaisesRegex(install.InstallError,'busy_close_workspace'):action(self.paths)
+                    with self.assertRaisesRegex(install.InstallError,'busy_close_workspace'):
+                        install.update_archive(self.archive,paths=self.paths,expected_sha256=self.sha,expected_commit=COMMIT)
+                    if not orphan:self.assertIsNone(process.poll())
+                    children=json.loads(started.read_text())
+                    self.assertTrue(Path('/proc',str(children['parent'])).exists())
+                    self.assertTrue(Path('/proc',str(children['child'])).exists())
+                    barrier.touch()
+                    out,err=process.communicate(timeout=8)
+                    if not orphan:self.assertEqual(process.returncode,0,out+err)
+                    self.assertNotIn(b'Destroyed while process',err)
+                    deadline=time.monotonic()+8
+                    while True:
+                        try:install.recover(self.paths);break
+                        except install.InstallError as error:
+                            if error.code!='busy_close_workspace' or time.monotonic()>deadline:raise
+                            time.sleep(.02)
+                    for pid in children.values():self.assertFalse(Path('/proc',str(pid)).exists())
+                finally:
+                    barrier.touch()
+                    process.communicate(timeout=8)
+        self.assertFalse(install.uninstall(self.paths)['installed'])
+
+
+@unittest.skipUnless(os.environ.get('ORLA_OLD_WORKSPACE_TOOLS'),'retained old trusted tools are private qualification evidence')
+class FreshTrustTests(InstalledUpdatesFixture):
+    def test_frozen_old_refusal_uninstall_new_reinstall_and_same_format_lifecycle(self):
+        tools=Path(os.environ['ORLA_OLD_WORKSPACE_TOOLS'])
+        self.assertEqual(hashlib.sha256((tools/'install.py').read_bytes()).hexdigest(),'02938d34922d24a9c829837e2eb666e2e3cc3b9f779bf8a19e647b9ac4d53321')
+        self.assertEqual(hashlib.sha256((tools/'package.py').read_bytes()).hexdigest(),'aaff9294e5855015a008512e9e42e6e3404dc5314fff48ce68f54562cb0b3c93')
+        old=load(tools/'install.py','trusted_old_install');oldpackage=load(tools/'package.py','trusted_old_package')
+        oldroot=tools.parent/'baseline'
+        oldarchive=oldpackage.build(oldroot,self.base/'old-archive',commit='b'*40)
+        oldsha=hashlib.sha256(oldarchive.read_bytes()).hexdigest()
+        options=dict(paths=self.paths,expected_sha256=self.sha,expected_commit=COMMIT)
+        before=document_tree(self.home)
+        with self.assertRaisesRegex(old.InstallError,'invalid_entries'):
+            old.install_archive(self.archive,service='literal.service',**options)
+        self.assertEqual(document_tree(self.home),before)
+        with self.assertRaisesRegex(install.InstallError,'invalid_entries'):
+            install.install_archive(oldarchive,paths=self.paths,expected_sha256=oldsha,expected_commit='b'*40,service='literal.service')
+        self.assertEqual(document_tree(self.home),before)
+        old.install_archive(oldarchive,paths=self.paths,expected_sha256=oldsha,expected_commit='b'*40,service='literal.service')
+        before=document_tree(self.home)
+        with self.assertRaisesRegex(old.InstallError,'invalid_entries'):old.update_archive(self.archive,**options)
+        self.assertEqual(document_tree(self.home),before)
+        with self.assertRaisesRegex(install.InstallError,'unsupported_schema'):install.rollback(self.paths)
+        self.assertEqual(document_tree(self.home),before)
+        def interrupted(point):
+            if point=='after_intent':raise RuntimeError('bounded interruption')
+        with self.assertRaisesRegex(RuntimeError,'bounded interruption'):old.uninstall(self.paths,failpoint=interrupted)
+        with self.assertRaisesRegex(install.InstallError,'recovery_required'):
+            install.install_archive(self.archive,service='literal.service',**options)
+        self.assertFalse(old.recover(self.paths)['installed'])
+        self.assertFalse(self.paths.base.exists())
+        self.assertIsNone(json.loads((self.paths.state/'current.json').read_text()))
+        self.assertIsNone(json.loads((self.paths.state/'pending.json').read_text()))
+        frozen={p:(p.read_bytes(),p.stat().st_mode,p.stat().st_ino) for p in self.paths.state.rglob('*')
+                if p.is_file() and p.name not in ('current.json','pending.json')}
+        # Independently trusted new pair; no modification to installed old tools.
+        with self.assertRaisesRegex(RuntimeError,'bounded interruption'):
+            install.install_archive(self.archive,service='literal.service',failpoint=interrupted,**options)
+        self.assertEqual(install.recover(self.paths)['current'],self.sha)
+        for p,record in frozen.items():self.assertEqual((p.read_bytes(),p.stat().st_mode,p.stat().st_ino),record)
+        self.assertEqual((self.paths.base/'tools/install.py').read_bytes(),(SOURCE/'workspace/install.py').read_bytes())
+        self.assertEqual((self.paths.base/'tools/package.py').read_bytes(),(SOURCE/'workspace/package.py').read_bytes())
+        before=document_tree(self.home)
+        with self.assertRaisesRegex(install.InstallError,'invalid_entries'):
+            install.update_archive(oldarchive,paths=self.paths,expected_sha256=oldsha,expected_commit='b'*40)
+        with self.assertRaisesRegex(old.InstallError,'unsupported_schema'):old.rollback(self.paths)
+        self.assertEqual(document_tree(self.home),before)
+        (self.fixture.source/'LICENSE').write_text('synthetic next generation\n')
+        archive=package.build(self.fixture.source,self.base/'new-update',commit='c'*40)
+        sha=hashlib.sha256(archive.read_bytes()).hexdigest()
+        with self.assertRaisesRegex(RuntimeError,'bounded interruption'):
+            install.update_archive(archive,paths=self.paths,expected_sha256=sha,expected_commit='c'*40,failpoint=interrupted)
+        self.assertEqual(install.recover(self.paths)['current'],sha)
+        self.assertEqual(install.rollback(self.paths)['current'],self.sha)
+        self.assertEqual(install.rollback(self.paths)['current'],sha)
+        self.assertFalse(install.uninstall(self.paths)['installed'])
+        for p,record in frozen.items():self.assertEqual((p.read_bytes(),p.stat().st_mode,p.stat().st_ino),record)
 
 
 if __name__ == '__main__':

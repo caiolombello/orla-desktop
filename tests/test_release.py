@@ -17,7 +17,7 @@ class ReleaseBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
-            for name in ("release.py", "caiodock.py", "themes.py"):
+            for name in ("release.py", "caiodock.py", "themes.py", "__init__.py", "updates.py", "updates_contract.py", "updates_desktop.py", "updates_desktop_state.py", "orla.py", "panel_layout.py", "search_shortcut.py"):
                 shutil.copyfile(source / "scripts" / name, root / "scripts" / name)
             for name in ("LICENSE", "README.md", "README.pt-BR.md", "CONTRIBUTING.md",
                          "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore"):
@@ -46,7 +46,7 @@ class ReleaseBundleTests(unittest.TestCase):
             for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
                          "test_workspace_setup.py", "test_workspace_view.py",
                          "test_workspace_entry.py", "test_workspace_package.py",
-                         "test_workspace_install.py",
+                         "test_workspace_install.py", "test_updates_desktop_entry.py", "test_updates_desktop_process.py", "test_updates_desktop_cache.py", "test_updates_desktop_view.py",
                          "SharedControlCenterBarHarness.qml", "test_design_system.py", "design_gallery.py",
                          "native/control_center_audio.py", "native/control_center_audio_session.py",
                          "native/run_control_center_audio.py", "native/control_center_audio.conf.in"):
@@ -73,7 +73,7 @@ class ReleaseBundleTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 required = ("themes/examples/essential.json", "themes/examples/mare.json",
                             "themes/schema/theme-0.1-experimental.schema.json",
-                            "scripts/themes.py", "docs/theme-format.md", "tests/test_themes.py",
+                            "scripts/themes.py", "scripts/updates.py", "scripts/updates_contract.py", "scripts/__init__.py", "docs/theme-format.md", "tests/test_themes.py",
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
                             "package/contents/code/theme_format.py", "package/contents/code/theme_file.py",
                             "package/contents/ui/AppearanceState.qml", "package/contents/ui/AppearanceEditor.qml",
@@ -94,7 +94,8 @@ class ReleaseBundleTests(unittest.TestCase):
                         self.assertEqual(package_archive.read(name), (root / "package" / name).read_bytes())
                 self.assertFalse(any(".runtime/" in name or "private-link" in name
                                      or "__pycache__" in name for name in archive.namelist()))
-                for name in ("bar/main.qml", "tests/test_bar.py", "tests/BarHarness.qml",
+                for name in ("bar/main.qml", "scripts/updates_desktop.py", "scripts/updates_desktop_state.py",
+                             "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/BarHarness.qml",
                              "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                              "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                              "tests/test_workspace_install.py",
@@ -117,6 +118,13 @@ class ReleaseBundleTests(unittest.TestCase):
                     (kit / "themes/examples" / name).as_uri()
                 ], cwd=unpacked, check=True, capture_output=True, text=True, timeout=10)
                 self.assertEqual(json.loads(loaded.stdout)["theme"], json.loads(result.stdout)["theme"])
+            checked = subprocess.run([sys.executable, "-I", "-B", str(kit / "scripts/updates.py"), "check", "--installed-version", "invalid"], cwd=unpacked, capture_output=True, text=True, timeout=10)
+            self.assertEqual(checked.returncode, 2, checked.stderr)
+            self.assertEqual(json.loads(checked.stdout)["reason"], "invalid_input")
+            refused = subprocess.run([sys.executable, "-S", "-B", str(kit / "scripts/orla.py"), "updates", "desktop"], cwd=unpacked, capture_output=True, text=True, timeout=10)
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn("complete source checkout", refused.stderr)
+            self.assertNotIn("Traceback", refused.stderr)
             for line in first["SHA256SUMS"].decode("utf-8").splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(hashlib.sha256(first[name]).hexdigest(), digest)

@@ -54,6 +54,15 @@ class PackageCliTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("restore", result.stdout)
 
+    def test_updates_source_dispatch_is_lazy_and_forwards_root(self):
+        from types import SimpleNamespace
+        import scripts
+        launch = mock.Mock(return_value=0)
+        module=SimpleNamespace(launch=launch)
+        with mock.patch.object(scripts, 'updates_desktop', module, create=True), mock.patch.dict(sys.modules, {'scripts.updates_desktop':module}):
+            self.assertEqual(caiodock.main(['updates','desktop']),0)
+        launch.assert_called_once_with(Path(caiodock.__file__).resolve().parents[1])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

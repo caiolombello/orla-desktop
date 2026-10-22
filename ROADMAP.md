@@ -323,7 +323,17 @@ Para eventos próprios, decidir um único caminho visual por evento. Antes de as
 
 ### 0.9 — Updates e beta pública
 
-**Consulta experimental no código e no ZIP 0.2.6:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes; cache e preferências/interface no desktop continuam pendentes. O gerenciador separado do launcher já oferece update/rollback de payload e recuperação no Source; isso não conclui o updater da família em U2. O ZIP 0.2.6 inclui `scripts/updates.py`; o `.plasmoid` sozinho não contém CLI nem UI de updates. U1/U2 permanecem abertos.
+**Consulta experimental no código e no ZIP 0.2.6:** a [CLI de updates](docs/updates.md) compara uma versão informada com releases oficiais estáveis/beta, com respostas e processos de rede limitados. Dezessete testes offline e revisão independente passaram. Não detecta a versão da sessão nem instala pacotes. A fase A Source acrescenta janela independente, canal e histórico datado, com consulta explícita por CLI em processo separado; a fase B acrescenta candidato de bundle/entrada instalada qualificado em XDG privado; publicação/instalação na sessão e proveniência da dock continuam pendentes. O gerenciador separado do launcher já oferece update/rollback de payload e recuperação no Source; isso não conclui o updater da família em U2. O ZIP 0.2.6 inclui `scripts/updates.py`; o `.plasmoid` sozinho não contém CLI nem UI de updates. U1/U2 permanecem abertos.
+
+**U1 — fase A Source:** `python3 -B scripts/orla.py updates desktop` abre a UI
+passiva de Sobre e atualizações. A referência é o pacote fonte do dock, sem inferir
+versão instalada/em execução. Consultar é explícito, com processo limitado, cache
+por proveniência/canal e falhas visíveis. **Fase B, candidato privado:** bundle
+0.2 de 21 arquivos, entrada `--updates` sem serviço e menu Sobre e atualizações,
+com ação de composição. Recusa cruzada, reinstalação com ferramentas novas
+confiáveis, histórico preservado e lease até fechar/limpar a consulta foram
+exercitados em XDG sintético. Revisão/integração/publicação e instalação na sessão
+pertencem a Root; offscreen não qualifica Plasma, Wayland ou AT. U1 permanece parcial e U2 não foi implementado.
 
 - [ ] **U1: avisos de versão.** Fonte oficial de releases do Orla, versão instalada/disponível, canal estável/beta, última consulta, cache e estado indisponível. Aceite: offline, falha e limite de consultas não parecem “já atualizado”; consultar não instala.
 - [ ] **U2: atualizar com recuperação.** Download verificado, compatibilidade, cópia da configuração, instalação iniciada pelo usuário e retorno ao pacote anterior. Definir autenticidade dos artefatos e origem confiável antes de distribuir o updater. Aceite: pacote inválido é recusado e uma atualização interrompida preserva uma versão utilizável e os perfis.
@@ -506,9 +516,11 @@ C1/X1/X2/DX2 continuam parciais. A sequência de produto é:
    Continua exigindo serviço explícito, Plasma 6.7.5 e widgets instalados.
    Falta concluir o aceite do instalador e qualificar o fluxo nativo completo.
    A VM descartável teve imagem assinada, inputs e supervisor revisados. O primeiro
-   boot de preparação falhou com status 153; imagem e primeira falha foram
-   preservadas para diagnóstico. NativeRuntime e o ciclo da composição não foram
-   executados. Reativar
+   boot de preparação falhou com status 153 e foi preservado. Uma nova geração
+   passou na preparação e auditoria; o ciclo final parou por limite de arquivo no
+   KWin antes do resultado do driver. A correção foi aprovada; uma nova tentativa
+   chegou ao controlador e falhou na leitura inicial, sem a exceção original
+   disponível. O diagnóstico continua e o ciclo da composição permanece sem aceite. Reativar
    após desativar exige restaurar e revisar um novo plano; criação aditiva e
    reativação direta continuam pendentes, sem um toggle que prometa essas transições.
 2. **Saber a versão e consultar updates no desktop (U1):** versão instalada/em

@@ -39,6 +39,21 @@ jobs:
       - name: Verify private D-Bus runner
         run: command -v dbus-run-session
 
+      - name: Verify passive update desktop with isolated user state
+        run: |
+          umask 077
+          ORLA_UPDATES_TEST_ROOT="$RUNNER_TEMP/orla-updates-tests"
+          mkdir -p "$ORLA_UPDATES_TEST_ROOT"/{home,config,cache,data,state,runtime,tmp}
+          export HOME="$ORLA_UPDATES_TEST_ROOT/home"
+          export XDG_CONFIG_HOME="$ORLA_UPDATES_TEST_ROOT/config" XDG_CACHE_HOME="$ORLA_UPDATES_TEST_ROOT/cache"
+          export XDG_DATA_HOME="$ORLA_UPDATES_TEST_ROOT/data" XDG_RUNTIME_DIR="$ORLA_UPDATES_TEST_ROOT/runtime"
+          export XDG_STATE_HOME="$ORLA_UPDATES_TEST_ROOT/state"
+          export TMPDIR="$ORLA_UPDATES_TEST_ROOT/tmp" PYTHONPATH=tests
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$ORLA_UPDATES_TEST_ROOT/absent-session"
+          export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$ORLA_UPDATES_TEST_ROOT/absent-system"
+          unset DISPLAY WAYLAND_DISPLAY AT_SPI_BUS_ADDRESS SESSION_MANAGER
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_updates_desktop*.py' -v
+
       - name: Run portable tests
         run: |
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v

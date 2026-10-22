@@ -418,6 +418,8 @@ def parser() -> argparse.ArgumentParser:
     preview_parser = subparsers.add_parser("preview", help="run plasmawindowed with temporary XDG user directories")
     preview_parser.add_argument("--project-root")
     preview_parser.add_argument("--timeout", type=float, help="stop the preview after this many seconds")
+    updates_parser = subparsers.add_parser("updates", help="optional read-only release window")
+    updates_parser.add_subparsers(dest="updates_action", required=True).add_parser("desktop")
     launcher_parser = subparsers.add_parser("launcher", help="install and manage the optional Orla Launcher")
     launcher_commands = launcher_parser.add_subparsers(dest="launcher_action", required=True)
     launcher_install = launcher_commands.add_parser("install", help="install a verified launcher archive for this user")
@@ -481,6 +483,21 @@ def main(argv: list[str] | None = None) -> int:
             elif args.launcher_action == "service":
                 arguments.append(args.action)
             return module.main(arguments)
+        elif args.command == "updates":
+            root = Path(__file__).resolve().parents[1]
+            required = ("workspace/Updates.qml", "scripts/updates.py", "scripts/updates_contract.py",
+                        "scripts/updates_desktop.py", "scripts/updates_desktop_state.py", "scripts/__init__.py",
+                        "package/metadata.json", "package/contents/code/Style.js",
+                        "package/contents/ui/Card.qml", "package/contents/ui/OrlaButton.qml")
+            if any(not (root / name).is_file() or (root / name).is_symlink() for name in required):
+                raise PackageError("updates desktop requires a complete source checkout")
+            if not __package__:
+                sys.path.insert(0, str(root))
+            try:
+                from scripts.updates_desktop import launch
+            except ImportError as exc:
+                raise PackageError("updates desktop requires PySide6 6.11 or newer") from exc
+            return launch(root)
         elif args.command == "layout":
             if __package__:
                 from . import panel_layout

@@ -21,6 +21,8 @@ PAYLOAD = (
     "package/contents/code/Style.js", "package/contents/ui/Card.qml",
     "package/contents/ui/OrlaButton.qml", "workspace/main.py", "workspace/package.py",
     "workspace/__init__.py", "scripts/__init__.py",
+    "workspace/Updates.qml", "scripts/updates.py", "scripts/updates_contract.py",
+    "scripts/updates_desktop_state.py", "scripts/updates_desktop.py",
 )
 
 
@@ -61,7 +63,7 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(archive.read(name), content)
             manifest = json.loads(archive.read("manifest.json"))
         self.assertEqual(set(manifest), {"schema", "component", "version", "commit", "runtime", "files"})
-        self.assertEqual(manifest["schema"], "orla-workspace-package-0.1")
+        self.assertEqual(manifest["schema"], "orla-workspace-package-0.2")
         self.assertEqual(manifest["component"], "workspace")
         self.assertEqual(manifest["version"], "0.2.9")
         self.assertEqual(manifest["commit"], COMMIT)
@@ -272,7 +274,7 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         verified = json.loads(result.stdout)
-        self.assertEqual(verified["fileCount"], 16)
+        self.assertEqual(verified["fileCount"], 21)
         self.assertEqual(verified["commit"], COMMIT)
         self.assertEqual(verified["version"], "0.2.9")
         self.assertNotIn("files", verified)
