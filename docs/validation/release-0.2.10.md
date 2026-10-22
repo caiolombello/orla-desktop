@@ -61,7 +61,16 @@ refeito sobre esse `main`.
 Antes da publicação, rodaram localmente:
 
 - `tests/test_release.py`, que agora exige `addons/` no ZIP e falha sem ela;
-- duas builds de release do mesmo commit, comparadas byte a byte.
+- duas builds de release do mesmo commit, comparadas byte a byte;
+- cada um dos 57 módulos `tests/test_*.py` incluídos no ZIP, rodado de dentro do
+  pacote extraído, um processo por módulo, com Qt offscreen e estilo Fusion.
+
+Essa rodada pelo pacote achou testes que dependiam de pastas que ficam fora do
+ZIP: `addons/`, `bar/`, `layouts/`, `workspace/` e dois helpers de updates do
+desktop. Agora a pasta `addons/` entra no ZIP e o teste da barra fica de fora.
+Os quatro casos que precisam das outras pastas pulam só quando elas faltam e
+continuam rodando no checkout e na CI. Os pulos restantes já existiam: KDE
+ausente no calendário e casos nativos de TaskManager.
 
 ## Não qualificado
 
