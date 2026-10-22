@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Templates as Templates
+import "../code/Style.js" as Style
 
 ColumnLayout {
     id: editor
     required property var appearance
     signal canceled()
-    spacing: 8
+    spacing: Style.space.sm
     function reveal(control) {
         const viewport = fields.contentItem;
         const point = control.mapToItem(viewport, 0, 0);
@@ -19,6 +21,8 @@ ColumnLayout {
         text: qsTr("Prévia no dock. Aplicar salva; Cancelar ou fechar descarta a prévia.")
         wrapMode: Text.WordWrap
         textFormat: Text.PlainText
+        font.pixelSize: Style.type.caption
+        opacity: 0.72
     }
     Controls.ScrollView {
         id: fields
@@ -29,19 +33,75 @@ ColumnLayout {
         clip: true
         ColumnLayout {
             width: fields.availableWidth
-            spacing: 8
-            Controls.Label { text: qsTr("Ponto de partida"); font.bold: true }
+            spacing: Style.space.sm
+            SectionLabel { text: qsTr("Ponto de partida") }
             RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.space.sm
                 Repeater {
                     model: [{key: "glass", label: "Vidro"}, {key: "midnight", label: "Meia-noite"}, {key: "paper", label: "Papel"}]
-                    Controls.Button {
+                    // Theme card: a miniature of the dock body with its accent.
+                    Templates.Button {
+                        id: themeCard
                         required property var modelData
+                        readonly property var theme: Style.dockTheme(modelData.key)
                         objectName: "appearanceTheme" + modelData.key
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitWidth: implicitContentWidth + leftPadding + rightPadding
+                        implicitHeight: implicitContentHeight + topPadding + bottomPadding
+                        padding: Style.space.sm
                         text: modelData.label
                         checkable: true
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: text
                         checked: editor.appearance.draft && editor.appearance.draft.baseTheme === modelData.key
                         onActiveFocusChanged: if (activeFocus) editor.reveal(this)
                         onClicked: editor.appearance.selectTheme(modelData.key)
+                        contentItem: ColumnLayout {
+                            spacing: Style.space.xs + 2
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 26
+                                radius: Style.radius.control
+                                color: themeCard.theme.surface
+                                border.width: 1
+                                border.color: themeCard.theme.border
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: Style.space.xs
+                                    Repeater {
+                                        model: 3
+                                        Rectangle {
+                                            required property int index
+                                            width: Style.space.sm + 2
+                                            height: width
+                                            radius: width / 2
+                                            color: index === 1 ? themeCard.theme.accent : Style.alpha(themeCard.theme.foreground, 0.55)
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: themeCard.text
+                                textFormat: Text.PlainText
+                                font.pixelSize: Style.type.label
+                                font.weight: themeCard.checked ? Style.weight.demiBold : Style.weight.medium
+                                color: themeCard.palette.windowText
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                            }
+                        }
+                        background: Rectangle {
+                            radius: Style.radius.card - 2
+                            color: themeCard.checked ? Style.alpha(themeCard.palette.highlight, 0.12)
+                                : themeCard.hovered ? Style.alpha(themeCard.palette.windowText, Style.state.hover) : "transparent"
+                            border.width: themeCard.checked || themeCard.visualFocus ? 2 : 1
+                            border.color: themeCard.checked || themeCard.visualFocus ? themeCard.palette.highlight
+                                : Style.alpha(themeCard.palette.windowText, 0.12)
+                        }
                     }
                 }
             }
@@ -131,60 +191,82 @@ ColumnLayout {
                     textFormat: Text.PlainText
                 }
             }
-            Controls.Label { text: qsTr("Cores · #RRGGBB"); font.bold: true }
-            Repeater {
-                model: [{key: "foreground", label: qsTr("Texto")}, {key: "muted", label: qsTr("Texto secundário")},
-                    {key: "accent", label: qsTr("Destaque")}, {key: "surface", label: qsTr("Superfície")}, {key: "border", label: qsTr("Borda")}]
-                RowLayout {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap }
-                    Rectangle {
-                        implicitWidth: 20; implicitHeight: 20; radius: 4
-                        color: editor.appearance.effective.tokens[modelData.key]
-                        border.color: "#808080"
-                    }
-                    Controls.TextField {
-                        objectName: "appearanceColor" + modelData.key
-                        Layout.preferredWidth: 104
-                        Accessible.name: modelData.label + qsTr(" · cor hexadecimal")
-                        selectByMouse: true
-                        maximumLength: 16
-                        text: editor.appearance.draft ? editor.appearance.draft.tokens[modelData.key] : ""
-                        onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                        onTextEdited: editor.appearance.setToken(modelData.key, text)
-                    }
-                }
-            }
-            Controls.Label { text: qsTr("Forma e movimento"); font.bold: true }
-            Repeater {
-                model: [{key: "opacity", label: qsTr("Opacidade (%)"), minimum: 40, maximum: 100, scale: 100},
-                    {key: "radius", label: qsTr("Cantos (px)"), minimum: 0, maximum: 32, scale: 1},
-                    {key: "spacing", label: qsTr("Espaçamento (px)"), minimum: 0, maximum: 16, scale: 1},
-                    {key: "iconSize", label: qsTr("Ícones (px)"), minimum: 24, maximum: 64, scale: 1}]
-                RowLayout {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap }
-                    Controls.SpinBox {
-                        objectName: "appearanceNumber" + modelData.key
-                        Accessible.name: modelData.label
-                        from: modelData.minimum; to: modelData.maximum
-                        value: editor.appearance.draft ? Math.round(editor.appearance.draft.tokens[modelData.key] * modelData.scale) : from
-                        onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                        onValueModified: editor.appearance.setToken(modelData.key, value / modelData.scale)
+            SectionLabel { text: qsTr("Cores · #RRGGBB") }
+            Card {
+                Layout.fillWidth: true
+                padding: 0
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+                    Repeater {
+                        id: colorRows
+                        model: [{key: "foreground", label: qsTr("Texto")}, {key: "muted", label: qsTr("Texto secundário")},
+                            {key: "accent", label: qsTr("Destaque")}, {key: "surface", label: qsTr("Superfície")}, {key: "border", label: qsTr("Borda")}]
+                        FormRow {
+                            required property var modelData
+                            required property int index
+                            last: index === colorRows.count - 1
+                            Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                            Rectangle {
+                                implicitWidth: Style.size.iconMd; implicitHeight: Style.size.iconMd; radius: width / 2
+                                color: editor.appearance.effective.tokens[modelData.key]
+                                border.color: Style.alpha(palette.windowText, 0.3)
+                            }
+                            Controls.TextField {
+                                objectName: "appearanceColor" + modelData.key
+                                Layout.preferredWidth: 96
+                                Accessible.name: modelData.label + qsTr(" · cor hexadecimal")
+                                selectByMouse: true
+                                maximumLength: 16
+                                text: editor.appearance.draft ? editor.appearance.draft.tokens[modelData.key] : ""
+                                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                                onTextEdited: editor.appearance.setToken(modelData.key, text)
+                            }
+                        }
                     }
                 }
             }
-            Controls.CheckBox {
-                objectName: "appearanceReducedMotion"
-                text: qsTr("Movimento reduzido")
-                checked: editor.appearance.draft ? editor.appearance.draft.tokens.reducedMotion : false
-                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
-                onToggled: editor.appearance.setToken("reducedMotion", checked)
+            SectionLabel { text: qsTr("Forma e movimento") }
+            Card {
+                Layout.fillWidth: true
+                padding: 0
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+                    Repeater {
+                        model: [{key: "opacity", label: qsTr("Opacidade (%)"), minimum: 40, maximum: 100, scale: 100},
+                            {key: "radius", label: qsTr("Cantos (px)"), minimum: 0, maximum: 32, scale: 1},
+                            {key: "spacing", label: qsTr("Espaçamento (px)"), minimum: 0, maximum: 16, scale: 1},
+                            {key: "iconSize", label: qsTr("Ícones (px)"), minimum: 24, maximum: 64, scale: 1}]
+                        FormRow {
+                            required property var modelData
+                            Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                            Controls.SpinBox {
+                                objectName: "appearanceNumber" + modelData.key
+                                Accessible.name: modelData.label
+                                from: modelData.minimum; to: modelData.maximum
+                                value: editor.appearance.draft ? Math.round(editor.appearance.draft.tokens[modelData.key] * modelData.scale) : from
+                                onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                                onValueModified: editor.appearance.setToken(modelData.key, value / modelData.scale)
+                            }
+                        }
+                    }
+                    FormRow {
+                        last: true
+                        Controls.CheckBox {
+                            objectName: "appearanceReducedMotion"
+                            Layout.fillWidth: true
+                            text: qsTr("Movimento reduzido")
+                            checked: editor.appearance.draft ? editor.appearance.draft.tokens.reducedMotion : false
+                            onActiveFocusChanged: if (activeFocus) editor.reveal(this)
+                            onToggled: editor.appearance.setToken("reducedMotion", checked)
+                        }
+                    }
+                }
             }
-            Controls.Button {
+            OrlaButton {
                 objectName: "appearanceDefaults"
+                variant: "ghost"
                 text: qsTr("Restaurar aparência anterior ao editor")
                 Layout.fillWidth: true
                 onActiveFocusChanged: if (activeFocus) editor.reveal(this)
@@ -212,8 +294,10 @@ ColumnLayout {
     }
     RowLayout {
         Layout.fillWidth: true
-        Controls.Button { objectName: "appearanceApply"; text: qsTr("Aplicar"); enabled: editor.appearance.canApply; onClicked: editor.appearance.apply() }
-        Controls.Button { objectName: "appearanceCancel"; text: qsTr("Cancelar"); onClicked: { editor.appearance.cancel(); editor.canceled(); } }
-        Controls.Button { objectName: "appearanceUndo"; text: qsTr("Desfazer"); enabled: editor.appearance.canUndo; onClicked: editor.appearance.undo() }
+        spacing: Style.space.sm
+        OrlaButton { objectName: "appearanceApply"; variant: "primary"; text: qsTr("Aplicar"); enabled: editor.appearance.canApply; onClicked: editor.appearance.apply() }
+        OrlaButton { objectName: "appearanceCancel"; text: qsTr("Cancelar"); onClicked: { editor.appearance.cancel(); editor.canceled(); } }
+        Item { Layout.fillWidth: true }
+        OrlaButton { objectName: "appearanceUndo"; variant: "ghost"; text: qsTr("Desfazer"); enabled: editor.appearance.canUndo; onClicked: editor.appearance.undo() }
     }
 }

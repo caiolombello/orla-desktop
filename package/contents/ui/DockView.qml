@@ -7,6 +7,7 @@ import org.kde.taskmanager as TaskManager
 import org.kde.plasma.private.mpris as Mpris
 import "../code/Logic.js" as Logic
 import "../code/Profiles.js" as Profiles
+import "../code/Style.js" as Style
 
 Item {
     id: root
@@ -42,7 +43,13 @@ Item {
     readonly property color foreground: appearanceState.effective.tokens.foreground
     readonly property color muted: appearanceState.effective.tokens.muted
     readonly property color accent: appearanceState.effective.tokens.accent
-    readonly property color surface: appearanceState.overridden ? appearanceState.effective.tokens.surface : light ? "#f4f0e8" : presentation.appearance.theme === "midnight" ? "#111923" : "#db283542"
+    readonly property color surface: appearanceState.overridden ? appearanceState.effective.tokens.surface
+        : light ? Style.dockThemes.paper.surface : presentation.appearance.theme === "midnight" ? Style.dockThemes.midnight.surface
+        : Style.alpha(Style.dockThemes.glass.surface, Style.dockThemes.glass.opacity)
+    // Custom tokens can make any theme light; depth effects follow the real surface.
+    readonly property bool lightSurface: Style.luminance(surface) > 0.4
+    // Popups and menus follow the system color scheme's lightness (see DESIGN_SYSTEM.md).
+    readonly property var popupScheme: Style.scheme(Style.schemeFor(systemColors.Kirigami.Theme.backgroundColor))
     readonly property int motion: appearanceState.effective.tokens.reducedMotion ? 0 : Kirigami.Units.shortDuration
     readonly property int requestedIconSize: appearanceState.effective.tokens.iconSize
     readonly property int tileSize: Math.max(16, Math.min(requestedIconSize, height > 0 ? height - 36 : requestedIconSize))
@@ -61,7 +68,9 @@ Item {
         && candidateEventSlotWidth >= 48
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
     readonly property int centerViewportWidth: innerWidth
-    implicitWidth: content.implicitWidth + 24
+    // The legacy lane reserves 4 px after the content; the glass skips it.
+    readonly property int trailingReserve: 4
+    implicitWidth: content.implicitWidth + root.outerMargin * 2 + trailingReserve
     implicitHeight: requestedIconSize + 38
 
     ProfileState {
@@ -103,13 +112,38 @@ Item {
             return profileState.commitPresentation({appearance: {appearanceJSON: next}}, scope, profileState.revision);
         }
     }
+    // Samples the system scheme. Keep it visible: hidden items report black.
+    Item {
+        id: systemColors
+        width: 0
+        height: 0
+        Kirigami.Theme.inherit: false
+        Kirigami.Theme.colorSet: Kirigami.Theme.Window
+    }
+    // Colors for content inside popups; dock tokens only style the dock body.
     QtObject {
-        id: calendarContext
+        id: popupContext
         readonly property var configuration: ({calendarEvents: root.presentation.calendarEvents})
         readonly property date now: root.now
-        readonly property color foreground: root.foreground
-        readonly property color muted: root.muted
-        readonly property color background: root.surface
+        readonly property color foreground: root.popupScheme.text
+        readonly property color muted: root.popupScheme.textMuted
+        readonly property color accent: root.popupScheme.accent
+        readonly property color background: root.popupScheme.surface
+    }
+    // Floating name label (DockLabel) follows the hovered slot in Plasma.
+    property Item labelTarget: null
+    readonly property bool popupOpen: settings.visible || addDialog.visible || calendarPopup.visible
+        || integrationPopup.visible || controlCenterPopup.visible || pomodoroPopup.visible
+        || musicPopup.visible || batteryPopup.visible || nativeTaskMenu.visible || taskMenu.visible
+    function hoverTile(tile, hovered) {
+        if (hovered) labelTarget = tile;
+        else if (labelTarget === tile) labelTarget = null;
+    }
+    Loader {
+        objectName: "dockLabelLoader"
+        property var labelOwner: root
+        active: root.nativePopups
+        source: active ? Qt.resolvedUrl("DockLabel.qml") : ""
     }
     function widgetVisible(id) { const widget = presentation.widgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
@@ -332,6 +366,7 @@ Item {
     Mpris.Mpris2Model { id: media }
     property var mediaSource: media
     readonly property var player: mediaSource ? mediaSource.currentPlayer : null
+    readonly property bool mediaPlaying: musicControls.mediaState.playing
     SystemBattery {
         id: power
         objectName: "systemBattery"
@@ -366,16 +401,35 @@ Item {
     }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
+    // Glass slab: hugs the slot row like the macOS dock and leaves the rest of the
+    // panel transparent. Tokens still drive its color, radius, border and opacity.
+    readonly property int glassHeight: Math.min(height, tileSize + 16 + Style.dock.glassPadding * 2)
+    readonly property real glassTop: dockSurface.y
+    GlassShadow {
+        target: dockSurface
+        radius: dockSurface.radius
+        strength: root.lightSurface ? Style.glass.shadowLight : Style.glass.shadowDark
+        blur: Style.space.sm + Style.space.xs
+        offset: Style.space.xxs
+    }
     Rectangle {
+        id: dockSurface
         objectName: "dockSurface"
-        anchors.fill: parent
+        x: root.outerMargin - Style.dock.glassInset
+        width: Math.max(0, root.width - 2 * x - root.trailingReserve)
+        height: root.glassHeight
+        y: Math.round((root.height - height) / 2)
         radius: appearanceState.effective.tokens.radius
         color: root.surface
         opacity: appearanceState.overridden ? appearanceState.effective.tokens.opacity : 1
         border.width: 1
         border.color: appearanceState.effective.tokens.border
         Behavior on color { ColorAnimation { duration: root.motion } }
-        Rectangle { x: 16; y: 1; width: parent.width - 32; height: 1; color: root.light ? "#ffffff" : "#526482"; opacity: 0.55 }
+        GlassRim {
+            anchors.fill: parent
+            radius: Math.min(parent.radius, parent.height / 2)
+            light: root.lightSurface
+        }
     }
     Tile {
         id: settingsButton
@@ -383,9 +437,13 @@ Item {
         parent: settingsPlaceholder
         anchors.verticalCenter: parent.verticalCenter
         iconSource: Qt.resolvedUrl("../images/orla.svg")
-        iconSize: root.tileSize - 10
+        iconSize: root.tileSize
+        // The local-events lane math reserves this width for the first slot.
+        implicitWidth: root.tileSize + 6
         foreground: root.accent; accent: root.accent; animationDuration: root.motion
         tooltip: qsTr("Personalizar Orla Dock")
+        nativeLabel: root.nativePopups
+        onHoveredChanged: root.hoverTile(this, hovered)
         onActiveFocusChanged: if (activeFocus) root.revealInViewport(settingsButton)
         onClicked: settings.openAt(settingsButton)
     }
@@ -393,18 +451,21 @@ Item {
         id: settingsDivider
         parent: settingsDividerPlaceholder
         anchors.centerIn: parent
-        width: 1
-        height: 30
-        color: root.muted
-        opacity: 0.3
+        // Like Finder, the Orla slot needs no separator; the lane keeps its width.
+        visible: false
+        width: Style.size.divider
+        height: Math.round(root.tileSize * 0.72)
+        radius: width / 2
+        color: Style.alpha(root.foreground, 0.2)
     }
     Flickable {
         id: viewport
         objectName: "appsViewport"
         x: root.outerMargin
-        y: root.outerMargin
+        // Full height: lifted and bouncing icons may rise above the glass.
+        y: 0
         width: root.centerViewportWidth
-        height: Math.max(0, root.height - root.outerMargin * 2)
+        height: root.height
         // Extend Qt's actual bounds without moving or resizing ordinary controls.
         contentWidth: content.width + (localEventSurface.visible ? root.eventSlotWidth : 0)
         onWidthChanged: root.revealAfterGeometryChange()
@@ -446,8 +507,11 @@ Item {
                     foreground: root.foreground; muted: root.muted; accent: root.accent
                     animationDuration: root.motion
                     running: Boolean(model.IsWindow || model.IsStartup)
+                    launching: Boolean(model.IsStartup)
                     activeTask: Boolean(model.IsActive)
                     attention: Boolean(model.IsDemandingAttention)
+                    nativeLabel: root.nativePopups
+                    onHoveredChanged: root.hoverTile(taskTile, hovered)
                     onActiveFocusChanged: if (activeFocus) root.revealInViewport(taskTile)
                     onClicked: root.activateTask(index)
                     onPressAndHold: root.showTaskMenuAt(index, model, taskTile)
@@ -464,10 +528,13 @@ Item {
             Tile {
                 objectName: "addButton"
                 anchors.verticalCenter: parent.verticalCenter
-                iconSource: "list-add"
-                iconSize: Math.max(12, root.tileSize - 16)
-                foreground: root.muted; accent: root.accent; animationDuration: root.motion
+                iconSource: "list-add-symbolic"
+                iconSize: Math.max(12, Math.round(root.tileSize * 0.5))
+                opacity: hovered || visualFocus ? 1 : 0.6
+                foreground: root.foreground; accent: root.accent; animationDuration: root.motion
                 tooltip: qsTr("Fixar aplicativo · ou arraste um app para o dock")
+                nativeLabel: root.nativePopups
+                onHoveredChanged: root.hoverTile(this, hovered)
                 onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
                 onClicked: addDialog.openAt(this)
             }
@@ -475,15 +542,18 @@ Item {
                 objectName: "controlCenterButton"
                 anchors.verticalCenter: parent.verticalCenter
                 visible: Boolean(root.configuration.showControlCenter)
-                iconSource: "preferences-system"
-                iconSize: Math.max(16, root.tileSize - 10)
+                liveKind: "controlCenter"
+                live: true
+                iconSize: root.tileSize
                 foreground: root.foreground; muted: root.muted; accent: root.accent
                 animationDuration: root.motion
                 tooltip: qsTr("Central de Controle")
+                nativeLabel: root.nativePopups
+                onHoveredChanged: root.hoverTile(this, hovered)
                 onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
                 onClicked: controlCenterPopup.openAt(this)
             }
-            Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: 1; height: 30; color: root.muted; opacity: 0.3 }
+            Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
 
         }
@@ -491,9 +561,10 @@ Item {
     EventSurface {
         id: localEventSurface
         x: root.width - root.outerMargin - width
-        y: root.outerMargin
+        // Inside the glass, whatever the panel thickness.
+        y: dockSurface.y + Style.dock.glassPadding + 1
         width: root.eventSlotWidth
-        height: Math.max(0, root.height - root.outerMargin * 2)
+        height: Math.max(0, dockSurface.height - 2 * (Style.dock.glassPadding + 1))
         visible: root.localEventsActive && Boolean(localEventState.current)
         z: 3
         eventState: localEventState
@@ -512,7 +583,7 @@ Item {
             for (const url of drop.urls) accepted = root.addLauncher(String(url)) || accepted;
             if (accepted) drop.acceptProposedAction();
         }
-        Rectangle { anchors.fill: parent; radius: appearanceState.effective.tokens.radius; visible: parent.containsDrag; color: "transparent"; border.color: root.accent; border.width: 2 }
+        Rectangle { x: dockSurface.x; y: dockSurface.y; width: dockSurface.width; height: dockSurface.height; radius: dockSurface.radius; visible: parent.containsDrag; color: Style.alpha(root.accent, 0.1); border.color: root.accent; border.width: 2 }
     }
     Controls.Menu {
         id: taskMenu
@@ -540,7 +611,7 @@ Item {
         id: nativeTaskMenu
         objectName: "nativeTaskContextMenu"
         dock: root
-        width: 300
+        width: 300 + 2 * shadowMargin
         title: root.menuData.title || ""
         ColumnLayout {
             id: nativeTaskActions
@@ -577,10 +648,8 @@ Item {
         anchors.fill: parent
         readonly property bool popAbove: root.popAbove
         readonly property bool nativePopups: root.nativePopups
-        readonly property bool light: root.presentation.appearance.theme === "paper"
-        readonly property color surface: light ? "#f4f0e8" : "#111923"
-        readonly property color foreground: light ? "#252b35" : "#edf1f9"
-        readonly property color accent: light ? "#167361" : "#69d7c2"
+        readonly property var popupScheme: root.popupScheme
+        readonly property real glassTop: root.glassTop
     }
     DockPopup {
         id: settings
@@ -612,10 +681,11 @@ Item {
         title: qsTr("Fixar aplicativo")
         onOpened: { scope = profileState.activeProfileId; revision = profileState.revision; appInput.forceActiveFocus(); }
         ColumnLayout {
-            Controls.Label { Layout.fillWidth: true; text: qsTr("Arraste um aplicativo do menu do KDE para o dock, ou informe o ID abaixo."); wrapMode: Text.WordWrap }
+            spacing: Style.space.sm
+            Controls.Label { Layout.fillWidth: true; text: qsTr("Arraste um aplicativo do menu do KDE para o dock, ou informe o ID abaixo."); color: root.popupScheme.textMuted; wrapMode: Text.WordWrap }
             Controls.TextField { id: appInput; objectName: "launcherInput"; Layout.fillWidth: true; placeholderText: "org.kde.dolphin.desktop"; onAccepted: pinButton.clicked() }
-            Controls.Label { Layout.fillWidth: true; text: root.notice; visible: text.length > 0; wrapMode: Text.WordWrap }
-            Controls.Button { id: pinButton; text: qsTr("Fixar aplicativo"); enabled: appInput.text.trim().length > 0; onClicked: if (root.addLauncher(appInput.text, addDialog.scope, addDialog.revision)) { appInput.clear(); addDialog.close(); } }
+            Controls.Label { Layout.fillWidth: true; text: root.notice; visible: text.length > 0; color: root.popupScheme.danger; wrapMode: Text.WordWrap }
+            OrlaButton { id: pinButton; variant: "primary"; Layout.alignment: Qt.AlignRight; text: qsTr("Fixar aplicativo"); enabled: appInput.text.trim().length > 0; onClicked: if (root.addLauncher(appInput.text, addDialog.scope, addDialog.revision)) { appInput.clear(); addDialog.close(); } }
         }
     }
     DockPopup {
@@ -625,7 +695,7 @@ Item {
         title: Qt.formatDate(root.now, "MMMM yyyy")
         CalendarAgenda {
             objectName: "calendarAgenda"
-            dock: calendarContext
+            dock: popupContext
             active: calendarPopup.visible
         }
         Controls.Button {
@@ -639,9 +709,10 @@ Item {
     }
     DockPopup {
         id: integrationPopup
+        objectName: "integrationPopup"
         dock: root
         title: root.selectedIntegration === "quota" ? "QuotaLantern" : root.selectedIntegration === "peripherals" ? "PeriGauge" : "FalaTrace"
-        IntegrationDetails { dock: root; integrations: localIntegrations; selected: root.selectedIntegration }
+        IntegrationDetails { dock: popupContext; integrations: localIntegrations; selected: root.selectedIntegration }
     }
     Connections {
         target: root.configuration
@@ -693,9 +764,9 @@ Item {
         readonly property real screenWidth: root.Screen.width > 0
             ? (root.Screen.desktopAvailableWidth > 0 ? Math.min(root.Screen.width, root.Screen.desktopAvailableWidth) : root.Screen.width)
             : root.Screen.desktopAvailableWidth
-        property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : 350
+        property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : Style.size.popupWidth
         property real heightBudget: maximumPopupHeight
-        width: Math.max(1, Math.min(350, widthBudget))
+        width: Math.max(1, Math.min(Style.size.popupWidth + 2 * shadowMargin, widthBudget))
         height: Math.max(1, Math.min(implicitHeight, heightBudget))
         dock: root
         title: qsTr("Central de Controle")
@@ -705,47 +776,78 @@ Item {
             Layout.fillWidth: true
             actions: kdeControlActions
             player: root.player
-            battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle})
+            battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle,
+                percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
+            playing: root.mediaPlaying
             audio: audioControlState
-            foreground: root.foreground
-            muted: root.muted
+            foreground: root.popupScheme.text
+            muted: root.popupScheme.textMuted
         }
     }
     DockPopup {
         id: pomodoroPopup
+        objectName: "pomodoroPopup"
         dock: root
         title: root.configuration.timerBreak ? qsTr("Respire um pouco") : qsTr("Uma coisa de cada vez")
-        ColumnLayout {
-            Controls.Label { text: Logic.duration(focusTimer.secondsLeft); font.pixelSize: 40; Layout.alignment: Qt.AlignHCenter }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 5
-                radius: 3
-                color: root.light ? "#ddd8cf" : "#34435b"
-                Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1, 1 - focusTimer.secondsLeft / focusTimer.phaseSeconds))
-                    height: parent.height
-                    radius: parent.radius
-                    color: root.accent
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: timerRing.height + Style.space.sm
+            ProgressRing {
+                id: timerRing
+                objectName: "pomodoroRing"
+                anchors.centerIn: parent
+                width: 172
+                height: width
+                lineWidth: 6
+                progress: 1 - focusTimer.secondsLeft / Math.max(1, focusTimer.phaseSeconds)
+                color: root.popupScheme.accent
+                trackColor: Style.alpha(root.popupScheme.text, 0.08)
+                animationDuration: root.motion
+            }
+            Column {
+                anchors.centerIn: parent
+                spacing: Style.space.xxs
+                Controls.Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: Logic.duration(focusTimer.secondsLeft)
+                    textFormat: Text.PlainText
+                    color: root.popupScheme.text
+                    font.pixelSize: Style.type.display
+                    font.weight: Style.weight.medium
+                    font.features: {"tnum": 1}
+                }
+                Controls.Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: (root.configuration.timerBreak ? qsTr("Pausa") : qsTr("Foco")).toUpperCase()
+                    textFormat: Text.PlainText
+                    color: root.popupScheme.accent
+                    font.pixelSize: Style.type.overline
+                    font.weight: Style.weight.bold
+                    font.letterSpacing: Style.letterSpacing.overline
                 }
             }
-            RowLayout {
-                Controls.Button { objectName: "toggleTimer"; text: focusTimer.running ? qsTr("Pausar") : qsTr("Iniciar"); onClicked: focusTimer.toggle() }
-                Controls.Button { text: qsTr("Reiniciar"); onClicked: focusTimer.reset() }
-            }
-            Controls.Label { text: qsTr("%1 sessões concluídas").arg(root.configuration.completedFocus); opacity: 0.65 }
-            RowLayout {
-                Controls.Label { text: qsTr("Foco (min)") }
-                Controls.SpinBox { from: 1; to: 120; value: root.configuration.focusMinutes; enabled: !focusTimer.running; onValueModified: { root.configuration.focusMinutes = value; focusTimer.reset(); } }
-            }
-            RowLayout {
-                Controls.Label { text: qsTr("Pausa (min)") }
-                Controls.SpinBox { from: 1; to: 60; value: root.configuration.breakMinutes; enabled: !focusTimer.running; onValueModified: { root.configuration.breakMinutes = value; focusTimer.reset(); } }
-            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.space.sm
+            OrlaButton { objectName: "toggleTimer"; variant: "primary"; Layout.fillWidth: true; text: focusTimer.running ? qsTr("Pausar") : qsTr("Iniciar"); onClicked: focusTimer.toggle() }
+            OrlaButton { Layout.fillWidth: true; text: qsTr("Reiniciar"); onClicked: focusTimer.reset() }
+        }
+        Controls.Label { Layout.alignment: Qt.AlignHCenter; text: qsTr("%1 sessões concluídas").arg(root.configuration.completedFocus); color: root.popupScheme.textMuted; textFormat: Text.PlainText }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: Style.space.md
+            rowSpacing: Style.space.sm
+            Controls.Label { Layout.fillWidth: true; text: qsTr("Foco (min)"); textFormat: Text.PlainText }
+            Controls.SpinBox { from: 1; to: 120; value: root.configuration.focusMinutes; enabled: !focusTimer.running; onValueModified: { root.configuration.focusMinutes = value; focusTimer.reset(); } }
+            Controls.Label { Layout.fillWidth: true; text: qsTr("Pausa (min)"); textFormat: Text.PlainText }
+            Controls.SpinBox { from: 1; to: 60; value: root.configuration.breakMinutes; enabled: !focusTimer.running; onValueModified: { root.configuration.breakMinutes = value; focusTimer.reset(); } }
         }
     }
     DockPopup {
         id: musicPopup
+        objectName: "musicPopup"
         dock: root
         title: qsTr("Sua música")
         MediaControls {
@@ -753,30 +855,60 @@ Item {
             objectName: "mediaControls"
             Layout.fillWidth: true
             media: root.mediaSource
-            foreground: root.foreground
-            muted: root.muted
+            foreground: root.popupScheme.text
+            muted: root.popupScheme.textMuted
         }
     }
     DockPopup {
         id: batteryPopup
+        objectName: "batteryPopup"
         dock: root
         title: qsTr("Energia")
-        ColumnLayout {
-            Controls.Label { Layout.fillWidth: true; text: power.summary; font.bold: true; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-            Controls.Label { Layout.fillWidth: true; text: root.powerSubtitle; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
-            Controls.Label {
-                Layout.fillWidth: true
-                visible: power.estimatedTimeKind !== "unknown"
-                text: power.estimatedTimeKind === "full"
-                    ? qsTr("Estimativa até completar: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
-                    : qsTr("Estimativa restante: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
-                wrapMode: Text.WordWrap; textFormat: Text.PlainText
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.space.lg
+            Item {
+                implicitWidth: 72
+                implicitHeight: 72
+                ProgressRing {
+                    anchors.fill: parent
+                    lineWidth: 5
+                    progress: power.percentKnown ? power.percent / 100 : 0
+                    color: root.popupScheme.accent
+                    trackColor: Style.alpha(root.popupScheme.text, 0.08)
+                    animationDuration: root.motion
+                }
+                Controls.Label {
+                    anchors.centerIn: parent
+                    text: power.percentKnown ? Math.round(power.percent) + "%" : "—"
+                    textFormat: Text.PlainText
+                    font.pixelSize: Style.type.title
+                    font.weight: Style.weight.demiBold
+                    font.features: {"tnum": 1}
+                }
             }
-            Controls.Label {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: qsTr("Bateria do computador. Baterias de periféricos continuam no PeriGauge.")
-                wrapMode: Text.WordWrap; textFormat: Text.PlainText; opacity: 0.65
+                spacing: Style.space.xxs
+                Controls.Label { Layout.fillWidth: true; text: power.summary; font.weight: Style.weight.demiBold; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                Controls.Label { Layout.fillWidth: true; text: root.powerSubtitle; color: root.popupScheme.textMuted; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    visible: power.estimatedTimeKind !== "unknown"
+                    text: power.estimatedTimeKind === "full"
+                        ? qsTr("Estimativa até completar: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
+                        : qsTr("Estimativa restante: %1 min").arg(Math.ceil(power.estimatedTimeSeconds / 60))
+                    color: root.popupScheme.textMuted
+                    wrapMode: Text.WordWrap; textFormat: Text.PlainText
+                }
             }
+        }
+        Controls.Label {
+            Layout.fillWidth: true
+            text: qsTr("Bateria do computador. Baterias de periféricos continuam no PeriGauge.")
+            color: root.popupScheme.textMuted
+            font.pixelSize: Style.type.caption
+            wrapMode: Text.WordWrap; textFormat: Text.PlainText
         }
     }
     Controls.ToolTip { parent: root; visible: root.notice.length > 0 && !addDialog.visible; text: root.notice; timeout: 8000 }

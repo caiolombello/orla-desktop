@@ -13,6 +13,12 @@ Reports, translations, accessibility feedback, documentation, synthetic test fix
 
 ## Local checks
 
+UI changes follow the [design system](docs/DESIGN_SYSTEM.md): every color, size,
+radius and motion value comes from `package/contents/code/Style.js`. Before opening a
+pull request that touches QML, run `python3 scripts/design.py check` and review the
+synthetic captures from `python3 scripts/design.py gallery` in both color schemes.
+AI coding agents start from [AGENTS.md](AGENTS.md).
+
 Use Python 3.10 or newer with PySide6 QtDBus, and make `dbus-run-session` available for the private service test. Run the portable tests and package build:
 
 ```bash

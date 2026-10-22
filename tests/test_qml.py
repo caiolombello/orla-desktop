@@ -7,9 +7,9 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Fusion")
 os.environ.setdefault("QT_QPA_PLATFORMTHEME", "")
 
-from PySide6.QtCore import QObject, QUrl, Qt, QPoint, QCoreApplication, QEvent
+from PySide6.QtCore import QObject, QUrl, Qt, QPoint, QPointF, QCoreApplication, QEvent
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest, QSignalSpy
 
@@ -112,13 +112,68 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(opened.count(), 1)
         self.assertEqual(self.warnings, [])
 
+    def test_keyboard_focus_ring_stays_visible_at_both_viewport_edges(self):
+        # Force horizontal scrolling so the last slot reaches the clipped edge.
+        self.dock.setWidth(180)
+        viewport = self.window.findChild(QQuickItem, "appsViewport")
+        for name in ("settingsButton", "musicTile"):
+            with self.subTest(control=name):
+                control = self.window.findChild(QQuickItem, name)
+                if control is None:
+                    strip = self.window.findChild(QQuickItem, "widgetStrip")
+                    control = next(item for item in strip.childItems() if item.objectName() == name)
+                control.forceActiveFocus(Qt.TabFocusReason)
+                QTest.qWait(40)
+                ring = control.findChild(QQuickItem, "tileFocusRing")
+                self.assertTrue(ring.property("visible"))
+                border = QQmlExpression(self.engine.rootContext(), ring, "border.width")
+                self.assertEqual(border.evaluate()[0], 2)
+                for corner in (QPointF(0, 0), QPointF(ring.width(), ring.height())):
+                    within_slot = ring.mapToItem(control, corner)
+                    within_viewport = ring.mapToItem(viewport, corner)
+                    self.assertGreaterEqual(within_slot.x(), 0)
+                    self.assertLessEqual(within_slot.x(), control.width())
+                    self.assertGreaterEqual(within_slot.y(), 0)
+                    self.assertLessEqual(within_slot.y(), control.height())
+                    self.assertGreaterEqual(within_viewport.x(), 0)
+                    self.assertLessEqual(within_viewport.x(), viewport.width())
+                    self.assertGreaterEqual(within_viewport.y(), 0)
+                    self.assertLessEqual(within_viewport.y(), viewport.height())
+
+    def test_shared_buttons_show_pressed_feedback_without_motion(self):
+        component = QQmlComponent(self.engine)
+        component.setData(b'''import QtQuick
+import "../package/contents/ui" as DockUI
+Item {
+    DockUI.OrlaButton { objectName: "action"; text: "Aplicar" }
+    DockUI.OrlaIconButton { objectName: "toggle"; text: "Silenciar" }
+}''', QUrl.fromLocalFile(str(Path(__file__).with_name("ButtonFeedbackFixture.qml"))))
+        fixture = component.create()
+        self.assertIsNotNone(fixture, [error.toString() for error in component.errors()])
+        try:
+            for name in ("action", "toggle"):
+                with self.subTest(control=name):
+                    control = fixture.findChild(QQuickItem, name)
+                    control.setProperty("down", True)
+                    expression = QQmlExpression(self.engine.rootContext(), control,
+                        "background.children[0].opacity")
+                    self.assertAlmostEqual(expression.evaluate()[0], 0.14)
+                    self.assertFalse(expression.hasError(), expression.error().toString())
+                    control.setProperty("down", False)
+                    self.assertAlmostEqual(expression.evaluate()[0], 0)
+        finally:
+            fixture.deleteLater()
+
     def test_popups_follow_each_clicked_or_keyboard_activated_control(self):
         self.window.setHeight(720)
         self.config.setProperty("showControlCenter", True)
+        # The compact icon dock is narrower than a popup; give it room to follow controls.
+        self.window.setWidth(1400)
+        self.dock.setWidth(1200)
         self.app.processEvents()
         cases = (("settingsButton", "settingsPopup"),
                  ("controlCenterButton", "controlCenterPopup"),
-                 ("clockTile", "calendarPopup"))
+                 ("musicTile", "musicPopup"))
         observed = []
         for control_name, popup_name in cases:
             control = self.window.findChild(QQuickItem, control_name)
@@ -162,7 +217,10 @@ class DockInterfaceTests(unittest.TestCase):
         QTest.qWait(40)
         self.assertTrue(popup.property("visible"))
         self.assertEqual(popup.property("x"), 0)
-        self.assertAlmostEqual(popup.property("y") + popup.property("height"), -10)
+        # 10 px between the visible glass of the dock and of the popup; the popup
+        # item also holds its shadow margin and the dock its transparent headroom.
+        self.assertAlmostEqual(popup.property("y") + popup.property("height") - popup.property("shadowMargin"),
+                               self.dock.property("glassTop") - 10)
         self.assertLessEqual(popup.property("height"), self.window.screen().size().height() - self.dock.height() - 30)
         self.assertEqual(popup.property("margins"), -1)
         QTest.keyClick(self.window, Qt.Key_Escape)
@@ -237,8 +295,8 @@ class DockInterfaceTests(unittest.TestCase):
                 dialog = popup.property("nativeDialog")
                 self.assertIsNotNone(dialog)
                 self.assertTrue(dialog.property("visible"))
-                dock_top = self.dock.mapToGlobal(QPoint(0, 0)).y()
-                self.assertLessEqual(dialog.y() + dialog.height(), dock_top - 10 + 1)
+                glass_top = self.dock.mapToGlobal(QPoint(0, int(self.dock.property("glassTop")))).y()
+                self.assertLessEqual(dialog.y() + dialog.height() - popup.property("shadowMargin"), glass_top - 10 + 1)
                 proxy = dialog.property("visualParent")
                 self.assertNotEqual(proxy, button)
                 self.assertAlmostEqual(proxy.mapToGlobal(QPoint(int(proxy.width() / 2), 0)).x(),
@@ -294,7 +352,8 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertNotEqual(proxy, button)
         self.assertAlmostEqual(proxy.mapToGlobal(QPoint(int(proxy.width() / 2), 0)).x(),
                                button.mapToGlobal(QPoint(int(button.width() / 2), 0)).x(), delta=1)
-        self.assertLessEqual(dialog.y() + dialog.height(), self.dock.mapToGlobal(QPoint(0, 0)).y() - 10 + 1)
+        glass_top = self.dock.mapToGlobal(QPoint(0, int(self.dock.property("glassTop")))).y()
+        self.assertLessEqual(dialog.y() + dialog.height() - menu.property("shadowMargin"), glass_top - 10 + 1)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Nova janela")
         QTest.keyClick(dialog, Qt.Key_Down)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Minimizar / restaurar")
@@ -392,13 +451,13 @@ class DockInterfaceTests(unittest.TestCase):
         window = engine.rootObjects()[0]
         try:
             tile = window.findChild(QObject, "fixtureTile")
-            subtitle = tile.findChild(QObject, "tileSubtitle")
+            # Live icons show no names; the label/tooltip is the only text surface.
             tooltip_text = tile.findChild(QObject, "tileTooltipText")
-            for text_item in (subtitle, tooltip_text):
-                expression = QQmlExpression(engine.rootContext(), text_item, "textFormat")
-                self.assertEqual(expression.evaluate()[0], 0)
-                self.assertFalse(expression.hasError(), expression.error().toString())
-            self.assertIn('<img src=', subtitle.property("text"))
+            expression = QQmlExpression(engine.rootContext(), tooltip_text, "textFormat")
+            self.assertEqual(expression.evaluate()[0], 0)
+            self.assertFalse(expression.hasError(), expression.error().toString())
+            self.assertIn('<img src=', tile.property("tooltip"))
+            self.assertIn('<img src=', tile.property("subtitle"))
         finally:
             window.close()
             engine.deleteLater()
@@ -675,7 +734,6 @@ class DockInterfaceTests(unittest.TestCase):
         backend = self.window.findChild(QObject, "dockAudioBackend")
         audio = self.window.findChild(QQuickItem, "audioControlState")
         selector = self.window.findChild(QQuickItem, "controlCenterOutputSelector")
-        audio.setProperty("confirmationTimeout", 90)
 
         selector.forceActiveFocus()
         QTest.qWait(20)
@@ -684,13 +742,19 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual((backend.property("calls").toVariant())[-1], {"kind": "default-output", "id": "headphones"})
         self.assertEqual(audio.property("pendingKind"), "default-output")
         self.assertEqual(selector.property("currentIndex"), 1)
-        QTest.qWait(110)
+        self.wait_for_audio_confirmation_timeout(audio)
         self.assertEqual(audio.property("pendingKind"), "")
         self.assertEqual(audio.property("defaultOutputId"), "speakers")
         self.assertEqual(selector.property("currentIndex"), 0)
         self.assertIn("Alto-falantes", selector.property("displayText"))
         self.assertIn("confirm", audio.property("error").lower())
         self.assertEqual(self.warnings, [])
+
+    def wait_for_audio_confirmation_timeout(self, audio):
+        # Keep the public deadline during input; KDE handling can already exceed 90 ms.
+        self.assertTrue(audio.property("pendingKind"))
+        expired = QSignalSpy(audio.pendingKindChanged)
+        self.assertTrue(expired.wait(audio.property("confirmationTimeout") + 200))
 
     def test_audio_output_pointer_failures_restore_confirmed_presentation(self):
         self.config.setProperty("showControlCenter", True)
@@ -753,7 +817,6 @@ class DockInterfaceTests(unittest.TestCase):
         audio = self.window.findChild(QQuickItem, "audioControlState")
         slider = self.window.findChild(QQuickItem, "controlCenterAudioVolume")
         selector = self.window.findChild(QQuickItem, "controlCenterOutputSelector")
-        audio.setProperty("confirmationTimeout", 90)
         slider.forceActiveFocus()
         QTest.qWait(20)
 
@@ -799,7 +862,7 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertFalse(reset.hasError(), reset.error().toString())
         QTest.qWait(10)
         accepted_on_speakers_then_default_changes()
-        QTest.qWait(110)
+        self.wait_for_audio_confirmation_timeout(audio)
         self.assertEqual(audio.property("pendingKind"), "")
         self.assertEqual(audio.property("defaultOutputId"), "headphones")
         self.assertAlmostEqual(slider.property("value"), 25, delta=0.5)
@@ -817,7 +880,6 @@ class DockInterfaceTests(unittest.TestCase):
         backend = self.window.findChild(QObject, "dockAudioBackend")
         audio = self.window.findChild(QQuickItem, "audioControlState")
         slider = self.window.findChild(QQuickItem, "controlCenterAudioVolume")
-        audio.setProperty("confirmationTimeout", 90)
 
         def rejected_supersession():
             backend.setProperty("calls", [])
@@ -862,7 +924,7 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertFalse(reset.hasError(), reset.error().toString())
         QTest.qWait(10)
         rejected_supersession()
-        QTest.qWait(110)
+        self.wait_for_audio_confirmation_timeout(audio)
         self.assertEqual(audio.property("pendingKind"), "")
         self.assertEqual(audio.property("confirmedVolume"), 50)
         self.assertAlmostEqual(slider.property("value"), 50, delta=0.5)

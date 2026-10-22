@@ -1,5 +1,6 @@
 import QtQuick
 import "../code/Logic.js" as Logic
+import "../code/Style.js" as Style
 
 // Only existing built-in tiles are constructed here; providers live in DockView.
 Row {
@@ -25,20 +26,53 @@ Row {
         const state = dock.integrations.recording.state;
         return state === "starting" || state === "recording" || state === "stopped";
     }
+    function ratio(value) { return finiteNumber(value) ? Math.max(0, Math.min(1, value / 100)) : -1; }
+    // Ring color for a remaining level (battery) or a used share (quota).
+    function remainingColor(percent) {
+        return percent <= 10 ? Style.levels.critical : percent <= 20 ? Style.levels.low : Style.levels.good;
+    }
+    function usedColor(percent) {
+        return percent >= 90 ? Style.levels.critical : percent >= 75 ? Style.levels.low : Style.levels.good;
+    }
+    function timerProgress() {
+        const total = dock.pomodoro.phaseSeconds;
+        return finiteNumber(total) && total > 0 ? Math.max(0, Math.min(1, 1 - dock.pomodoro.secondsLeft / total)) : 0;
+    }
+    // Text stays in title/subtitle for the hover label and screen readers; the
+    // icon itself only shows a short value.
     function info(key) {
-        if (key === "clock") return {wide: true, width: 112, icon: "clock", title: Qt.formatTime(dock.now, "HH:mm"),
-            subtitle: Qt.formatDate(dock.now, "ddd, d MMM"), tooltip: Qt.formatDate(dock.now, Qt.DefaultLocaleLongDate)};
-        if (key === "pomodoro") return {wide: true, width: 126, icon: dock.pomodoro.running ? "media-playback-pause" : "chronometer",
-            title: Logic.duration(dock.pomodoro.secondsLeft), subtitle: dock.configuration.timerBreak ? qsTr("Pausa") : qsTr("Foco · Pomodoro"), tooltip: qsTr("Pomodoro · iniciar, pausar ou reiniciar")};
-        if (key === "music") return {wide: meaningful(key), width: 158, icon: dock.player ? dock.player.iconName || "audio-x-generic" : "audio-x-generic",
+        const live = meaningful(key);
+        if (key === "clock") return {live: true, data: {},
+            title: Qt.formatTime(dock.now, "HH:mm"), subtitle: Qt.formatDate(dock.now, Qt.DefaultLocaleLongDate)};
+        if (key === "pomodoro") return {live: true,
+            data: {value: Math.ceil(dock.pomodoro.secondsLeft / 60), progress: timerProgress(),
+                palette: dock.configuration.timerBreak ? "sea" : "coral"},
+            title: Logic.duration(dock.pomodoro.secondsLeft), subtitle: dock.configuration.timerBreak ? qsTr("Pausa") : qsTr("Foco")};
+        if (key === "music") return {live: live,
+            data: {art: dock.player ? dock.player.artUrl || "" : "", active: Boolean(dock.mediaPlaying)},
             title: dock.player ? dock.mediaText(dock.player.track || dock.player.identity, 512) : qsTr("Sua música"),
-            subtitle: dock.player ? dock.mediaText(dock.player.artist || dock.player.identity, 256) : qsTr("Nenhum player aberto"), tooltip: qsTr("Controles de mídia")};
-        if (key === "systemBattery") return {wide: meaningful(key), width: 132, icon: dock.systemBattery.charging === "charging" ? "battery-charging" : "battery",
-            title: dock.systemBattery.percentKnown ? Math.round(dock.systemBattery.percent) + "%" : qsTr("Energia"),
-            subtitle: dock.powerSubtitle, tooltip: qsTr("Bateria do sistema") + " · " + dock.powerSubtitle};
+            subtitle: dock.player ? dock.mediaText(dock.player.artist || dock.player.identity, 256) : qsTr("Nenhum player aberto")};
+        if (key === "systemBattery") {
+            const percent = Math.round(dock.systemBattery.percent);
+            return {live: live,
+                data: {value: percent, progress: ratio(percent), ring: remainingColor(percent),
+                    charging: live && dock.systemBattery.charging === "charging", glyph: "battery-100-symbolic"},
+                title: dock.systemBattery.percentKnown ? percent + "%" : qsTr("Energia"), subtitle: dock.powerSubtitle};
+        }
         const title = key === "quota" ? "QuotaLantern" : key === "peripherals" ? "PeriGauge" : "FalaTrace";
         const subtitle = key === "quota" ? dock.integrations.quotaSummary : key === "peripherals" ? dock.integrations.batterySummary : dock.integrations.recordingSummary;
-        return {wide: meaningful(key), width: 164, icon: key === "quota" ? "office-chart-pie" : key === "peripherals" ? "battery" : "media-record", title: title, subtitle: subtitle, tooltip: title + " · " + subtitle};
+        if (key === "recording") return {live: live,
+            data: {active: live && dock.integrations.recording.state === "recording"}, title: title, subtitle: subtitle};
+        const windows = (dock.integrations.quota.windows || []).filter(window => window && finiteNumber(window.usedPercent));
+        const devices = (dock.integrations.peripherals.devices || []).filter(device => device && finiteNumber(device.percent));
+        const used = windows.length ? Math.round(Math.max(...windows.map(window => window.usedPercent))) : -1;
+        const lowest = devices.length ? Math.round(Math.min(...devices.map(device => device.percent))) : -1;
+        const percent = key === "quota" ? used : lowest;
+        return {live: live,
+            data: {value: live && percent >= 0 ? percent : "", progress: live ? ratio(percent) : -1,
+                ring: key === "quota" ? usedColor(percent) : remainingColor(percent),
+                glyph: key === "quota" ? "office-chart-pie-symbolic" : "input-mouse-symbolic"},
+            title: title, subtitle: subtitle};
     }
     Repeater {
         model: strip.dock.presentation.widgets
@@ -48,16 +82,19 @@ Row {
             objectName: modelData.id === "pomodoro" ? "pomodoroButton" : modelData.id + "Tile"
             anchors.verticalCenter: parent.verticalCenter
             visible: modelData.visible
-            wide: info.wide
-            implicitWidth: wide ? info.width : iconSize + 16
             iconSize: strip.dock.tileSize
-            iconSource: info.icon
+            liveKind: modelData.id
+            liveInfo: info.data
+            live: info.live
+            now: strip.dock.now
             title: info.title
             subtitle: info.subtitle
-            tooltip: wide ? info.tooltip : info.title + " · " + info.subtitle
+            tooltip: info.title + " · " + info.subtitle
+            nativeLabel: Boolean(strip.dock.nativePopups)
             foreground: strip.dock.foreground; muted: strip.dock.muted; accent: strip.dock.accent
             animationDuration: strip.dock.motion
             onClicked: strip.dock.openWidget(modelData.id, this)
+            onHoveredChanged: if (strip.dock.hoverTile) strip.dock.hoverTile(this, hovered)
         }
     }
 }

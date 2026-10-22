@@ -6,7 +6,7 @@ Este documento detalha como o Orla pode crescer de um dock alpha para um espaço
 
 - **Começar pelo trabalho do usuário:** abrir e alternar apps é a tarefa principal do dock; launcher, barra, notificações e IA são módulos opcionais, desligados até a pessoa escolhê-los.
 - **KDE primeiro:** respeitar Plasma, atalhos, painel, serviços, foco, tema e convenções de teclado. A inspiração do macOS orienta a composição e a sensação de continuidade; Orla usa marca, ícones e linguagem visual próprios, sem marca Apple nem promessa de imitar APIs ou comportamentos privados.
-- **Personalização segura:** pré-visualizar, guardar rascunho, aplicar, desfazer e exportar. Configurações e painéis existentes sobrevivem a presets e atualizações.
+- **Personalização segura:** pré-visualizar, guardar rascunho, aplicar, desfazer e exportar. Configurações e painéis não selecionados são preservados; substituir um painel exige escolha explícita e mantém recuperação do layout original.
 - **Estados claros:** toda integração apresenta disponível, conectando, carregando, vazio, desatualizado, sem permissão, limitado, desconectado e erro quando esses estados se aplicam.
 - **Aberto por padrão:** core útil sem conta, API paga ou catálogo central obrigatório; extensões têm capacidades explícitas e podem ser instaladas de fontes escolhidas pelo usuário.
 - **Privacidade visível:** explicar de onde vem cada dado, quando ele sai do dispositivo, qual provedor o recebe e como desconectar/apagar configuração.
@@ -27,6 +27,8 @@ O setup pergunta o mínimo e não é um wizard obrigatório: escolher **Só dock
 ## Sistema visual
 
 Preservar a marca costeira existente e evoluí-la com tokens semânticos; os valores são ponto inicial de design, não substituem verificação de contraste nem o esquema Plasma.
+
+Os tokens implementados, componentes e regras verificadas por `scripts/design.py` estão em [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); a tabela abaixo registra a proposta original.
 
 | Token | Base proposta | Uso |
 |---|---|---|
@@ -52,7 +54,7 @@ O editor usa três colunas/painéis adaptáveis: lista de módulos e layout; pr�
 
 Controles da primeira experiência personalizável: escala e tamanho; alinhamento, margem e espaçamento; forma/opacidade; tema e cores de realce; ordem e visibilidade dos widgets; animação; posição/monitor; itens fixados; módulos habilitados. Evitar controles que não possam ser mantidos nem validados. Perfil selecionado sempre visível e reversível.
 
-Presets iniciais: **Essencial** (dock e apps), **Maré** (dock com widgets), **Estúdio** (dock, barra compacta e foco em produtividade) e **Jogo** (dock/media/Steam). A composição **Inspirado no macOS** é uma escolha visual opcional e separada dos presets; mantém menus, atalhos e convenções KDE. Todos mostram a lista de mudanças e respeitam o layout atual.
+Presets iniciais: **Essencial** (dock e apps), **Maré** (dock com widgets), **Estúdio** (dock, barra compacta e foco em produtividade) e **Jogo** (dock/media/Steam). A composição **Inspirado no macOS** é uma escolha visual opcional e separada dos presets; reutiliza serviços e fluxos KDE. Meta → Orla Search exige escolha explícita e restauração do atalho anterior; ainda não está qualificada. Todos mostram a lista de mudanças; substituem somente os painéis explicitamente selecionados e preservam recuperação do layout original.
 
 Importar/exportar configuração em arquivo declarativo versionado (por exemplo, JSON), com prévia de diferenças, validação de esquema e migração conhecida. Não importar segredos, tokens, conteúdo de calendário nem caminhos privados por padrão. Arquivo inválido não sobrescreve configuração válida. Permitir exportação seletiva de aparência/layout sem dados pessoais.
 

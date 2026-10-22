@@ -9,7 +9,8 @@ Window {
     DockUI.Tile {
         objectName: "fixtureTile"
         anchors.centerIn: parent
-        wide: true
+        liveKind: "peripherals"
+        live: true
         title: "PeriGauge"
         subtitle: '<img src="https://example.test/probe"> · 64%'
         tooltip: subtitle

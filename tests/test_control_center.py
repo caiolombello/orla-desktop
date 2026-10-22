@@ -176,6 +176,33 @@ class ControlCenterTests(unittest.TestCase):
             self.assertLessEqual(control.width(), self.center.width())
         self.assertEqual(self.warnings, [])
 
+    def test_full_volume_keeps_a_separate_visible_keyboard_focus_ring(self):
+        self.evaluate("audioBackend.snapshot.outputs[0].volumeRaw = 65536; audioBackend.revision += 1", self.window)
+        volume = self.item("controlCenterAudioVolume")
+        QTest.qWait(20)
+        self.assertEqual(volume.property("value"), 100)
+        original_size = (volume.width(), volume.height())
+        volume.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(30)
+        self.assertTrue(volume.property("visualFocus"))
+        track = volume.property("background")
+        top = track.mapToScene(QPointF(track.width() / 2, 0))
+        image = self.window.grabWindow()
+        accent = self.evaluate("palette.highlight", volume)
+        # At full volume the filled track must still have a gap below its outline.
+        self.assertEqual(image.pixelColor(int(top.x()), int(top.y()) - 3), accent)
+        self.assertNotEqual(image.pixelColor(int(top.x()), int(top.y()) - 1), accent)
+        ring = self.item("controlCenterAudioVolumeFocus")
+        self.assertEqual(self.evaluate("border.width", ring), 2)
+        for corner in (QPointF(0, 0), QPointF(ring.width(), ring.height())):
+            point = ring.mapToItem(volume, corner)
+            self.assertGreaterEqual(point.x(), 0)
+            self.assertLessEqual(point.x(), volume.width())
+            self.assertGreaterEqual(point.y(), 0)
+            self.assertLessEqual(point.y(), volume.height())
+        self.assertEqual((volume.width(), volume.height()), original_size)
+        self.assertEqual(self.warnings, [])
+
 
 if __name__ == "__main__":
     unittest.main()

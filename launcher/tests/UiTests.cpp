@@ -1,6 +1,9 @@
 #include <QtTest>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQmlComponent>
+#include <QQmlExpression>
+#include <QQmlProperty>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QJSValue>
@@ -110,6 +113,79 @@ private Q_SLOTS:
         QTest::addColumn<int>("width");
         QTest::newRow("narrow") << 440;
         QTest::newRow("standard") << 660;
+    }
+
+    void nonselectedResultShowsKeyboardFocusWithoutChangingGeometry()
+    {
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-steam-helper.py"));
+        std::unique_ptr<QObject> launcher;
+        QQmlApplicationEngine engine;
+        // Two owned rows keep focus independent of backend selection, without starting runners.
+        QQmlComponent fixture(&engine);
+        fixture.setData(R"QML(
+            import QtQuick
+            QtObject {
+                signal changed()
+                property string query: ""
+                property string status: "ready"
+                property string error: ""
+                property int selectedIndex: 0
+                property var rows: [
+                    {id: "first", title: "Primeiro", description: "Resultado sintético", source: "Fixture",
+                     kind: "app", categoryLabel: "APLICATIVOS", enabled: true, generation: 1, actions: []},
+                    {id: "second", title: "Segundo", description: "Resultado sintético", source: "Fixture",
+                     kind: "app", categoryLabel: "APLICATIVOS", enabled: true, generation: 1, actions: []}
+                ]
+                function dismiss() {}
+            }
+        )QML", QUrl());
+        launcher.reset(fixture.create());
+        QVERIFY2(launcher, qPrintable(fixture.errorString()));
+        engine.rootContext()->setContextProperty("launcher", launcher.get());
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(search);
+        auto *context = QQmlEngine::contextForObject(window);
+        QQmlExpression rowExpression(context, window, QStringLiteral("results.itemAtIndex(1)"));
+        QQuickItem *row = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT((row = qobject_cast<QQuickItem *>(rowExpression.evaluate().value<QObject *>())), 1000);
+        search->forceActiveFocus();
+        const QRectF geometry = row->mapRectToItem(window->contentItem(), QRectF(0, 0, row->width(), row->height()));
+        QTest::qWait(30);
+        const QImage before = window->grabWindow();
+        QVERIFY(!before.isNull());
+        row->forceActiveFocus(Qt::TabFocusReason);
+        QVERIFY(row->hasActiveFocus());
+        QCOMPARE(launcher->property("selectedIndex").toInt(), 0);
+        QCOMPARE(row->mapRectToItem(window->contentItem(), QRectF(0, 0, row->width(), row->height())), geometry);
+        auto *background = row->property("background").value<QObject *>();
+        QVERIFY(background);
+        QCOMPARE(QQmlProperty(background, QStringLiteral("border.width")).read().toReal(), 2.0);
+        QQmlExpression focusColor(context, window, QStringLiteral("ui.focus"));
+        QCOMPARE(QQmlProperty(background, QStringLiteral("border.color")).read().value<QColor>(),
+                 QColor(focusColor.evaluate().toString()));
+        QTest::qWait(30);
+        const QImage after = window->grabWindow();
+        QVERIFY(!after.isNull());
+        const qreal dpr = before.devicePixelRatio();
+        const QRect pixels(qRound(geometry.x() * dpr), qRound(geometry.y() * dpr),
+                           qRound(geometry.width() * dpr), qRound(geometry.height() * dpr));
+        QVERIFY(before.copy(pixels) != after.copy(pixels));
+        search->forceActiveFocus();
+        QVERIFY(!row->hasActiveFocus());
+        QCOMPARE(launcher->property("selectedIndex").toInt(), 0);
+        QCOMPARE(row->mapRectToItem(window->contentItem(), QRectF(0, 0, row->width(), row->height())), geometry);
+        QVERIFY(!ai.busy() && !aiText.busy() && !steam.busy());
     }
 
     void headerEntryTargetsFitAndKeepKeyboardControl()

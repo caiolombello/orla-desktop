@@ -215,7 +215,9 @@ class BarTests(unittest.TestCase):
         self.assertEqual(availability.height(), 0)
         self.session.update(status="loading")
         self.assertTrue(availability.property("visible"))
-        self.assertEqual(availability.height(), 32)
+        # Visible rows take the menu's row height (compact, macOS-like menus).
+        self.assertEqual(availability.height(), availability.property("implicitHeight"))
+        self.assertGreater(availability.height(), 20)
         self.assertFalse(availability.property("enabled"))
         self.session.update(status="ready")
         self.assertEqual(availability.height(), 0)

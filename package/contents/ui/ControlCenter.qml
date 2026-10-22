@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
+import "../code/Style.js" as Style
 
 Controls.Control {
     id: root
@@ -11,11 +12,14 @@ Controls.Control {
     required property var audio
     property color foreground: palette.windowText
     property color muted: palette.windowText
+    property bool playing: false
     property string soundError: ""
     property string powerError: ""
     property string allError: ""
     implicitWidth: 310
-    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 390)
+    // Tall enough to show every module without scrolling on common screens;
+    // the popup budget still caps it on short ones.
+    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 520)
     Layout.fillHeight: true
     Layout.minimumHeight: 1
     Accessible.role: Accessible.Pane
@@ -55,32 +59,46 @@ Controls.Control {
         contentWidth: availableWidth
         contentHeight: body.implicitHeight
         clip: true
+        // Keep the scrollbar off the cards' edges.
+        rightPadding: Controls.ScrollBar.vertical.visible ? Controls.ScrollBar.vertical.width + Style.space.xs : 0
         Controls.ScrollBar.horizontal.policy: Controls.ScrollBar.AlwaysOff
         ColumnLayout {
             id: body
             width: scroll.availableWidth
-            spacing: 10
+            spacing: Style.space.sm
 
-            Controls.Frame {
+            Card {
                 objectName: "controlCenterSoundCard"
                 Layout.fillWidth: true
+                radius: Style.radius.module
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: 8
+                    spacing: Style.space.md
+                    // Now playing: the same live artwork as the dock's music icon.
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 10
-                        Kirigami.Icon { source: "preferences-desktop-sound"; Layout.preferredWidth: 28; Layout.preferredHeight: 28 }
+                        spacing: Style.space.md
+                        LiveIcon {
+                            Layout.preferredWidth: Style.size.target + Style.space.xs
+                            Layout.preferredHeight: Style.size.target + Style.space.xs
+                            Layout.alignment: Qt.AlignTop
+                            kind: "music"
+                            live: Boolean(root.player)
+                            info: ({art: root.player ? root.player.artUrl || "" : "", active: root.playing})
+                            animationDuration: 0
+                        }
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 1
                             Controls.Label {
                                 objectName: "controlCenterSoundHeading"
                                 Layout.fillWidth: true
                                 text: qsTr("Som e mídia")
-                                font.bold: true
+                                font.pixelSize: Style.type.caption
+                                font.weight: Style.weight.bold
                                 textFormat: Text.PlainText
                                 color: root.foreground
+                                opacity: 0.72
                             }
                             Controls.Label {
                                 objectName: "controlCenterMediaTitle"
@@ -89,6 +107,7 @@ Controls.Control {
                                                   : qsTr("Nenhum player aberto")
                                 textFormat: Text.PlainText
                                 elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
                                 color: root.foreground
                             }
                             Controls.Label {
@@ -99,70 +118,26 @@ Controls.Control {
                                 textFormat: Text.PlainText
                                 elide: Text.ElideRight
                                 color: root.muted
-                                opacity: 0.75
                             }
                         }
                     }
-                    Controls.Label {
-                        objectName: "controlCenterOutputHeading"
-                        Layout.fillWidth: true
-                        text: qsTr("Saída padrão")
-                        textFormat: Text.PlainText
-                        color: root.muted
-                    }
-                    Controls.ComboBox {
-                        id: outputSelector
-                        objectName: "controlCenterOutputSelector"
-                        Layout.fillWidth: true
-                        Layout.minimumHeight: 40
-                        model: root.audio.outputs
-                        textRole: "label"
-                        enabled: root.audio.status === "ready" && root.audio.outputs.length > 0
-                            && root.audio.pendingKind === "" && !root.audio.volumeGestureActive
-                        displayText: currentIndex >= 0
-                            ? root.boundedText(root.audio.outputs[currentIndex].label, 128)
-                            : qsTr("Nenhuma saída")
-                        delegate: Controls.ItemDelegate {
-                            required property var modelData
-                            width: outputSelector.width
-                            text: root.boundedText(modelData.label, 128)
-                            contentItem: Text {
-                                text: parent.text
-                                textFormat: Text.PlainText
-                                elide: Text.ElideRight
-                                verticalAlignment: Text.AlignVCenter
-                                color: parent.palette.buttonText
-                                font: parent.font
-                            }
-                        }
-                        Accessible.name: qsTr("Saída de áudio padrão")
-                        onActivated: index => {
-                            if (index >= 0 && index < root.audio.outputs.length)
-                                root.audio.requestDefaultOutput(root.audio.outputs[index].id);
-                        }
-                        onActiveFocusChanged: if (activeFocus) root.reveal(this)
-                    }
-                    Binding {
-                        target: outputSelector
-                        property: "currentIndex"
-                        value: root.outputIndex(root.audio.presentationOutputId)
-                        when: true
-                        restoreMode: Binding.RestoreNone
-                    }
+                    // Volume: a thick capsule with the speaker inside, macOS style.
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: Style.space.sm
                         Controls.Slider {
                             id: audioVolume
                             objectName: "controlCenterAudioVolume"
                             Layout.fillWidth: true
                             Layout.minimumHeight: 40
+                            padding: Style.space.xs
                             from: 0
                             to: 100
                             stepSize: 1
                             enabled: root.audio.status === "ready" && root.audio.writable
                                 && (root.audio.pendingKind === "" || (root.audio.pendingKind === "volume"
                                     && root.audio.volumeGestureActive))
+                            opacity: enabled ? 1 : 1 - Style.state.disabled
                             Accessible.name: qsTr("Volume da saída padrão")
                             onPressedChanged: {
                                 if (pressed) root.audio.beginVolumeGesture();
@@ -175,6 +150,51 @@ Controls.Control {
                                     value = root.audio.presentationVolume;
                             }
                             onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                            background: Rectangle {
+                                x: audioVolume.leftPadding
+                                y: audioVolume.topPadding + (audioVolume.availableHeight - height) / 2
+                                width: audioVolume.availableWidth
+                                height: Style.size.iconButton
+                                radius: height / 2
+                                color: Style.alpha(audioVolume.palette.windowText, Style.state.pressed)
+                                Rectangle {
+                                    width: Math.max(parent.height, audioVolume.visualPosition * parent.width)
+                                    height: parent.height
+                                    radius: height / 2
+                                    color: audioVolume.palette.highlight
+                                }
+                                Kirigami.Icon {
+                                    x: Style.space.sm
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Style.size.iconSm
+                                    height: width
+                                    source: root.audio.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
+                                    isMask: true
+                                    color: audioVolume.palette.highlightedText
+                                }
+                                Rectangle {
+                                    objectName: "controlCenterAudioVolumeFocus"
+                                    // Leave a gap so focus remains distinct from a full accent track.
+                                    anchors.fill: parent
+                                    anchors.margins: -Style.space.xs
+                                    radius: height / 2
+                                    color: "transparent"
+                                    visible: audioVolume.visualFocus
+                                    border.width: 2
+                                    border.color: audioVolume.palette.highlight
+                                }
+                            }
+                            handle: Rectangle {
+                                x: audioVolume.leftPadding + audioVolume.visualPosition * (audioVolume.availableWidth - width)
+                                y: audioVolume.topPadding + (audioVolume.availableHeight - height) / 2
+                                width: Style.size.iconButton - Style.space.xs
+                                height: width
+                                radius: width / 2
+                                color: Style.glass.highlight
+                                border.width: 1
+                                border.color: Style.alpha(Style.glass.shade, 0.18)
+                                visible: audioVolume.enabled
+                            }
                         }
                         Binding {
                             target: audioVolume
@@ -185,24 +205,76 @@ Controls.Control {
                         }
                         Controls.Label {
                             objectName: "controlCenterAudioPercent"
-                            Layout.minimumWidth: 36
+                            Layout.minimumWidth: Style.size.control
                             horizontalAlignment: Text.AlignRight
                             text: qsTr("%1%").arg(Math.round(audioVolume.value))
                             textFormat: Text.PlainText
+                            font.features: {"tnum": 1}
                             color: root.foreground
                         }
                     }
-                    Controls.Button {
-                        id: muteAction
-                        objectName: "controlCenterAudioMute"
+                    Controls.Label {
+                        objectName: "controlCenterOutputHeading"
                         Layout.fillWidth: true
-                        Layout.minimumHeight: 40
-                        enabled: root.audio.status === "ready" && root.audio.writable
-                            && root.audio.pendingKind === "" && !root.audio.volumeGestureActive
-                        text: root.audio.muted ? qsTr("Ativar som") : qsTr("Silenciar")
-                        Accessible.name: text
-                        onClicked: root.audio.requestMute(!root.audio.muted)
-                        onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        Layout.bottomMargin: -Style.space.xs
+                        text: qsTr("Saída padrão")
+                        font.pixelSize: Style.type.caption
+                        textFormat: Text.PlainText
+                        color: root.muted
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.space.sm
+                        OrlaIconButton {
+                            id: muteAction
+                            objectName: "controlCenterAudioMute"
+                            enabled: root.audio.status === "ready" && root.audio.writable
+                                && root.audio.pendingKind === "" && !root.audio.volumeGestureActive
+                            checked: root.audio.muted
+                            iconName: root.audio.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
+                            text: root.audio.muted ? qsTr("Ativar som") : qsTr("Silenciar")
+                            onClicked: root.audio.requestMute(!root.audio.muted)
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        Controls.ComboBox {
+                            id: outputSelector
+                            objectName: "controlCenterOutputSelector"
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: 40
+                            model: root.audio.outputs
+                            textRole: "label"
+                            enabled: root.audio.status === "ready" && root.audio.outputs.length > 0
+                                && root.audio.pendingKind === "" && !root.audio.volumeGestureActive
+                            displayText: currentIndex >= 0
+                                ? root.boundedText(root.audio.outputs[currentIndex].label, 128)
+                                : qsTr("Nenhuma saída")
+                            delegate: Controls.ItemDelegate {
+                                required property var modelData
+                                width: outputSelector.width
+                                text: root.boundedText(modelData.label, 128)
+                                contentItem: Text {
+                                    text: parent.text
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    color: parent.palette.buttonText
+                                    font: parent.font
+                                }
+                            }
+                            Accessible.name: qsTr("Saída de áudio padrão")
+                            onActivated: index => {
+                                if (index >= 0 && index < root.audio.outputs.length)
+                                    root.audio.requestDefaultOutput(root.audio.outputs[index].id);
+                            }
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        Binding {
+                            target: outputSelector
+                            property: "currentIndex"
+                            value: root.outputIndex(root.audio.presentationOutputId)
+                            when: true
+                            restoreMode: Binding.RestoreNone
+                        }
                     }
                     Controls.Label {
                         objectName: "controlCenterAudioStatus"
@@ -218,7 +290,7 @@ Controls.Control {
                         color: root.audio.error ? root.foreground : root.muted
                         Accessible.role: root.audio.error ? Accessible.AlertMessage : Accessible.StaticText
                     }
-                    Controls.Button {
+                    OrlaButton {
                         id: audioRetry
                         objectName: "controlCenterAudioRetry"
                         Layout.fillWidth: true
@@ -229,9 +301,10 @@ Controls.Control {
                         onClicked: root.audio.retry()
                         onActiveFocusChanged: if (activeFocus) root.reveal(this)
                     }
-                    Controls.Button {
+                    OrlaButton {
                         id: soundAction
                         objectName: "controlCenterSoundAction"
+                        variant: "ghost"
                         Layout.fillWidth: true
                         Layout.minimumHeight: 40
                         text: qsTr("Abrir Som no KDE")
@@ -251,26 +324,49 @@ Controls.Control {
                 }
             }
 
-            Controls.Frame {
+            Card {
                 objectName: "controlCenterPowerCard"
                 Layout.fillWidth: true
+                radius: Style.radius.module
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: 8
+                    spacing: Style.space.sm
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 10
-                        Kirigami.Icon { source: "preferences-system-power-management"; Layout.preferredWidth: 28; Layout.preferredHeight: 28 }
+                        spacing: Style.space.md
+                        Item {
+                            Layout.preferredWidth: Style.size.target + Style.space.xs
+                            Layout.preferredHeight: Style.size.target + Style.space.xs
+                            Layout.alignment: Qt.AlignTop
+                            ProgressRing {
+                                anchors.fill: parent
+                                lineWidth: Style.space.xs
+                                progress: root.battery && root.battery.percentKnown ? root.battery.percent / 100 : 0
+                                color: root.palette.highlight
+                                trackColor: Style.alpha(root.foreground, 0.12)
+                                animationDuration: 0
+                            }
+                            Kirigami.Icon {
+                                anchors.centerIn: parent
+                                width: Style.size.iconMd
+                                height: width
+                                source: root.battery && root.battery.charging ? "battery-full-charging-symbolic" : "battery-100-symbolic"
+                                isMask: true
+                                color: root.foreground
+                            }
+                        }
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 1
                             Controls.Label {
                                 objectName: "controlCenterPowerHeading"
                                 Layout.fillWidth: true
                                 text: qsTr("Energia")
-                                font.bold: true
+                                font.pixelSize: Style.type.caption
+                                font.weight: Style.weight.bold
                                 textFormat: Text.PlainText
                                 color: root.foreground
+                                opacity: 0.72
                             }
                             Controls.Label {
                                 objectName: "controlCenterPowerTitle"
@@ -278,6 +374,7 @@ Controls.Control {
                                 text: root.battery ? root.battery.summary : qsTr("Bateria indisponível")
                                 textFormat: Text.PlainText
                                 elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
                                 color: root.foreground
                             }
                             Controls.Label {
@@ -287,12 +384,12 @@ Controls.Control {
                                 textFormat: Text.PlainText
                                 elide: Text.ElideRight
                                 color: root.muted
-                                opacity: 0.75
                             }
                         }
                     }
-                    Controls.Button {
+                    OrlaButton {
                         objectName: "controlCenterPowerAction"
+                        variant: "ghost"
                         Layout.fillWidth: true
                         Layout.minimumHeight: 40
                         text: qsTr("Abrir Energia no KDE")
@@ -312,28 +409,27 @@ Controls.Control {
                 }
             }
 
-            Controls.Frame {
+            ColumnLayout {
                 Layout.fillWidth: true
-                ColumnLayout {
-                    anchors.fill: parent
-                    Controls.Button {
-                        objectName: "controlCenterAllAction"
-                        Layout.fillWidth: true
-                        Layout.minimumHeight: 40
-                        text: qsTr("Todos os ajustes do sistema")
-                        onClicked: root.request("all")
-                        onActiveFocusChanged: if (activeFocus) root.reveal(this)
-                    }
-                    Controls.Label {
-                        objectName: "controlCenterAllError"
-                        Layout.fillWidth: true
-                        visible: root.allError.length > 0
-                        text: root.allError
-                        textFormat: Text.PlainText
-                        wrapMode: Text.WordWrap
-                        color: root.foreground
-                        Accessible.role: Accessible.AlertMessage
-                    }
+                spacing: Style.space.xs
+                OrlaButton {
+                    objectName: "controlCenterAllAction"
+                    variant: "ghost"
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: 40
+                    text: qsTr("Todos os ajustes do sistema")
+                    onClicked: root.request("all")
+                    onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                }
+                Controls.Label {
+                    objectName: "controlCenterAllError"
+                    Layout.fillWidth: true
+                    visible: root.allError.length > 0
+                    text: root.allError
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                    color: root.foreground
+                    Accessible.role: Accessible.AlertMessage
                 }
             }
         }

@@ -216,7 +216,17 @@ Sem atalho global, Esc encerra o processo. Na execução normal, o componente te
 
 Build, busca real por aplicativos/calculadora, cancelamento, proteção contra callbacks antigos e execução exclusiva de uma fixture própria foram verificados. Os testes de teclado Qt simulam eventos dentro da própria janela; não comprovam atalhos globais nem foco real no compositor. Todos os CTests usam bus D-Bus privado sem diretórios de ativação de serviços e XDG/runtime temporários próprios. O processo Qt verifica o ID desse bus antes de construir RunnerManager. O teste de fixture cria um `.desktop` e recibo próprios; tudo é removido ao terminar, e nenhum aplicativo pessoal é lançado automaticamente. O runner do Plasma pode registrar o acesso ao aplicativo explicitamente aberto em serviços do desktop, como KActivities; desligar o histórico do Orla não desliga esses serviços.
 
-**Atalho por gesto real, foco global após o atalho e retorno do foco no Wayland permanecem UNRUN.** O caminho usa `KWaylandExtras::xdgActivationToken` e `KWindowSystem::activateWindow`, com callbacks canceláveis; KWin decide conceder foco. A janela continua visível para clique se o compositor recusar. A fonte KWin 6.7.5 ainda documenta o limite de passar seat/serial por KGlobalAccel a clientes sem foco. Não há solicitação de interfaces privilegiadas ou inspeção das janelas de outros apps. O primeiro probe manual terminou sem gesto. No segundo, a pessoa confirmou “Abriu e o foco voltou”, mas os eventos shortcut/↓/Escape não apareceram no recibo instrumentado. Esse relato humano foi preservado e não foi convertido em PASS nativo. As duas janelas da fixture pertenciam ao mesmo processo; não houve qualificação entre aplicativos, e a admissão L0 ampla permanece aberta.
+**Recibo histórico dos probes iniciais:** atalho por gesto real, foco global e retorno do foco permaneceram UNRUN nesses probes. O caminho usa `KWaylandExtras::xdgActivationToken` e `KWindowSystem::activateWindow`, com callbacks canceláveis; KWin decide conceder foco. A janela continua visível para clique se o compositor recusar. A fonte KWin 6.7.5 ainda documenta o limite de passar seat/serial por KGlobalAccel a clientes sem foco. Não há solicitação de interfaces privilegiadas ou inspeção das janelas de outros apps. O primeiro probe manual terminou sem gesto. No segundo, a pessoa confirmou “Abriu e o foco voltou”, mas os eventos shortcut/↓/Escape não apareceram no recibo instrumentado. Esse relato humano foi preservado e não foi convertido em PASS nativo. As duas janelas da fixture pertenciam ao mesmo processo; não houve qualificação entre aplicativos, e a admissão L0 ampla permanece aberta.
+
+**Prova posterior delimitada:** em `43905da`, Ctrl+Alt+Meta+O, consulta,
+↓ e Escape retornando à mesma janela de teste passaram em dois processos
+independentes, numa tela Plasma 6.7.5/Wayland. Isso não qualifica Enter/dispatch,
+Meta isolada, provedores reais ou múltiplos monitores; L0/L2 seguem abertos.
+A revisão visual de 13/10 foi instalada com backup e passou nova consulta/Escape
+com retorno à janela de teste em uma tela Wayland/DPR 2. A galeria claro/escuro
+é sintética; esquema claro nativo, múltiplas telas, Enter/execução e provedores
+reais permanecem sem qualificação. Os probes e canaries anteriores são históricos. Meta continua atribuída ao KRunner até configuração explícita e
+prova própria, com recuperação do atalho anterior.
 
 As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles. O ZIP 0.2.9 carrega apenas os helpers-fonte `scripts/ai.py` e `tests/test_ai.py`; eles não instalam nem habilitam o launcher. O painel experimental de IA permanece apenas no fonte e não é qualificado para uso diário; empacotamento e instalação opcional do launcher seguem pendentes.
 

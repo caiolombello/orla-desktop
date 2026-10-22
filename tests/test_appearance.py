@@ -109,12 +109,21 @@ class AppearanceTests(unittest.TestCase):
             config.setProperty("theme", "paper")
             QTest.qWait(50)
             popup = window.findChild(QObject, "calendarPopup")
-            popup_background = QColor(popup.property("background").property("color"))
-            default_muted = QColor(dock.property("muted"))
-            self.assertTrue(default_muted.isValid())
+
+            def popup_color(source):
+                expression = QQmlExpression(engine.rootContext(), popup, "String(" + source + ")")
+                value, _ = expression.evaluate()
+                self.assertFalse(expression.hasError(), expression.error().toString())
+                return QColor(value)
+
+            # Popups use the Style scheme that matches the system, not the dock tokens.
+            popup_background = popup_color("background.color")
             self.assertTrue(popup_background.isValid())
-            self.assertEqual((default_muted.alpha(), popup_background.alpha()), (255, 255))
-            self.assertGreaterEqual(self.contrast_ratio(default_muted, popup_background), 4.5)
+            self.assertEqual(popup_background, popup_color("dock.popupScheme.surface"))
+            for role in ("text", "textMuted", "accent"):
+                color = popup_color("scheme." + role)
+                self.assertEqual((color.alpha(), popup_background.alpha()), (255, 255), role)
+                self.assertGreaterEqual(self.contrast_ratio(color, popup_background), 4.5, role)
         finally:
             window.close()
             engine.deleteLater()

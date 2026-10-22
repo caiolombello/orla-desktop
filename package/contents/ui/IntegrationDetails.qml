@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import "../code/Style.js" as Style
 
 ColumnLayout {
     id: root
@@ -8,7 +9,7 @@ ColumnLayout {
     required property var integrations
     property string selected: "quota"
     readonly property string project: selected === "quota" ? "quotalantern" : selected === "peripherals" ? "perigauge" : "falatrace"
-    spacing: 10
+    spacing: Style.space.md
 
     function stateText(modelData) {
         if (root.selected === "peripherals" && modelData.present === false) return qsTr("Fora de alcance");
@@ -37,7 +38,7 @@ ColumnLayout {
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         color: root.dock.muted
-        font.pixelSize: 11
+        font.pixelSize: Style.type.caption
     }
     Controls.Label {
         objectName: "integrationEmptyState"
@@ -90,7 +91,7 @@ ColumnLayout {
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.dock.muted
-                        font.pixelSize: 11
+                        font.pixelSize: Style.type.caption
                     }
                 }
             }

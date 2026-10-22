@@ -1,9 +1,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "Style.js" as Style
 
 Item {
     id: panel
+    // The launcher is a dark overlay in every system scheme.
+    readonly property var ui: Style.scheme("dark")
     objectName: "steamSettingsPanel"
     implicitWidth: 0
     implicitHeight: 0
@@ -49,18 +52,18 @@ Item {
                     text: qsTr("← Busca")
                     Accessible.name: qsTr("Voltar à busca local")
                     onClicked: panel.backRequested()
-                    contentItem: Text { text: parent.text; color: "#69D7C2"; font.pixelSize: 12; textFormat: Text.PlainText }
-                    background: Rectangle { radius: 8; color: "#1B2733"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+                    contentItem: Text { text: parent.text; color: ui.accent; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
+                    background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 1 : 0; border.color: ui.accent }
                 }
                 Item { Layout.fillWidth: true }
-                Text { text: qsTr("SOMENTE SESSÃO"); color: "#A7B7C4"; font.pixelSize: 10; font.letterSpacing: 1; textFormat: Text.PlainText }
+                Text { text: qsTr("SOMENTE SESSÃO"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.letterSpacing: 1; textFormat: Text.PlainText }
             }
             Text {
-                Layout.fillWidth: true; text: qsTr("Jogos Steam locais"); color: "#EAF4F1"
-                font.pixelSize: 22; font.weight: Font.DemiBold; textFormat: Text.PlainText
+                Layout.fillWidth: true; text: qsTr("Jogos Steam locais"); color: ui.text
+                font.pixelSize: Style.type.headline; font.weight: Font.DemiBold; textFormat: Text.PlainText
             }
             Text {
-                Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#A7B7C4"; font.pixelSize: 12; textFormat: Text.PlainText
+                Layout.fillWidth: true; wrapMode: Text.Wrap; color: ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText
                 text: qsTr("Nada é lido ao abrir esta tela. Informe somente pastas locais de uma instalação Steam. Bibliotecas externas listadas por essas pastas também serão consultadas. O resultado mostra presença local e não confirma que sua conta pode acessar o jogo.")
             }
             TextArea {
@@ -69,8 +72,8 @@ Item {
                 Layout.fillWidth: true; Layout.preferredHeight: 92
                 placeholderText: "native=/caminho/absoluto/Steam\nflatpak=/caminho/absoluto/Steam"
                 Accessible.name: qsTr("Pastas locais do Steam, uma por linha")
-                color: "#EAF4F1"; placeholderTextColor: "#728391"; wrapMode: TextEdit.NoWrap
-                background: Rectangle { radius: 9; color: "#1B2733"; border.width: parent.activeFocus ? 1 : 0; border.color: "#69D7C2" }
+                color: ui.text; placeholderTextColor: ui.textMuted; wrapMode: TextEdit.NoWrap
+                background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 1 : 0; border.color: ui.accent }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -81,8 +84,8 @@ Item {
                     enabled: !panel.operationStartBlocked && !panel.controller.busy
                     text: panel.controller.apps.length > 0 ? qsTr("Atualizar jogos") : qsTr("Carregar jogos")
                     onClicked: if (!panel.operationStartBlocked) panel.controller.scan(panel.rootSpecs())
-                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? "#111923" : "#A7B7C4"; font.pixelSize: 12; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                    background: Rectangle { radius: 9; color: parent.enabled ? "#69D7C2" : "#283542"; border.width: parent.activeFocus ? 2 : 0; border.color: "#EAF4F1" }
+                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.onAccent : ui.textMuted; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                    background: Rectangle { radius: Style.radius.control; color: parent.enabled ? ui.accent : ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: ui.text }
                 }
                 Button {
                     id: cancelButton
@@ -94,13 +97,13 @@ Item {
             }
             Text {
                 Layout.fillWidth: true; text: panel.statusText(); wrapMode: Text.Wrap
-                color: panel.controller.status === "error" ? "#E7C58E" : "#B9CCC7"
-                font.pixelSize: 11; textFormat: Text.PlainText
+                color: panel.controller.status === "error" ? ui.warning : ui.textMuted
+                font.pixelSize: Style.type.caption; textFormat: Text.PlainText
             }
             Text {
                 Layout.fillWidth: true; visible: panel.controller.status === "available" || panel.controller.status === "partial"
                 text: qsTr("%1 jogos · %2 avisos · %3 raízes").arg(panel.controller.apps.length).arg(panel.controller.issueCount).arg(panel.controller.rootsCount)
-                color: "#91A5B4"; font.pixelSize: 10; textFormat: Text.PlainText
+                color: ui.textMuted; font.pixelSize: Style.type.overline; textFormat: Text.PlainText
             }
             Button {
                 id: downloadsButton
@@ -110,8 +113,8 @@ Item {
                 text: qsTr("Abrir downloads no Steam")
                 Accessible.description: qsTr("Encaminha a URI fixa de downloads; não confirma que o cliente abriu")
                 onClicked: if (!panel.operationStartBlocked) panel.controller.openDownloads()
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: "#69D7C2"; font.pixelSize: 11; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: 8; color: "#253F42"; border.width: parent.activeFocus ? 2 : 1; border.color: "#69D7C2" }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.caption; font.weight: Font.DemiBold; textFormat: Text.PlainText }
+                background: Rectangle { radius: Style.radius.control; color: Style.alpha(ui.accent, 0.14); border.width: parent.activeFocus ? 2 : 1; border.color: ui.accent }
             }
         }
     }

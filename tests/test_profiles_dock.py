@@ -446,7 +446,7 @@ class ProfilesDockTests(unittest.TestCase):
         self.assertTrue(self.window.findChild(QQuickItem, "widgetDivider").property("visible"))
         self.assertEqual(self.evaluate("children.filter(item => item.objectName === 'systemBatteryTile')[0].x", strip), 0)
         strip.ensurePolished()
-        self.assertEqual(strip.property("implicitWidth"), 132)
+        self.assertEqual(strip.property("implicitWidth"), 50)  # one live icon slot
 
     def test_selector_keyboard_is_pending_until_use_and_focus_reveals_at_420_height(self):
         self.assertTrue(self.evaluate("profiles.initializeDefaults(profiles.activeProfileId,profiles.revision)"))
