@@ -124,6 +124,242 @@ class AppearancePresetTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key_Return)
         self.assertEqual(json.loads(self.config.property('profilesJSON')), json.loads(before))
 
+    def test_catalog_keyboard_choice_previews_then_apply_and_undo_preserve_private_data(self):
+        self.initialize()
+        self.popup.setProperty('heightBudget', 420)
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        before = self.config.property('profilesJSON')
+        flat = self.flat()
+        timers = {key: self.config.property(key) for key in ('timerDeadline', 'timerRemaining', 'timerBreak', 'completedFocus')}
+        contexts = self.config.property('contextsJSON')
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        button = self.owned_item('appearancePresetCatalog-essencial')
+        self.assertIsNotNone(button)
+        self.assertFalse(self.owned_item('appearancePresetJSON').property('checked'))
+        self.focus(button)
+        height = button.height()
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(50)
+        self.assertEqual(button.height(), height)
+        label = self.owned_item('appearancePresetCatalogLabel-essencial')
+        self.assertIn('Em prévia', label.property('text'))
+        self.assertLessEqual(label.property('implicitWidth'), label.width() + 1)
+        from PySide6.QtCore import QRectF, QPointF
+        caption = QRectF(label.mapToScene(QPointF()), label.size())
+        parent = button.parentItem()
+        while parent:
+            if parent.property('clip') and parent.width() > 0 and parent.height() > 0:
+                visible = QRectF(parent.mapToScene(QPointF()), parent.size())
+                self.assertTrue(visible.adjusted(-1, -1, 1, 1).contains(caption))
+            parent = parent.parentItem()
+        self.assertTrue(self.evaluate('appearancePreset.hasPreview'))
+        self.assertEqual(self.evaluate('appearance.effective.baseTheme'), 'paper')
+        widgets = json.loads(self.evaluate('JSON.stringify(displayWidgets)'))
+        self.assertEqual([w['id'] for w in widgets if w['visible']], ['clock', 'systemBattery'])
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertEqual(writes.count(), 0)
+        self.assertIn('Essencial', self.owned_item('appearancePresetCatalogStatus').property('text'))
+        apply = self.owned_item('appearanceApply')
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier,
+                         apply.mapToScene(apply.boundingRect().center()).toPoint())
+        self.assertEqual(writes.count(), 1)
+        saved, original = json.loads(self.config.property('profilesJSON')), json.loads(before)
+        for profile in saved['profiles']:
+            old = next(p for p in original['profiles'] if p['id'] == profile['id'])
+            if profile['id'] != 'work':
+                self.assertEqual(profile, old)
+            else:
+                for key in ('launchers', 'calendarEvents', 'currentDesktopOnly', 'showAudioHud'):
+                    self.assertEqual(profile[key], old[key])
+        undo = self.owned_item('appearanceUndo')
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier,
+                         undo.mapToScene(undo.boundingRect().center()).toPoint())
+        self.assertEqual(writes.count(), 2)
+        self.assertEqual(json.loads(self.config.property('profilesJSON')), original)
+        self.assertEqual(self.flat(), flat)
+        self.assertEqual(self.config.property('contextsJSON'), contexts)
+        for key, value in timers.items():
+            self.assertEqual(self.config.property(key), value)
+
+    def test_catalog_tab_backtab_return_and_escape_keep_focus_visible_without_writes(self):
+        self.initialize()
+        self.popup.setProperty('heightBudget', 420)
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        before = self.config.property('profilesJSON')
+        saved = self.exported()
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        for index, key in enumerate(['essencial', 'mare', 'estudio', 'jogo']):
+            if index:
+                QTest.keyClick(self.window, Qt.Key_Tab)
+            button = self.owned_item('appearancePresetCatalog-' + key)
+            self.assertEqual(self.window.activeFocusItem(), button)
+            QTest.keyClick(self.window, Qt.Key_Return)
+            QTest.qWait(50)
+            self.assertTrue(self.evaluate('appearancePreset.hasPreview'))
+            self.assertEqual(self.window.activeFocusItem(), button)
+            label = self.owned_item('appearancePresetCatalogLabel-' + key)
+            self.assertIn('Em prévia', label.property('text'))
+            self.assertLessEqual(label.property('implicitWidth'), label.width() + 1)
+            ring = json.loads(self.evaluate('var outline=background.children.find(item=>item.visible && item.border && item.border.width===2);'
+                                            'var p=outline.mapToItem(null,0,0);JSON.stringify({x:p.x,y:p.y,width:outline.width,height:outline.height})', button))
+            from PySide6.QtCore import QRectF, QPointF
+            bounds = QRectF(ring['x'], ring['y'], ring['width'], ring['height'])
+            caption = QRectF(label.mapToScene(QPointF()), label.size())
+            parent = button.parentItem()
+            while parent:
+                if parent.property('clip') and parent.width() > 0 and parent.height() > 0:
+                    visible = QRectF(parent.mapToScene(QPointF()), parent.size())
+                    self.assertTrue(visible.adjusted(-1, -1, 1, 1).contains(bounds), key)
+                    self.assertTrue(visible.adjusted(-1, -1, 1, 1).contains(caption), key)
+                parent = parent.parentItem()
+            self.assertEqual(self.exported(), saved)
+            self.assertEqual(writes.count(), 0)
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetJSON')
+        for key in ['jogo', 'estudio', 'mare', 'essencial']:
+            QTest.keyClick(self.window, Qt.Key_Backtab)
+            self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetCatalog-' + key)
+        for _ in range(4):
+            QTest.keyClick(self.window, Qt.Key_Tab)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetExport')
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetOutput')
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetInput')
+        self.owned_item('appearancePresetInput').setProperty('text', '{invalid}')
+        QTest.keyClick(self.window, Qt.Key_Tab)
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetPreview')
+        QTest.keyClick(self.window, Qt.Key_Return)
+        self.assertTrue(self.evaluate('appearancePreset.error.length > 0'))
+        self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetInput')
+        for name in ['appearancePresetOutput', 'appearancePresetExport', 'appearancePresetJSON', 'appearancePresetCatalog-jogo']:
+            QTest.keyClick(self.window, Qt.Key_Backtab)
+            self.assertEqual(self.window.activeFocusItem().objectName(), name)
+        QTest.qWait(50)
+        button = self.owned_item('appearancePresetCatalog-jogo')
+        parent = button.parentItem()
+        while parent:
+            if parent.property('clip') and parent.width() > 0 and parent.height() > 0:
+                visible = QRectF(parent.mapToScene(QPointF()), parent.size())
+                self.assertTrue(visible.adjusted(-1, -1, 1, 1).contains(
+                    QRectF(button.mapToScene(QPointF()), button.size())))
+            parent = parent.parentItem()
+        self.assertEqual(writes.count(), 0)
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        self.settle(lambda: not self.popup.property('visible'))
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertEqual(writes.count(), 0)
+
+    def test_catalog_reentrant_cancel_or_newer_input_cannot_revive_the_old_choice(self):
+        self.initialize()
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        before = self.config.property('profilesJSON')
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.evaluate('appearancePreset.inputTextChanged.connect(function handler(){'
+                      'appearancePreset.inputTextChanged.disconnect(handler);appearancePreset.cancel();})')
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertFalse(self.evaluate('appearancePreset.apply()'))
+        self.assertNotIn('Em prévia', self.owned_item('appearancePresetCatalogStatus').property('text'))
+        self.evaluate('appearancePreset.cancel();appearance.begin()')
+        self.evaluate("appearancePreset.inputTextChanged.connect(function handler(){"
+                      "appearancePreset.inputTextChanged.disconnect(handler);appearancePreset.setInputText('{newer}');})")
+        self.focus(self.owned_item('appearancePresetCatalog-mare'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate('appearancePreset.inputText'), '{newer}')
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertEqual(writes.count(), 0)
+
+    def test_catalog_same_text_restored_in_a_new_profile_does_not_preview_the_old_choice(self):
+        self.initialize()
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        self.evaluate('appearancePreset.inputTextChanged.connect(function handler(){'
+                      'appearancePreset.inputTextChanged.disconnect(handler);const text=appearancePreset.inputText;'
+                      'const doc=JSON.parse(configuration.profilesJSON);doc.activeProfileId="personal";'
+                      'configuration.profilesJSON=JSON.stringify(doc);appearance.begin();appearancePreset.setInputText(text);})')
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'personal')
+        self.assertTrue(self.evaluate('appearancePreset.inputText.length > 0'))
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertFalse(self.evaluate('appearancePreset.apply()'))
+
+    def test_catalog_same_text_after_revision_change_does_not_preview_the_old_choice(self):
+        self.initialize()
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        revision = self.evaluate('profiles.revision')
+        self.evaluate('appearancePreset.inputTextChanged.connect(function handler(){'
+                      'appearancePreset.inputTextChanged.disconnect(handler);const text=appearancePreset.inputText;'
+                      'const doc=JSON.parse(configuration.profilesJSON);doc.profiles[0].name="Revisado";'
+                      'configuration.profilesJSON=JSON.stringify(doc);appearance.begin();appearancePreset.setInputText(text);})')
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'work')
+        self.assertGreater(self.evaluate('profiles.revision'), revision)
+        self.assertTrue(self.evaluate('appearancePreset.inputText.length > 0'))
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertFalse(self.evaluate('appearancePreset.apply()'))
+
+    def test_catalog_same_text_after_cancel_restart_does_not_revive_the_canceled_choice(self):
+        self.initialize()
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        before = self.config.property('profilesJSON')
+        revision = self.evaluate('profiles.revision')
+        writes = QSignalSpy(self.config.profilesJSONChanged)
+        self.evaluate('appearancePreset.inputTextChanged.connect(function handler(){'
+                      'appearancePreset.inputTextChanged.disconnect(handler);const text=appearancePreset.inputText;'
+                      'appearancePreset.cancel();appearance.begin();appearancePreset.setInputText(text);})')
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.evaluate('profiles.activeProfileId'), 'work')
+        self.assertEqual(self.evaluate('profiles.revision'), revision)
+        self.assertTrue(self.evaluate('appearancePreset.inputText.length > 0'))
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+        self.assertFalse(self.evaluate('appearancePreset.apply()'))
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertEqual(writes.count(), 0)
+
+    def test_catalog_busy_choice_is_refused_and_legacy_link_does_not_initialize_profiles(self):
+        before = self.config.property('profilesJSON')
+        self.evaluate('open()', self.popup)
+        QTest.qWait(30)
+        for key in ['essencial', 'mare', 'estudio', 'jogo']:
+            self.assertFalse(self.owned_item('appearancePresetCatalog-' + key).property('enabled'))
+        self.focus(self.owned_item('appearancePresetCatalogProfiles'))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.owned_item('settingsTabs').property('currentIndex'), 2)
+        self.assertEqual(self.config.property('profilesJSON'), before)
+        self.assertFalse(self.evaluate('profiles.initialized'))
+        self.initialize()
+        self.owned_item('settingsTabs').setProperty('currentIndex', 0)
+        self.evaluate('appearance.begin()')
+        self.focus(self.owned_item('appearancePresetCatalog-essencial'))
+        QTest.keyClick(self.window, Qt.Key_Return)
+        attempts = []
+        def newer_choice():
+            button = self.owned_item('appearancePresetCatalog-mare')
+            attempts.append((self.evaluate('appearancePreset.busy'), button.property('enabled')))
+            self.evaluate('clicked()', button)
+        self.config.profilesJSONChanged.connect(newer_choice)
+        self.assertTrue(self.evaluate('appearancePreset.apply()'))
+        self.assertEqual(attempts, [(True, False)])
+        saved = json.loads(self.config.property('profilesJSON'))
+        work = next(p for p in saved['profiles'] if p['id'] == 'work')
+        self.assertEqual(json.loads(work['appearance']['appearanceJSON'])['baseTheme'], 'paper')
+        self.assertFalse(self.evaluate('appearancePreset.hasPreview'))
+
     def test_reentrant_input_edit_remains_pending_and_cannot_apply_old_preview(self):
         self.initialize()
         self.evaluate('appearance.begin()')

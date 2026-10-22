@@ -30,6 +30,17 @@ dock e barra permaneceram iguais. Seleção de jogo, execução, cliente e matri
 de bibliotecas ainda estão abertos; S1 permanece parcial. Veja o
 [registro](docs/validation/steam-root-discovery-source.md).
 
+**Quatro presets de aparência — instalados com prova delimitada:** Essencial, Maré, Estúdio e Jogo
+oferecem prévia optativa de aparência e widgets, com Aplicar/Cancelar/Desfazer
+existentes. O estado aparece no botão, sem deslocar sua altura; a seleção antiga
+é recusada após mudança de perfil ou cancelamento reentrante. Passaram 69 testes
+relevantes por estilo, suíte final de presets 25/25, design e build. O dock
+`944c0e7` foi instalado (67 arquivos); abertura passiva e orientação de perfil
+foram observadas em Wayland, sem mudar configuração, barra, bancos ou launcher.
+Escolher/Aplicar/Desfazer por esse novo controle em perfil gerenciado permanecem
+pendentes no KDE real; C1/UX1/X1 seguem parciais.
+Veja o [registro](docs/validation/appearance-presets-source.md).
+
 ## Resultado esperado
 
 Um ambiente KDE inspirado no macOS, com dock, barra superior, launcher inspirado no Raycast e notificações configuráveis, integração com os projetos do Caio e instalação acessível para outras pessoas. A identidade Orla continua própria, com uma interface bonita, consistente e personalizável. Temas, widgets, comandos e provedores de IA poderão ser ampliados pela comunidade; autores poderão distribuir addons gratuitos ou comerciais conforme os contratos e políticas abaixo. Caio decide as prioridades e valida o uso diário. Este documento define a sequência proposta; os números de versão são marcos, sem promessa de datas.

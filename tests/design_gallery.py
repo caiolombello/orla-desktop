@@ -21,7 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "org.kde.desktop")
 
-from PySide6.QtCore import QObject, QPointF, QRect, QRectF, Qt, QUrl
+from PySide6.QtCore import QObject, QPointF, QRect, QRectF, Qt, QUrl, QCoreApplication, QEvent
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -112,6 +112,51 @@ class Gallery:
         evaluate("closeContext(); settings.close()")
         window.close()
         engine.deleteLater()
+
+    def appearance_catalog(self, host: str) -> None:
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "QmlHarness.qml")))
+        window = engine.rootObjects()[0]
+        dock = window.findChild(QQuickItem, "dock")
+        context = QQmlEngine.contextForObject(window.findChild(QQuickItem, "dockSurface"))
+        def evaluate(source):
+            expression = QQmlExpression(context, dock, source)
+            value, _ = expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(expression.error().toString())
+            return value
+        window.setProperty("width", 900)
+        window.setProperty("height", 900)
+        evaluate('root.anchors.centerIn=undefined;root.x=40;root.y=24;settings.popupType=0;'
+                 'settings.width=420;settings.heightBudget=420;'
+                 'profiles.initializeDefaults(profiles.activeProfileId,profiles.revision);'
+                 'profiles.select("work",profiles.activeProfileId,profiles.revision);settings.open()')
+        QTest.qWait(60)
+        popup = window.findChild(QQuickItem, "settingsPopup")
+        pending = [window.contentItem()]
+        choice = None
+        while pending:
+            item = pending.pop()
+            if item.objectName() == "appearancePresetCatalog-essencial":
+                choice = item
+                break
+            pending.extend(item.childItems())
+        assert choice is not None
+        choice.forceActiveFocus(Qt.TabFocusReason)
+        steps, name = (1, "mare") if host == "dark" else (3, "jogo")
+        for _ in range(steps):
+            QTest.keyClick(window, Qt.Key_Tab)
+            QTest.qWait(20)
+        assert window.activeFocusItem().objectName() == "appearancePresetCatalog-" + name
+        QTest.keyClick(window, Qt.Key_Return)
+        self.save(f"preset-catalog-{host}-{name}-420", window, self.scene_rect(popup))
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(window, QEvent.DeferredDelete)
+        QTest.qWait(10)
+        engine.deleteLater()
+        QCoreApplication.sendPostedEvents(engine, QEvent.DeferredDelete)
+        QTest.qWait(10)
 
     def bar(self, host: str) -> None:
         from test_bar import FixtureApplication, FixtureSession
@@ -283,6 +328,7 @@ def render(host: str, output: Path) -> int:
     app = QGuiApplication.instance() or QGuiApplication([])
     gallery = Gallery(output)
     gallery.dock(host)
+    gallery.appearance_catalog(host)
     gallery.bar(host)
     if host == "dark":
         gallery.launcher()

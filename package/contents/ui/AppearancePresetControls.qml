@@ -2,13 +2,134 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import "../code/Style.js" as Style
+import "../code/AppearancePreset.js" as Preset
+import "../code/AppearancePresetCatalog.js" as Catalog
 
 ColumnLayout {
     id: controls
     required property var preset
+    readonly property var choices: Catalog.entries()
+    readonly property string previewId: {
+        if (!preset.hasPreview) return "";
+        const appearance = JSON.stringify(preset.appearance.effective);
+        const widgets = JSON.stringify(preset.previewWidgets);
+        const entry = choices.find(option => JSON.stringify(option.payload.appearance) === appearance
+            && JSON.stringify(option.payload.widgets) === widgets);
+        return entry ? entry.id : "";
+    }
     signal focusRequested(var control, var owner)
     signal profilesRequested()
     spacing: Style.space.sm
+    function nameFor(id) {
+        return ({essencial:qsTr("Essencial"), mare:qsTr("Maré"), estudio:qsTr("Estúdio"), jogo:qsTr("Jogo")})[id] || "";
+    }
+    function descriptionFor(id) {
+        return ({essencial:qsTr("Claro e opaco; relógio e bateria. Movimento reduzido."),
+            mare:qsTr("Vidro translúcido; relógio, música e bateria. Movimento normal."),
+            estudio:qsTr("Escuro opaco; Pomodoro e mídia. Movimento reduzido."),
+            jogo:qsTr("Escuro opaco; música primeiro, relógio e bateria. Movimento normal.")})[id] || "";
+    }
+    function choose(id) {
+        if (!preset.managed || !preset.editing || preset.busy) return false;
+        const target = preset, appearance = target.appearance, draft = appearance.draft;
+        const scope = target.scope, revision = target.revision;
+        const text = Preset.serialize(Catalog.payload(id));
+        if (!text.length) return false;
+        target.setInputText(text);
+        // A synchronous input observer can cancel or replace this intent.
+        if (preset !== target || target.appearance !== appearance || appearance.draft !== draft
+                || target.scope !== scope || target.revision !== revision
+                || target.inputText !== text || !target.managed || !target.editing || target.busy) return false;
+        return target.previewImport();
+    }
+    SectionLabel { text: qsTr("Escolher preset") }
+    Controls.Label {
+        Layout.fillWidth: true
+        text: controls.preset.managed ? qsTr("Escolher muda a prévia. Aplicar salva neste perfil.")
+            : qsTr("Para usar um preset, crie ou escolha um perfil na aba Perfis.")
+        textFormat: Text.PlainText
+        wrapMode: Text.WordWrap
+    }
+    GridLayout {
+        Layout.fillWidth: true
+        columns: 2
+        rowSpacing: Style.space.sm
+        columnSpacing: Style.space.sm
+        Repeater {
+            id: choicesRepeater
+            model: controls.choices
+            OrlaButton {
+                id: choice
+                required property var modelData
+                required property int index
+                objectName: "appearancePresetCatalog-" + modelData.id
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                Layout.minimumHeight: Style.size.target
+                text: controls.nameFor(modelData.id)
+                enabled: controls.preset.managed && controls.preset.editing && !controls.preset.busy
+                Accessible.description: controls.descriptionFor(modelData.id)
+                    + (controls.previewId === modelData.id ? " " + qsTr("Em prévia.") : "")
+                KeyNavigation.priority: KeyNavigation.BeforeItem
+                KeyNavigation.tab: index + 1 < choicesRepeater.count ? choicesRepeater.itemAt(index + 1) : disclosure
+                KeyNavigation.backtab: index > 0 ? choicesRepeater.itemAt(index - 1) : null
+                Keys.onReturnPressed: event => { if (enabled) clicked(); event.accepted = true; }
+                onClicked: controls.choose(modelData.id)
+                onActiveFocusChanged: if (activeFocus) controls.focusRequested(this, this)
+                contentItem: ColumnLayout {
+                    spacing: Style.space.xs
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: Style.size.iconMd
+                        radius: Style.radius.control
+                        color: choice.modelData.payload.appearance.tokens.surface
+                        opacity: choice.modelData.payload.appearance.tokens.opacity
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: Style.space.xs
+                            Repeater {
+                                model: choice.modelData.payload.widgets.filter(widget => widget.visible)
+                                Rectangle {
+                                    required property var modelData
+                                    width: Style.space.sm
+                                    height: width
+                                    radius: Style.radius.xs
+                                    color: choice.modelData.payload.appearance.tokens.foreground
+                                }
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "appearancePresetCatalogLabel-" + choice.modelData.id
+                        Layout.fillWidth: true
+                        text: choice.text + (controls.previewId === choice.modelData.id ? qsTr(" · Em prévia") : "")
+                        font.pixelSize: Style.type.label
+                        font.weight: controls.previewId === choice.modelData.id ? Style.weight.demiBold : Style.weight.medium
+                        horizontalAlignment: Text.AlignHCenter
+                        textFormat: Text.PlainText
+                    }
+                }
+            }
+        }
+    }
+    Controls.Label {
+        objectName: "appearancePresetCatalogStatus"
+        Layout.fillWidth: true
+        text: controls.previewId.length ? qsTr("Em prévia: %1").arg(controls.nameFor(controls.previewId))
+            + "\n" + controls.descriptionFor(controls.previewId) : qsTr("Quatro pontos de partida. Você confirma ao aplicar.")
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+        font.pixelSize: Style.type.caption
+    }
+    OrlaButton {
+        id: catalogProfiles
+        objectName: "appearancePresetCatalogProfiles"
+        Layout.fillWidth: true
+        visible: !controls.preset.managed
+        text: qsTr("Ir para Perfis")
+        onClicked: controls.profilesRequested()
+        onActiveFocusChanged: if (activeFocus) controls.focusRequested(this, this)
+    }
     OrlaButton {
         id: disclosure
         objectName: "appearancePresetJSON"
@@ -17,6 +138,7 @@ ColumnLayout {
         checkable: true
         Accessible.description: checked ? qsTr("Seção expandida") : qsTr("Seção recolhida")
         KeyNavigation.tab: checked ? exporter : null
+        KeyNavigation.backtab: controls.preset.managed ? choicesRepeater.itemAt(choicesRepeater.count - 1) : catalogProfiles
         onActiveFocusChanged: if (activeFocus) controls.focusRequested(this, this)
     }
     Card {
