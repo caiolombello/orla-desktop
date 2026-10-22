@@ -263,3 +263,40 @@ aviso do Qt Wayland, e o título passou a “Outubro 2026”.
 Não houve instalação ou ativação de complemento, produtor ou exportação,
 esquema claro nativo, leitor de tela, vários monitores, troca de escala,
 reinício ou login. O formato continua experimental.
+
+## Quota por complemento — 22/10
+
+Prova privada (D-Bus isolado, HOME/XDG temporários, dados sintéticos): o
+pacote do QuotaLantern foi instalado e ativado pela CLI do Orla, o exportador
+real do QuotaLantern publicou uma leitura depois de `--orla-export enable`, e
+o serviço real respondeu `SnapshotFor(["quota"])` com `ready` (um provedor
+pronto com 0 % e 42 %, um desatualizado sem percentual, um indisponível, o
+adaptador de custo de API ausente), sem e-mail, mensagem do provedor nem
+valores em dinheiro. O `AddonQuota.js` real aceitou a resposta. Depois de
+`--orla-export disable`, o Orla passou a `missing`. A mesma prova encontrou a
+quota envolvida no envelope do worker, recusada pelo leitor; corrigido em
+`69d8b04`.
+
+Instalação local, sem complemento de quota no registro, observando as chamadas
+D-Bus da dock:
+
+1. **Leituras em ciclo.** Ao terminar, cada leitor (bateria e quota) reiniciava
+   o outro sem condição: cerca de cinco `SnapshotFor` por segundo, cada um com
+   um worker. A dock anterior foi restaurada do backup em seguida. Em `2a6908d`,
+   um leitor só é retomado quando a admissão de um worker por vez o recusou; o
+   teste novo reproduzia o ciclo antes da correção.
+2. **Depois da correção**, em 90 s: a cada 15 s, uma leitura legada de quota
+   (`ready`) e exatamente duas do host, quota e bateria, cada uma respondida em
+   cerca de 50 ms com `not_installed`. A dock manteve a quota legada e o
+   journal do plasmashell não registrou erro da dock.
+
+Na reinstalação, encerrar o host à mão deixou a ativação sob demanda sem
+resposta por cerca de 3 min (chamadas expirando em 25 s); um host iniciado à
+mão respondeu em 54 ms, e a ativação seguinte voltou ao normal. Em D-Bus
+privado, o host atende e sai em poucos segundos após SIGTERM, então o atraso
+não foi reproduzido; como o host já sai ao ver os módulos novos, a instalação
+não precisa encerrá-lo.
+
+Não houve QuotaLantern real na sessão de uso, conta de provedor, captura
+visual da dock com quota por complemento, leitor de tela nem esquema claro
+nativo.

@@ -85,7 +85,7 @@ jobs:
             bash -euo pipefail -c '
               "$1" -B -s -m unittest \
                 test_addon_text_profile test_addons test_addon_store test_addon_worker \
-                test_addon_service test_package_cli test_release -v
+                test_addon_service test_addon_quota test_package_cli test_release -v
               # Core runs without the dependent five-file client layer.
               # A separate process preserves QCore/QGui application ownership.
               if [[ -f tests/test_addon_manager_state.py ]]; then
@@ -96,7 +96,7 @@ jobs:
                   test_addon_manager test_addon_peripherals \
                   test_addon_composition.AddonCompositionTests \
                   test_addon_composition.AddonSessionInitializationTests \
-                  test_addon_composition.AddonSessionLifetimeTests -v
+                  test_addon_composition.AddonSessionLifetimeTests test_addon_quota_dock -v
               fi
             ' -- "$ORLA_CI_PYTHON"
 

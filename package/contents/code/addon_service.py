@@ -115,9 +115,10 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
 
         @Slot('QStringList', QDBusMessage, result=str)
         def SnapshotFor(self, modules, message):
-            if type(modules) is not list or (modules != [] and modules != ['peripherals']):
+            if type(modules) is not list or modules not in ([], ['peripherals'], ['quota']):
                 return self.error('format')
-            return self.dispatch('snapshot' if modules else 'empty', [], message)
+            action = 'snapshot' if modules == ['peripherals'] else 'quota' if modules == ['quota'] else 'empty'
+            return self.dispatch(action, [], message)
 
         def dispatch(self, action, args, message):
             if self.obsolete:
@@ -276,7 +277,8 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
                     elif self.action in worker.MUTATIONS:
                         committed, generation = True, response['result']['generation']
                 payload = self.error(self.first_failure, committed=committed, generation=generation)
-            elif self.action == 'snapshot':
+            elif self.action in ('snapshot', 'quota'):
+                # Data snapshots carry the bare projection; failures keep the envelope.
                 payload = worker.encoded(response['result']) if response['ok'] else worker.encoded(response)
             else:
                 payload = worker.encoded(response)

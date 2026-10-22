@@ -11,10 +11,19 @@ Item {
     property string selectionKey: "[]"
     property bool addonSuspended: false
     property var addonIdentity: null
+    // Production composition reads quota from the addon host; fixtures keep the
+    // legacy-only route unless they opt in. A validated reading of an active
+    // quota addon retires the legacy quota read; a validated "none" restores it.
+    property bool addonQuotaEnabled: false
+    property var quotaIdentity: null
+    property bool quotaAddonActive: false
+    property string quotaAddonError: ""
+    property string quotaAddonErrorCode: ""
+    readonly property var quotaAddonValue: quotaAddon.value
     property double nowMsOverride: -1
     property bool legacyLoading: false
     property bool addonLoading: false
-    readonly property bool addonCallPending: addons.callPending
+    readonly property bool addonCallPending: addons.callPending || quotaAddon.callPending
     property bool loading: false
     property string legacyError: ""
     property string addonError: ""
@@ -30,14 +39,33 @@ Item {
         // Read the inputs directly: derived selection may still be notifying observers.
         admissionAllowed: function() {
             return root.active && !root.addonSuspended && Array.isArray(root.enabledModules)
-                && root.enabledModules.indexOf("peripherals") >= 0;
+                && root.enabledModules.indexOf("peripherals") >= 0 && !quotaAddon.callPending;
         }
         transport: root.transport
         expectedIdentity: root.addonIdentity
         nowMsOverride: root.nowMsOverride
-        onLoadingChanged: root.addonLoading = loading
+        onLoadingChanged: root.addonLoading = loading || quotaAddon.loading
         onErrorCodeChanged: root.addonErrorChangedFrom(errorCode)
         onValueChanged: root.peripheralChanged(value)
+        // The host runs one worker at a time: a reader refused for that reason reads next.
+        onCallPendingChanged: if (!callPending && quotaAddon.admissionWaiting) root.handTurnTo(quotaAddon)
+    }
+    AddonPeripheralsState {
+        id: quotaAddon
+        module: "quota"
+        active: root.active && root.addonQuotaEnabled && root.selectedModules.indexOf("quota") >= 0
+        suspended: root.addonSuspended
+        admissionAllowed: function() {
+            return root.active && !root.addonSuspended && root.addonQuotaEnabled && Array.isArray(root.enabledModules)
+                && root.enabledModules.indexOf("quota") >= 0 && !addons.callPending;
+        }
+        transport: root.transport
+        expectedIdentity: root.quotaIdentity
+        nowMsOverride: root.nowMsOverride
+        onLoadingChanged: root.addonLoading = loading || addons.loading
+        onErrorCodeChanged: root.quotaErrorChangedFrom(errorCode)
+        onValueChanged: root.quotaReadingChanged(value)
+        onCallPendingChanged: if (!callPending && addons.admissionWaiting) root.handTurnTo(addons)
     }
     QtObject {
         id: internal
@@ -46,6 +74,7 @@ Item {
         property var flight: null
         property var legacy: root.emptySnapshot([])
         property var peripheral: ({status: "disabled", devices: []})
+        property var quota: ({status: "disabled", providers: []})
     }
     readonly property var quota: snapshot.quota
     readonly property var peripherals: snapshot.peripherals
@@ -110,9 +139,48 @@ Item {
         } catch (_) { return null; }
     }
     function errorFor(module) {
-        return selectedModules.indexOf(module) < 0 ? "" : module === "peripherals" ? addonError : legacyError;
+        return selectedModules.indexOf(module) < 0 ? "" : module === "peripherals" ? addonError
+            : module === "quota" && quotaAddonActive ? quotaAddonError : legacyError;
     }
-    function invalidateAddons() { addons.invalidate(); }
+    function invalidateAddons() { addons.invalidate(); quotaAddon.invalidate(); }
+    function quotaView(value) {
+        const names = {codex: "Codex", claude: "Claude", gemini: "Gemini", grok: "Grok", kiro: "Kiro", cursor: "Cursor",
+            glm: "GLM (z.ai)", "opencode-go": "OpenCode Go", zen: "Zen"};
+        const labels = {primary: qsTr("Janela principal"), secondary: qsTr("Janela secundária"), tertiary: qsTr("Janela terciária")};
+        const windows = [];
+        for (const provider of value.providers || []) {
+            const name = names[provider.id] || provider.id;
+            // A provider without windows still shows that it has no reading.
+            if (!provider.windows.length) windows.push({provider: name, label: qsTr("Sem leitura"), usedPercent: null,
+                resetAt: null, resetDescription: "", stale: provider.state === "stale"});
+            for (const window of provider.windows) {
+                const minutes = window.windowMinutes;
+                const span = !minutes ? "" : minutes % 1440 === 0 ? " (" + minutes / 1440 + "d)"
+                    : minutes % 60 === 0 ? " (" + minutes / 60 + "h)" : " (" + minutes + "min)";
+                windows.push({provider: name, label: labels[window.key] + span, usedPercent: window.usedPercent,
+                    resetAt: window.resetAtMs ? new Date(window.resetAtMs).toISOString() : null,
+                    resetDescription: "", stale: provider.state === "stale"});
+            }
+        }
+        return {status: value.status === "disabled" ? "unknown" : value.status, source: "addon",
+            updatedAt: typeof value.generatedAtMs === "number" ? new Date(value.generatedAtMs).toISOString() : null,
+            windows: windows, costs: []};
+    }
+    function quotaReadingChanged(value) {
+        internal.quota = value;
+        // Only a validated reading names the source; failures keep the current one.
+        if (value && value.addon && (value.addon.enabled === true) !== quotaAddonActive) {
+            quotaAddonActive = value.addon.enabled === true;
+            selectionChanged(false);
+            return;
+        }
+        syncSnapshot();
+    }
+    function quotaErrorChangedFrom(code) {
+        quotaAddonErrorCode = code;
+        if (quotaAddon.errorCode !== code) return;
+        quotaAddonError = code ? qsTr("Integração de quota indisponível.") : "";
+    }
     function acceptSnapshot(text, modules) {
         if (!Array.isArray(modules) || modules.indexOf("peripherals") >= 0) { unavailable(qsTr("Formato de integração incompatível.")); return false; }
         const value = decodeSnapshot(text, modules);
@@ -122,8 +190,11 @@ Item {
     function updateLoading() { loading = legacyLoading || addonLoading; }
     function updateError() {
         const hasAddon = selectedModules.indexOf("peripherals") >= 0;
-        error = legacyModules.length && hasAddon ? (legacyError && addonError ? legacyError : "")
+        let combined = legacyModules.length && hasAddon ? (legacyError && addonError ? legacyError : "")
             : hasAddon ? addonError : legacyError;
+        if (quotaAddonActive && selectedModules.indexOf("quota") >= 0)
+            combined = legacyModules.length || hasAddon ? (combined && quotaAddonError ? combined : "") : quotaAddonError;
+        error = combined;
     }
     function addonErrorChangedFrom(code) {
         addonErrorCode = code;
@@ -131,7 +202,8 @@ Item {
         addonError = code ? qsTr("Integração de periféricos indisponível.") : "";
     }
     function syncSnapshot() {
-        snapshot = {quota: internal.legacy.quota, peripherals: internal.peripheral, recording: internal.legacy.recording};
+        snapshot = {quota: quotaAddonActive && selectedModules.indexOf("quota") >= 0 ? quotaView(internal.quota) : internal.legacy.quota,
+            peripherals: internal.peripheral, recording: internal.legacy.recording};
     }
     function peripheralChanged(value) { internal.peripheral = value; syncSnapshot(); }
     function publish(value, message) {
@@ -140,6 +212,12 @@ Item {
         if (generation === internal.generation) { internal.legacy = value; syncSnapshot(); }
     }
     function unavailable(message) { publish(emptySnapshot(legacyModules), message); }
+    function handTurnTo(reader) {
+        // Wait until the finishing reader has handled its own result: starting now
+        // would make that reader see the other in flight and drop what it just read.
+        const lifetime = callbackLifetime;
+        Qt.callLater(function() { if (lifetime.alive && reader.admissionWaiting) reader.refresh(); });
+    }
     function queueLegacyRefresh(generation) {
         const lifetime = callbackLifetime;
         Qt.callLater(function() {
@@ -152,7 +230,7 @@ Item {
         const generation = ++internal.generation;
         const selected = active && Array.isArray(enabledModules)
             ? ["quota", "peripherals", "recording"].filter(module => enabledModules.indexOf(module) >= 0) : [];
-        const modules = selected.filter(module => module !== "peripherals");
+        const modules = selected.filter(module => module !== "peripherals" && !(module === "quota" && quotaAddonActive));
         // Clear legacy state before addon notifications can reenter through snapshot.
         internal.legacy = emptySnapshot(modules);
         legacyModules = modules;
@@ -185,7 +263,7 @@ Item {
         legacyLoading = false;
         if (changed) queueLegacyRefresh(internal.generation);
     }
-    function refresh() { if (!active) return; refreshLegacy(); if (active) addons.refresh(); }
+    function refresh() { if (!active) return; refreshLegacy(); if (active) addons.refresh(); if (active) quotaAddon.refresh(); }
     function refreshLegacy() {
         if (!internal.completed || !active || internal.flight !== null || !legacyModules.length) return;
         const modules = legacyModules.slice();
@@ -208,6 +286,9 @@ Item {
     onAddonLoadingChanged: updateLoading()
     onLegacyErrorChanged: updateError()
     onAddonErrorChanged: updateError()
+    onQuotaAddonErrorChanged: updateError()
+    // Opting out of the addon route hands quota back to the legacy reader.
+    onAddonQuotaEnabledChanged: { if (!addonQuotaEnabled) quotaAddonActive = false; selectionChanged(true); }
     onEnabledModulesChanged: selectionChanged(false)
     onActiveChanged: selectionChanged(true)
     Component.onDestruction: callbackLifetime.alive = false

@@ -292,7 +292,8 @@ QtObject {
         self.component = QQmlComponent(self.engine)
         self.component.setData(('import QtQuick\nimport ' + json.dumps(ui.as_uri()) + ' as Candidate\n'
             'import org.kde.plasma.workspace.dbus as DBus\n'
-            'Candidate.Integrations { nowMsOverride: 100000; property var forwarded: null; '
+            # Quota routing through the addon host has its own tests; these cover the adapter.
+            'Candidate.Integrations { nowMsOverride: 100000; addonQuotaEnabled: false; property var forwarded: null; '
             'property var errorToken: ({error:{isValid:true,message:"synthetic"}}) }').encode(),
             QUrl.fromLocalFile(str(directory / 'Production.qml')))
         self.state = self.component.create()
@@ -362,6 +363,16 @@ QtObject {
         self.assertEqual(self.evaluate('recording.state'), 'stopped')
         self.assertFalse(self.state.property('addonCallPending'))
         self.assertFalse(self.state.property('loading'))
+
+    def test_production_quota_route_asks_the_addon_host_with_the_exact_message(self):
+        self.assertTrue(self.evaluate('addonQuotaEnabled = true; addonQuotaEnabled'))
+        self.evaluate('enabledModules=["quota"]; active=true')
+        messages = self.evaluate('calls.map(call=>call.message)', self.bus)
+        self.assertIn({'service': 'org.orla.Addons', 'path': '/org/orla/Addons', 'iface': 'org.orla.Addons1',
+                       'member': 'SnapshotFor', 'signature': '(as)', 'arguments': [['quota']]}, messages)
+        self.assertIn({'service': 'org.caiodock.Integrations', 'path': '/org/caiodock/Integrations',
+                       'iface': 'org.caiodock.Integrations1', 'member': 'SnapshotFor', 'signature': '(as)',
+                       'arguments': [['quota']]}, messages)
 
     def latest_reply(self, frame, failed=False):
         self.evaluate('complete(calls.length-1,stringReply(' + json.dumps(json.dumps(frame))

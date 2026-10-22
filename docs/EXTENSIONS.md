@@ -167,8 +167,9 @@ Cada linha é uma operação independente. Depois de atualizar ou voltar uma
 versão, consulte `list` para obter o digest atual antes da próxima operação.
 Rollback exige uma versão anterior retida.
 Instalação, atualização e rollback deixam o complemento desativado. Ativação
-exige aprovação separada do pacote atual; só um provedor de bateria pode ficar
-ativado. A visibilidade no perfil e o compartilhamento autorizado no aplicativo
+exige aprovação separada do pacote atual; fica ativo no máximo um complemento
+por tipo (um de bateria e um de quota), e ativar um substitui só o do mesmo
+tipo. A visibilidade no perfil e o compartilhamento autorizado no aplicativo
 produtor são escolhas adicionais. Nenhum desses comandos inicia o produtor.
 
 O namespace do manifesto determina somente
@@ -195,8 +196,37 @@ por [testes privados e chamadas reais em barramento isolado](validation/addon-ho
 O cliente e a coordenação também completaram um ciclo privado com transporte
 KDE real e dados sintéticos; um ciclo separado do PeriGauge usou UPower real.
 Essas provas têm escopos distintos e não qualificam a interface instalada,
-HID/Buds ou operação contínua. QuotaLantern e FalaTrace mantêm o caminho
-experimental opcional descrito acima.
+HID/Buds ou operação contínua. FalaTrace mantém o caminho experimental opcional
+descrito acima.
+
+### Complementos de quota de IA
+
+O segundo renderer, `quota-usage`, mostra o uso de quota de assinaturas de IA
+compartilhado por um aplicativo como o QuotaLantern. O manifesto segue no
+formato `0.1-experimental`; um ID instalado não muda de tipo numa atualização.
+O namespace determina somente
+`$XDG_STATE_HOME/<namespace>/exports/orla-quota-v1.json`, descrito no
+[schema de quota](../addons/schema/quota-0.1.schema.json) e no
+[exemplo sintético](../addons/fixtures/quota-0.1.json).
+
+A exportação lista até 32 provedores por ID (por exemplo `codex`, `claude`,
+`opencode-go`), cada um com um estado finito (`ready`, `stale`, `unknown`,
+`unavailable`), o horário da observação e até três janelas: percentual usado,
+duração e horário de reinício. Contas, e-mails, mensagens do provedor, URLs,
+custos e saldos não fazem parte do contrato; um campo extra recusa o arquivo
+inteiro. O mesmo prazo de validade das baterias vale aqui. Só uma observação
+recente de um provedor pronto confirma uso; zero continua sendo um valor
+conhecido, e uma observação antiga, futura ou de provedor indisponível chega
+sem percentual.
+
+`python3 scripts/addons.py snapshot --module quota` mostra a projeção passiva.
+No serviço, `SnapshotFor(["quota"])` lê a quota e `SnapshotFor(["peripherals"])`
+as baterias; seleções combinadas são recusadas, e a dock alterna as duas
+leituras para não disputar o worker. A dock continua lendo a quota pela ponte
+legada até uma leitura válida mostrar um complemento de quota ativo; a partir
+daí usa só o complemento, mesmo se ele falhar, e volta à ponte somente quando
+uma leitura válida mostra que não há complemento ativo. Voltar para uma dock
+anterior com bateria e quota ativas exige desativar um deles antes.
 
 ### Gerenciar nas configurações
 

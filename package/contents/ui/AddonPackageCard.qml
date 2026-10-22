@@ -11,6 +11,7 @@ Card {
     property bool busy: false
     property bool providerAvailable: true
     property bool profilePeripheralVisible: true
+    property bool profileQuotaVisible: true
     property string pendingAction: ""
     // Internal owner for this manager's focus lifetime, not a host/backend API.
     property var focusManager: null
@@ -19,6 +20,9 @@ Card {
     readonly property string digest: String(packageData.sha256 || "")
     readonly property bool identityValid: addonId.length > 0 && addonId.length <= 120 && /^[a-f0-9]{64}$/.test(digest)
     readonly property bool valid: identityValid && packageData.valid !== false && packageData.state !== "invalid"
+    // Copy follows the addon's module; the host enforces one active addon per module.
+    readonly property bool quota: packageData.renderer === "quota-usage"
+    readonly property bool profileVisible: quota ? profileQuotaVisible : profilePeripheralVisible
     readonly property bool active: packageData.enabled === true
     readonly property string suffix: preview ? "Preview" : "-" + addonId
     signal installRequested(string sha256)
@@ -197,7 +201,8 @@ Card {
             color: root.palette.windowText
             Layout.fillWidth: true
             visible: root.preview
-            text: qsTr("Permissão: acesso somente leitura aos dados locais de bateria compartilhados pelo aplicativo. Instalar não ativa a leitura.")
+            text: root.quota ? qsTr("Permissão: acesso somente leitura ao uso de quota de IA compartilhado pelo aplicativo, sem contas nem custos. Instalar não ativa a leitura.")
+                : qsTr("Permissão: acesso somente leitura aos dados locais de bateria compartilhados pelo aplicativo. Instalar não ativa a leitura.")
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }
@@ -209,15 +214,19 @@ Card {
             text: {
                 if (!root.valid) return qsTr("Desative ou remova este pacote e adicione um arquivo válido do projeto.");
                 if (!root.active && !root.providerAvailable)
-                    return qsTr("Desative o outro complemento de bateria antes de ativar este.");
-                if (root.active && !root.profilePeripheralVisible)
-                    return qsTr("Para ver os dados no dock, mostre Periféricos neste perfil. O aplicativo de origem também precisa permitir o compartilhamento com o Orla.");
+                    return root.quota ? qsTr("Desative o outro complemento de quota antes de ativar este.")
+                        : qsTr("Desative o outro complemento de bateria antes de ativar este.");
+                if (root.active && !root.profileVisible)
+                    return root.quota ? qsTr("Para ver os dados no dock, mostre QuotaLantern neste perfil. O aplicativo de origem também precisa permitir o compartilhamento com o Orla.")
+                        : qsTr("Para ver os dados no dock, mostre Periféricos neste perfil. O aplicativo de origem também precisa permitir o compartilhamento com o Orla.");
                 if (root.active && root.packageData.state === "missing")
                     return qsTr("Abra o aplicativo de origem e permita o compartilhamento com o Orla. Essa permissão é separada da ativação aqui.");
                 if (root.active && root.packageData.state === "stale")
                     return qsTr("Abra o aplicativo de origem para atualizar os dados. O Orla não inicia o aplicativo.");
                 if (root.active && root.packageData.state === "unavailable")
                     return qsTr("Confira no aplicativo de origem se o compartilhamento com o Orla está permitido.");
+                if (root.active && root.quota)
+                    return qsTr("A leitura também depende da permissão de compartilhamento no aplicativo e da opção QuotaLantern neste perfil.");
                 return root.active ? qsTr("A leitura também depende da permissão de compartilhamento no aplicativo e da opção Periféricos neste perfil.")
                     : qsTr("Ative para permitir a leitura. O aplicativo de origem também precisa permitir o compartilhamento com o Orla.");
             }

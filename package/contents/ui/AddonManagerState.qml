@@ -118,7 +118,8 @@ QtObject {
     }
     function row(manifest, sha) {
         if (!fields(manifest, ["formatVersion", "id", "name", "description", "author", "license", "version", "origin", "renderer", "source"])
-                || manifest.formatVersion !== "0.1-experimental" || manifest.renderer !== "peripheral-battery"
+                || manifest.formatVersion !== "0.1-experimental"
+                || ["peripheral-battery", "quota-usage"].indexOf(manifest.renderer) < 0
                 || !identifier(manifest.id) || !digest(sha) || !plain(manifest.name, 80)
                 || !plain(manifest.description, 240) || !plain(manifest.author, 120) || !plain(manifest.license, 80)
                 || typeof manifest.version !== "string" || manifest.version.length > 32
@@ -128,13 +129,15 @@ QtObject {
                 || !/^[a-z][a-z0-9-]{0,63}$/.test(manifest.source.namespace)) return null;
         return {id: manifest.id, sha256: sha, name: manifest.name, description: manifest.description,
             author: manifest.author, license: manifest.license, version: manifest.version, origin: manifest.origin,
-            namespace: manifest.source.namespace, enabled: false, state: "installed", previousSha256: null, valid: true};
+            namespace: manifest.source.namespace, renderer: manifest.renderer, enabled: false, state: "installed",
+            previousSha256: null, valid: true};
     }
     function listing(value) {
         if (!fields(value, ["generation", "addons"]) || !Array.isArray(value.addons) || value.addons.length > 32
                 || !(registryGeneration(value.generation) || (value.generation === null && !value.addons.length))) return null;
         const rows = [];
-        let enabled = 0, previousId = "";
+        const enabled = {};
+        let previousId = "";
         for (const item of value.addons) {
             if (!fields(item, ["manifest", "sha256", "previousSha256", "enabled"]) || typeof item.enabled !== "boolean"
                     || !(item.previousSha256 === null || (digest(item.previousSha256) && item.previousSha256 !== item.sha256))) return null;
@@ -143,10 +146,12 @@ QtObject {
             previousId = entry.id;
             entry.enabled = item.enabled;
             entry.previousSha256 = item.previousSha256;
-            enabled += item.enabled ? 1 : 0;
+            // At most one active addon per module (battery, quota).
+            if (item.enabled && enabled[entry.renderer]) return null;
+            if (item.enabled) enabled[entry.renderer] = true;
             rows.push(Object.freeze(entry));
         }
-        return enabled <= 1 ? {generation: value.generation, addons: Object.freeze(rows)} : null;
+        return {generation: value.generation, addons: Object.freeze(rows)};
     }
     function decode(raw) {
         // Management has no numeric fields. Bound raw UTF-8, depth and duplicate keys before JSON.parse.

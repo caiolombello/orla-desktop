@@ -25,6 +25,7 @@ MAX_ADDONS = 32
 MAX_ARTIFACTS = 128
 MAX_STORAGE_BYTES = 8 * 1024 * 1024
 EXPORT_BASENAME = 'orla-peripherals-v1.json'
+QUOTA_EXPORT_BASENAME = 'orla-quota-v1.json'
 
 
 class AddonPaths:
@@ -108,7 +109,8 @@ def _validate_registry(value):
             raise AddonError('state')
         ids.add(e['id'])
         enabled += e['enabled']
-    if enabled > 1:
+    # One active addon per renderer; Session.verify checks renderers with manifests.
+    if enabled > len(f.RENDERERS):
         raise AddonError('state')
     return r
 
@@ -157,10 +159,17 @@ class _Session:
             self.pins[digest].check()
         if sum(len(p.data) for p in self.pins.values()) > MAX_STORAGE_BYTES:
             raise AddonError('limit')
+        renderers = set()
         for entry in self.registry['entries']:
+            renderer = self.manifests[entry['sha256']]['renderer']
             for digest in (entry['sha256'], entry['previousSha256']):
-                if digest is not None and self.manifests[digest]['id'] != entry['id']:
+                if digest is not None and (self.manifests[digest]['id'] != entry['id']
+                                           or self.manifests[digest]['renderer'] != renderer):
                     raise AddonError('state')
+            if entry['enabled']:
+                if renderer in renderers:
+                    raise AddonError('state')
+                renderers.add(renderer)
         self.objects.check()
         self.directory.check()
 
@@ -272,6 +281,9 @@ def install_addon(*, paths: AddonPaths, file, expected_sha256: str) -> dict:
         entry = next((e for e in registry['entries'] if e['id'] == manifest['id']), None)
         if entry is None and len(registry['entries']) == MAX_ADDONS:
             raise AddonError('limit')
+        # An update cannot move an addon to another module.
+        if entry is not None and session.manifests[entry['sha256']]['renderer'] != manifest['renderer']:
+            raise AddonError('format')
         if expected_sha256 not in registry['artifacts']:
             if (len(registry['artifacts']) == MAX_ARTIFACTS
                     or sum(len(p.data) for p in session.pins.values()) + len(data) > MAX_STORAGE_BYTES):
@@ -303,8 +315,13 @@ def _change(paths, addon_id, expected_current_sha256, action):
         if entry['sha256'] != expected_current_sha256:
             raise AddonError('hash')
         if action == 'enable':
+            # Enabling replaces only the active addon of the same module.
+            renderer = session.manifests[entry['sha256']]['renderer']
             for other in session.registry['entries']:
-                other['enabled'] = other is entry
+                if other is entry:
+                    other['enabled'] = True
+                elif session.manifests[other['sha256']]['renderer'] == renderer:
+                    other['enabled'] = False
         elif action == 'disable':
             entry['enabled'] = False
         elif action == 'remove':
@@ -408,8 +425,12 @@ def snapshot_peripherals(*, paths: AddonPaths, now_ms: int | None = None,
         result = _snapshot_base(session.registry['generation'] if session else None)
         if not session or not session.registry['entries']:
             return result
+        if not any(session.manifests[e['sha256']]['renderer'] == 'peripheral-battery'
+                   for e in session.registry['entries']):
+            return result
         result['addon']['reason'] = 'disabled'
-        active = next((e for e in session.registry['entries'] if e['enabled']), None)
+        active = next((e for e in session.registry['entries'] if e['enabled']
+                       and session.manifests[e['sha256']]['renderer'] == 'peripheral-battery'), None)
         if active is None:
             return result
         namespace = session.manifests[active['sha256']]['source']['namespace']
@@ -430,6 +451,91 @@ def snapshot_peripherals(*, paths: AddonPaths, now_ms: int | None = None,
             # Do not swallow registry/package drift as a producer parsing error.
             session.verify()
             result = _snapshot_base(session.registry['generation'])
+            result['addon'].update(id=active['id'], sha256=active['sha256'], enabled=True,
+                producerNamespace=namespace, errorCode=error.code,
+                reason='export_missing' if error.code == 'missing' else 'export_invalid')
+            if error.code != 'missing':
+                result['status'] = 'invalid'
+        return result
+
+
+def _quota_base(generation):
+    return dict(status='missing', generatedAt=None, source=None, producerVersion=None,
+        limited=False, providers=[], generatedAtMs=None, expiresAtMs=None, leaseMs=None,
+        addon=dict(id=None, sha256=None, enabled=False, generation=generation,
+                   producerNamespace=None, reason='not_installed', errorCode=None))
+
+
+def _project_quota(record, result, now_ms):
+    generated, expires = record['generatedAtMs'], record['expiresAtMs']
+    lease = 3000 * record['intervalSeconds']
+    result.update(generatedAt=generated / 1000.0, generatedAtMs=generated,
+                  expiresAtMs=expires, leaseMs=lease, source='addon',
+                  producerVersion=record['producerVersion'])
+    if now_ms < generated or now_ms >= expires:
+        result.update(status='stale', limited=True)
+        result['addon']['reason'] = 'future' if now_ms < generated else 'expired'
+        return result
+    for provider in record['providers']:
+        observed = provider['observedAtMs']
+        time_valid = observed is not None and observed <= generated and observed <= now_ms
+        old = time_valid and now_ms - observed >= lease
+        # Only a fresh, ready observation confirms usage; zero stays a known value.
+        confirmed = provider['state'] == 'ready' and time_valid and not old
+        stale = provider['state'] == 'stale' or (provider['state'] == 'ready' and not confirmed)
+        result['providers'].append(dict(id=provider['id'],
+            state='ready' if confirmed else 'stale' if stale else provider['state'],
+            observedAt=observed / 1000.0 if time_valid else None,
+            observedAtMs=observed if time_valid else None,
+            windows=[dict(key=w['key'], usedPercent=w['usedPercent'] if confirmed else None,
+                          windowMinutes=w['windowMinutes'], resetAtMs=w['resetAtMs'])
+                     for w in provider['windows']]))
+        result['limited'] |= not confirmed
+    ready = any(w['usedPercent'] is not None for p in result['providers'] for w in p['windows'])
+    result['status'] = ('ready' if ready else 'stale' if any(p['state'] == 'stale' for p in result['providers'])
+                        else 'unknown')
+    result['addon']['reason'] = result['status']
+    return result
+
+
+def snapshot_quota(*, paths: AddonPaths, now_ms: int | None = None, profile_enabled: bool = True) -> dict:
+    """Active quota-usage addon only; same lease and failure rules as batteries.
+
+    No enabled quota addon => zero producer directory or export opens.
+    """
+    if type(profile_enabled) is not bool:
+        raise AddonError('type')
+    if now_ms is None:
+        import time
+        now_ms = time.time_ns() // 1000000
+    f.integer(now_ms, 1, f.MAX_SAFE_INTEGER)
+    with _session(paths) as session:
+        result = _quota_base(session.registry['generation'] if session else None)
+        if not session or not any(session.manifests[e['sha256']]['renderer'] == 'quota-usage'
+                                  for e in session.registry['entries']):
+            return result
+        result['addon']['reason'] = 'disabled'
+        active = next((e for e in session.registry['entries'] if e['enabled']
+                       and session.manifests[e['sha256']]['renderer'] == 'quota-usage'), None)
+        if active is None:
+            return result
+        namespace = session.manifests[active['sha256']]['source']['namespace']
+        result['addon'].update(id=active['id'], sha256=active['sha256'], enabled=True,
+                               producerNamespace=namespace)
+        if not profile_enabled:
+            result['addon']['reason'] = 'profile_hidden'
+            return result
+        try:
+            with io.Directory(paths.state_home / namespace, private=True) as producer:
+                with io.Directory(producer.path / 'exports', private=True) as directory:
+                    with io.PinnedFile(directory, QUOTA_EXPORT_BASENAME) as exported:
+                        record = f.parse_quota_export(exported.data, producer_namespace=namespace)
+                        _project_quota(record, result, now_ms)
+                        producer.check()
+                        session.verify()
+        except AddonError as error:
+            session.verify()
+            result = _quota_base(session.registry['generation'])
             result['addon'].update(id=active['id'], sha256=active['sha256'], enabled=True,
                 producerNamespace=namespace, errorCode=error.code,
                 reason='export_missing' if error.code == 'missing' else 'export_invalid')

@@ -667,6 +667,8 @@ Item {
     def test_integrations_render_real_percentages_and_neutral_stale_data(self):
         import json
         from test_addon_peripherals import peripheral_frame, missing_frame
+        # Rendering only: quota routing through the addon host has its own tests.
+        self.evaluate("integrations.addonQuotaEnabled=false")
         self.evaluate("integrations.active=true; integrations.enabledModules=['quota','peripherals','recording']; integrations.nowMsOverride=100000")
         self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion:2,modules:['quota','recording'],quota:{status:'ready',windows:[{provider:'codex',label:'5 h',usedPercent:37,stale:false}]},recording:{status:'idle',state:'idle'}}), ['quota','recording'])")
         self.app.processEvents()

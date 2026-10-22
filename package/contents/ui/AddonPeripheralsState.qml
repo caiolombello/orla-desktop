@@ -1,8 +1,11 @@
 import QtQuick
 import "../code/AddonPeripherals.js" as Addon
+import "../code/AddonQuota.js" as Quota
 
+// One passive addon module per instance: "peripherals" (batteries) or "quota".
 Item {
     id: root
+    property string module: "peripherals"
     // Captured JavaScript record survives queued work without reading a destroyed QObject.
     property var callbackLifetime: ({alive: true})
     property bool active: false
@@ -15,9 +18,12 @@ Item {
     property bool loading: false
     // Logical revocation does not settle callbacks already owned by the transport.
     readonly property bool callPending: internal.pendingCalls > 0
+    // A read refused only by admission (another reader's turn); the owner retries it once.
+    readonly property bool admissionWaiting: internal.admissionWaiting
     property string errorCode: ""
-    readonly property string error: errorCode ? qsTr("Integração de periféricos indisponível.") : ""
-    property var value: Addon.empty(active)
+    readonly property string error: !errorCode ? "" : module === "quota"
+        ? qsTr("Integração de quota indisponível.") : qsTr("Integração de periféricos indisponível.")
+    property var value: emptyValue(active)
     QtObject {
         id: internal
         property bool completed: false
@@ -27,16 +33,25 @@ Item {
         property int pendingCalls: 0
         property int publishingPending: 0
         property bool refreshDeferred: false
+        property bool admissionWaiting: false
         property var accepted: null
         property var identity: null
         property double lastNow: -1
         property double freshnessFloor: -1
     }
+    function admitted() {
+        return admissionAllowed === null || (typeof admissionAllowed === "function" && admissionAllowed());
+    }
     function canRead() {
-        return !internal.revoking && internal.publishingPending === 0 && active && !suspended && (admissionAllowed === null
-            || (typeof admissionAllowed === "function" && admissionAllowed()));
+        return !internal.revoking && internal.publishingPending === 0 && active && !suspended && admitted();
     }
     function nowMs() { return nowMsOverride >= 0 ? nowMsOverride : Date.now(); }
+    function emptyValue(isActive) { return module === "quota" ? Quota.empty(isActive) : Addon.empty(isActive); }
+    function decodeReply(text) { return module === "quota" ? Quota.decode(text) : Addon.decode(text); }
+    function currentValue(current, now, floor) {
+        return module === "quota" ? Quota.current(current, now, floor) : Addon.current(current, now, floor);
+    }
+    function deadlineFor(current, now) { return module === "quota" ? Quota.deadline(current, now) : Addon.deadline(current, now); }
     function queueRefresh(generation) {
         const lifetime = callbackLifetime;
         Qt.callLater(function() {
@@ -58,7 +73,7 @@ Item {
             expiry.stop();
             if (resetIdentity) errorCode = "";
             if (generation !== internal.generation) return;
-            value = Addon.empty(active);
+            value = emptyValue(active);
             if (generation !== internal.generation) return;
             loading = false;
         } finally {
@@ -76,15 +91,15 @@ Item {
         internal.accepted = accepted;
         errorCode = code;
         if (generation !== internal.generation) return;
-        const shown = accepted === null ? Addon.empty(active) : JSON.parse(JSON.stringify(accepted));
-        for (const device of shown.devices) device.name = genericName(device);
+        const shown = accepted === null ? emptyValue(active) : JSON.parse(JSON.stringify(accepted));
+        if (module === "peripherals") for (const device of shown.devices) device.name = genericName(device);
         value = shown;
         if (generation === internal.generation) armExpiry();
     }
     function armExpiry() {
         expiry.stop();
         const now = nowMs();
-        const next = Addon.deadline(internal.accepted, now);
+        const next = deadlineFor(internal.accepted, now);
         if (next > 0) { expiry.interval = Math.max(1, next - now); expiry.start(); }
     }
     function observeClock(now) {
@@ -103,7 +118,7 @@ Item {
         internal.lastNow = now;
         if (internal.accepted !== null) {
             try {
-                const current = Addon.current(internal.accepted, now, internal.freshnessFloor);
+                const current = currentValue(internal.accepted, now, internal.freshnessFloor);
                 if (JSON.stringify(current) !== JSON.stringify(internal.accepted)) publish(generation, current, "");
                 else armExpiry();
             } catch (_) { publish(generation, null, "invalid_response"); }
@@ -134,7 +149,7 @@ Item {
         settlePhysical(operation);
         if (internal.flight !== operation) return;
         if (operation.generation === internal.generation && canRead()) {
-            const decoded = failed ? {error: "unavailable"} : Addon.decode(reply ? reply.value : null);
+            const decoded = failed ? {error: "unavailable"} : decodeReply(reply ? reply.value : null);
             let accepted = null;
             let code = decoded.error || "";
             if (!code && (!Addon.matches(decoded.value, expectedIdentity)
@@ -144,7 +159,7 @@ Item {
                     const now = nowMs();
                     observeClock(now);
                     if (internal.lastNow >= 0 && now < internal.lastNow) { revoke(false); return; }
-                    accepted = Addon.current(decoded.value, now, internal.freshnessFloor);
+                    accepted = currentValue(decoded.value, now, internal.freshnessFloor);
                     internal.lastNow = now;
                     internal.identity = Addon.identity(accepted);
                 } catch (_) { code = "invalid_response"; }
@@ -157,7 +172,13 @@ Item {
     }
     function refresh() {
         if (internal.publishingPending > 0) { internal.refreshDeferred = true; return; }
-        if (!internal.completed || !canRead() || internal.flight !== null) return;
+        if (!internal.completed || internal.flight !== null) return;
+        if (!canRead()) {
+            internal.admissionWaiting = !internal.revoking && internal.publishingPending === 0 && active && !suspended
+                && !admitted();
+            return;
+        }
+        internal.admissionWaiting = false;
         checkTime();
         if (!canRead() || internal.flight !== null) return;
         const operation = {generation: internal.generation, settling: false};
@@ -165,7 +186,7 @@ Item {
         loading = true;
         if (internal.flight !== operation || operation.generation !== internal.generation || !canRead()) return;
         const message = {service: "org.orla.Addons", path: "/org/orla/Addons", iface: "org.orla.Addons1",
-            member: "SnapshotFor", signature: "(as)", arguments: [["peripherals"]]};
+            member: "SnapshotFor", signature: "(as)", arguments: [[module]]};
         try {
             if (transport === null) { finish(operation, null, true); return; }
             operation.pending = true;
@@ -184,6 +205,7 @@ Item {
     onActiveChanged: invalidate()
     onSuspendedChanged: invalidate()
     onExpectedIdentityChanged: invalidate()
+    onModuleChanged: invalidate()
     onNowMsOverrideChanged: if (internal.completed) checkTime()
     Component.onDestruction: callbackLifetime.alive = false
     Component.onCompleted: { internal.completed = true; invalidate(); }

@@ -205,6 +205,10 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(set(snapshot), {'schemaVersion', 'modules', 'peripherals'})
         self.assertEqual(snapshot['schemaVersion'], 2)
         self.assertEqual(snapshot['peripherals']['addon']['reason'], 'export_missing')
+        # Quota snapshots are bare projections too; a battery addon is not a quota source.
+        quota = invoke('SnapshotFor', ['quota'])
+        self.assertEqual(set(quota), {'schemaVersion', 'modules', 'quota'})
+        self.assertEqual((quota['modules'], quota['quota']['addon']['reason']), (['quota'], 'not_installed'))
         self.assertFalse(invoke('DisableAddon', 'org.example.battery', first)['result']['addons'][0]['enabled'])
         p.write_text(json.dumps(manifest('2.0.0')))
         second = invoke('InspectAddonFile', p.as_uri())['result']['sha256']
@@ -339,7 +343,9 @@ class ServiceTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(json.loads(service.SnapshotFor([], Message())),
                              dict(schemaVersion=2, modules=[]))
-        for modules in (['quota'], ['peripherals', 'peripherals'], ['peripherals', 'recording'], 'peripherals'):
+        # 'quota' is a valid module now; combined, repeated and unknown selections stay refused.
+        for modules in (['recording'], ['quota', 'quota'], ['quota', 'peripherals'], ['peripherals', 'peripherals'],
+                        ['peripherals', 'recording'], 'peripherals', 'quota'):
             self.assertEqual(json.loads(service.SnapshotFor(modules, Message()))['error']['code'], 'format')
 
     def test_source_change_stops_owned_worker_and_rejects_old_success(self):

@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = sub.add_parser('snapshot')
     snapshot.add_argument('--now-ms', type=int)
     snapshot.add_argument('--profile-hidden', action='store_true')
+    snapshot.add_argument('--module', choices=('peripherals', 'quota'), default='peripherals')
     try:
         args = parser.parse_args(argv)
         if args.command == 'inspect':
@@ -54,8 +55,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = store.install_addon(paths=paths, file=args.file,
                                              expected_sha256=args.expected_sha256)
             elif args.command == 'snapshot':
-                result = store.snapshot_peripherals(paths=paths, now_ms=args.now_ms,
-                                                    profile_enabled=not args.profile_hidden)
+                snapshot = store.snapshot_quota if args.module == 'quota' else store.snapshot_peripherals
+                result = snapshot(paths=paths, now_ms=args.now_ms, profile_enabled=not args.profile_hidden)
             else:
                 operation = {'enable': store.enable_addon, 'disable': store.disable_addon,
                              'remove': store.remove_addon, 'rollback': store.rollback_addon}[args.command]
