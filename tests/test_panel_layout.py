@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 import unittest
 
 from scripts import panel_layout as layout
@@ -68,6 +69,8 @@ class ControlCenterManifestTests(unittest.TestCase):
             with self.subTest(config=config), self.assertRaises(layout.LayoutError):
                 layout.validate_manifest(data)
 
+    @unittest.skipUnless((Path(__file__).resolve().parents[1] / "layouts").is_dir(),
+                         "needs the source-only layouts/ folder")
     def test_default_preset_leaves_cc_disabled(self):
         import json
         from pathlib import Path

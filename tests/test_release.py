@@ -53,7 +53,7 @@ class ReleaseBundleTests(unittest.TestCase):
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir(exist_ok=True)
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
-            for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
+            for name in ("test_bar.py", "test_bar_settings.py", "BarHarness.qml", "test_shared_control_center.py",
                          "test_workspace_setup.py", "test_workspace_view.py",
                          "test_workspace_entry.py", "test_workspace_package.py",
                          "test_workspace_install.py", "test_updates_desktop_entry.py", "test_updates_desktop_process.py", "test_updates_desktop_cache.py", "test_updates_desktop_view.py",
@@ -112,7 +112,7 @@ class ReleaseBundleTests(unittest.TestCase):
                     body=text.split(comment+"BEGIN UNICODE LICENSE\n",1)[1].split(comment+"END UNICODE LICENSE",1)[0]
                     self.assertEqual(''.join(line[len(comment):] for line in body.splitlines(True)),profile['license'])
                 for name in ("bar/main.qml", "scripts/updates_desktop.py", "scripts/updates_desktop_state.py",
-                             "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/BarHarness.qml",
+                             "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/test_bar_settings.py", "tests/BarHarness.qml",
                              "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                              "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                              "tests/test_workspace_install.py",
