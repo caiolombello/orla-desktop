@@ -9,7 +9,7 @@ import re
 
 SUPPORTED_PLASMA = "6.7.5"
 MODULE_IDS = {
-    "menu": "org.orla.bar", "global-menu": "org.kde.plasma.appmenu",
+    "menu": "org.orla.bar", "control-center": "org.orla.bar", "global-menu": "org.kde.plasma.appmenu",
     "spacer": "org.kde.plasma.panelspacer", "tray": "org.kde.plasma.systemtray",
     "clock": "org.kde.plasma.digitalclock",
 }
@@ -20,6 +20,7 @@ CONTROL_IDS = {
 }
 CONFIG_TYPES = {
     "menu": {"showApplicationName": bool, "showMenuLabel": bool, "compactHeight": bool},
+    "control-center": {"showOrlaMenu": bool, "showApplicationName": bool, "showControlCenter": bool, "compactHeight": bool},
     "global-menu": {"compactView": bool, "allScreens": bool},
     "spacer": {}, "tray": {"controls": list, "overflow": list},
     "clock": {"showDate": bool, "showLocalTimezone": bool},
@@ -175,7 +176,7 @@ def validate_manifest(data):
         _object(module, ("key", "enabled", "config"), "module")
         key = module["key"]
         if not isinstance(key, str) or key not in MODULE_IDS or key in seen:
-            raise LayoutError("unknown or duplicate module; custom Orla CC requires a shared owner")
+            raise LayoutError("unknown or duplicate module")
         seen.add(key)
         if type(module["enabled"]) is not bool or not isinstance(module["config"], dict):
             raise LayoutError("invalid module visibility/configuration")
@@ -185,6 +186,9 @@ def validate_manifest(data):
             if key == "tray":
                 if len(value) > len(CONTROL_IDS) or any(type(item) is not str or item not in CONTROL_IDS for item in value) or len(set(value)) != len(value):
                     raise LayoutError("unsupported or duplicate tray control")
+        if key == "control-center" and any(module["config"].get(name) is not expected for name, expected in
+                (("showOrlaMenu", False), ("showApplicationName", False), ("showControlCenter", True))):
+            raise LayoutError("control-center requires a CC-only bar instance")
         if key == "tray" and not set(module["config"].get("overflow", [])).issubset(module["config"].get("controls", [])):
             raise LayoutError("overflow must refer to an enabled native control")
     enabled = {item["key"] for item in modules if item["enabled"]}

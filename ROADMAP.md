@@ -397,7 +397,12 @@ a emissão inicial precedeu o callback do atalho. As reaberturas a 50/100/500 ms
 passaram três vezes por intervalo e três novos processos passaram a 500 ms.
 A ativação foi preservada após revisão independente; nenhum ganho de latência
 foi anunciado. Isso conclui a medição delimitada, mantendo L0/L2 e UX0 parciais.
-O próximo incremento funcional é a Central de Controle na barra; a prontidão
+**Central compartilhada S1 no Source:** a entrada direita opcional encaminha
+para a mesma view/estado do dock, com dono único, fechamento completo antes de
+trocar host, cancelamento de áudio, release exato e guardas de reentrada/foco.
+O módulo permanece desligado no preset. A [validação Source](docs/validation/shared-control-center-source.md)
+separa a composição offscreen dos próximos gates de pacote ativo,
+âncora/foco e áudio na sessão real. CC0/CC1/T1 continuam parciais. A prontidão
 da busca em outros ambientes permanece como gate de qualificação.
 
 Os cinco incrementos abaixo priorizam uma experiência básica verificável. Não substituem o backlog nem encerram os gates completos; Spotify/Steam/bateria, Google Agenda, updates, ilha/toasts, IA oficial, plugins e marketplace mantêm seus critérios acima.

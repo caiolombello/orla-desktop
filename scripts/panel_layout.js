@@ -1,7 +1,7 @@
 // Plasma 6.7.5 fixed operations. Request fields are validated Orla data.
 (function () {
     const request = __ORLA_REQUEST__;
-    const moduleIds = {menu:"org.orla.bar", "global-menu":"org.kde.plasma.appmenu",
+    const moduleIds = {menu:"org.orla.bar", "control-center":"org.orla.bar", "global-menu":"org.kde.plasma.appmenu",
         spacer:"org.kde.plasma.panelspacer", tray:"org.kde.plasma.systemtray", clock:"org.kde.plasma.digitalclock"};
     const controls = {network:"org.kde.plasma.networkmanagement", bluetooth:"org.kde.plasma.bluetooth",
         audio:"org.kde.plasma.volume", battery:"org.kde.plasma.battery", notifications:"org.kde.plasma.notifications"};
