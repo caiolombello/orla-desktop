@@ -14,6 +14,8 @@ MAX_SAFE_INTEGER = 9007199254740991
 ID_PATTERN = r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+'
 VERSION_PATTERN = r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)'
 NAMESPACE_PATTERN = r'[a-z][a-z0-9-]{0,63}'
+# One passive renderer per module; an addon ID keeps its renderer across updates.
+RENDERERS = ('peripheral-battery', 'quota-usage')
 ERROR_CODES = frozenset(('type', 'size', 'utf8', 'json', 'depth', 'duplicate_key',
     'nonfinite', 'fields', 'format', 'range', 'lease', 'file', 'missing', 'unsafe',
     'drift', 'hash', 'state', 'busy', 'limit', 'not_found', 'no_previous', 'exists', 'io'))
@@ -925,7 +927,7 @@ def json_bytes(value):
 def validate_manifest(value: object) -> dict:
     m = object_fields(value, ('formatVersion', 'id', 'name', 'description', 'author',
                              'license', 'version', 'origin', 'renderer', 'source'))
-    if m['formatVersion'] != FORMAT_VERSION or m['renderer'] != 'peripheral-battery':
+    if m['formatVersion'] != FORMAT_VERSION or m['renderer'] not in RENDERERS:
         raise AddonError('format')
     for key, limit, pattern in (('id', 120, ID_PATTERN), ('name', 80, None),
             ('description', 240, None), ('author', 120, None), ('license', 80, None),
@@ -1046,6 +1048,68 @@ def canonical_export_bytes(value: object, *, producer_namespace: str) -> bytes:
     return json_bytes(validate_export(value, producer_namespace=producer_namespace))
 
 
+PROVIDER_PATTERN = r'[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?'
+QUOTA_STATES = ('ready', 'stale', 'unknown', 'unavailable')
+WINDOW_KEYS = ('primary', 'secondary', 'tertiary')
+
+
+def validate_quota_export(value: object, *, producer_namespace: str) -> dict:
+    """Usage windows only: no accounts, provider text, errors, URLs or money."""
+    text(producer_namespace, 64, NAMESPACE_PATTERN)
+    e = object_fields(value, ('formatVersion', 'producer', 'producerVersion', 'generatedAtMs',
+                             'expiresAtMs', 'intervalSeconds', 'providers'))
+    if e['formatVersion'] != FORMAT_VERSION or e['producer'] != producer_namespace:
+        raise AddonError('format')
+    text(e['producerVersion'], 40, r'[A-Za-z0-9.+_-]{1,40}')
+    generated = integer(e['generatedAtMs'], 1, MAX_SAFE_INTEGER)
+    expires = integer(e['expiresAtMs'], 1, MAX_SAFE_INTEGER)
+    interval = integer(e['intervalSeconds'], 10, 3600)
+    if expires != generated + 3000 * interval:
+        raise AddonError('lease')
+    if type(e['providers']) is not list:
+        raise AddonError('type')
+    if len(e['providers']) > 32:
+        raise AddonError('size')
+    ids = set()
+    for provider in e['providers']:
+        object_fields(provider, ('id', 'state', 'observedAtMs', 'windows'))
+        text(provider['id'], 32, PROVIDER_PATTERN)
+        if provider['id'] in ids:
+            raise AddonError('format')
+        ids.add(provider['id'])
+        _enum(provider['state'], QUOTA_STATES)
+        if provider['observedAtMs'] is not None:
+            integer(provider['observedAtMs'], 1, MAX_SAFE_INTEGER)
+        if type(provider['windows']) is not list:
+            raise AddonError('type')
+        if len(provider['windows']) > 3:
+            raise AddonError('size')
+        order = -1
+        for window in provider['windows']:
+            object_fields(window, ('key', 'usedPercent', 'windowMinutes', 'resetAtMs'))
+            _enum(window['key'], WINDOW_KEYS)
+            # Canonical primary < secondary < tertiary, each at most once.
+            if WINDOW_KEYS.index(window['key']) <= order:
+                raise AddonError('format')
+            order = WINDOW_KEYS.index(window['key'])
+            _percent(window['usedPercent'])
+            if window['windowMinutes'] is not None:
+                integer(window['windowMinutes'], 1, 525600)
+            if window['resetAtMs'] is not None:
+                integer(window['resetAtMs'], 1, MAX_SAFE_INTEGER)
+    result = copy.deepcopy(e)
+    json_bytes(result)
+    return result
+
+
+def parse_quota_export(data: bytes, *, producer_namespace: str) -> dict:
+    return validate_quota_export(strict_json(data), producer_namespace=producer_namespace)
+
+
+def canonical_quota_export_bytes(value: object, *, producer_namespace: str) -> bytes:
+    return json_bytes(validate_quota_export(value, producer_namespace=producer_namespace))
+
+
 def _schema_object(properties):
     return dict(type='object', additionalProperties=False, required=list(properties),
                 properties=properties)
@@ -1065,7 +1129,7 @@ def manifest_schema() -> dict:
         name=_schema_text(80), description=_schema_text(240), author=_schema_text(120),
         license=_schema_text(80), version=_schema_text(32, VERSION_PATTERN),
         origin=dict(type='string', maxLength=512, pattern=r'^https://[^/\s@?#\\]+(?:/[^\s?#\\]*)?$'),
-        renderer=dict(const='peripheral-battery'),
+        renderer=dict(enum=list(RENDERERS)),
         source=_schema_object(dict(namespace=_schema_text(64, NAMESPACE_PATTERN),
                                    formatVersion=dict(const=FORMAT_VERSION)))))
     schema['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
@@ -1100,4 +1164,30 @@ def peripherals_schema() -> dict:
         '65536 bytes, depth <=8, duplicate keys, nonfinite numbers, integer tokens, '
         'producer == selected namespace and expiresAtMs == generatedAtMs + 3000 * intervalSeconds. '
         'Host independently checks envelope/observation clocks and leases.')
+    return schema
+
+
+def quota_schema() -> dict:
+    """Portable quota export shape; window order and lease arithmetic require parser."""
+    stamp = dict(type='integer', minimum=1, maximum=MAX_SAFE_INTEGER)
+    nullable_stamp = {**stamp, 'type': ['integer', 'null']}
+    windows = dict(type='array', maxItems=3, items=_schema_object(dict(
+        key=dict(enum=list(WINDOW_KEYS)),
+        usedPercent=dict(type=['integer', 'null'], minimum=0, maximum=100),
+        windowMinutes=dict(type=['integer', 'null'], minimum=1, maximum=525600),
+        resetAtMs=nullable_stamp)))
+    schema = _schema_object(dict(formatVersion=dict(const=FORMAT_VERSION),
+        producer=_schema_text(64, NAMESPACE_PATTERN),
+        producerVersion=_schema_text(40, r'[A-Za-z0-9.+_-]{1,40}'),
+        generatedAtMs=stamp, expiresAtMs=stamp,
+        intervalSeconds=dict(type='integer', minimum=10, maximum=3600),
+        providers=dict(type='array', maxItems=32, items=_schema_object(dict(
+            id=_schema_text(32, PROVIDER_PATTERN), state=dict(enum=list(QUOTA_STATES)),
+            observedAtMs=nullable_stamp, windows=windows)))))
+    schema['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
+    schema['$comment'] = ('Experimental. Normative stdlib parser also checks strict UTF-8, '
+        '65536 bytes, depth <=8, duplicate keys, nonfinite numbers, integer tokens, unique '
+        'provider ids, window keys in primary/secondary/tertiary order, producer == selected '
+        'namespace and expiresAtMs == generatedAtMs + 3000 * intervalSeconds. No account, '
+        'provider message, URL or monetary field is accepted.')
     return schema

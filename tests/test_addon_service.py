@@ -339,7 +339,9 @@ class ServiceTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(json.loads(service.SnapshotFor([], Message())),
                              dict(schemaVersion=2, modules=[]))
-        for modules in (['quota'], ['peripherals', 'peripherals'], ['peripherals', 'recording'], 'peripherals'):
+        # 'quota' is a valid module now; combined, repeated and unknown selections stay refused.
+        for modules in (['recording'], ['quota', 'quota'], ['quota', 'peripherals'], ['peripherals', 'peripherals'],
+                        ['peripherals', 'recording'], 'peripherals', 'quota'):
             self.assertEqual(json.loads(service.SnapshotFor(modules, Message()))['error']['code'], 'format')
 
     def test_source_change_stops_owned_worker_and_rejects_old_success(self):

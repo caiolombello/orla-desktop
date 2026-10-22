@@ -19,7 +19,7 @@ SOURCE_NAMES = ('addon_service.py', 'addon_worker.py', 'addon_store.py',
                 'addon_io.py', 'addon_format.py')
 MUTATIONS = frozenset(('install', 'enable', 'disable', 'remove', 'rollback'))
 ARITY = dict(list=0, inspect=1, install=2, enable=2, disable=2, remove=2,
-             rollback=2, snapshot=0, empty=0)
+             rollback=2, snapshot=0, quota=0, empty=0)
 CODES = frozenset(('type size utf8 json depth duplicate_key nonfinite fields format range '
     'lease file missing unsafe drift hash state busy limit not_found no_previous exists io '
     'unavailable timeout invalid_response cleanup_failed source_changed cancelled').split())
@@ -230,7 +230,7 @@ def validate_response(data, exit_code, action, backend):
         _hex(result['generation'], 32, nullable=action == 'list')
         if type(result['addons']) is not list or len(result['addons']) > 32:
             raise ValueError('addons')
-        ids, enabled = [], 0
+        ids, enabled = [], []
         for item in result['addons']:
             _fields(item, 'manifest sha256 previousSha256 enabled')
             backend.f.validate_manifest(item['manifest'])
@@ -239,8 +239,10 @@ def validate_response(data, exit_code, action, backend):
             _hex(item['previousSha256'], 64, nullable=True)
             if type(item['enabled']) is not bool:
                 raise ValueError('enabled')
-            enabled += item['enabled']
-        if ids != sorted(set(ids)) or enabled > 1 or (ids and result['generation'] is None):
+            if item['enabled']:
+                enabled.append(item['manifest']['renderer'])
+        # At most one active addon per renderer.
+        if ids != sorted(set(ids)) or len(enabled) != len(set(enabled)) or (ids and result['generation'] is None):
             raise ValueError('addons')
     elif action == 'empty':
         if result != dict(schemaVersion=2, modules=[]):
@@ -250,9 +252,76 @@ def validate_response(data, exit_code, action, backend):
         if type(result['schemaVersion']) is not int or result['schemaVersion'] != 2 or result['modules'] != ['peripherals']:
             raise ValueError('snapshot')
         _validate_projection(result['peripherals'], backend)
+    elif action == 'quota':
+        _fields(result, 'schemaVersion modules quota')
+        if type(result['schemaVersion']) is not int or result['schemaVersion'] != 2 or result['modules'] != ['quota']:
+            raise ValueError('snapshot')
+        _validate_quota(result['quota'], backend)
     else:
         raise ValueError('action')
     return value
+
+
+def _validate_envelope(p, backend, items):
+    _fields(p, 'status generatedAt source producerVersion limited ' + items + ' generatedAtMs expiresAtMs leaseMs addon')
+    if p['status'] not in ('missing', 'invalid', 'ready', 'stale', 'unknown') or type(p['limited']) is not bool:
+        raise ValueError('snapshot')
+    for key in ('generatedAtMs', 'expiresAtMs', 'leaseMs'):
+        if p[key] is not None:
+            backend.f.integer(p[key], 1, backend.f.MAX_SAFE_INTEGER)
+    if ((p['generatedAt'] is not None and type(p['generatedAt']) not in (int, float))
+            or p['generatedAt'] != (None if p['generatedAtMs'] is None else p['generatedAtMs'] / 1000.0)):
+        raise ValueError('time')
+    if p['source'] not in (None, 'addon'):
+        raise ValueError('source')
+    if p['producerVersion'] is not None:
+        backend.f.text(p['producerVersion'], 40, r'[A-Za-z0-9.+_-]+')
+    a = p['addon']
+    _fields(a, 'id sha256 enabled generation producerNamespace reason errorCode')
+    _hex(a['generation'], 32, nullable=True)
+    _hex(a['sha256'], 64, nullable=True)
+    if a['id'] is not None:
+        backend.f.text(a['id'], 120, backend.f.ID_PATTERN)
+    if a['producerNamespace'] is not None:
+        backend.f.text(a['producerNamespace'], 64, backend.f.NAMESPACE_PATTERN)
+    if (type(a['enabled']) is not bool or a['reason'] not in ('not_installed', 'disabled',
+            'profile_hidden', 'export_missing', 'export_invalid', 'future', 'expired', 'ready', 'stale', 'unknown')
+            or (a['errorCode'] is not None and a['errorCode'] not in backend.f.ERROR_CODES)):
+        raise ValueError('addon')
+
+
+def _validate_quota(p, backend):
+    _validate_envelope(p, backend, 'providers')
+    if type(p['providers']) is not list or len(p['providers']) > 32:
+        raise ValueError('providers')
+    ids = set()
+    for provider in p['providers']:
+        _fields(provider, 'id state observedAt observedAtMs windows')
+        backend.f.text(provider['id'], 32, backend.f.PROVIDER_PATTERN)
+        if provider['id'] in ids or provider['state'] not in backend.f.QUOTA_STATES:
+            raise ValueError('provider')
+        ids.add(provider['id'])
+        if provider['observedAtMs'] is not None:
+            backend.f.integer(provider['observedAtMs'], 1, backend.f.MAX_SAFE_INTEGER)
+        if ((provider['observedAt'] is not None and type(provider['observedAt']) not in (int, float))
+                or provider['observedAt'] != (None if provider['observedAtMs'] is None else provider['observedAtMs'] / 1000.0)):
+            raise ValueError('time')
+        if type(provider['windows']) is not list or len(provider['windows']) > 3:
+            raise ValueError('windows')
+        order = -1
+        for window in provider['windows']:
+            _fields(window, 'key usedPercent windowMinutes resetAtMs')
+            if window['key'] not in backend.f.WINDOW_KEYS or backend.f.WINDOW_KEYS.index(window['key']) <= order:
+                raise ValueError('window')
+            order = backend.f.WINDOW_KEYS.index(window['key'])
+            if window['usedPercent'] is not None:
+                backend.f.integer(window['usedPercent'], 0, 100)
+                if provider['state'] != 'ready':
+                    raise ValueError('window')
+            if window['windowMinutes'] is not None:
+                backend.f.integer(window['windowMinutes'], 1, 525600)
+            if window['resetAtMs'] is not None:
+                backend.f.integer(window['resetAtMs'], 1, backend.f.MAX_SAFE_INTEGER)
 
 
 def _validate_projection(p, backend):
@@ -340,6 +409,8 @@ def execute(action, args, *, base, expected_source):
             elif action == 'snapshot':
                 result = dict(schemaVersion=2, modules=['peripherals'],
                               peripherals=backend.snapshot_peripherals(paths=paths))
+            elif action == 'quota':
+                result = dict(schemaVersion=2, modules=['quota'], quota=backend.snapshot_quota(paths=paths))
             elif action == 'install':
                 committed = None  # Interrupted/unknown exceptions cannot promise cancellation.
                 result = backend.install_addon(paths=paths, file=args[0], expected_sha256=args[1])

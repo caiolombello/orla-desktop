@@ -55,7 +55,10 @@
       "pattern": "^https://[^/\\s@?#\\\\]+(?:/[^\\s?#\\\\]*)?$"
     },
     "renderer": {
-      "const": "peripheral-battery"
+      "enum": [
+        "peripheral-battery",
+        "quota-usage"
+      ]
     },
     "source": {
       "type": "object",

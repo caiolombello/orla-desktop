@@ -115,9 +115,10 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
 
         @Slot('QStringList', QDBusMessage, result=str)
         def SnapshotFor(self, modules, message):
-            if type(modules) is not list or (modules != [] and modules != ['peripherals']):
+            if type(modules) is not list or modules not in ([], ['peripherals'], ['quota']):
                 return self.error('format')
-            return self.dispatch('snapshot' if modules else 'empty', [], message)
+            action = 'snapshot' if modules == ['peripherals'] else 'quota' if modules == ['quota'] else 'empty'
+            return self.dispatch(action, [], message)
 
         def dispatch(self, action, args, message):
             if self.obsolete:

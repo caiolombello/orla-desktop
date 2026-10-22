@@ -1,0 +1,61 @@
+{
+  "formatVersion": "0.1-experimental",
+  "producer": "synthetic-quota",
+  "producerVersion": "0.1.0",
+  "generatedAtMs": 1792600000000,
+  "expiresAtMs": 1792600900000,
+  "intervalSeconds": 300,
+  "providers": [
+    {
+      "id": "codex",
+      "state": "ready",
+      "observedAtMs": 1792599940000,
+      "windows": [
+        {
+          "key": "primary",
+          "usedPercent": 0,
+          "windowMinutes": 300,
+          "resetAtMs": 1792603600000
+        },
+        {
+          "key": "secondary",
+          "usedPercent": 42,
+          "windowMinutes": 10080,
+          "resetAtMs": 1792686400000
+        }
+      ]
+    },
+    {
+      "id": "claude",
+      "state": "stale",
+      "observedAtMs": 1792592800000,
+      "windows": [
+        {
+          "key": "primary",
+          "usedPercent": null,
+          "windowMinutes": 300,
+          "resetAtMs": null
+        }
+      ]
+    },
+    {
+      "id": "gemini",
+      "state": "unavailable",
+      "observedAtMs": null,
+      "windows": []
+    },
+    {
+      "id": "opencode-go",
+      "state": "ready",
+      "observedAtMs": 1792599970000,
+      "windows": [
+        {
+          "key": "primary",
+          "usedPercent": 88,
+          "windowMinutes": null,
+          "resetAtMs": null
+        }
+      ]
+    }
+  ]
+}
