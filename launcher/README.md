@@ -522,6 +522,23 @@ confere todos os arquivos antes de apagar e preserva configurações, favoritos,
 aliases e histórico. O status se refere aos arquivos gerenciados: `runtime`
 permanece `unverified`, e a remoção não atesta encerramento de processos.
 
+Novas instalações desta geração usam recibos de instalação `0.2`, separados do
+schema `0.3` do ZIP. No Btrfs em Linux x86_64, `status`, `session` e os comandos
+`service` conferem a identidade persistente dos diretórios por descritores
+abertos, além dos hashes e permissões. Uma mudança apenas na numeração do
+dispositivo pode ser aceita quando essa identidade permanece igual, sem editar
+recibos. Outros filesystems e ABIs não implementadas mantêm a verificação POSIX
+estrita; não há qualificação de persistência nesses casos.
+
+Recibos `0.1` e ferramentas já instaladas permanecem estritos. Atualizar apenas o
+payload não atualiza esse gerenciador nem migra uma instalação antiga. Nesta
+fatia, `uninstall`, `update` e `recover --finish-install` ainda recusam uma
+mudança nos dispositivos observados dos diretórios gerenciados com
+`directory_operation_requires_original_device`, antes de escrever. Bancos de
+transação e recuperação conservam seus pins completos; um banco retido também
+é validado antes de criar um lock ausente. Migração, Workspace e qualificação
+por login/reboot têm aceites separados.
+
 A abertura manual usa `--no-global-shortcut`. Serviço, autostart e atribuição
 de Meta serão escolhas explícitas na etapa seguinte. O instalador usa
 `renameat2(RENAME_NOREPLACE)` no Linux e recusa a publicação se esse recurso

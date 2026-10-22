@@ -283,6 +283,8 @@ class ManagedUpdateGuardTests(unittest.TestCase):
                         return -1
                 library = mock.Mock()
                 library.renameat2 = Rename()
+                # Keep FD filesystem classification real; only renameat2 fails.
+                library.fstatfs = ctypes.CDLL(None, use_errno=True).fstatfs
                 with mock.patch.object(ctypes, "CDLL", return_value=library):
                     with self.assertRaises(fixture[5].InstallError): self.update(fixture, archive, digest)
                 self.assertTrue(calls, "documented renameat2 seam must be exercised")

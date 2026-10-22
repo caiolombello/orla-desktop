@@ -31,6 +31,7 @@ import time
 
 
 SCHEMA = "orla-launcher-install-0.1"
+IDENTITY_SCHEMA = "orla-launcher-install-0.2"
 PACKAGE_SHA256 = "cc5637c62ed98b4928a1de618e248fad0471b7649717b8c936be1ef630cc7011"
 MAX_RECEIPT_BYTES = 64 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -94,6 +95,95 @@ def _identity(value):
 
 def _directory_identity(value):
     return value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid
+
+
+def _filesystem_type(descriptor):
+    # Linux v6.18 UAPI asm-generic/statfs.h: x86_64 statfs is 120 bytes,
+    # f_type is the first long. Other ABIs retain explicitly strict POSIX pins.
+    if sys.platform != "linux" or os.uname().machine != "x86_64" or ctypes.sizeof(ctypes.c_long) != 8:
+        return None
+    result = (ctypes.c_long * 15)()
+    try:
+        function = ctypes.CDLL(None, use_errno=True).fstatfs
+        function.argtypes = [ctypes.c_int, ctypes.c_void_p]
+        function.restype = ctypes.c_int
+        if function(descriptor, ctypes.byref(result)) != 0:
+            raise InstallError("directory_proof_unavailable")
+    except (AttributeError, OSError):
+        raise InstallError("directory_proof_unavailable") from None
+    return result[0]
+
+
+def _proof_value(proof):
+    if type(proof) is not dict:
+        raise InstallError("receipt_schema")
+    if proof == {"policy": "posix-strict-0.1"}:
+        return proof
+    if set(proof) != {"policy", "fsUuid", "treeId", "subvolumeUuid", "inodeGeneration"} \
+            or proof["policy"] != "btrfs-fd-0.1" \
+            or any(type(proof[key]) is not str or re.fullmatch(r"[0-9a-f]{32}", proof[key], re.ASCII) is None
+                   or proof[key] == "0" * 32 for key in ("fsUuid", "subvolumeUuid")) \
+            or type(proof["treeId"]) is not int or not 0 < proof["treeId"] < 2 ** 64 \
+            or type(proof["inodeGeneration"]) is not int or not 0 < proof["inodeGeneration"] < 2 ** 32:
+        raise InstallError("receipt_schema")
+    return proof
+
+
+def _directory_proof(descriptor, pin):
+    if list(_directory_identity(os.fstat(descriptor))) != pin:
+        raise InstallError("parent_changed")
+    if _filesystem_type(descriptor) != 0x9123683e:
+        proof = {"policy": "posix-strict-0.1"}
+    else:
+        # Linux v6.18 UAPI linux/btrfs.h, linux/fs.h and asm-generic/ioctl.h.
+        # _IOR(0x94,31,1024), _IOR(0x94,60,504), _IOR('v',1,long).
+        # Btrfs GETVERSION writes an int (ioctl.c), despite encoding sizeof(long).
+        # UUID is offset 16 in FS_INFO and 296 in GET_SUBVOL_INFO; treeid is u64.
+        if sys.byteorder != "little" or ctypes.sizeof(ctypes.c_long) != 8:
+            raise InstallError("directory_proof_unavailable")
+        buffers = []
+        for request, size in ((0x8400941f, 1024), (0x81f8943c, 504), (0x80087601, 8)):
+            buffer = bytearray(size)
+            try:
+                result = fcntl.ioctl(descriptor, request, buffer, True)
+            except OSError:
+                raise InstallError("directory_proof_unavailable") from None
+            if type(result) is not int or result != 0 or len(buffer) != size:
+                raise InstallError("directory_proof_unavailable")
+            buffers.append(buffer)
+        fs_info, subvolume, generation = buffers
+        proof = {"policy": "btrfs-fd-0.1", "fsUuid": fs_info[16:32].hex(),
+                 "treeId": int.from_bytes(subvolume[:8], "little"),
+                 "subvolumeUuid": subvolume[296:312].hex(),
+                 "inodeGeneration": int.from_bytes(generation[:4], "little")}
+        _proof_value(proof)
+    if list(_directory_identity(os.fstat(descriptor))) != pin:
+        raise InstallError("parent_changed")
+    return proof
+
+
+def _receipt_directory_proofs(paths, receipt, *, versions_root=None):
+    directories = _directories(paths, receipt["archiveSha256"])
+    if versions_root is not None:
+        version = versions_root / receipt["archiveSha256"]
+        directories.update({"versions": versions_root, "version": version,
+                            "payload-bin": version / "bin", "payload-libexec": version / "libexec"})
+    proofs = {}
+    for record in receipt["directories"]:
+        with _directory(directories[record["key"]]) as descriptor:
+            proofs[record["key"]] = _directory_proof(descriptor, record["pin"])
+    return proofs
+
+
+def _operation_directory_pins(paths, receipt):
+    # Transactions and destructive consumers still use historical full pins.
+    # Refuse before their first write rather than partially applying after reboot.
+    if receipt["schema"] == IDENTITY_SCHEMA:
+        directories = _directories(paths, receipt["archiveSha256"])
+        for record in receipt["directories"]:
+            with _directory(directories[record["key"]]) as descriptor:
+                if list(_directory_identity(os.fstat(descriptor))) != record["pin"]:
+                    raise InstallError("directory_operation_requires_original_device")
 
 
 @contextmanager
@@ -277,8 +367,11 @@ def _directories(paths, digest):
 
 def _receipt_value(paths, data):
     value = _strict_json(data)
-    if type(value) is not dict or set(value) != {"schema", "archiveSha256", "commit", "uid", "runtime", "files", "directories"} \
-            or value["schema"] != SCHEMA or type(value["archiveSha256"]) is not str or SHA256.fullmatch(value["archiveSha256"]) is None \
+    keys = {"schema", "archiveSha256", "commit", "uid", "runtime", "files", "directories"}
+    if type(value) is dict and value.get("schema") == IDENTITY_SCHEMA:
+        keys.add("directoryProofs")
+    if type(value) is not dict or set(value) != keys \
+            or value["schema"] not in (SCHEMA, IDENTITY_SCHEMA) or type(value["archiveSha256"]) is not str or SHA256.fullmatch(value["archiveSha256"]) is None \
             or type(value["commit"]) is not str or COMMIT.fullmatch(value["commit"]) is None \
             or type(value["uid"]) is not int or value["uid"] != os.getuid() or value["runtime"] != "unverified":
         raise InstallError("receipt_schema")
@@ -305,7 +398,17 @@ def _receipt_value(paths, data):
                 or record["key"] not in directories or record["key"] in seen or type(record["pin"]) is not list \
                 or len(record["pin"]) != 5 or any(type(number) is not int for number in record["pin"]):
             raise InstallError("receipt_schema")
+        if value["schema"] == IDENTITY_SCHEMA and (any(not 0 <= n < 2 ** 64 for n in record["pin"])
+                or not 0 < record["pin"][1] or not 0 <= record["pin"][2] <= 0xffff
+                or not stat.S_ISDIR(record["pin"][2]) or any(n >= 2 ** 32 for n in record["pin"][3:])):
+            raise InstallError("receipt_schema")
         seen.add(record["key"])
+    if value["schema"] == IDENTITY_SCHEMA:
+        proofs = value["directoryProofs"]
+        if type(proofs) is not dict or set(proofs) != set(directories):
+            raise InstallError("receipt_schema")
+        for proof in proofs.values():
+            _proof_value(proof)
     return value
 
 
@@ -336,7 +439,15 @@ def _guard(paths, receipt, *, versions_root=None):
                             "payload-bin": version / "bin", "payload-libexec": version / "libexec"})
     for record in receipt["directories"]:
         with _directory(directories[record["key"]]) as descriptor:
-            if list(_directory_identity(os.fstat(descriptor))) != record["pin"]:
+            observed = list(_directory_identity(os.fstat(descriptor)))
+            if receipt["schema"] == IDENTITY_SCHEMA:
+                proof = _directory_proof(descriptor, observed)
+                if proof != receipt["directoryProofs"][record["key"]]:
+                    raise InstallError("managed_parent_drift")
+                matches = observed[1:] == record["pin"][1:] if proof["policy"] == "btrfs-fd-0.1" else observed == record["pin"]
+            else:
+                matches = observed == record["pin"]
+            if not matches:
                 raise InstallError("managed_parent_drift")
     expected = {"base": {"versions", "tools"}, "versions": {receipt["archiveSha256"]},
                 "version": {"bin", "libexec", "LICENSE"}, "payload-bin": {"orla-launcher"},
@@ -717,9 +828,11 @@ def install_archive(archive: Path, *, expected_sha256: str, expected_commit: str
             for key in ("tools/install.py", "tools/package.py", "controller", "launcher", "menu"):
                 path, mode = files[key]
                 _write_new(path, content[key], mode, owned=created)
-            receipt = {"schema": SCHEMA, "archiveSha256": expected_sha256, "commit": expected_commit,
+            receipt = {"schema": IDENTITY_SCHEMA, "archiveSha256": expected_sha256, "commit": expected_commit,
                        "uid": os.getuid(), "runtime": "unverified", "files": records,
                        "directories": [{"key": key, "pin": pin} for key, pin in directories.items()]}
+            receipt["directoryProofs"] = _receipt_directory_proofs(paths, receipt)
+            _receipt_value(paths, _json(receipt))
             _guard(paths, receipt)
             receipt_data = _json(receipt)
             _write_new(_state(paths) / "receipts" / (expected_sha256 + ".json"), receipt_data, 0o600)
@@ -764,12 +877,15 @@ def uninstall(paths: InstallPaths, *, backend=None) -> dict:
     _service_disabled(paths)
     if backend is not None:
         raise InstallError("backend_unimplemented")
+    if _exists(_state(paths) / "current.json"):
+        _operation_directory_pins(paths, _receipt(paths))
     with _locked(paths):
         _service_disabled(paths)
         if _pending(paths) is not None:
             raise InstallError("pending_transaction")
         receipt = _receipt(paths)
         _guard(paths, receipt)
+        _operation_directory_pins(paths, receipt)
         digest = receipt["archiveSha256"]
         directories = {record["key"]: record["pin"] for record in receipt["directories"]}
         _write_new(_state(paths) / "transactions" / (digest + "-uninstall.json"),
@@ -1623,11 +1739,21 @@ def recover_finish_install(paths: InstallPaths, *, backend=None) -> dict:
         if backend is not None:
             raise InstallError("backend_unimplemented")
         # Unlike initial install, recovery has no authority to create a state tree.
+        receipt = _receipt(paths)
+        _operation_directory_pins(paths, receipt)
         _recovery_parents(paths)
+        bank_path = _state(paths) / "transactions" / (receipt["archiveSha256"] + "-finish-install-recovery.json")
+        if len(os.fsencode(bank_path)) > 4096:
+            raise InstallError("install_paths")
+        if _exists(bank_path):
+            # A retained bank must be admitted before a missing lock is created.
+            bank_data, bank_pin = _read(bank_path, mode=0o600, limit=MAX_RECOVERY_BYTES)
+            _recovery_revalidate(paths, receipt, bank_path, bank_data, bank_pin)
         with _locked(paths):
             _service_disabled(paths)
             receipt = _receipt(paths)
             _guard(paths, receipt)
+            _operation_directory_pins(paths, receipt)
             proofs, parents = _recovery_proofs(paths, receipt), _recovery_parents(paths)
             bank_path = _state(paths) / "transactions" / (receipt["archiveSha256"] + "-finish-install-recovery.json")
             if len(os.fsencode(bank_path)) > 4096:
@@ -2019,8 +2145,10 @@ def _update_prepare(paths, a, decoded, digest, commit):
         a_files = {item["key"]: item for item in a["files"]}
         b_files = [{"key": item["key"], "mode": f"{mode:04o}", "size": item["size"], "sha256": item["sha256"]}
                    for item, (_name, mode) in zip(payload, PAYLOAD)] + [a_files[key] for key in UPDATE_SHARED]
-        b = {"schema": SCHEMA, "archiveSha256": digest, "commit": commit, "uid": os.getuid(), "runtime": "unverified",
+        b = {"schema": a["schema"], "archiveSha256": digest, "commit": commit, "uid": os.getuid(), "runtime": "unverified",
              "files": b_files, "directories": [{"key": key, "pin": directory_pins[key]} for key in _directories(paths, digest)]}
+        if b["schema"] == IDENTITY_SCHEMA:
+            b["directoryProofs"] = _receipt_directory_proofs(paths, b, versions_root=versions)
         b_data = _json(b)
         _receipt_value(paths, b_data)
         _guard(paths, b, versions_root=versions)
@@ -2083,12 +2211,15 @@ def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
                        if record["name"] != "manifest.json"}
         except package.PackageError as error:
             raise InstallError(error.code) from None
+        if _exists(_state(paths) / "current.json"):
+            _operation_directory_pins(paths, _receipt(paths))
         _recovery_parents(paths)
         with _locked(paths):
             _service_disabled(paths)
             _update_need(all(item["pin"] is None for item in _recovery_controls(paths)), "pending_transaction")
             a = _receipt(paths)
             _guard(paths, a)
+            _operation_directory_pins(paths, a)
             data, pin, bank = _update_prepare(paths, a, decoded, expected_sha256, expected_commit)
             try:
                 _bank, positions = _update_rename(paths, data, pin, "activate")
@@ -2115,6 +2246,8 @@ def _update_return_a(paths, backend, *, recovery):
         if backend is not None:
             raise InstallError("backend_unimplemented")
         _recovery_parents(paths)
+        # A missing lock is not permission to write before bank admission.
+        _update_load(paths)
         with _locked(paths):
             _service_disabled(paths)
             data, pin, bank, _positions = _update_load(paths)
