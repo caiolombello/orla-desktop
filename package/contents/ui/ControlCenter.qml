@@ -14,6 +14,8 @@ Controls.Control {
     property var brightness: null
     // Optional: hosts without a Do Not Disturb state show no focus card.
     property var doNotDisturb: null
+    // Optional: hosts without a microphone state show no microphone card.
+    property var microphone: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
@@ -45,6 +47,16 @@ Controls.Control {
         else if (kind === "power") powerError = message;
         else if (kind === "all") allError = message;
         return Boolean(dispatched);
+    }
+    function microphoneText() {
+        const mic = root.microphone;
+        if (!mic) return "";
+        if (mic.status === "unavailable") return qsTr("Serviço de áudio indisponível");
+        if (mic.status === "loading") return qsTr("Conectando ao áudio…");
+        if (mic.status === "absent") return qsTr("Nenhum microfone disponível");
+        if (mic.pending) return mic.desired ? qsTr("Silenciando…") : qsTr("Ativando…");
+        const name = boundedText(mic.label, 128);
+        return mic.muted ? qsTr("Mudo · %1").arg(name) : qsTr("Ligado · %1").arg(name);
     }
     function doNotDisturbText() {
         const mode = root.doNotDisturb;
@@ -336,6 +348,64 @@ Controls.Control {
                         Layout.fillWidth: true
                         visible: root.soundError.length > 0
                         text: root.soundError
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                }
+            }
+
+            Card {
+                objectName: "controlCenterMicrophoneCard"
+                visible: root.microphone !== null && root.microphone.status !== "inactive"
+                Layout.fillWidth: true
+                radius: Style.radius.module
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Style.space.sm
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.space.md
+                        OrlaIconButton {
+                            objectName: "controlCenterMicrophoneMute"
+                            // Stays enabled while confirming: disabling would drop keyboard focus.
+                            // The state ignores a second request until the first one settles.
+                            enabled: !!root.microphone && root.microphone.status === "ready" && root.microphone.writable
+                            checked: !!root.microphone && root.microphone.presentation
+                            iconName: checked ? "microphone-sensitivity-muted-symbolic" : "audio-input-microphone-symbolic"
+                            text: checked ? qsTr("Ativar microfone") : qsTr("Silenciar microfone")
+                            onClicked: root.microphone.request(!root.microphone.muted)
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Microfone")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
+                                color: root.foreground
+                            }
+                            Controls.Label {
+                                objectName: "controlCenterMicrophoneStatus"
+                                Layout.fillWidth: true
+                                text: root.microphoneText()
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                                color: root.muted
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterMicrophoneError"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.microphone ? root.microphone.error : ""
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.foreground
