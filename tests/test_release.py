@@ -17,8 +17,11 @@ class ReleaseBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
-            for name in ("release.py", "caiodock.py", "themes.py", "__init__.py", "updates.py", "updates_contract.py", "updates_desktop.py", "updates_desktop_state.py", "orla.py", "panel_layout.py", "search_shortcut.py"):
+            for name in ("release.py", "caiodock.py", "themes.py", "__init__.py", "updates.py", "updates_contract.py", "orla.py", "panel_layout.py", "search_shortcut.py"):
                 shutil.copyfile(source / "scripts" / name, root / "scripts" / name)
+            # Source-only helpers are absent from the kit itself; placeholders prove their exclusion.
+            for name in ("updates_desktop.py", "updates_desktop_state.py"):
+                (root / "scripts" / name).write_text("source-only helper\n", encoding="utf-8")
             for name in ("LICENSE", "README.md", "README.pt-BR.md", "CONTRIBUTING.md",
                          "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore"):
                 (root / name).write_text("synthetic fixture\n", encoding="utf-8")
