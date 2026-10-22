@@ -112,7 +112,7 @@ O `plasmanotifyrc` terminou idêntico ao anterior. A primeira versão desativava
 botão durante a confirmação e perdia o foco do teclado; a prova nativa mostrou o
 defeito, corrigido e coberto por teste.
 
-CC1 continua parcial. Microfone e os gates reais do
+CC1 continua parcial. O microfone está na seção seguinte; os gates reais do
 serviço de áudio ainda estão abertos; rede, Bluetooth e energia pertencem às
 fatias seguintes. Instalação, módulo privado do Plasma-PA, Pulse/PipeWire,
 barramento da sessão, compositor, seat, hardware, popup nativo e painel
@@ -120,3 +120,27 @@ instalado permanecem sem validação.
 
 Veja a [validação Source de áudio](validation/control-center-audio-source.md) e
 o [registro da alpha 0.2.9](validation/control-center-peripherals-0.2.9.md).
+
+## Microfone — CC1-D
+
+O card **Microfone** silencia e reativa a entrada padrão do servidor de áudio,
+lida pelo mesmo módulo Plasma-PA do applet de volume. Só a entrada padrão muda,
+porque é dela que os aplicativos gravam quando não escolhem outra. Um monitor de
+saída ou a fonte nula não contam como microfone.
+
+A alteração só conclui quando o serviço de áudio publica o novo estado para a
+mesma entrada. Uma escrita recusada, a falta de confirmação em 3 segundos ou a
+troca da entrada padrão durante o pedido mostram um erro em vez de um mudo que
+não aconteceu. Abrir a Central não grava nada. Sem microfone ou sem o serviço de
+áudio, só este card fica desativado, e mudanças feitas fora do Orla aparecem como
+estão. O botão continua focável durante a confirmação, como no Não perturbe.
+
+Na sessão Plasma 6.7.5 deste registro, com nenhum aplicativo gravando, o card
+mostrou a entrada padrão real como ligada. Um clique silenciou (`pactl
+get-source-mute` respondeu sim) e Espaço reativou. Silenciar e reativar pelo
+`pactl` apareceram no card. O microfone terminou ligado, como estava antes, e o
+journal não registrou erro da dock.
+
+Com o microfone, todos os cards básicos do CC1 existem e passaram por uma prova
+nativa nesta máquina. O aceite completo continua aberto: outros ambientes,
+hardware ausente de verdade e as transferências com áudio pendente.

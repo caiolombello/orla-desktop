@@ -17,6 +17,8 @@ Window {
     property alias brightness: fixtureBrightness
     property alias dndBackend: fixtureDndBackend
     property alias dnd: fixtureDnd
+    property alias micBackend: fixtureMicBackend
+    property alias mic: fixtureMic
 
     QtObject {
         id: fixtureBackend
@@ -106,6 +108,23 @@ Window {
         confirmationTimeout: 300
         backend: fixtureDndBackend
     }
+    QtObject {
+        id: fixtureMicBackend
+        objectName: "controlCenterMicBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", input: {id: "input.synthetic", label: "Microfone sintético", muted: false, writable: true}})
+        function setMuted(id, muted) { calls = calls.concat([{id: id, muted: muted}]); return !rejectWrites; }
+        // Tests report like the audio service would.
+        function report(changes) { snapshot = {status: snapshot.status, input: Object.assign({}, snapshot.input, changes)}; }
+    }
+    DockUI.MicrophoneState {
+        id: fixtureMic
+        objectName: "controlCenterMicState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixtureMicBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -122,5 +141,6 @@ Window {
         audio: fixtureAudio
         brightness: fixtureBrightness
         doNotDisturb: fixtureDnd
+        microphone: fixtureMic
     }
 }

@@ -46,6 +46,7 @@ Item {
     property var audioBackendOverride: null
     property var brightnessBackendOverride: null
     property var doNotDisturbBackendOverride: null
+    property var microphoneBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -289,7 +290,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
-        || brightnessControlState.pendingAny || doNotDisturbState.pending
+        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1154,6 +1155,19 @@ Item {
         active: controlCenterPopup.visible
         backend: root.doNotDisturbBackendOverride !== null ? root.doNotDisturbBackendOverride : nativeDoNotDisturbBackend.item
     }
+    Loader {
+        id: nativeMicrophoneBackend
+        objectName: "controlCenterMicrophoneNativeLoader"
+        // Plasma-PA's input model is only used inside plasmashell.
+        active: controlCenterPopup.visible && root.microphoneBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativeMicrophone.qml") : ""
+    }
+    MicrophoneState {
+        id: microphoneState
+        objectName: "microphoneState"
+        active: controlCenterPopup.visible
+        backend: root.microphoneBackendOverride !== null ? root.microphoneBackendOverride : nativeMicrophoneBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1186,6 +1200,7 @@ Item {
         audio: audioControlState
         brightness: brightnessControlState
         doNotDisturb: doNotDisturbState
+        microphone: microphoneState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

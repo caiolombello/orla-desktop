@@ -383,6 +383,102 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.dnd_calls(), [])
         self.assertEqual(self.warnings, [])
 
+    def mic_calls(self):
+        calls = self.window.findChild(QObject, "controlCenterMicBackend").property("calls")
+        calls = calls.toVariant() if hasattr(calls, "toVariant") else calls
+        return [(call["id"], call["muted"]) for call in calls]
+
+    def test_microphone_mutes_the_default_input_once_the_service_confirms(self):
+        state = self.window.findChild(QObject, "controlCenterMicState")
+        confirmations = QSignalSpy(state.confirmed)
+        toggle = self.item("controlCenterMicrophoneMute")
+        status = self.item("controlCenterMicrophoneStatus")
+        self.assertTrue(self.item("controlCenterMicrophoneCard").isVisible())
+        self.assertFalse(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Ligado · Microfone sintético")
+        # Opening the Control Center never writes.
+        self.assertEqual(self.mic_calls(), [])
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.mic_calls(), [("input.synthetic", True)])
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Silenciando…")
+        # Keyboard focus stays on the toggle while waiting; a repeat press is ignored.
+        self.assertTrue(toggle.hasActiveFocus())
+        self.assertTrue(toggle.property("visualFocus"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(len(self.mic_calls()), 1)
+        self.evaluate("micBackend.report({muted: true})", self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(status.property("text"), "Mudo · Microfone sintético")
+        self.assertEqual(toggle.property("text"), "Ativar microfone")
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.mic_calls()[-1], ("input.synthetic", False))
+        self.evaluate("micBackend.report({muted: false})", self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmations.count(), 2)
+        self.assertFalse(toggle.property("checked"))
+        # A change made outside Orla is shown as it is.
+        self.evaluate("micBackend.report({muted: true})", self.window)
+        QTest.qWait(20)
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(confirmations.count(), 2)
+        self.assertEqual(self.warnings, [])
+
+    def test_microphone_failures_never_look_like_success(self):
+        toggle = self.item("controlCenterMicrophoneMute")
+        error = self.item("controlCenterMicrophoneError")
+        state = self.window.findChild(QObject, "controlCenterMicState")
+        self.evaluate("micBackend.rejectWrites = true", self.window)
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertIn("recusou", error.property("text"))
+        self.assertFalse(toggle.property("checked"))
+        self.evaluate("micBackend.rejectWrites = false", self.window)
+        # No confirmation: the request expires instead of claiming the mute.
+        self.assertTrue(self.evaluate("request(true)", state))
+        QTest.qWait(450)
+        self.assertIn("não confirmou", error.property("text"))
+        self.assertFalse(toggle.property("checked"))
+        # The default input changing mid-request is not a confirmation either.
+        self.assertTrue(self.evaluate("request(true)", state))
+        self.evaluate('micBackend.snapshot = {status: "ready", input: {id: "input.other", label: "Outro", muted: true, writable: true}}', self.window)
+        QTest.qWait(20)
+        self.assertIn("mudou", error.property("text"))
+        self.assertFalse(state.property("pending"))
+        self.assertEqual(self.warnings, [])
+
+    def test_microphone_absent_or_unavailable_disables_only_its_card(self):
+        card = self.item("controlCenterMicrophoneCard")
+        toggle = self.item("controlCenterMicrophoneMute")
+        status = self.item("controlCenterMicrophoneStatus")
+        for snapshot, text in (('{status: "absent", input: null}', "Nenhum microfone disponível"),
+                               ('{status: "unavailable", input: null}', "Serviço de áudio indisponível"),
+                               ('{status: "loading", input: null}', "Conectando ao áudio…")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate(f"micBackend.snapshot = {snapshot}", self.window)
+                QTest.qWait(20)
+                self.assertTrue(card.isVisible())
+                self.assertFalse(toggle.isEnabled())
+                self.assertEqual(status.property("text"), text)
+                self.assertTrue(self.item("controlCenterAudioVolume").isEnabled())
+        self.evaluate('micBackend.snapshot = {status: "ready", input: {id: "input.synthetic", label: "x", muted: "yes", writable: true}}', self.window)
+        QTest.qWait(20)
+        self.assertFalse(toggle.isEnabled())
+        self.evaluate('micBackend.snapshot = {status: "ready", input: {id: "input.synthetic", label: "x", muted: false, writable: false}}', self.window)
+        QTest.qWait(20)
+        self.assertFalse(toggle.isEnabled())
+        self.evaluate("mic.backend = null", self.window)
+        QTest.qWait(20)
+        self.assertFalse(card.isVisible())
+        self.assertEqual(self.mic_calls(), [])
+        self.assertEqual(self.warnings, [])
+
     def test_full_volume_keeps_a_separate_visible_keyboard_focus_ring(self):
         self.evaluate("audioBackend.snapshot.outputs[0].volumeRaw = 65536; audioBackend.revision += 1", self.window)
         volume = self.item("controlCenterAudioVolume")

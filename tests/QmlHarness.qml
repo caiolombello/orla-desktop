@@ -130,6 +130,13 @@ Window {
         property var snapshot: ({status: "ready", inhibited: false, until: 0, byApplication: false, applications: []})
         function setDoNotDisturb(on) { calls = calls.concat([on]); return true; }
     }
+    QtObject {
+        id: microphoneBackend
+        objectName: "dockMicrophoneBackend"
+        property var calls: []
+        property var snapshot: ({status: "ready", input: {id: "input.synthetic", label: "Microfone sintético", muted: false, writable: true}})
+        function setMuted(id, muted) { calls = calls.concat([{id: id, muted: muted}]); return true; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -160,6 +167,7 @@ Window {
         audioBackendOverride: audioBackend
         brightnessBackendOverride: brightnessBackend
         doNotDisturbBackendOverride: doNotDisturbBackend
+        microphoneBackendOverride: microphoneBackend
         integrations.active: false
         integrations.transport: addonTransport
         addonTransportOverride: addonTransport

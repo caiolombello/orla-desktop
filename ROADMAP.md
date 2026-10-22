@@ -361,8 +361,12 @@ aberto; CC1 permanece parcial. [Detalhes](docs/control-center.md#brilho-da-tela-
 **CC1-C — Não perturbe (21/10):** o card usa as configurações e regras do applet de
 notificações do Plasma, então os dois toggles são um só estado; a mudança conclui quando
 o servidor publica o novo estado. Prova nativa: liga/desliga pelo teclado, `Inhibited`
-acompanhou e `plasmanotifyrc` ficou idêntico. Falta o microfone para fechar os cards
-básicos do CC1. [Detalhes](docs/control-center.md#não-perturbe--cc1-c).
+acompanhou e `plasmanotifyrc` ficou idêntico. [Detalhes](docs/control-center.md#não-perturbe--cc1-c).
+**CC1-D — microfone (22/10):** o card silencia a entrada padrão pelo Plasma-PA e só
+conclui quando o serviço publica o novo estado da mesma entrada. Prova nativa: clique e
+Espaço alternaram o mudo com readback do `pactl`, e mudanças externas apareceram no card.
+Todos os cards básicos do CC1 existem; o aceite completo segue aberto.
+[Detalhes](docs/control-center.md#microfone--cc1-d).
 
 - [ ] **CC1: controles diretos básicos.** Cards de volume/saída de áudio, microfone/mudo, brilho quando disponível, mídia, bateria/energia e Não perturbe. Sincronizar com mudanças feitas fora do Orla. Aceite: valores refletem o KDE, hardware ausente desativa somente o card correspondente e cada alteração resulta de uma ação do usuário, confirmada pelo serviço.
 - [ ] **CC2: conexões e energia.** Wi-Fi/rede, Bluetooth, perfil de energia e acesso às configurações detalhadas. Reusar serviços e os fluxos nativos de autenticação. Aceite: conectar/desconectar e trocar dispositivo respeita permissões; erro não fica com aparência de sucesso. HUD será conectado a esses controles na etapa seguinte.
