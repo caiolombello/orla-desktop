@@ -299,4 +299,54 @@ não precisa encerrá-lo.
 
 Não houve QuotaLantern real na sessão de uso, conta de provedor, captura
 visual da dock com quota por complemento, leitor de tela nem esquema claro
-nativo.
+nativo. A rodada seguinte cobriu o QuotaLantern real.
+
+## Quota real na sessão de uso — 22/10
+
+O QuotaLantern de caiolombello/quotalantern#5 substituiu a versão em uso pelo
+instalador do próprio aplicativo, que guardou backup e script de reversão. A
+exportação foi ativada pela CLI antes de abrir o tray. A primeira publicação
+real tinha 659 bytes e dois provedores prontos: um com janelas de 5 h e 7 d,
+outro com duas janelas sem duração declarada. A pasta tinha modo 0700, o
+arquivo 0600, e não havia e-mail, conta, mensagem do provedor nem valores em
+dinheiro.
+
+1. **Armazenamento recusado.** Instalar o complemento pela CLI do Orla falhou
+   com `unsafe`: o armazenamento exigia que `orla-desktop`, a pasta-mãe dele
+   em `$XDG_DATA_HOME`, tivesse modo 0700, mas outras partes do Orla já a
+   criam com 0755. Nenhum complemento podia ser instalado numa máquina com o
+   Orla em uso. A tentativa deixou uma pasta `addons` vazia, e por cerca de
+   2 min o host respondeu `unsafe` à dock; a quota legada continuou, porque a
+   dock só troca de fonte com uma leitura válida. A pasta vazia foi removida.
+   Em `31e2c3a`, a pasta-mãe segue a regra das demais acima do armazenamento:
+   do usuário e sem escrita para outras contas. O armazenamento continua 0700,
+   e uma pasta-mãe com escrita para grupo ou outros continua recusada.
+2. **Mudança feita fora das configurações.** Depois da correção, a CLI
+   instalou e ativou o pacote, e `snapshot --module quota` respondeu `ready`
+   com os dois provedores. A dock tinha fixado a identidade do registro vazio,
+   então a primeira leitura deu `source_changed` e as leituras de complementos
+   pararam, como previsto. Abrir **Configurações → Widgets → Complementos**
+   mostrou o QuotaLantern ativado. **Recarregar complementos** e fechar as
+   configurações retomaram as leituras.
+3. **Leitura descartada.** Mesmo com `ready` a cada 15 s, a quota continuou
+   pela ponte legada. Com bateria e quota visíveis, o leitor que esperava a
+   vez começava dentro da liberação do primeiro, e o primeiro descartava a
+   leitura que tinha acabado de validar. As respostas reais gravadas
+   reproduziram isso offscreen. Em `1971c74`, a vez passa depois que o leitor
+   trata o próprio resultado; o teste cobre as duas ordens, e reverter
+   qualquer um dos lados o faz falhar.
+
+Com as duas correções instaladas e o plasmashell reiniciado, a captura de
+120 s teve uma única leitura legada, já em andamento na partida. Depois dela,
+a cada 15 s, a quota veio do complemento (`ready`, cerca de 50 ms), e a bateria
+respondeu `not_installed`. O popup de quota da dock mostrou as janelas com
+duração e horário de reinício, e o journal do plasmashell não registrou erro da dock.
+As capturas têm dados reais e ficaram somente na máquina.
+
+Observações para depois: **Recarregar complementos** volta a rolagem para
+cima, e o popup de quota mantém textos do caminho legado (“Reler cache
+local”, “Leituras já coletadas”) quando a fonte é o complemento.
+
+Não executado: instalar pelo seletor de arquivos das configurações (a rodada
+usou a CLI), desativar a exportação na sessão de uso, esquema claro, leitor de
+tela e novo login.
