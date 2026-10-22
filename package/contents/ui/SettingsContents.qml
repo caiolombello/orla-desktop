@@ -399,7 +399,7 @@ ColumnLayout {
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Para ocultar automaticamente: configure a visibilidade do painel no modo de edição do Plasma."); wrapMode: Text.WordWrap; opacity: 0.65 }
             }
         }
-        ProfileControls { profiles: settings.profiles; appearance: settings.appearance; preset: settings.appearancePreset }
+        ProfileControls { profiles: settings.profiles; appearance: settings.appearance; preset: settings.appearancePreset; sessionOpen: settings.visible }
         ContextControls {
             objectName: "contextControls"
             desktopSwitch: settings.desktopSwitch

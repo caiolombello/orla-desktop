@@ -678,3 +678,87 @@ not wheel/touchpad scrolling, autoscroll, held pixel appearance, physical panel
 overflow, multiple outputs/scales or changing contexts. Private receipts are under
 `.runtime/task-viewport-20261015/`; the final matrix status is
 `PASS_SOURCE_TASK_VIEWPORT_GESTURES`.
+
+## Active profile rename (development, 16 October 2026)
+
+This Source increment adds an initially collapsed editor in the active-profile
+module. The pending selector does not choose its target. Save is explicit;
+invalid/duplicate names, dirty appearance, protected data and stale owner/scope/
+revision preserve the draft without a rename write. Tabs keep it; closing
+settings discards it. Escape cancels the inline editor first. A synchronous
+writer cannot clear newer input or reclaim newer focus.
+
+`ProfileState.rename(name, expectedScope, expectedRevision)` changes only the
+active managed entry's name in the parsed original saved document. It preserves
+omitted optional fields, IDs, all other profile data, context associations and
+global preferences. A same-name no-op preserves the exact saved bytes and makes
+no assignment. The state uses the existing format and transition guard.
+
+Portable/offscreen results, separately in Fusion and `org.kde.desktop`:
+`test_profiles` 27 pass, `test_auto_context_profiles` 54 pass,
+`test_profiles_dock` 38 pass + one TaskManager skip, `test_appearance` 21 pass,
+and `test_contexts_dock` 30 pass + one TaskManager skip. Total: 170 pass and two
+expected skips per style. Design check reported zero issues; seven design guards
+passed. The new UI cases require no QML warnings. Source remained unchanged
+during the independent appearance/context regression run.
+
+The first gallery was rejected: focusing the newly opened field could leave it
+below the short viewport after content-height settlement. A themed geometry
+test reproduced the failure before the fix. The final implementation reveals
+again only for the still-focused control and opening epoch when content height
+changes. The corrected test and gallery passed; dark/light captures cover
+350/420 px with editing, duplicate error, cancellation focus and saved states.
+Representative captures are in `docs/screenshots/profiles-rename/`.
+
+The built archive contains the same 72 paths, changing only ProfileState,
+ProfileControls and the SettingsContents session-lifecycle wire. Version and
+published 0.2.9 assets are unchanged. Installation and private native public-UI
+rename were unrun at that initial Source checkpoint; subsequent evidence follows.
+
+The first installed package (`bb6fa88d…`) passed independent whole-package,
+read-only backup/rollback-mode and main-session preservation checks. Native R1
+then stopped before editing: the closed rename disclosure was clipped, and the
+route had not planned to focus it before Press. Its reader recorded
+`action_target_not_live` after two Press, zero text edits and zero focus actions.
+R1 remains FAILED (`229499e5…`); its reader-exit cleanup assertion remains
+separate. The postcheck (`514d8945…`) qualifies main-session/resource preservation,
+not rename success. The duplicate Press names in that target's facts were a
+separate latent issue; they were not the first failure.
+
+Qt 6.11.2 and a causal public-interface test confirmed redundant attached Press
+handlers on the three editor buttons. Removing those three handlers retains the
+inherited native button actions and existing click guards. Public action names
+are now unique; the test verifies one Save write, no Cancel write and the active
+target despite a pending selector choice. `test_profiles_dock` passed again in
+each style: 38 pass + one TaskManager skip, no QML warnings. Design check passed;
+the new dark/light gallery matches all four committed captures byte for byte.
+
+The updated package (`fd08e77c…`, Source `6153a9a`) changes only ProfileControls
+relative to the first installed rename package. Installation and independent
+postcheck passed with a new read-only backup. The main configuration still
+matches the original authority plus its previously declared two-key dialog-size
+footprint; that footprint's geometry correlation remains unqualified. Bar,
+launcher, layout banks, automatic mode OFF and five absent disk keys were
+preserved. Autolock remains off, the screen unlocked, automatic shell restarts zero.
+
+Native R2 passed (`a85a1821…`) in a private real KDE/Wayland host using the pristine
+installed 72-file package: six public AT-SPI Press, one EditableText call with
+exact Text readback and two SetFocus actions. The revised route first reveals
+the clipped disclosure; each action uses a fresh eligible technical target.
+Five reader checkpoints preserve raw saved bytes until Save, then require only
+the active Work entry's name to differ. IDs, all other profile fields, omitted
+optional fields, raw context bindings, global preferences and timer fields stay
+unchanged. Normal host exit zero confirms the saved name after flush.
+
+Independent postcheck `PASS_PRIVATE_PROFILE_RENAME_R2_POSTCHECK` confirms the same
+main-shell process, preserved configuration and installed package, all owned
+children reaped without forced termination, and accessibility daemons/sockets
+gone, with no lifecycle errors. R2's reader retained the historical
+`RENAME_R1_PREDECLARED` label; the pre-execution, separately pinned budget errata
+explains the actual R2 contract: at most three unique focus actions and unchanged
+time budgets. No frozen receipt was relabeled.
+
+This qualifies that private public-accessibility journey. Portable signal counts
+and Native final deltas do not establish exact native KConfig setter counts,
+physical keyboard focus, the user's actual panel or multiple monitors. P1/P2
+remain partial. Private receipts: `.runtime/profile-rename-20261016/`.
