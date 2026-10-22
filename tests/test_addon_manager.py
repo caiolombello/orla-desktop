@@ -619,6 +619,32 @@ class AddonManagerTests(unittest.TestCase):
         self.assertEqual(enable.count(), 0)
         self.assertEqual(self.warnings, [])
 
+    def test_reload_keeps_the_scroll_position_while_rows_are_cleared(self):
+        # Installed dock: a reload cleared the rows until the host answered, so the
+        # settings scroll snapped upward and stayed there after the rows returned.
+        self.window.setHeight(240)
+        rows = [package(enabled=True), package(id="org.example.other", sha256="c" * 64)]
+        self.manager.setProperty("addons", rows)
+        QTest.qWait(60)
+        flick = self.control("addonScroll").property("contentItem")
+        bottom = flick.property("contentHeight") - flick.property("height")
+        self.assertGreater(bottom, 100)
+        flick.setProperty("contentY", bottom)
+        QTest.qWait(30)
+        self.manager.setProperty("loading", True)
+        self.manager.setProperty("addons", [])
+        QTest.qWait(60)
+        self.assertAlmostEqual(flick.property("contentY"), bottom, delta=1)
+        self.manager.setProperty("addons", rows)
+        self.manager.setProperty("loading", False)
+        QTest.qWait(60)
+        self.assertAlmostEqual(flick.property("contentY"), bottom, delta=1)
+        # Without rows after the answer the list really is shorter.
+        self.manager.setProperty("addons", [])
+        QTest.qWait(60)
+        self.assertLess(flick.property("contentHeight"), bottom)
+        self.assertEqual(self.warnings, [])
+
     def test_loading_feedback_and_provider_profile_gates(self):
         self.manager.setProperty("loading", True)
         self.assertTrue(self.control("addonProgress").isVisible())
@@ -655,6 +681,28 @@ class AddonManagerTests(unittest.TestCase):
         outside.forceActiveFocus(Qt.TabFocusReason)
         QTest.qWait(40)
         self.assertEqual(self.window.activeFocusItem(), outside)
+        self.assertEqual(self.warnings, [])
+
+    def test_toggling_reading_keeps_focus_on_the_same_card_with_the_same_input(self):
+        # Installed dock: after "Desativar leitura" the ring jumped to "Adicionar arquivo…",
+        # even when the button had been clicked with the pointer.
+        for reason, visual in ((Qt.TabFocusReason, True), (Qt.MouseFocusReason, False)):
+            with self.subTest(visual=visual):
+                self.manager.setProperty("addons", [package(enabled=True)])
+                QTest.qWait(30)
+                self.control("addonDisable-org.example.battery").forceActiveFocus(reason)
+                self.manager.setProperty("addons", [package(enabled=False)])
+                QTest.qWait(40)
+                enable = self.control("addonEnable-org.example.battery")
+                self.assertEqual(self.window.activeFocusItem(), enable)
+                self.assertEqual(enable.property("visualFocus"), visual)
+                self.manager.setProperty("addons", [package(enabled=True)])
+                QTest.qWait(40)
+                disable = self.control("addonDisable-org.example.battery")
+                self.assertEqual(self.window.activeFocusItem(), disable)
+                self.assertEqual(disable.property("visualFocus"), visual)
+                self.manager.setProperty("addons", [])
+                QTest.qWait(40)
         self.assertEqual(self.warnings, [])
 
     def assert_visible_add_focus(self):

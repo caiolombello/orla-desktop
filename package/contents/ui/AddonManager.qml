@@ -34,7 +34,24 @@ Controls.Control {
     signal rollbackRequested(string addonId, string sha256)
     signal openOriginRequested(string origin)
     signal revealRequested(var control)
-    implicitHeight: contentItem.implicitHeight
+    // Reads and changes clear the rows until the host answers. Holding the last
+    // settled height stops the settings scroll from snapping upward; the hold ends
+    // when the answer has been laid out, or shortly after if nothing moved.
+    property real settledHeight: 0
+    property bool holdingHeight: false
+    implicitHeight: holdingHeight ? Math.max(contentItem.implicitHeight, settledHeight) : contentItem.implicitHeight
+    function waitChanged() {
+        if (loading || busy) { holdingHeight = true; heightRelease.stop(); }
+        else if (holdingHeight) heightRelease.restart();
+    }
+    function contentResized() {
+        if (loading || busy) return;
+        heightRelease.stop();
+        holdingHeight = false;
+        settledHeight = contentItem.implicitHeight;
+    }
+    Connections { target: root.contentItem; function onImplicitHeightChanged() { root.contentResized(); } }
+    Timer { id: heightRelease; interval: Style.motion.fast; onTriggered: root.contentResized() }
     padding: 0
     palette.window: scheme.surface
     palette.base: scheme.raised
@@ -199,6 +216,7 @@ Controls.Control {
             if (!trackedFocus) return;
             const scope = focusScope();
             scope.name = trackedFocus.objectName;
+            scope.visual = trackedFocus.visualFocus === true;
             pendingRecovery = scope;
         }
         Qt.callLater(attemptRecovery);
@@ -220,20 +238,26 @@ Controls.Control {
         }
         // Projection and gate completion may arrive in separate event turns.
         if (busy || loading) return;
-        const candidate = findControl(root, pending.name);
-        const replacement = candidate && candidate.visible && candidate.enabled ? candidate : chooseFile;
+        // Toggling reading swaps the card's action; focus follows it to the same card.
+        const toggled = /^addon(Enable|Disable)-/.test(pending.name)
+            ? findControl(root, pending.name.replace(/^addon(Enable|Disable)-/,
+                (_, kind) => kind === "Enable" ? "addonDisable-" : "addonEnable-")) : null;
+        const usable = item => item && item.visible && item.enabled ? item : null;
+        const replacement = usable(findControl(root, pending.name)) || usable(toggled) || chooseFile;
         if (replacement.visible && replacement.enabled) {
             pendingRecovery = null;
             // Clearing the observable token can revoke ownership or publish a
             // newer request. Recheck before the focus assignment itself.
+            // Keep the last input: a pointer action must not light the keyboard ring.
+            // OtherFocusReason would not be tracked, so pointer focus stays MouseFocusReason.
             if (ownsScope(pending) && !pendingRecovery && replacement.visible && replacement.enabled)
-                replacement.forceActiveFocus(Qt.TabFocusReason);
+                replacement.forceActiveFocus(pending.visual === false ? Qt.MouseFocusReason : Qt.TabFocusReason);
         }
     }
     onAddonsChanged: recoverAfterChange()
     onPreviewChanged: recoverAfterChange()
-    onBusyChanged: gateChanged()
-    onLoadingChanged: gateChanged()
+    onBusyChanged: { waitChanged(); gateChanged(); }
+    onLoadingChanged: { waitChanged(); gateChanged(); }
     onVisibleChanged: if (!visible) invalidateFocus()
     onEnabledChanged: if (!enabled) invalidateFocus()
     onParentChanged: invalidateFocus()

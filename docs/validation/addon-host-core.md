@@ -343,10 +343,35 @@ respondeu `not_installed`. O popup de quota da dock mostrou as janelas com
 duração e horário de reinício, e o journal do plasmashell não registrou erro da dock.
 As capturas têm dados reais e ficaram somente na máquina.
 
-Observações para depois: **Recarregar complementos** volta a rolagem para
-cima, e o popup de quota mantém textos do caminho legado (“Reler cache
-local”, “Leituras já coletadas”) quando a fonte é o complemento.
+Duas observações da rodada foram tratadas em seguida:
 
-Não executado: instalar pelo seletor de arquivos das configurações (a rodada
-usou a CLI), desativar a exportação na sessão de uso, esquema claro, leitor de
-tela e novo login.
+- **Rolagem presa no topo.** **Recarregar complementos** deixava a rolagem das
+  configurações no topo, porque a lista some enquanto o host responde. Agora
+  a altura fica reservada até a resposta ser exibida.
+- **Popup de quota.** Com a fonte no complemento, o popup ainda nomeava o
+  QuotaLantern, oferecia o link fixo do projeto e não mostrava origem,
+  horário nem a orientação para recarregar. Agora segue o popup de bateria.
+  O botão continua “Reler cache local”, porque só relê os dados locais.
+
+Ainda na sessão de uso, com essas correções instaladas:
+
+- **Exportação desligada.** `--orla-export disable` levou o host a
+  `export_missing`, a dock não voltou à ponte legada, e o popup mostrou
+  “Sem dados compartilhados…” sem a linha de origem. Religada, a exportação
+  voltou na atualização seguinte do QuotaLantern.
+- **Caminho do usuário nas configurações.** O complemento foi desativado e
+  removido (com confirmação), depois adicionado de novo:
+  1. **Adicionar arquivo…** abriu o seletor do KDE, que recebeu o caminho
+     digitado e Enter;
+  2. a prévia mostrou a permissão de quota;
+  3. **Instalar complemento** deixou o pacote desativado;
+  4. **Ativar leitura** o ativou.
+
+  Ao fechar as configurações, a dock leu a quota pelo complemento (`ready`)
+  sem pausa por `source_changed`.
+- **Foco depois de ativar/desativar.** O foco pulava para **Adicionar
+  arquivo…** e acendia o contorno de teclado mesmo após um clique. Agora segue
+  para a ação equivalente do mesmo cartão e só acende o contorno quando o foco
+  anterior veio do teclado.
+
+Não executado: esquema claro, leitor de tela e novo login.
