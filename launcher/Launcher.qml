@@ -39,6 +39,12 @@ Window {
     readonly property bool canOpenActions: activePanel === "search" && !executionBlocked && !aliasPreferences.visible
     readonly property bool canAddAlias: canOpenActions && launcher.aliasesWritable === true
         && launcher.status === "ready" && !!selectedRow && selectedRow.enabled && selectedRow.aliasEligible === true
+    readonly property string selectedAppId: selectedRow ? String(selectedRow.appId || "") : ""
+    readonly property bool selectedFavorite: selectedAppId.length > 0
+        && (launcher.favorites || []).some(entry => entry.appId === selectedAppId)
+    readonly property bool canChangeFavorite: canOpenActions && launcher.favoritesWritable === true
+        && launcher.status === "ready" && !!selectedRow && selectedRow.enabled && selectedAppId.length > 0
+        && (selectedFavorite || (selectedRow.kind === "app" && selectedRow.aliasEligible === true))
     property var actionsRow: null
     property int actionsEpisode: 0
     function openResultActions() {
@@ -46,10 +52,14 @@ Window {
         const row = selectedRow
         actionsEpisode++
         actionsRow = {title: row ? row.title : qsTr("Busca local"), source: row ? row.source : qsTr("Orla"),
-            actions: row && row.enabled ? row.actions.slice() : []}
+            actions: row && row.enabled ? row.actions.slice() : [],
+            preferences: (canChangeFavorite ? [{preference: selectedFavorite ? "unpin" : "pin",
+                text: selectedFavorite ? qsTr("Remover dos favoritos") : qsTr("Fixar nos favoritos")}] : [])
+                .concat(canAddAlias ? [{preference: "add", text: qsTr("Adicionar alias…")}] : [])
+                .concat([{preference: "manage", text: qsTr("Apps e aliases…")}])}
         resultActions.open()
         resultActions.currentIndex = 2
-        const first = canAddAlias || actionsRow.actions.length > 0 ? 2 : resultActions.count - 1
+        const first = 2
         resultActions.currentIndex = first
         if (resultActions.itemAt(first)) resultActions.itemAt(first).forceActiveFocus(Qt.PopupFocusReason)
     }
@@ -186,18 +196,18 @@ Window {
             background: Item { }
         }
         Instantiator {
-            model: window.actionsRow ? window.actionsRow.actions.concat(window.canAddAlias
-                ? [{preference: "add", text: qsTr("Adicionar alias…")}, {preference: "manage", text: qsTr("Gerenciar aliases…")}]
-                : [{preference: "manage", text: qsTr("Gerenciar aliases…")}]) : []
+            model: window.actionsRow ? window.actionsRow.actions.concat(window.actionsRow.preferences) : []
             delegate: Templates.MenuItem {
                 id: actionItem
                 required property var modelData
                 required property int index
-                objectName: modelData.preference === "add" ? "aliasAddAction" : modelData.preference === "manage" ? "aliasManageAction" : "launcherAction" + index
+                objectName: modelData.preference === "pin" ? "favoritePinAction" : modelData.preference === "unpin" ? "favoriteRemoveAction"
+                    : modelData.preference === "add" ? "aliasAddAction" : modelData.preference === "manage" ? "aliasManageAction" : "launcherAction" + index
                 property var executionTicket: null
                 property int pressedEpisode: -1
                 text: String(modelData.text).slice(0, 512)
-                enabled: window.canOpenActions
+                enabled: window.canOpenActions && (modelData.preference === "add" ? window.canAddAlias
+                    : modelData.preference === "pin" || modelData.preference === "unpin" ? window.canChangeFavorite : true)
                 focusPolicy: Qt.StrongFocus
                 implicitHeight: Math.max(Style.size.target, contentItem.implicitHeight + 2 * Style.space.sm)
                 height: implicitHeight
@@ -205,15 +215,31 @@ Window {
                 rightPadding: Style.space.sm
                 onPressed: {
                     pressedEpisode = window.actionsEpisode
-                    executionTicket = modelData.preference === "add"
-                        ? {row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id, revision: launcher.aliasRevision}
-                        : {row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id}
+                    executionTicket = null
+                    if (modelData.preference === "add" && !window.canAddAlias) return
+                    if ((modelData.preference === "pin" || modelData.preference === "unpin") && !window.canChangeFavorite) return
+                    executionTicket = modelData.preference === "pin" || modelData.preference === "unpin"
+                        ? {row: launcher.selectedIndex, generation: launcher.generation, id: window.selectedRow.id,
+                            appId: window.selectedAppId, revision: launcher.favoriteRevision, preference: modelData.preference}
+                        : modelData.preference === "add"
+                            ? {row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id, revision: launcher.aliasRevision}
+                            : {row: modelData.row, generation: modelData.generation, id: modelData.resultId, actionId: modelData.id}
                 }
                 // A closed or reopened menu cannot revive an earlier press.
                 onTriggered: {
                     if (!resultActions.visible || !window.canOpenActions || pressedEpisode !== window.actionsEpisode) return
                     const ticket = executionTicket
-                    if (modelData.preference === "add") {
+                    if (modelData.preference === "pin" || modelData.preference === "unpin") {
+                        if (!ticket || !window.canChangeFavorite || ticket.generation !== launcher.generation
+                            || ticket.revision !== launcher.favoriteRevision || ticket.row !== launcher.selectedIndex
+                            || ticket.id !== window.selectedRow.id || ticket.appId !== window.selectedAppId
+                            || (ticket.preference === "unpin") !== window.selectedFavorite) return
+                        const episode = window.actionsEpisode
+                        if (ticket.preference === "pin") launcher.pinFavorite(ticket.row, ticket.generation, ticket.id, ticket.revision)
+                        else launcher.removeFavorite(ticket.appId, ticket.generation, ticket.revision)
+                        // A newer menu opened by a synchronous callback owns its own focus.
+                        if (episode === window.actionsEpisode) resultActions.close()
+                    } else if (modelData.preference === "add") {
                         if (!window.canAddAlias || ticket.generation !== launcher.generation || ticket.revision !== launcher.aliasRevision) return
                         resultActions.close()
                         aliasPreferences.begin("add", ticket)
@@ -527,8 +553,9 @@ Window {
         Text {
             objectName: "executionWaiting"
             Layout.fillWidth: true
-            visible: window.activePanel === "search" && (window.executionBlocked || (windowSession && windowSession.notice.length > 0))
-            text: window.executionBlocked ? qsTr("Aguarde o encerramento das operações antes de abrir um resultado.") : windowSession ? windowSession.notice : ""
+            visible: window.activePanel === "search" && (window.executionBlocked || (windowSession && windowSession.notice.length > 0) || String(launcher.favoriteError || "").length > 0)
+            text: window.executionBlocked ? qsTr("Aguarde o encerramento das operações antes de abrir um resultado.")
+                : windowSession && windowSession.notice.length > 0 ? windowSession.notice : String(launcher.favoriteError || "").slice(0, 256)
             color: ui.warning; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: Style.alpha(ui.text, Style.state.hover); visible: window.activePanel === "search" }
@@ -553,8 +580,9 @@ Window {
             Button {
                 objectName: "executeButton"
                 property var executionTicket: null
-                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
-                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0 && !window.executionBlocked && !aliasPreferences.visible
+                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias" || window.selectedRow.kind === "favorite") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
+                    && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
                 onClicked: window.executeTicket(executionTicket, false)
                 leftPadding: Style.space.md

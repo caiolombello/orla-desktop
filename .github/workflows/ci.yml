@@ -240,6 +240,7 @@ jobs:
               "launcher-ai-provider",
               "launcher-ai-text",
               "launcher-behavior",
+              "launcher-favorites-store",
               "launcher-owned-app",
               "launcher-steam-provider",
               "launcher-shortcuts",
