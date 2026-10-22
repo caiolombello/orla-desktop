@@ -123,9 +123,13 @@ class PackageTests(unittest.TestCase):
         (stage / "bin/orla-launcher").write_bytes(synthetic_elf())
         (stage / "libexec/ai.py").write_bytes(b"# synthetic ai helper\n")
         (stage / "libexec/steam.py").write_bytes(b"# synthetic steam helper\n")
+        # Owned placeholders preserve the sibling closure without executing providers.
+        for name in ("ai_text_ollama.py", "ai_text_transport.py", "ai_text.py"):
+            (stage / "libexec" / name).write_bytes(("# synthetic " + name + "\n").encode("ascii"))
         (stage / "LICENSE").write_bytes(b"synthetic license\n")
         os.chmod(stage / "bin/orla-launcher", 0o755)
-        for name in ("libexec/ai.py", "libexec/steam.py", "LICENSE"):
+        for name in ("libexec/ai.py", "libexec/steam.py", "libexec/ai_text_ollama.py",
+                     "libexec/ai_text_transport.py", "libexec/ai_text.py", "LICENSE"):
             os.chmod(stage / name, 0o644)
         return stage
 
@@ -190,12 +194,149 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(first_digest, hashlib.sha256(first.read_bytes()).hexdigest())
             self.assertEqual(first_digest, second_digest)
             manifest = package.verify(first, expected_sha256=first_digest, expected_commit="a" * 40)
-            self.assertEqual(manifest["schema"], "orla-launcher-package-0.2")
+            self.assertEqual(manifest["schema"], "orla-launcher-package-0.3")
             with zipfile.ZipFile(first) as archive:
                 self.assertEqual(archive.namelist(), [
-                    "bin/orla-launcher", "libexec/ai.py", "libexec/steam.py", "LICENSE",
-                    "manifest.json",
+                    "bin/orla-launcher", "libexec/ai.py", "libexec/steam.py",
+                    "libexec/ai_text_ollama.py", "libexec/ai_text_transport.py",
+                    "libexec/ai_text.py", "LICENSE", "manifest.json",
                 ])
+
+    def legacy_archive(self, root, output_name="legacy.zip"):
+        # Independent old-format fixture: never use the current builder/constants.
+        payload = (
+            ("bin/orla-launcher", synthetic_elf(), 0o755),
+            ("libexec/ai.py", b"# legacy ai helper\n", 0o644),
+            ("libexec/steam.py", b"# legacy steam helper\n", 0o644),
+            ("LICENSE", b"legacy license\n", 0o644),
+        )
+        manifest = {
+            "schema": "orla-launcher-package-0.2", "target": "fedora44-x86_64",
+            "version": "0.1.0", "channel": "experimental", "commit": "a" * 40,
+            "ci_image_digest": "sha256:" + "b" * 64,
+            "files": [{"path": name, "size": len(data), "mode": f"{mode:04o}",
+                       "sha256": hashlib.sha256(data).hexdigest()} for name, data, mode in payload],
+            "runtime_inventory": runtime_inventory(),
+        }
+        data = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
+        output = root / output_name
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for name, content, mode in (*payload, ("manifest.json", data, 0o644)):
+                archive.writestr(self.independent_info(name, mode), content,
+                                 compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+        os.chmod(output, 0o644)
+        return output, hashlib.sha256(output.read_bytes()).hexdigest()
+
+    def test_complete_relocated_stage_builds_without_source_and_preserves_closure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "owned source"
+            source.mkdir()
+            stage = self.make_stage(source)
+            moved = root / "relocated payload"
+            stage.rename(moved)
+            source.rmdir()
+            self.assertFalse(source.exists())
+            expected = {str(p.relative_to(moved)): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+                        for p in moved.rglob("*") if p.is_file()}
+            with mock.patch.object(subprocess, "Popen", side_effect=AssertionError("process")), \
+                    mock.patch.object(subprocess, "run", side_effect=AssertionError("process")):
+                archive, digest = self.build_archive(root, stage=moved)
+                manifest = package.verify(archive, expected_sha256=digest, expected_commit="a" * 40)
+            self.assertEqual(manifest["schema"], "orla-launcher-package-0.3")
+            self.assertEqual(len(manifest["files"]), 7)
+            with zipfile.ZipFile(archive) as result:
+                self.assertEqual(len(result.infolist()), 8)
+                for record in manifest["files"]:
+                    data, mode = expected[record["path"]]
+                    self.assertEqual(result.read(record["path"]), data)
+                    self.assertEqual(record["mode"], f"{mode:04o}")
+                    self.assertEqual(record["sha256"], hashlib.sha256(data).hexdigest())
+                self.assertEqual({str(Path(name).parent) for name in result.namelist()
+                                  if name.endswith(".py")}, {"libexec"})
+
+    def test_independent_legacy_archive_verifies_unchanged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive, digest = self.legacy_archive(root)
+            duplicate, second_digest = self.legacy_archive(root, "second-legacy.zip")
+            self.assertEqual(archive.read_bytes(), duplicate.read_bytes())
+            self.assertEqual(digest, second_digest)
+            before = (archive.read_bytes(), archive.stat().st_mode)
+            manifest = package.verify(archive, expected_sha256=digest, expected_commit="a" * 40)
+            self.assertEqual(manifest["schema"], "orla-launcher-package-0.2")
+            self.assertEqual(len(manifest["files"]), 4)
+            self.assertEqual(before, (archive.read_bytes(), archive.stat().st_mode))
+            self.assert_code("archive_digest", lambda: package.verify(
+                archive, expected_sha256="0" * 64, expected_commit="a" * 40))
+            self.assert_code("manifest_commit", lambda: package.verify(
+                archive, expected_sha256=digest, expected_commit="c" * 40))
+            changed = root / "changed-legacy.zip"
+            changed_digest = self.rewrite(archive, changed, lambda entries: [
+                (name, b"tampered\n" if name == "libexec/steam.py" else data, mode)
+                for name, data, mode in entries])
+            self.assert_code("payload_digest", lambda: package.verify(
+                changed, expected_sha256=changed_digest, expected_commit="a" * 40))
+
+    def test_schema_and_membership_must_match_exactly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            current, _digest = self.build_archive(root)
+            legacy, _digest = self.legacy_archive(root)
+            for archive, schemas in ((current, ("orla-launcher-package-0.2",)),
+                                     (legacy, ("orla-launcher-package-0.3",)),
+                                     (current, ("orla-launcher-package-0.4", None, []))):
+                for index, schema in enumerate(schemas):
+                    with self.subTest(archive=archive.name, schema=schema):
+                        def transform(entries):
+                            output = []
+                            for name, data, mode in entries:
+                                if name == "manifest.json":
+                                    value = json.loads(data)
+                                    value["schema"] = schema
+                                    data = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                                output.append((name, data, mode))
+                            return output
+                        candidate = root / f"mixed-{archive.stem}-{index}.zip"
+                        digest = self.rewrite(archive, candidate, transform)
+                        self.assert_code("manifest_identity", lambda: package.verify(
+                            candidate, expected_sha256=digest, expected_commit="a" * 40))
+
+    def test_each_helper_missing_tampered_extra_or_wrong_mode_is_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stage = self.make_stage(root)
+            archive, _digest = self.build_archive(root, stage=stage)
+            helpers = ("ai.py", "steam.py", "ai_text_ollama.py", "ai_text_transport.py", "ai_text.py")
+            for helper in helpers:
+                with self.subTest(helper=helper):
+                    path = stage / "libexec" / helper
+                    content = path.read_bytes()
+                    path.unlink()
+                    self.assert_code("staging_layout", lambda: self.build_archive(root, stage=stage))
+                    path.write_bytes(content)
+                    os.chmod(path, 0o755)
+                    self.assert_code("staging_file", lambda: self.build_archive(root, stage=stage))
+                    os.chmod(path, 0o644)
+                    relative = "libexec/" + helper
+                    cases = (
+                        ("missing", "zip_members", lambda entries: [item for item in entries if item[0] != relative]),
+                        ("tampered", "payload_digest", lambda entries: [
+                            (name, b"tampered\n" if name == relative else data, mode)
+                            for name, data, mode in entries]),
+                        ("extra", "zip_members", lambda entries: entries + [(relative + ".extra", b"x", 0o644)]),
+                        ("mode", "zip_mode", lambda entries: [
+                            (name, data, 0o755 if name == relative else mode) for name, data, mode in entries]),
+                    )
+                    for suffix, code, transform in cases:
+                        candidate = root / f"{helper}-{suffix}.zip"
+                        digest = self.rewrite(archive, candidate, transform)
+                        self.assert_code(code, lambda: package.verify(
+                            candidate, expected_sha256=digest, expected_commit="a" * 40))
+                    extra_path = path.with_suffix(".py.extra")
+                    extra_path.write_bytes(b"x")
+                    self.assert_code("staging_layout", lambda: self.build_archive(root, stage=stage))
+                    extra_path.unlink()
 
     def test_byte_change_changes_digest_and_readonly_stage_is_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -587,7 +728,7 @@ class PackageTests(unittest.TestCase):
                     "verify", str(archive), "--sha256", result["sha256"], "--commit", "a" * 40,
                 ]), 0)
             self.assertEqual(json.loads(output.getvalue()), {
-                "status": "ok", "commit": "a" * 40, "schema": "orla-launcher-package-0.2",
+                "status": "ok", "commit": "a" * 40, "schema": "orla-launcher-package-0.3",
             })
 
 

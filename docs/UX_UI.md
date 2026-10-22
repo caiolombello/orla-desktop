@@ -77,7 +77,7 @@ Desenvolvedores podem distribuir extensões gratuitas, cobrar licença fora do c
 O launcher começa por busca e ações determinísticas. Resultados mostram origem (KRunner, Orla, extensão), atalho, escopo e disponibilidade. Digitar apenas consulta; Enter/clique executa o item selecionado. Nenhuma ação destrutiva ou externa roda como efeito colateral de completar texto.
 
 Windows/Meta é uma escolha independente de tema e preset. No fonte, a pessoa
-inicia `build/launcher/orla-launcher --managed-shortcuts`: uma única instância usa
+inicia `build/launcher/bin/orla-launcher --managed-shortcuts`: uma única instância usa
 a ação persistente `org.orla.Launcher` / `orla-search-open`, inicialmente com
 Ctrl+Alt+Meta+O quando disponível. Com o launcher já ativo, consulta
 `python3 scripts/orla.py search-shortcut status` (somente leitura) e escolhe
