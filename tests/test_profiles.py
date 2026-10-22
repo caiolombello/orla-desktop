@@ -69,6 +69,40 @@ class ProfilesTests(unittest.TestCase):
             self.assertEqual(self.configuration_value(key), baseline[key])
         self.assertEqual(self.warnings, [])
 
+    def test_create_preserves_kde_default_application_launchers(self):
+        launchers = ["applications:org.test.Editor.desktop", "preferred://filemanager",
+                     "preferred://browser", "preferred://mailer", "preferred://terminal"]
+        self.config.setProperty("launchers", launchers)
+        baseline = self.snapshot()
+        self.assertTrue(self.command("create", "Synthetic"), self.state.property("error"))
+        saved = json.loads(self.config.property("profilesJSON"))
+        self.assertEqual(len(saved["profiles"]), 1)
+        profile = saved["profiles"][0]
+        self.assertEqual(profile["launchers"], launchers)
+        self.assertEqual(self.configuration_value("launchers"), launchers)
+        self.assertTrue(self.command("commitPresentation", {"calendarEvents": False}))
+        self.assertEqual(self.snapshot()["launchers"], launchers)
+        self.assertTrue(self.command("select", "legacy"))
+        self.assertEqual(self.snapshot(), baseline)
+        self.assertTrue(self.command("select", profile["id"]))
+        self.assertEqual(self.snapshot()["launchers"], launchers)
+        self.evaluate("recreateState()", self.harness)
+        reloaded = self.harness.findChild(QObject, "reloadedProfiles")
+        self.assertEqual(json.loads(self.evaluate("JSON.stringify(effective.launchers)", reloaded)), launchers)
+
+    def test_default_launcher_urls_reject_unknown_targets_and_url_suffixes(self):
+        invalid = ["preferred://unknown", "preferred://inode/directory", "preferred://filemanager/",
+                   "preferred://browser/path", "preferred://browser?command=x", "preferred://browser#x",
+                   "preferred://user@browser", "preferred://browser:80", "preferred://%62rowser",
+                   "preferred:browser", "preferred:///browser", "preferred://BROWSER",
+                   "preferred://browser\n", "preferred://browser\\path", "preferred://browser.desktop"]
+        for url in invalid:
+            with self.subTest(url=url):
+                self.config.setProperty("launchers", [url])
+                self.assertFalse(self.command("create", "Synthetic"))
+                self.assertEqual(self.config.property("profilesJSON"), "")
+                self.assertEqual(self.configuration_value("launchers"), [url])
+
     def test_audio_hud_defaults_off_migrates_in_memory_and_serializes_only_on_commit(self):
         self.assertFalse(self.snapshot()["showAudioHud"])
         saved = self.initialize()

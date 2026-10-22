@@ -54,3 +54,66 @@ Essa mudança é somente de testes. Não qualifica o encerramento do launcher
 nativo nem explica retrospectivamente outros crashes sem core. Falhas e
 recibos anteriores permanecem preservados; importação gerenciada nativa segue
 UNRUN. [Contrato Qt de término da thread](https://doc.qt.io/qt-6.11/qthread.html#isFinished).
+
+
+## Compatibilidade com apps padrão do KDE — 2026-10-13
+
+Na sessão Plasma 6.7.5/Wayland, `Criar e usar` recusou as preferências anteriores
+quando um app fixado usava `preferred://filemanager`. A lista tinha sete entradas
+únicas, dentro dos limites; nenhum perfil foi gravado e as configurações
+protegidas permaneceram iguais.
+
+O validador passa a aceitar exatamente `preferred://browser`,
+`preferred://mailer`, `preferred://terminal` e `preferred://filemanager`.
+A URL é preservada, para continuar acompanhando o app padrão do usuário.
+As restrições de tamanho, quantidade, duplicatas e URLs locais permanecem.
+Targets desconhecidos, caminhos, query, fragmento, credenciais e escapes são
+recusados. [Contrato KDE 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/tasktools.cpp).
+
+Uma regressão de criação falhou antes do fix e passou depois, cobrindo também
+edição, troca e recarga. A matriz de URLs inválidas confirma recusa sem gravação.
+As suítes pertinentes passaram 39 testes em cada estilo, Fusion e KDE, com um
+skip de TaskManager em cada rodada; sete design guards e o design check passaram.
+A galeria KDE foi revisada nos dois esquemas. A falha histórica da galeria Fusion
+não foi repetida nem convertida em aprovação. Revisão independente: zero bloqueios.
+
+| Escuro | Claro |
+|---|---|
+| ![Configurações escuras](../screenshots/profile-preferred/settings-dark.png) | ![Configurações claras](../screenshots/profile-preferred/settings-light.png) |
+
+Capturas sintéticas offscreen; não comprovam foco ou persistência nativos.
+Nesta etapa, o fix local e o fluxo gerenciado completo ainda aguardam validação.
+A custódia de clipboard recusou o limite de dados e encontrou timeouts de
+formatos do provider; os helpers encerraram sem writes. Copiar/colar e
+restauração de clipboard não foram qualificados.
+
+
+## Canary gerenciado local — 2026-10-13
+
+O fix `6152eeb` foi instalado: 66 arquivos, somente `Profiles.js` alterado.
+A criação por gesto nativo passou com os sete pins preservados. Foi usado um
+único perfil temporário, sem inicialização automática ou alteração dos perfis
+anteriores. Valores e grafia dos pins pessoais ficam somente na evidência privada.
+
+No Plasma 6.7.5/Wayland, colar um preset sintético e usar a prévia alterou o dock
+sem mudar o documento salvo. Escape e Cancelar mantiveram o salvo. Aplicar
+persistiu aparência e widgets juntos, preservando os demais campos; Desfazer
+restaurou exatamente o documento anterior. Uma segunda aplicação sobreviveu
+a uma recarga controlada, com igualdade entre readback do applet e KConfig.
+O canary confirma persistência dos dados nesta sessão, sem inferir quantidade
+exata de setters ou undo entre processos.
+
+O perfil e sua chave foram removidos com Plasma parado e guardas do documento
+próprio; nenhum arquivo de configuração foi substituído. Todos os valores
+parseados de appletsrc/plasmashellrc voltaram ao baseline. Apps, atalhos, barra,
+launcher e bancos protegidos permaneceram iguais; a dock manteve o novo Source.
+Plasma terminou ativo, sem restart automático; a abertura do popup e a dock
+original foram conferidas visualmente depois da restauração.
+
+Limites: o export-copy em perfil gerenciado depois da recarga não foi
+qualificado, pois o gesto não confirmou o popup após mudar a largura do dock.
+A entrada digitada encontrou composição do teclado US internacional; sua
+recusa preservou o salvo. O fluxo positivo usou clipboard com JSON sintético;
+a custódia original dos formatos falhou e a restauração integral anterior não
+foi qualificada. Foco de retorno, tecnologia assistiva, outras telas/escalas e
+número de setters nativos continuam UNRUN. C1/X1 permanecem parciais.
