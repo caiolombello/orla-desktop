@@ -34,7 +34,24 @@ Controls.Control {
     signal rollbackRequested(string addonId, string sha256)
     signal openOriginRequested(string origin)
     signal revealRequested(var control)
-    implicitHeight: contentItem.implicitHeight
+    // Reads and changes clear the rows until the host answers. Holding the last
+    // settled height stops the settings scroll from snapping upward; the hold ends
+    // when the answer has been laid out, or shortly after if nothing moved.
+    property real settledHeight: 0
+    property bool holdingHeight: false
+    implicitHeight: holdingHeight ? Math.max(contentItem.implicitHeight, settledHeight) : contentItem.implicitHeight
+    function waitChanged() {
+        if (loading || busy) { holdingHeight = true; heightRelease.stop(); }
+        else if (holdingHeight) heightRelease.restart();
+    }
+    function contentResized() {
+        if (loading || busy) return;
+        heightRelease.stop();
+        holdingHeight = false;
+        settledHeight = contentItem.implicitHeight;
+    }
+    Connections { target: root.contentItem; function onImplicitHeightChanged() { root.contentResized(); } }
+    Timer { id: heightRelease; interval: Style.motion.fast; onTriggered: root.contentResized() }
     padding: 0
     palette.window: scheme.surface
     palette.base: scheme.raised
@@ -232,8 +249,8 @@ Controls.Control {
     }
     onAddonsChanged: recoverAfterChange()
     onPreviewChanged: recoverAfterChange()
-    onBusyChanged: gateChanged()
-    onLoadingChanged: gateChanged()
+    onBusyChanged: { waitChanged(); gateChanged(); }
+    onLoadingChanged: { waitChanged(); gateChanged(); }
     onVisibleChanged: if (!visible) invalidateFocus()
     onEnabledChanged: if (!enabled) invalidateFocus()
     onParentChanged: invalidateFocus()
