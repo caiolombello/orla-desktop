@@ -390,11 +390,20 @@ class NativeAdapterSourceTests(unittest.TestCase):
         self.assertNotIn("GlobalService", native)
         self.assertNotIn("switchStreams", native)
 
+        # The microphone card has its own audited adapter: the default source only.
+        microphone = (root / "package/contents/ui/NativeMicrophone.qml").read_text()
+        self.assertIn("import org.kde.plasma.private.volume as PlasmaPA", microphone)
+        self.assertEqual(microphone.count("PlasmaPA.SourceModel"), 1)
+        self.assertIn("PlasmaPA.Context.State.Ready", microphone)
+        self.assertIn("PlasmaPA.Server.defaultSource", microphone)
+        for forbidden in ("SinkModel", "SinkInputModel", "SourceOutputModel", "GlobalService", "switchStreams"):
+            self.assertNotIn(forbidden, microphone)
+
         importers = []
         for path in (root / "package/contents/ui").glob("*.qml"):
             if "org.kde.plasma.private.volume" in path.read_text():
                 importers.append(path.name)
-        self.assertEqual(importers, ["NativePulseAudio.qml"])
+        self.assertEqual(sorted(importers), ["NativeMicrophone.qml", "NativePulseAudio.qml"])
 
 
 if __name__ == "__main__":
