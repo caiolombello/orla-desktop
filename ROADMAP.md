@@ -137,7 +137,7 @@ Publicado significa que o incremento integra os assets indicados; Source signifi
 | Notificações | Toast local opt-in 0.2.7 do Pomodoro; HUD de áudio Source opt-in por perfil, com confirmação, agrupamento e expiração | Ilha/HUD global, outros eventos, regras completas e qualificação nativa sem duplicar notificações/OSD do KDE |
 | Barra superior | Menu Orla experimental somente no fonte: menu do sistema e nome do app ativo, Plasma 6.7.x | Qualificar ações/painel/foco, composição com Menu Global/relógio/bandeja nativos, preset reversível e Central de Controle |
 | Launcher estilo Raycast | Componente experimental no fonte, com build separado; KRunner/Milou como fallback | Interface por teclado, comandos compartilhados, painel de ações e integração com perfis/projetos |
-| Updates e distribuição | Repositório MIT, landing bilíngue, releases alpha e instalação do dock; CI compila o launcher e executa cinco CTests (PR 26). Verificador de pacote do launcher somente no fonte (PR 30), com inventário ainda declarado pelo chamador | Coleta factual de dependências, build e distribuição do launcher, matriz nativa, UI/cache de updates, autenticidade e retorno à versão anterior |
+| Updates e distribuição | Repositório MIT, landing bilíngue, releases alpha e instalação do dock; launcher com nove CTests, bundle experimental real da CI, download verificado e calculadora em perfil Wayland isolado; instalação/remoção e recuperação delimitada no fonte | Atualização/reversão do launcher, autenticidade, distribuição qualificada, matriz nativa e UI/cache de updates |
 | UX/UI e DX | Identidade Orla, temas, tokens/componentes compartilhados e galeria sintética no Source; documentação de contribuição e testes por ambiente | Completar estados/fluxos, editor/exportação, acessibilidade e qualificação nativa; onboarding e autoria guiada |
 | Ecossistema | Contribuições ao código pelo GitHub | Formato declarativo, SDK, compatibilidade, catálogo e plugins com isolamento comprovado |
 | IA | Detecção explícita de CLI e compatibilidade anônima do Codex (PR 20); contratos/parsers offline (PR 28), lifecycle com fakes (PR 30), adaptadores privados Ollama/OpenAI e integração operacional Ollama numérico nesta mudança Source com UI, streaming/cancelamento e fixtures privadas. O entrypoint T1/T2 direto continua `unsupported_transport`; OpenAI HTTPS permanece sem ligação operacional | Empacotar helpers de forma relocável e qualificar Ollama/modelo, semântica, clipboard/acessibilidade e uso nativo; credenciais/auth e backend API opt-in de A1 continuam abertos |
@@ -761,6 +761,25 @@ geral. Seus metadados anteriores continuam `unverified`/Native `UNRUN`.
 Autenticidade, atualização, reversão e recuperação mantêm seus gates;
 R2 permanece parcial. Consulte o
 [fluxo e limites](launcher/README.md#bundle-acoplado-da-ci--experimental-no-fonte).
+
+**R2 — recuperar uma finalização de instalação interrompida (14/10):**
+`recover --finish-install` no bootstrap novo/CLI conclui somente a limpeza de
+uma instalação integralmente publicada que ficou pendente. Confere os arquivos,
+recibos e journals; preserva a primeira causa e os registros originais em um
+banco privado imutável antes de limpar os nomes ativos. Retoma interrupções de
+limpeza quando o banco e o restante permanecem exatos. Ferramentas, wrappers,
+menu, versão e recibos instalados não são substituídos. Instalações parciais,
+marcadores ausentes, remoção pendente, drift e banco incompleto são recusados,
+preservando evidência. Não é recuperação geral de crash ou de falta de energia.
+Passaram 40 testes de instalação/CLI (13 de recuperação), 56 do pacote e 15 do
+bundle. A compatibilidade foi verificada também com o ZIP real e o instalador
+anterior da execução 38660941244: 12 arquivos gerenciados exatos, bootstrap
+ausente, consulta/remoção pelo controlador original e dados sintéticos
+preservados. Nenhum ELF/helper/display/bus foi executado nessa prova;
+`runtime` continua `unverified` e a instalação principal não mudou.
+Atualização, reversão, recuperação de estados parciais e serviço/Meta opcionais
+seguem pendentes; R2 permanece parcial. Consulte o
+[comando e limites](launcher/README.md#recuperação-da-finalização--experimental-no-fonte).
 
 ## Prontidão e recomendação de execução
 

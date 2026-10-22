@@ -1,8 +1,8 @@
-"""Experimental owned launcher install/status/launch/uninstall manager.
+"""Experimental owned launcher installation manager.
 
 Phase A installs inert verified files, with runtime explicitly unverified.
-Service, Meta, update, rollback and interrupted-transaction recovery are separate
-verticals; this first candidate requires an uncontended clean owned prefix.
+Recovery only finishes cleanup of an already fully published installation.
+Service, Meta, update, rollback and partial transactions are separate verticals.
 """
 
 from __future__ import annotations
@@ -541,13 +541,7 @@ def _record_failure(paths, operation, digest, commit, records, directory_pins, e
         _write_new(_state(paths) / "pending-error.json", _json(failure), 0o600)
 
 
-def _pending(paths):
-    path = _state(paths) / "pending.json"
-    if not _exists(path):
-        path = _state(paths) / "pending-intent.json"
-        if not _exists(path):
-            return None
-    data, _pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+def _pending_value(paths, data):
     value = _strict_json(data)
     keys = {"schema", "operation", "archiveSha256", "commit", "uid", "code", "files", "ownedFiles", "directories"}
     if type(value) is not dict or set(value) != keys or value["schema"] != "orla-launcher-pending-0.1" \
@@ -597,16 +591,31 @@ def _pending(paths):
                 or len(record["pin"]) != 5 or any(type(number) is not int for number in record["pin"]):
             raise InstallError("pending_schema")
         seen.add(record["key"])
+    return value
+
+
+def _pending_error(value, data):
+    error = _strict_json(data)
+    if type(error) is not dict or set(error) != {"schema", "operation", "archiveSha256", "uid", "code"} \
+            or error["schema"] != "orla-launcher-pending-error-0.1" or error["operation"] != value["operation"] \
+            or error["archiveSha256"] != value["archiveSha256"] or type(error["uid"]) is not int or error["uid"] != os.getuid() \
+            or type(error["code"]) is not str or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", error["code"], re.ASCII) is None:
+        raise InstallError("pending_schema")
+    return error["code"]
+
+
+def _pending(paths):
+    path = _state(paths) / "pending.json"
+    if not _exists(path):
+        path = _state(paths) / "pending-intent.json"
+        if not _exists(path):
+            return None
+    data, _pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+    value = _pending_value(paths, data)
     code = value["code"]
     error_path = _state(paths) / "pending-error.json"
     if _exists(error_path):
-        error = _strict_json(_read(error_path, mode=0o600, limit=4096)[0])
-        if type(error) is not dict or set(error) != {"schema", "operation", "archiveSha256", "uid", "code"} \
-                or error["schema"] != "orla-launcher-pending-error-0.1" or error["operation"] != value["operation"] \
-                or error["archiveSha256"] != value["archiveSha256"] or type(error["uid"]) is not int or error["uid"] != os.getuid() \
-                or type(error["code"]) is not str or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", error["code"], re.ASCII) is None:
-            raise InstallError("pending_schema")
-        code = error["code"]
+        code = _pending_error(value, _read(error_path, mode=0o600, limit=4096)[0])
     return {"status": "pending", "runtime": "unverified", "archiveSha256": value["archiveSha256"], "code": code}
 
 
@@ -705,13 +714,20 @@ def install_archive(archive: Path, *, expected_sha256: str, expected_commit: str
             raise InstallError(_error_code(error)) from error
 
 
-def _unlink_checked(path, record, mode):
+def _unlink_checked(path, record, mode, *, expected_pin=None, expected_parent=None):
     data, pin = _read(path, mode=mode)
     if len(data) != record["size"] or hashlib.sha256(data).hexdigest() != record["sha256"]:
         raise InstallError("managed_drift")
+    if expected_pin is not None and list(pin) != expected_pin:
+        raise InstallError("recovery_control_changed")
     with _directory(path.parent) as parent:
-        if _identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != pin:
+        if expected_parent is not None and list(_directory_identity(os.fstat(parent))) != expected_parent:
+            raise InstallError("recovery_parent_changed")
+        named = _identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False))
+        if named != pin:
             raise InstallError("managed_drift")
+        if expected_pin is not None and list(named) != expected_pin:
+            raise InstallError("recovery_control_changed")
         os.unlink(path.name, dir_fd=parent)
         os.fsync(parent)
 
@@ -786,6 +802,220 @@ def _launch(paths):
     os.execv(str(binary), [str(binary), "--no-global-shortcut"])
 
 
+RECOVERY_SCHEMA = "orla-launcher-finish-install-recovery-0.1"
+MAX_RECOVERY_BYTES = 512 * 1024
+RECOVERY_CONTROLS = ("pending-error.json", "pending-intent.json", "pending.json")
+
+
+def _recovery_need(value, code="recovery_bank"):
+    if not value:
+        raise InstallError(code)
+
+
+def _recovery_pin(value, count):
+    # Only file-type and permission bits may reach the native stat predicates.
+    return (type(value) is list and len(value) == count
+            and all(type(number) is int and 0 <= number < 2 ** 64 for number in value)
+            and value[2] <= 0xffff)
+
+
+def _recovery_controls(paths):
+    records = []
+    with _directory(_state(paths)) as parent:
+        for name in RECOVERY_CONTROLS:
+            try:
+                observed = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                records.append({"name": name, "pin": None, "dataHex": None})
+                continue
+            data, pin = _read(_state(paths) / name, mode=0o600,
+                              limit=4096 if name == "pending-error.json" else MAX_RECEIPT_BYTES)
+            _recovery_need(_identity(observed) == pin, "recovery_control_changed")
+            records.append({"name": name, "pin": list(pin), "dataHex": data.hex()})
+    return records
+
+
+def _recovery_parents(paths):
+    result = []
+    for key, path in (("state", _state(paths)), ("receipts", _state(paths) / "receipts"),
+                      ("transactions", _state(paths) / "transactions")):
+        with _directory(path) as descriptor:
+            value = os.fstat(descriptor)
+            _recovery_need(value.st_uid == os.getuid() and stat.S_IMODE(value.st_mode) == 0o700, "recovery_parent_changed")
+            result.append({"key": key, "pin": list(_directory_identity(value))})
+    return result
+
+
+def _recovery_proofs(paths, receipt):
+    digest = receipt["archiveSha256"]
+    files = (("current", _state(paths) / "current.json"),
+             ("receipt", _state(paths) / "receipts" / (digest + ".json")),
+             ("prepared", _state(paths) / "transactions" / (digest + "-install.json")),
+             ("installed", _state(paths) / "transactions" / (digest + "-installed.json")))
+    prepared = {"schema": "orla-launcher-install-transaction-0.1", "operation": "install",
+                "archiveSha256": digest, "commit": receipt["commit"], "phase": "prepared", "files": receipt["files"]}
+    installed = {"operation": "install", "archiveSha256": digest, "phase": "committed"}
+    expected = {"current": receipt, "receipt": receipt, "prepared": prepared, "installed": installed}
+    result = []
+    for key, path in files:
+        data, pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
+        _recovery_need(data == _json(expected[key]), "recovery_proof_changed")
+        result.append({"key": key, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "pin": list(pin)})
+    return result
+
+
+def _recovery_pending(paths, receipt, controls):
+    primary = {}
+    for record in controls:
+        if record["name"] == "pending-error.json" or record["pin"] is None:
+            continue
+        data = bytes.fromhex(record["dataHex"])
+        value = _pending_value(paths, data)
+        _recovery_need(value["operation"] == "install" and value["archiveSha256"] == receipt["archiveSha256"] and
+                       value["commit"] == receipt["commit"] and value["uid"] == receipt["uid"] and
+                       value["files"] == receipt["files"], "recovery_pending")
+        if record["name"] == "pending-intent.json":
+            _recovery_need(value["ownedFiles"] == [] and value["directories"] == [], "recovery_pending")
+        else:
+            expected_files = {item["key"]: item for item in receipt["files"]}
+            _recovery_need(len(value["ownedFiles"]) == len(expected_files) and
+                           {item["key"] for item in value["ownedFiles"]} == set(expected_files), "recovery_pending")
+            fixed = _files(paths, receipt["archiveSha256"])
+            for item in value["ownedFiles"]:
+                original = expected_files[item["key"]]
+                data, pin = _read(fixed[item["key"]][0], mode=fixed[item["key"]][1])
+                _recovery_need(item["complete"] is True and item["mode"] == original["mode"] and
+                               item["expectedMode"] == original["mode"] and item["size"] == len(data) == original["size"] and
+                               item["sha256"] == hashlib.sha256(data).hexdigest() == original["sha256"] and
+                               item["expectedSha256"] == original["sha256"] and item["pin"] == list(pin), "recovery_pending")
+            _recovery_need(len(value["directories"]) == len(receipt["directories"]) and
+                           {item["key"]: item["pin"] for item in value["directories"]} ==
+                           {item["key"]: item["pin"] for item in receipt["directories"]}, "recovery_pending")
+        primary[record["name"]] = value
+    _recovery_need(bool(primary), "recovery_pending")
+    error = controls[0]
+    if error["pin"] is not None:
+        _pending_error(next(iter(primary.values())), bytes.fromhex(error["dataHex"]))
+
+
+def _recovery_bank(data, receipt):
+    _recovery_need(len(data) <= MAX_RECOVERY_BYTES)
+    value = _strict_json(data)
+    _recovery_need(type(value) is dict and set(value) == {"schema", "uid", "archiveSha256", "commit", "pending", "proofs", "parents"})
+    _recovery_need(value["schema"] == RECOVERY_SCHEMA and type(value["uid"]) is int and value["uid"] == os.getuid() and
+                   value["archiveSha256"] == receipt["archiveSha256"] and value["commit"] == receipt["commit"])
+    _recovery_need(data == _json(value))
+    controls = value["pending"]
+    _recovery_need(type(controls) is list and len(controls) == 3)
+    for record, name in zip(controls, RECOVERY_CONTROLS):
+        _recovery_need(type(record) is dict and set(record) == {"name", "pin", "dataHex"} and record["name"] == name)
+        if record["pin"] is None:
+            _recovery_need(record["dataHex"] is None)
+        else:
+            limit = 4096 if name == "pending-error.json" else MAX_RECEIPT_BYTES
+            encoded = record["dataHex"]
+            _recovery_need(_recovery_pin(record["pin"], 9) and type(encoded) is str and
+                           0 < len(encoded) <= limit * 2 and len(encoded) % 2 == 0 and re.fullmatch(r"[0-9a-f]+", encoded) is not None)
+            pin = record["pin"]
+            _recovery_need(stat.S_ISREG(pin[2]) and stat.S_IMODE(pin[2]) == 0o600 and pin[3] == os.getuid() and
+                           pin[5] == 1 and pin[6] == len(encoded) // 2)
+    proofs = value["proofs"]
+    _recovery_need(type(proofs) is list and len(proofs) == 4)
+    for record, key in zip(proofs, ("current", "receipt", "prepared", "installed")):
+        _recovery_need(type(record) is dict and set(record) == {"key", "size", "sha256", "pin"} and record["key"] == key)
+        _recovery_need(type(record["size"]) is int and 0 < record["size"] <= MAX_RECEIPT_BYTES and
+                       type(record["sha256"]) is str and SHA256.fullmatch(record["sha256"]) is not None and _recovery_pin(record["pin"], 9))
+        pin = record["pin"]
+        _recovery_need(stat.S_ISREG(pin[2]) and stat.S_IMODE(pin[2]) == 0o600 and pin[3] == os.getuid() and
+                       pin[5] == 1 and pin[6] == record["size"])
+    parents = value["parents"]
+    _recovery_need(type(parents) is list and len(parents) == 3)
+    for record, key in zip(parents, ("state", "receipts", "transactions")):
+        _recovery_need(type(record) is dict and set(record) == {"key", "pin"} and record["key"] == key and _recovery_pin(record["pin"], 5))
+        pin = record["pin"]
+        _recovery_need(stat.S_ISDIR(pin[2]) and stat.S_IMODE(pin[2]) == 0o700 and pin[3] == os.getuid())
+    return value
+
+
+def _recovery_remaining(paths, bank):
+    current = _recovery_controls(paths)
+    remaining, seen_survivor = [], False
+    for captured, live in zip(bank["pending"], current):
+        if captured["pin"] is None:
+            _recovery_need(live["pin"] is None, "recovery_control_changed")
+        elif live["pin"] is None:
+            _recovery_need(not seen_survivor, "recovery_cleanup_order")
+        else:
+            _recovery_need(live == captured, "recovery_control_changed")
+            seen_survivor = True
+            remaining.append(captured)
+    return remaining
+
+
+def _recovery_revalidate(paths, receipt, bank_path, bank_data, bank_pin):
+    observed, pin = _read(bank_path, mode=0o600, limit=MAX_RECOVERY_BYTES)
+    _recovery_need(observed == bank_data and list(pin) == list(bank_pin), "recovery_bank_changed")
+    bank = _recovery_bank(observed, receipt)
+    _recovery_need(_receipt(paths) == receipt, "recovery_proof_changed")
+    _guard(paths, receipt)
+    _recovery_need(_recovery_parents(paths) == bank["parents"], "recovery_parent_changed")
+    _recovery_need(_recovery_proofs(paths, receipt) == bank["proofs"], "recovery_proof_changed")
+    _recovery_pending(paths, receipt, bank["pending"])
+    remaining = _recovery_remaining(paths, bank)
+    _recovery_need(_recovery_parents(paths) == bank["parents"], "recovery_parent_changed")
+    return remaining
+
+
+def recover_finish_install(paths: InstallPaths, *, backend=None) -> dict:
+    """Clear a verified install tail, preserving its immutable failure evidence."""
+    try:
+        paths = _paths(paths)
+        if backend is not None:
+            raise InstallError("backend_unimplemented")
+        # Unlike initial install, recovery has no authority to create a state tree.
+        _recovery_parents(paths)
+        with _locked(paths):
+            receipt = _receipt(paths)
+            _guard(paths, receipt)
+            proofs, parents = _recovery_proofs(paths, receipt), _recovery_parents(paths)
+            bank_path = _state(paths) / "transactions" / (receipt["archiveSha256"] + "-finish-install-recovery.json")
+            if len(os.fsencode(bank_path)) > 4096:
+                raise InstallError("install_paths")
+            if _exists(bank_path):
+                bank_data, bank_pin = _read(bank_path, mode=0o600, limit=MAX_RECOVERY_BYTES)
+                _recovery_bank(bank_data, receipt)
+            else:
+                controls = _recovery_controls(paths)
+                if all(record["pin"] is None for record in controls):
+                    _recovery_need(_receipt(paths) == receipt and _recovery_proofs(paths, receipt) == proofs and
+                                   _recovery_parents(paths) == parents, "recovery_proof_changed")
+                    _guard(paths, receipt)
+                    return _report(paths, receipt)
+                _recovery_pending(paths, receipt, controls)
+                _recovery_need(_recovery_proofs(paths, receipt) == proofs and _recovery_parents(paths) == parents and
+                               _recovery_controls(paths) == controls, "recovery_control_changed")
+                bank = {"schema": RECOVERY_SCHEMA, "uid": os.getuid(), "archiveSha256": receipt["archiveSha256"],
+                        "commit": receipt["commit"], "pending": controls, "proofs": proofs, "parents": parents}
+                bank_data = _json(bank)
+                _recovery_bank(bank_data, receipt)
+                # Exclusive write/readback/fsync precedes every control deletion.
+                # A failed partial bank is intentionally left intact and unrepairable.
+                _write_new(bank_path, bank_data, 0o600)
+                stored, bank_pin = _read(bank_path, mode=0o600, limit=MAX_RECOVERY_BYTES)
+                _recovery_need(stored == bank_data, "recovery_bank_changed")
+            while True:
+                remaining = _recovery_revalidate(paths, receipt, bank_path, bank_data, bank_pin)
+                if not remaining:
+                    return _report(paths, receipt)
+                record = remaining[0]
+                data = bytes.fromhex(record["dataHex"])
+                state_pin = _recovery_bank(bank_data, receipt)["parents"][0]["pin"]
+                _unlink_checked(_state(paths) / record["name"], {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()},
+                                0o600, expected_pin=record["pin"], expected_parent=state_pin)
+    except OSError as error:
+        raise InstallError("filesystem_unknown") from error
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="orla-launcherctl")
     parser.add_argument("--home", type=Path)
@@ -798,6 +1028,8 @@ def main(arguments: list[str] | None = None) -> int:
     install_command.add_argument("--commit", required=True)
     for command in ("status", "launch", "uninstall"):
         commands.add_parser(command)
+    recover_command = commands.add_parser("recover")
+    recover_command.add_argument("--finish-install", action="store_true", required=True)
     options = parser.parse_args(arguments)
     try:
         home = options.home or Path(os.environ.get("HOME", ""))
@@ -810,6 +1042,8 @@ def main(arguments: list[str] | None = None) -> int:
             result = status(paths)
         elif options.command == "uninstall":
             result = uninstall(paths)
+        elif options.command == "recover":
+            result = recover_finish_install(paths)
         else:
             _launch(paths)
             return 0
