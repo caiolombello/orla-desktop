@@ -35,9 +35,9 @@ kpackagetool6 -t Plasma/Applet -r org.orla.bar
 
 ### Barra gerenciada — código experimental, sem release
 
-Os comandos abaixo são para um checkout que contenha o helper experimental de layout; não estão disponíveis no bundle 0.2.9. A composição gerenciada ainda requer qualificação nativa. A CLI separada compõe Menu Orla, Menu Global, espaçador, bandeja e relógio KDE. O template [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) propõe um painel superior de 32 px, translúcido e compacto, com áudio/rede nativos na bandeja. Não implementa uma Central de Controle Orla própria compartilhada nem aplicativos recentes. Há modos `dock-plus-bar` e `dock-only`; `bar-only` não é suportado. O dock é gerenciado independentemente.
+Os comandos abaixo são para um checkout que contenha o helper experimental de layout; não estão disponíveis no bundle 0.2.9. A composição gerenciada ainda requer qualificação nativa. A CLI separada compõe Menu Orla, Menu Global, espaçador, bandeja e relógio KDE. O template [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) propõe um painel superior de 32 px, translúcido e compacto, com áudio/rede nativos na bandeja. O módulo opcional `control-center`, desativado no template, acrescenta uma entrada à direita que usa a mesma Central e o estado do dock. Essa rota ainda exige qualificação na sessão real. Aplicativos recentes permanecem pendentes. Há modos `dock-plus-bar` e `dock-only`; `bar-only` não é suportado. O dock é gerenciado independentemente.
 
-Requer o checkout completo do helper (`scripts/orla.py`, `caiodock.py`, `panel_layout.py` e `panel_layout.js`), Menu Orla e os widgets KDE selecionados instalados, Python 3, `gdbus`, `systemctl` e **Plasma 6.7.5**. Todos os subcomandos exigem `--service`: informe o nome literal do serviço Plasma do usuário atual, cuja identidade/processo/configuração o helper verifica; não há escolha automática de serviço.
+Requer o checkout completo do helper (`scripts/orla.py`, `caiodock.py`, `panel_layout.py`, `panel_layout_update.py` e `panel_layout.js`), Menu Orla e os widgets KDE selecionados instalados, Python 3, `gdbus`, `systemctl` e **Plasma 6.7.5**. Todos os subcomandos exigem `--service`: informe o nome literal do serviço Plasma do usuário atual, cuja identidade/processo/configuração o helper verifica; não há escolha automática de serviço.
 
 Instale ou atualize primeiro o applet pelo fluxo manual acima (`-i bar` ou `-u bar`); o helper não o instala. Na raiz do checkout completo clonado, substitua o serviço abaixo pelo serviço verificado. `status` lê o inventário e o recibo, sem alterar painéis; `python3 scripts/orla.py doctor` verifica as dependências gerais do dock, não substitui esse inventário. Copie o template e edite `screen.connector` (substitua **SELECT-MONITOR** pelo conector real), `replacePanelIds` (IDs explícitos dos painéis desse monitor a substituir) e, se necessário, `reuseWidgetIds` (IDs explícitos de widgets compatíveis desses painéis a preservar). O template não pode ser aplicado sem essas escolhas; um painel que contém o dock é recusado.
 
@@ -65,9 +65,36 @@ python3 scripts/orla.py layout restore --service "$PLASMA_SERVICE" --receipt "$R
 
 `disable` preserva os demais painéis/dock e os dados de recuperação; não recria os painéis substituídos. `restore` recupera o layout original com seus backups verificados. Se apply falhar após a mutação, o helper tenta restaurar o layout anterior e registra o resultado no recibo; falha nessa recuperação mantém os backups e exige inspeção. Transações de layout interrompidas não são repetidas automaticamente. O helper pode tentar reiniciar o serviço uma única vez quando confirma o limite de partidas de um serviço conhecido e anteriormente saudável, com o processo anterior verificado. Outras falhas exigem inspeção do recibo e, para recuperação de uma transação interrompida, `restore --recover` explícito. A recuperação de um disable interrompido pode restaurar a barra gerenciada ativa, em vez do layout original.
 
+### Adicionar a Central à barra existente
+
+A primeira operação experimental de atualização aceita uma barra gerenciada
+ativa com recibo original v1 e bandeja seguida pelo relógio. Ela acrescenta
+somente a entrada da Central entre esses módulos, preservando o painel,
+os widgets existentes e suas configurações atuais.
+
+```sh
+python3 scripts/orla.py layout plan-update --service "$PLASMA_SERVICE" --receipt "$RECEIPT" --add control-center --output my-topbar-update.json
+# Revise o plano, os IDs, a tela e o estado atual antes de atualizar:
+python3 scripts/orla.py layout update --service "$PLASMA_SERVICE" --plan my-topbar-update.json
+```
+
+`plan-update` lê o estado atual e salva o plano privado. `update` reinicia o
+serviço nas etapas de verificação e informa um **novo** caminho de recibo;
+use esse caminho nas operações seguintes. O backup original permanece
+imutável. Um banco separado do estado anterior ao update permite desfazer
+uma falha dessa atualização. Mudanças externas posteriores podem impedir a
+recuperação automática; os bancos ficam preservados para inspeção.
+
+`restore --recover` de um update interrompido recupera a composição anterior
+ao update. `restore` de um update concluído recupera o layout original somente
+quando isso preserva as configurações externas à barra. O helper recusa
+sobrescrever dados divergentes. Recibos de update exigem este helper novo;
+helpers anteriores os recusam. A qualificação da entrada na sessão real,
+incluindo foco, âncora e áudio, permanece separada dos testes do helper.
+
 Em 12/10/2026, o helper final sem modificações passou apply → disable → restore normal do layout original → novo plan/apply em uma tela Plasma 6.7.5/Wayland com DPR 2. Disable manteve somente o dock independente; o restore recuperou os painéis originais; reaplicar terminou com a barra gerenciada e a ordem dos cinco módulos verificada. A observação visual confirmou relógio sem data e dock oculto com o cursor afastado. Nenhum novo crash foi observado nesse ciclo. Crashes intermitentes anteriores em desligamentos/reinícios rápidos do Plasma continuam um risco experimental separado; a proteção contra o limite de partidas não comprova sua correção.
 
-Menu Global depende de aplicativos que exportem menus; áudio/rede usam controles nativos da bandeja. O botão existente da Central de Controle no dock permanece independente; uma entrada própria compartilhada na barra está pendente. Ações reais de sessão, ações de menus de aplicativos, áudio/rede, outros ambientes, múltiplos monitores e o aceite completo de T1–T4 continuam abertos. A prova do Menu Orla abaixo cobre o applet isolado.
+Menu Global depende de aplicativos que exportem menus; áudio/rede usam controles nativos da bandeja. A Central compartilhada experimental exige uma única Orla Dock compatível; a entrada da barra fica indisponível sem esse dono. Ações reais de sessão, ações de menus de aplicativos, áudio/rede, a rota da Central na barra, outros ambientes, múltiplos monitores e o aceite completo de T1–T4 continuam abertos. A prova do Menu Orla abaixo cobre o applet isolado.
 
 ### Testes e limites
 
@@ -116,9 +143,9 @@ kpackagetool6 -t Plasma/Applet -r org.orla.bar
 
 ### Managed bar — experimental source, unreleased
 
-These commands require a checkout containing the experimental layout helper; they are unavailable in the 0.2.9 bundle. Managed composition still requires native qualification. The separate CLI composes Orla Menu, KDE Global Menu, spacer, tray and clock widgets. The [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) template proposes a 32 px translucent, compact top panel with native audio/network tray controls. It does not implement a shared custom Orla Control Center or recent applications. Modes are `dock-plus-bar` and `dock-only`; `bar-only` is unsupported. The dock is managed independently.
+These commands require a checkout containing the experimental layout helper; they are unavailable in the 0.2.9 bundle. Managed composition still requires native qualification. The separate CLI composes Orla Menu, KDE Global Menu, spacer, tray and clock widgets. The [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) template proposes a 32 px translucent, compact top panel with native audio/network tray controls. Its optional `control-center` module, disabled in the template, adds a right-side entry using the dock's existing view and state; native qualification of that route remains open. Recent applications remain planned. Modes are `dock-plus-bar` and `dock-only`; `bar-only` is unsupported. The dock is managed independently.
 
-Requires the complete helper checkout (`scripts/orla.py`, `caiodock.py`, `panel_layout.py` and `panel_layout.js`), installed Orla Menu and selected KDE widgets, Python 3, `gdbus`, `systemctl` and **Plasma 6.7.5**. Every subcommand requires `--service`: provide the literal current-user Plasma service name, whose identity/process/configuration the helper verifies; there is no automatic service selection.
+Requires the complete helper checkout (`scripts/orla.py`, `caiodock.py`, `panel_layout.py`, `panel_layout_update.py` and `panel_layout.js`), installed Orla Menu and selected KDE widgets, Python 3, `gdbus`, `systemctl` and **Plasma 6.7.5**. Every subcommand requires `--service`: provide the literal current-user Plasma service name, whose identity/process/configuration the helper verifies; there is no automatic service selection.
 
 First install or update the applet using the manual flow above (`-i bar` or `-u bar`); the helper does not install it. From the complete cloned checkout root, replace the service below with the verified service. `status` reads inventory and the receipt without changing panels; `python3 scripts/orla.py doctor` checks general dock dependencies and does not replace this inventory. Copy the template and edit `screen.connector` (replace **SELECT-MONITOR** with the actual connector), `replacePanelIds` (explicit IDs of panels on that monitor to replace) and, if needed, `reuseWidgetIds` (explicit compatible widget IDs from those panels to preserve). The template cannot be applied without those choices; a panel containing the dock is refused.
 
@@ -146,9 +173,33 @@ python3 scripts/orla.py layout restore --service "$PLASMA_SERVICE" --receipt "$R
 
 `disable` retains other panels/the dock and recovery data; it does not recreate replaced panels. `restore` recovers the original layout from verified backups. If apply fails after mutation, the helper attempts to restore the previous layout and records the outcome in the receipt; failed recovery retains backups and requires inspection. Interrupted layout transactions are not repeated automatically. The helper may retry starting the service once when it confirms the startup limit for a known, previously healthy service with a verified prior process. Other failures require receipt inspection and, to recover an interrupted transaction, explicit `restore --recover`. Recovering an interrupted disable may restore the active managed bar rather than the original layout.
 
+### Add Control Center to an existing bar
+
+The first experimental update accepts an active managed bar with its original
+v1 receipt and adjacent tray/clock modules. It adds the Control Center entry
+between them, retaining the panel, existing widgets and current settings.
+
+```sh
+python3 scripts/orla.py layout plan-update --service "$PLASMA_SERVICE" --receipt "$RECEIPT" --add control-center --output my-topbar-update.json
+# Review the plan, IDs, screen and current state before updating:
+python3 scripts/orla.py layout update --service "$PLASMA_SERVICE" --plan my-topbar-update.json
+```
+
+Planning writes only a private plan. Updating restarts the selected service
+at verification stages and prints a **new** receipt path; use that path for
+subsequent operations. The original bank stays immutable, while a separate
+pre-update bank supports rollback. Later external changes can prevent automatic
+recovery; all banks remain available for inspection.
+
+For an interrupted update, `restore --recover` recovers the pre-update
+composition. For a completed update, `restore` recovers the original layout
+only when doing so preserves settings outside the bar. Divergent user data
+causes refusal. Update receipts require this new helper; older helpers refuse
+them. Native bar routing, positioning, focus and audio have separate gates.
+
 On 2026-10-12, the unmodified final helper passed apply → disable → normal original-layout restore → fresh plan/apply on one Plasma 6.7.5/Wayland screen at DPR 2. Disable retained only the independent dock; restore recovered the original panels; reapply committed the managed bar with the five-module order verified. Visual observation confirmed the clock without a date and the dock hidden with the cursor away. No new crash was observed in this cycle. Earlier intermittent crashes during rapid Plasma shutdown/restart remain a separate experimental risk; the startup-rate guard does not establish their resolution.
 
-Global Menu depends on applications exporting menus; audio/network use native tray controls. The dock's existing Control Center button stays independent; a shared custom bar entry remains pending. Real session actions, application-menu actions, audio/network, other environments, multiple monitors and complete T1–T4 acceptance remain open. The Orla Menu check below covers the separate applet.
+Global Menu depends on applications exporting menus; audio/network use native tray controls. The experimental shared Control Center requires one compatible Orla Dock owner; its bar entry is unavailable without that owner. Real session actions, application-menu actions, audio/network, the shared bar route, other environments, multiple monitors and complete T1–T4 acceptance remain open. The Orla Menu check below covers the separate applet.
 
 ### Tests and limits
 

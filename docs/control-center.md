@@ -15,6 +15,9 @@ depois da bandeja e antes do relógio; o módulo começa desativado. Essa instâ
 usa `showOrlaMenu=false`, `showApplicationName=false` e `showControlCenter=true`.
 A instância do Menu Orla permanece independente à esquerda. Para alterar o
 layout, prepare e revise o plano com o helper `orla layout` antes de aplicar.
+Para uma barra gerenciada existente com recibo original v1, `layout plan-update`
+e `layout update` acrescentam essa entrada preservando a configuração atual e
+o primeiro banco de recuperação. Veja os [comandos e limites](../bar/README.md#adicionar-a-central-à-barra-existente).
 
 As duas entradas usam a mesma Central e o mesmo estado de áudio do dock.
 Desativar/remover a entrada da barra preserva dock, pins e perfis; ocultar o

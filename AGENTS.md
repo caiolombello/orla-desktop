@@ -31,6 +31,7 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
   `test_shared_control_center` additionally needs the local KDE QML modules.
 - Design guards: `python3 -B -m unittest discover -s tests -p 'test_design_system.py'`
 - Build the applet: `python3 scripts/orla.py build`; release bundle: `python3 scripts/release.py`
+- Managed layout, including update/recovery: `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software python3 -B -m unittest discover -s tests -p 'test_panel_layout*.py'`
 - Portable CI list: `.github/workflows/ci.yml`. Run the QML suites with both `Fusion` and
   `org.kde.desktop` styles when touching shared controls.
 
@@ -75,6 +76,9 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 - Never change test-pinned geometry (tile widths, event slot math, popup budgets) to make a visual fit;
   redesign within it or update the test with a stated reason.
 - Never put personal data in fixtures, captures or logs (names, calendars, window titles, home paths).
+- Layout updates keep the first apply bank immutable and use a separate current bank for rollback.
+  Never rewrite a receipt or relax its hashes to bypass configuration drift. Menu and Control Center
+  share a plugin type; identify their applets by role, exact ID and update token.
 - Tests and CI must not need paid AI calls, accounts, network or real hardware.
 - Do not claim native Plasma/Wayland behavior from offscreen tests; say what was and wasn't run.
 - Ask before installing into the user's live Plasma session, restarting `plasmashell`,
