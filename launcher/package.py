@@ -1450,6 +1450,8 @@ def parser() -> argparse.ArgumentParser:
     verify_command.add_argument("--commit", required=True)
     inventory_command = commands.add_parser("inventory")
     inventory_command.add_argument("--stage", required=True, type=Path)
+    transitive_command = commands.add_parser("inventory-transitive")
+    transitive_command.add_argument("--stage", required=True, type=Path)
     commands.add_parser("doctor")
     return result
 
@@ -1457,6 +1459,14 @@ def parser() -> argparse.ArgumentParser:
 def main(arguments: list[str] | None = None) -> int:
     options = parser().parse_args(arguments)
     try:
+        if options.command == "inventory-transitive":
+            from inventory_host import HostInventoryError, collect_host_catalog
+            try:
+                result = collect_host_catalog(options.stage)
+            except HostInventoryError as error:
+                raise PackageError(error.code) from error
+            print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+            return {"ok": 0, "missing": 1, "unknown": 2}[result["status"]]
         if options.command == "inventory":
             result = inventory(options.stage)
             print(json.dumps(result, sort_keys=True, separators=(",", ":")))

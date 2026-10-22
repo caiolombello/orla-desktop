@@ -433,6 +433,61 @@ reais, com evidência de cada caminho e salto. O inventário direto 0.1 e os
 arquivos de pacote 0.2/0.3 mantêm seus contratos, incluindo
 `caller_assertion_unverified`.
 
+### Catálogo observado de dependências transitivas — experimental
+
+O comando abaixo conecta a política de catálogo a arquivos observados do host:
+
+```sh
+python3 -B launcher/package.py inventory-transitive --stage /prefixo/absoluto
+```
+
+O prefixo deve ser absoluto, ASCII e conter somente os sete payloads do staging
+0.3, com os modos esperados. Essa conferência ocorre antes de ler bibliotecas
+ou consultar RPM. O launcher e seis plugins fixos são raízes necessárias;
+cada NEEDED gera somente `/usr/lib64/<nome>`. Arquivos são lidos por descritores
+ancorados e conferidos antes/depois. Links folhas conservam destino bruto,
+identidade e referências ordenadas da cadeia; componentes intermediários
+reais são conferidos antes de tratar `..`. Pais simbólicos, escapes e ciclos
+ficam inconclusivos. A conferência final também revê ausências conhecidas.
+
+`orla-launcher-host-catalog-0.1` separa observações, grafo, proprietário RPM e
+cobertura. Saída 0 significa coleta concluída dentro dessa política; 1 significa
+dependência ausente com as demais verificações necessárias concluídas; 2
+significa informação inconclusiva. Uma raiz fixa ausente mantém seu registro
+de ausência e o grafo incompleto, sem inventar tags. Falha de metadados preserva
+os fatos dos bytes, mas impede um resultado global `ok`.
+
+A coleta tem limites de nós, ligações, caminhos, bytes, descritores e operações.
+O orçamento padrão de 20 segundos e o orçamento acumulado de RPM são
+cooperativos: uma chamada bloqueada pode ultrapassá-los; isso interrompe novas
+admissões e deixa a conclusão inconclusiva. A consulta RPM é a mesma do doctor,
+com reserva por chamada e sem shell. Um relatório que exceda o limite de
+serialização é reduzido a uma saída explicitamente truncada, com causa e
+campos omitidos. Não se executam ELF, helpers, loader ou `ldd`.
+
+Resolução do loader, seleção ABI, imports QML, proveniência do Python e saúde
+de execução continuam `UNRUN`. O resultado não é uma fotografia atômica do
+sistema e não promove `caller_assertion_unverified` no builder. Doctor,
+inventário direto 0.1 e arquivos de pacote 0.2/0.3 mantêm seus contratos.
+
+Passaram 30 testes de coleta/CLI, os 22 testes do grafo e os 56 testes do
+pacote, usando somente arquivos e consultas RPM sintéticos. A revisão
+independente aprovou o escopo delimitado. Na coleta local de 14/10 foram
+observados 126 nós e 533 ligações em 4,573 s; 1.524 arquivos e 247 diretórios
+protegidos permaneceram exatos. O resultado ficou `unknown`: um candidato
+estava ausente no namespace restrito, dois ELFs não foram aceitos pelo parser
+e quatro consultas RPM ficaram inconclusivas. Flags e caminhos de busca
+também mantiveram incerteza no grafo. Isso não diagnostica corrupção dos
+arquivos nem falha do launcher em execução. Nenhuma sessão foi reiniciada.
+
+```sh
+python3 -B -m unittest discover -s launcher/tests -p 'test_inventory_host*.py' -v
+```
+
+A próxima entrega é instalar, atualizar, reverter e remover o launcher em
+perfil limpo, com entrada no menu e preservação das configurações. Depois,
+seguem os fluxos visíveis de busca por Meta e mídia.
+
 ## Compilar e testar
 
 Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
