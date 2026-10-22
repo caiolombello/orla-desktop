@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import stat
 import fcntl
 from unittest import mock
 from pathlib import Path
@@ -60,6 +61,25 @@ class StoreTests(unittest.TestCase):
     def operation(self, name, digest, addon_id='org.example.battery'):
         return getattr(self.s, name + '_addon')(paths=self.paths, addon_id=addon_id,
                                                expected_current_sha256=digest)
+
+    def test_existing_shared_orla_data_folder_hosts_the_private_store(self):
+        # Installed Orla features create this folder first, with the usual 0755 mode.
+        shared = self.data / 'orla-desktop'
+        shared.mkdir(parents=True)
+        shared.chmod(0o755)
+        installed, digest = self.install()
+        self.assertEqual(self.s.list_addons(paths=self.paths), installed)
+        self.operation('enable', digest)
+        self.assertTrue(self.s.list_addons(paths=self.paths)['addons'][0]['enabled'])
+        self.assertEqual(stat.S_IMODE((shared / 'addons').stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(shared.stat().st_mode), 0o755)
+        # A parent that other accounts can write could swap the store, so it stays refused.
+        for mode in (0o775, 0o757):
+            shared.chmod(mode)
+            with self.subTest(mode=oct(mode)), self.assertRaises(self.s.AddonError) as error:
+                self.s.list_addons(paths=self.paths)
+            self.assertEqual(error.exception.code, 'unsafe')
+        shared.chmod(0o755)
 
     def test_update_and_rollback_require_fresh_hash_bound_activation(self):
         _, first = self.install()

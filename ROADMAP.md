@@ -373,9 +373,11 @@ básicos do CC1. [Detalhes](docs/control-center.md#não-perturbe--cc1-c).
 com um complemento ativo por tipo, de modo que bateria e quota funcionam juntos. A dock
 lê a quota pelo host e só abandona a ponte legada depois de ver um complemento de quota
 ativo; as leituras de bateria e quota se revezam. Custos ficam para um módulo separado.
-O exportador do QuotaLantern está em revisão (caiolombello/quotalantern#5); a leitura real
-na sessão de uso ainda não foi feita. [Contrato](docs/EXTENSIONS.md#complementos-de-quota-de-ia),
-[validação](docs/validation/addon-host-core.md#quota-por-complemento--2210).
+O exportador do QuotaLantern está em revisão (caiolombello/quotalantern#5). Em 22/10, a dock
+instalada passou a mostrar a quota real exportada por ele, depois de duas correções achadas
+nessa rodada. [Contrato](docs/EXTENSIONS.md#complementos-de-quota-de-ia),
+[validação](docs/validation/addon-host-core.md#quota-por-complemento--2210),
+[sessão de uso](docs/validation/addon-host-core.md#quota-real-na-sessão-de-uso--2210).
 
 - [ ] **I1: concluir QuotaLantern/PeriGauge/FalaTrace.** PeriGauge round 2 tem aprovação independente limitada ao Source/mock; o bridge rejeita flags `stale`/`hidden` malformadas com estado seguro. Leituras de cache real, serviço/daemon e hardware seguem UNRUN. Validar também percentuais de quota separados de custos e confirmar a sessão de gravação antes de indicar atividade FalaTrace ao vivo. I1 permanece parcial; custo tipado do QuotaLantern não é suportado e liveness do FalaTrace permanece `false`.
 - [ ] **G1: qualificar Google Agenda pelo KDE.** A primeira fatia Source lazy e somente leitura já evita estados de prontidão inventados e direciona a configuração ao KOrganizer. Para concluir, conectar pelo KOrganizer/Akonadi, escolher os calendários existentes e testar evento real, recorrente, dia inteiro, fuso e ausência de rede. A seleção usada pelo plugin PIM é compartilhada com o relógio do KDE; alterá-la também muda o relógio, e o Orla não a escreve. Aceite: agenda do dock corresponde ao calendário sincronizado, sem configurar outra autenticação Google no dock.

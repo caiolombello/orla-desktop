@@ -225,7 +225,8 @@ def _session(paths, *, write=False):
         raise
     session = None
     try:
-        with directory, io.Directory(paths.store.parent, private=True) as parent:
+        # The store is private; its shared Orla data parent only needs to be closed to other accounts.
+        with directory, io.Directory(paths.store.parent) as parent:
             with directory.file('.lock', create=write) as lock:
                 try:
                     fcntl.flock(lock, (fcntl.LOCK_EX if write else fcntl.LOCK_SH) | fcntl.LOCK_NB)
