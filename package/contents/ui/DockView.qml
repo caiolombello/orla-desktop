@@ -44,6 +44,7 @@ Item {
     property var contextSnapshotOverride: null
     property var controlCenterBackendOverride: null
     property var audioBackendOverride: null
+    property var brightnessBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -287,6 +288,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
+        || brightnessControlState.pendingAny
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1125,6 +1127,19 @@ Item {
         active: controlCenterPopup.visible && root.audioBackendOverride === null
         source: active ? Qt.resolvedUrl("NativePulseAudio.qml") : ""
     }
+    Loader {
+        id: nativeBrightnessBackend
+        objectName: "controlCenterBrightnessNativeLoader"
+        // PowerDevil's module exists only in the production Plasma session.
+        active: controlCenterPopup.visible && root.brightnessBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativeBrightness.qml") : ""
+    }
+    BrightnessControlState {
+        id: brightnessControlState
+        objectName: "brightnessControlState"
+        active: controlCenterPopup.visible
+        backend: root.brightnessBackendOverride !== null ? root.brightnessBackendOverride : nativeBrightnessBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1155,6 +1170,7 @@ Item {
             percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
         playing: root.mediaPlaying
         audio: audioControlState
+        brightness: brightnessControlState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

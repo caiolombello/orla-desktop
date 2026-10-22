@@ -115,6 +115,14 @@ Window {
         function setDefaultOutput(id) { calls = calls.concat([{kind: "default-output", id: id}]); return !rejectWrites; }
         function retry() { calls = calls.concat([{kind: "retry"}]); return !rejectWrites; }
     }
+    QtObject {
+        id: brightnessBackend
+        objectName: "dockBrightnessBackend"
+        property var calls: []
+        property var snapshot: ({status: "ready", displays: [
+            {id: "display0", label: "Tela sintética", value: 7000, max: 10000, internal: false}]})
+        function setBrightness(id, raw) { calls = calls.concat([{id: id, raw: raw}]); return true; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -143,6 +151,7 @@ Window {
         contextSnapshotOverride: contextSnapshot
         controlCenterBackendOverride: controlCenterBackend
         audioBackendOverride: audioBackend
+        brightnessBackendOverride: brightnessBackend
         integrations.active: false
         integrations.transport: addonTransport
         addonTransportOverride: addonTransport

@@ -13,6 +13,8 @@ Window {
     property alias battery: fixtureBattery
     property alias player: fixturePlayer
     property alias audioBackend: fixtureAudioBackend
+    property alias brightnessBackend: fixtureBrightnessBackend
+    property alias brightness: fixtureBrightness
 
     QtObject {
         id: fixtureBackend
@@ -58,6 +60,33 @@ Window {
         active: true
         backend: fixtureAudioBackend
     }
+    QtObject {
+        id: fixtureBrightnessBackend
+        objectName: "controlCenterBrightnessBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property bool reportDuringWrite: false
+        property var snapshot: ({status: "ready", displays: [
+            {id: "display0", label: "Tela sintética", value: 5000, max: 10000, internal: true}]})
+        signal writeFailed(string id)
+        function setBrightness(id, raw) {
+            calls = calls.concat([{id: id, raw: raw}]);
+            if (reportDuringWrite) report(id, raw);
+            return !rejectWrites;
+        }
+        // Tests confirm explicitly, like the service's readback would.
+        function report(id, raw) {
+            snapshot = {status: snapshot.status, displays: snapshot.displays.map(
+                display => display.id === id ? Object.assign({}, display, {value: raw}) : display)};
+        }
+    }
+    DockUI.BrightnessControlState {
+        id: fixtureBrightness
+        objectName: "controlCenterBrightnessState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixtureBrightnessBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -72,5 +101,6 @@ Window {
         player: fixturePlayer
         battery: fixtureBattery
         audio: fixtureAudio
+        brightness: fixtureBrightness
     }
 }
