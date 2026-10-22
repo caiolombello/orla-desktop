@@ -589,6 +589,87 @@ qualificar o novo ELF da CI, Meta isolada, execução de apps, outros ambientes,
 serviço/autostart público ou migração do legado. A instalação principal continua
 com o launcher anterior. R2/L0 permanecem parciais.
 
+### Serviço opcional de busca — experimental no fonte
+
+Uma instalação nova feita com esta geração do gerenciador pode iniciar a busca
+com a sessão gráfica, por escolha explícita:
+
+```sh
+~/.local/bin/orla-launcherctl service enable
+~/.local/bin/orla-launcherctl service status
+~/.local/bin/orla-launcherctl service disable
+# Alternativa com o checkout:
+python3 scripts/orla.py launcher service status
+```
+
+`enable` publica a unidade própria `orla-launcher-managed.service` e seu link em
+`$XDG_DATA_HOME/systemd/user`, confere a configuração efetivamente carregada e
+inicia o controlador instalado com `session`. `status` só consulta; distingue
+ativo, inativo, desativado, parcial e não gerenciado. Uma ativação parcial tem
+`enabled: null` enquanto não houver confirmação. `disable` para apenas a unidade
+própria, confirma a inatividade e remove seus arquivos/link. Recibos, auditoria
+e dados do usuário permanecem. Não instala outro autostart nem atribui Meta.
+
+A instalação normal continua sem ativação automática. O serviço usa o gerenciador
+systemd do usuário e `busctl`; o diretório escolhido precisa pertencer ao caminho
+real de busca desse gerenciador. Configuração estranha, unidade mascarada ou dono
+da busca já ativo causam recusa, sem substituição. Políticas globais conhecidas
+de timeout são preservadas; política não classificada exige investigação.
+
+Ferramentas antigas preservadas por atualização de payload não adquirem esse
+recurso, mesmo com um bootstrap novo: a ativação exige a geração instalada exata.
+O serviço legado/customizado não é adotado. Para atualizar, reverter, recuperar
+uma transação ou remover o payload, execute `service disable` primeiro. Uma
+barreira dentro da instalação impede também o bootstrap anterior de atravessar
+esse limite. Falhas retêm a primeira causa e a barreira; a retirada explícita
+pode continuar quando os recursos próprios restantes forem verificáveis.
+Arquivos temporários inertes de uma publicação interrompida ficam preservados.
+
+Passaram 72 testes de instalação/CLI, 56 do pacote e 15 do bundle, incluindo
+14 casos de serviço com backend finito. O bootstrap anterior real recusou
+alterações com a barreira e voltou a consultar a instalação após a retirada.
+Essas provas usam payloads sintéticos e não iniciam o launcher ou D-Bus.
+
+No systemd 259 do Fedora 44, uma unidade temporária com script próprio `exit 1`
+confirmou os argumentos em caminho com espaços, Unicode, aspas, barra, `$` e `%`,
+e a transição `failed` → `inactive` após parada e reset somente dessa unidade.
+A primeira prova revelou que parar não limpa `failed`; a correção foi repetida
+em perfil novo. A limpeza auxiliar da segunda prova acusou erro num reset
+adicional, preservado no registro; a unidade terminou ausente, e o launcher
+anterior e nove configurações protegidas ficaram exatos. Isso qualifica somente
+esses mecanismos do backend.
+
+A tentativa pública com o [bundle do CI 38675652867](https://github.com/caiolombello/orla-desktop/actions/runs/38675652867)
+instalou os arquivos e recusou a ativação com `service_singleton_busy`, antes de
+iniciar o ELF. A retirada pública e a restauração do legado passaram; um erro do
+roteiro ao reconhecer o fechamento do input ficou preservado, e a ausência dos
+dispositivos temporários foi conferida depois. Um diagnóstico inerte no manager
+real confirmou o vínculo com `graphical-session.target`, embora
+[`GetUnitFileLinks`](https://github.com/systemd/systemd/blob/v259/src/core/dbus-manager.c)
+retorne uma lista vazia para esse diretório de dados. A correção revalida o link
+próprio no disco depois do reload e mantém as recusas de dono, identidade e links
+estranhos. A regressão reproduziu a recusa antes da correção e passou depois,
+incluindo remoção/troca do link durante o reload sem iniciar o serviço.
+
+Uma nova tentativa com o [bundle corrigido do CI 38677892489](https://github.com/caiolombello/orla-desktop/actions/runs/38677892489)
+passou o ciclo público instalado em Wayland, em uma saída com escala 1,45:
+ativar/status → Meta abre com foco → `2-1` mostra `1` → Escape oculta mantendo o
+processo → Ctrl+Alt+Meta+O reabre com foco → desativar → ativar/status novamente.
+A [captura da consulta própria](../docs/screenshots/launcher-managed-service/native-search.png)
+foi revisada. A segunda ativação ficou residente e oculta na instalação principal;
+wrapper, menu, unidade e link legados permanecem guardados para restauração.
+Os 127 arquivos de estado anteriores ficaram exatos, incluindo a auditoria da
+primeira tentativa. Input, janela de teste e inibidor temporários foram liberados.
+Um getter transitório `sink_refused` foi preservado; somente o snapshot válido
+posterior comprova a ocultação. Os recibos continuam `runtime: unverified`.
+
+Isso qualifica o ciclo delimitado neste login. Inicialização após novo login,
+execução de aplicativos, provedores, outros ambientes e migração pública genérica
+continuam pendentes; R2/L0 permanecem parciais.
+O contrato usa as referências do
+[systemd 259](https://github.com/systemd/systemd/blob/v259/man/org.freedesktop.systemd1.xml)
+e seus [targets de sessão](https://github.com/systemd/systemd/blob/v259/man/systemd.special.xml).
+
 ### Recuperação da finalização — experimental no fonte
 
 Se uma instalação já publicou todos os arquivos, recibos e o marcador de
