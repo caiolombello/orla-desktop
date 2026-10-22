@@ -216,6 +216,7 @@ Controls.Control {
             if (!trackedFocus) return;
             const scope = focusScope();
             scope.name = trackedFocus.objectName;
+            scope.visual = trackedFocus.visualFocus === true;
             pendingRecovery = scope;
         }
         Qt.callLater(attemptRecovery);
@@ -237,14 +238,20 @@ Controls.Control {
         }
         // Projection and gate completion may arrive in separate event turns.
         if (busy || loading) return;
-        const candidate = findControl(root, pending.name);
-        const replacement = candidate && candidate.visible && candidate.enabled ? candidate : chooseFile;
+        // Toggling reading swaps the card's action; focus follows it to the same card.
+        const toggled = /^addon(Enable|Disable)-/.test(pending.name)
+            ? findControl(root, pending.name.replace(/^addon(Enable|Disable)-/,
+                (_, kind) => kind === "Enable" ? "addonDisable-" : "addonEnable-")) : null;
+        const usable = item => item && item.visible && item.enabled ? item : null;
+        const replacement = usable(findControl(root, pending.name)) || usable(toggled) || chooseFile;
         if (replacement.visible && replacement.enabled) {
             pendingRecovery = null;
             // Clearing the observable token can revoke ownership or publish a
             // newer request. Recheck before the focus assignment itself.
+            // Keep the last input: a pointer action must not light the keyboard ring.
+            // OtherFocusReason would not be tracked, so pointer focus stays MouseFocusReason.
             if (ownsScope(pending) && !pendingRecovery && replacement.visible && replacement.enabled)
-                replacement.forceActiveFocus(Qt.TabFocusReason);
+                replacement.forceActiveFocus(pending.visual === false ? Qt.MouseFocusReason : Qt.TabFocusReason);
         }
     }
     onAddonsChanged: recoverAfterChange()

@@ -683,6 +683,28 @@ class AddonManagerTests(unittest.TestCase):
         self.assertEqual(self.window.activeFocusItem(), outside)
         self.assertEqual(self.warnings, [])
 
+    def test_toggling_reading_keeps_focus_on_the_same_card_with_the_same_input(self):
+        # Installed dock: after "Desativar leitura" the ring jumped to "Adicionar arquivo…",
+        # even when the button had been clicked with the pointer.
+        for reason, visual in ((Qt.TabFocusReason, True), (Qt.MouseFocusReason, False)):
+            with self.subTest(visual=visual):
+                self.manager.setProperty("addons", [package(enabled=True)])
+                QTest.qWait(30)
+                self.control("addonDisable-org.example.battery").forceActiveFocus(reason)
+                self.manager.setProperty("addons", [package(enabled=False)])
+                QTest.qWait(40)
+                enable = self.control("addonEnable-org.example.battery")
+                self.assertEqual(self.window.activeFocusItem(), enable)
+                self.assertEqual(enable.property("visualFocus"), visual)
+                self.manager.setProperty("addons", [package(enabled=True)])
+                QTest.qWait(40)
+                disable = self.control("addonDisable-org.example.battery")
+                self.assertEqual(self.window.activeFocusItem(), disable)
+                self.assertEqual(disable.property("visualFocus"), visual)
+                self.manager.setProperty("addons", [])
+                QTest.qWait(40)
+        self.assertEqual(self.warnings, [])
+
     def assert_visible_add_focus(self):
         action = self.control("addonChooseFile")
         self.assertEqual(self.window.activeFocusItem(), action)
