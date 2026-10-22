@@ -484,9 +484,57 @@ arquivos nem falha do launcher em execução. Nenhuma sessão foi reiniciada.
 python3 -B -m unittest discover -s launcher/tests -p 'test_inventory_host*.py' -v
 ```
 
-A próxima entrega é instalar, atualizar, reverter e remover o launcher em
-perfil limpo, com entrada no menu e preservação das configurações. Depois,
-seguem os fluxos visíveis de busca por Meta e mídia.
+A instalação inicial e a remoção descritas abaixo estão disponíveis no fonte.
+O próximo gate é produzir o artifact real na CI e validar sua abertura em
+perfil limpo; depois seguem atualização, reversão, recuperação e os fluxos
+visíveis de busca por Meta e mídia.
+
+### Instalação explícita para usuário novo — experimental no fonte
+
+O instalador aceita um ZIP schema 0.3 verificado, com SHA-256 externo e commit
+de 40 caracteres. Use o pacote construído pelo fluxo de staging acima e
+substitua os valores do comando:
+
+```sh
+python3 scripts/orla.py launcher install /caminho/orla-launcher.zip \
+  --sha256 SHA256_DO_ARQUIVO --commit COMMIT_DE_40_CARACTERES
+~/.local/bin/orla-launcherctl status
+~/.local/bin/orla-launcher
+~/.local/bin/orla-launcherctl uninstall
+```
+
+Os arquivos são instalados em `~/.local/bin`,
+`$XDG_DATA_HOME/orla-desktop/launcher` e
+`$XDG_DATA_HOME/applications/org.orla.Launcher.desktop`. Quando a variável XDG
+não está definida, o diretório de dados é `~/.local/share`. O estado privado
+fica em `$XDG_STATE_HOME/orla/launcher-install`, com padrão `~/.local/state`.
+O gerenciador copia somente `install.py` e `package.py`; seus comandos seguem
+funcionando sem o checkout. A entrada no menu e os wrappers verificam os bytes
+dessas ferramentas antes de executar o gerenciador.
+
+Esta etapa cobre a primeira instalação. Arquivos ou instalações preexistentes
+são recusados, inclusive os de instalação manual antiga. Um estado incompleto
+retorna `pending` com causa e evidência de propriedade preservadas; recuperação,
+reinstalação, atualização e reversão entram no próximo incremento. A remoção
+confere todos os arquivos antes de apagar e preserva configurações, favoritos,
+aliases e histórico. O status se refere aos arquivos gerenciados: `runtime`
+permanece `unverified`, e a remoção não atesta encerramento de processos.
+
+A abertura manual usa `--no-global-shortcut`. Serviço, autostart e atribuição
+de Meta serão escolhas explícitas na etapa seguinte. O instalador usa
+`renameat2(RENAME_NOREPLACE)` no Linux e recusa a publicação se esse recurso
+estiver indisponível. [Semântica de publicação](https://man7.org/linux/man-pages/man2/rename.2.html)
+
+Foram aprovados 26 testes de instalação, 56 do pacote e 23 da CLI preexistente,
+com fixtures isoladas, nomes Unicode, escaping de Desktop Entry e falhas de
+gravação/remoção. O fluxo público instalar → status → checkout ausente → status
+independente → remover também passou com um pacote sintético e dados preservados.
+Abertura do ELF real, clique no menu KDE e sessão Wayland a partir desse pacote
+continuam sem validação; este incremento não produz um bundle de distribuição.
+
+```sh
+python3 -B -m unittest discover -s launcher/tests -p 'test_install*.py' -v
+```
 
 ## Compilar e testar
 
@@ -499,7 +547,7 @@ ctest --test-dir build/launcher --output-on-failure
 build/launcher/bin/orla-launcher --no-global-shortcut
 ```
 
-Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Meta+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro temporário próprio. Não há autostart, instalação automática, alteração de painel ou integração de menu nesta pasta.
+Sem atalho global, Esc encerra o processo. Na execução normal, o componente tenta registrar **Ctrl+Alt+Meta+O** apenas durante a sessão do processo; `--shortcut 'Ctrl+Alt+Meta+F12'` escolhe outra combinação. Uma combinação ocupada não é substituída e a janela continua utilizável. Esc oculta a janela enquanto o atalho está registrado; fechar pelo X ou Ctrl+Q encerra e remove o registro temporário próprio. A instalação explícita e sua entrada no menu estão descritas acima; a compilação e execução manuais não configuram autostart nem painel.
 
 `--start-hidden` inicia a janela oculta quando o registro do atalho funciona. Se o atalho estiver ocupado ou desativado, a janela permanece visível para que o launcher continue acessível.
 

@@ -729,6 +729,18 @@ mudaram. R2 segue parcial. A próxima entrega é o fluxo utilizável de
 instalar/atualizar/reverter/remover em perfil limpo, depois Meta e mídia.
 Consulte o [comando e limites](launcher/README.md#catálogo-observado-de-dependências-transitivas--experimental).
 
+**R2 — primeira instalação gerenciada no fonte (14/10):** `orla.py launcher`
+oferece instalar um ZIP schema 0.3 com SHA/commit explícitos, consultar, abrir
+manualmente e remover. Wrappers e entrada no menu usam ferramentas verificadas
+que funcionam sem checkout; configurações, favoritos, aliases e histórico são
+preservados. Estado parcial mantém causa e propriedade, e a publicação não
+substitui destinos preexistentes. Passaram 26 testes de instalação, 56 do pacote
+e 23 da CLI, mais o fluxo público sintético com checkout ausente. Runtime segue
+`unverified`; a instalação atual do PC não mudou. Artifact real da CI e abertura
+em perfil limpo são o próximo gate, seguidos por atualização, reversão,
+recuperação e serviço/Meta opcionais. R2 permanece parcial. Consulte o
+[fluxo e limites](launcher/README.md#instalação-explícita-para-usuário-novo--experimental-no-fonte).
+
 ## Prontidão e recomendação de execução
 
 - **Modelo/esforço:** `gpt-6.1-sol`, `medium`, para R1/R2 e as funcionalidades delimitadas; há código existente e testes que tornam o resultado verificável.
