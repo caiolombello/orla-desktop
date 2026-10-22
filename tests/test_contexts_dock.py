@@ -275,6 +275,127 @@ class ContextsDockTests(unittest.TestCase):
         self.assertFalse(self.dock.property("nativeContextSourceLoaded"))
         self.assertFalse(self.dock.property("nativeDesktopSwitchBackendLoaded"))
 
+    def test_missing_automatic_default_explains_recovery_without_changing_saved_preferences(self):
+        self.initialize_profiles()
+        self.set_snapshot()
+        self.config.setProperty("autoContextDefaultProfile", "removed-profile")
+        self.config.setProperty("autoContextEnabled", True)
+        self.open_contexts()
+        before = self.configuration_snapshot()
+        hint = self.window.findChild(QQuickItem, "autoContextProfileHint")
+        self.assertIsNotNone(hint, "Missing default needs a visible recovery hint")
+        self.assertTrue(hint.property("visible"))
+        self.assertIn("perfil padrão não está disponível", hint.property("text"))
+        self.assertIn("Escolha outro", hint.property("text"))
+        self.assertEqual(self.evaluate("Number(textFormat)", hint), Qt.PlainText.value)
+        self.assertFalse(self.evaluate("autoContextProfiles.canEnable"))
+        self.assertTrue(self.window.findChild(QQuickItem, "autoContextDefaultProfile").property("enabled"))
+        toggle = self.window.findChild(QQuickItem, "autoContextEnabled")
+        self.assertTrue(toggle.property("enabled"), "An invalid enabled mode must still allow turning it off")
+        self.assertTrue(toggle.property("checked"))
+        QTest.qWait(40)
+        self.assertEqual(self.configuration_snapshot(), before)
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(toggle.window(), Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.configuration_snapshot(), dict(before, autoContextEnabled="false"))
+
+    def test_orphan_binding_warning_counts_all_domains_and_keeps_current_recovery_actions(self):
+        self.initialize_profiles()
+        document = json.loads(self.config.property("profilesJSON"))
+        document["profiles"] = [p for p in document["profiles"] if p["id"] != "work"]
+        self.config.setProperty("profilesJSON", json.dumps(document, indent=2))
+        raw = json.dumps({"formatVersion": "0.1-experimental",
+            "activityBindings": [
+                {"contextId": "a1", "lastKnownName": "Foco", "profileId": "work"},
+                {"contextId": "old-a", "lastKnownName": "Antiga", "profileId": "work"}],
+            "desktopBindings": [
+                {"contextId": "d1", "lastKnownName": "Área 1", "profileId": "work"},
+                {"contextId": "old-d", "lastKnownName": "Antiga", "profileId": "work"}]}, indent=2)
+        self.config.setProperty("contextsJSON", raw)
+        self.evaluate("contextSnapshot=({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},"
+            "desktop:{status:'ready',currentId:'d1',ids:['d1'],names:['Área 1']}})", self.window)
+        controls = self.open_contexts()
+        before = self.configuration_snapshot()
+        warning = self.window.findChild(QQuickItem, "orphanProfileBindings")
+        self.assertIsNotNone(warning, "Orphan profile bindings need recovery guidance beyond stale context counts")
+        self.assertTrue(warning.property("visible"))
+        self.assertIn("2 de Activity", warning.property("text"))
+        self.assertIn("2 de área", warning.property("text"))
+        self.assertIn("escolha outro perfil", warning.property("text"))
+        self.assertIn("Remover", warning.property("text"))
+        self.assertIn("preservadas", warning.property("text"))
+        self.assertEqual(self.evaluate("Number(textFormat)", warning), Qt.PlainText.value)
+        QTest.qWait(40)
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.assertTrue(self.window.findChild(QQuickItem, "desktopUnbind").property("enabled"))
+        self.evaluate("chooseProfile('desktop','personal')", controls)
+        button = self.window.findChild(QQuickItem, "desktopBind")
+        button.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(button.window(), Qt.Key_Space)
+        QTest.qWait(20)
+        changed = self.config.property("contextsJSON")
+        self.assertEqual(next(b for b in json.loads(changed)["desktopBindings"] if b["contextId"] == "d1")["profileId"], "personal")
+        self.assertEqual(self.configuration_snapshot(), dict(before, contextsJSON=json.dumps(changed, ensure_ascii=False)))
+        self.assertIn("1 de área", warning.property("text"))
+
+    def test_empty_initialized_profiles_explain_creation_and_allow_unbinding_current_context(self):
+        empty = json.dumps({"formatVersion": "0.2-experimental", "activeProfileId": "legacy", "profiles": []}, indent=2)
+        raw = json.dumps({"formatVersion": "0.1-experimental", "activityBindings": [
+            {"contextId": "old-a", "lastKnownName": "Antiga", "profileId": "work"}],
+            "desktopBindings": [{"contextId": "d1", "lastKnownName": "Área 1", "profileId": "work"}]}, indent=2)
+        self.dispose()
+        self.create(contexts_json=raw, profiles_json=empty)
+        self.config.setProperty("autoContextDefaultProfile", "work")
+        self.config.setProperty("autoContextEnabled", True)
+        self.set_snapshot()
+        self.open_contexts()
+        before = self.configuration_snapshot()
+        self.assertTrue(self.evaluate("profiles.initialized && profiles.writable"))
+        hint = self.window.findChild(QQuickItem, "autoContextProfileHint")
+        self.assertTrue(hint.property("visible"))
+        self.assertIn("Nenhum perfil disponível", hint.property("text"))
+        self.assertIn("Crie um perfil", hint.property("text"))
+        self.assertIn("padrão", hint.property("text"))
+        self.assertFalse(self.window.findChild(QQuickItem, "autoContextDefaultProfile").property("enabled"))
+        self.assertFalse(self.window.findChild(QQuickItem, "activityBind").property("enabled"))
+        self.assertFalse(self.window.findChild(QQuickItem, "desktopBind").property("enabled"))
+        self.assertFalse(self.evaluate("autoContextProfiles.canEnable"))
+        self.assertTrue(self.window.findChild(QQuickItem, "autoContextEnabled").property("enabled"))
+        self.assertTrue(self.window.findChild(QQuickItem, "orphanProfileBindings").property("visible"))
+        QTest.qWait(20)
+        self.assertEqual(self.configuration_snapshot(), before)
+        button = self.window.findChild(QQuickItem, "desktopUnbind")
+        self.assertTrue(button.property("enabled"))
+        button.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(button.window(), Qt.Key_Space)
+        QTest.qWait(20)
+        changed = self.config.property("contextsJSON")
+        self.assertEqual(json.loads(changed)["desktopBindings"], [])
+        self.assertEqual(json.loads(changed)["activityBindings"], json.loads(raw)["activityBindings"])
+        self.assertEqual(self.configuration_snapshot(), dict(before, contextsJSON=json.dumps(changed, ensure_ascii=False)))
+        self.assertEqual(self.config.property("profilesJSON"), empty)
+
+    def test_protected_profiles_show_recovery_instead_of_creation_and_invalid_bindings_stay_protected(self):
+        raw = '{\n "formatVersion":"future", "owned":true\n}'
+        self.dispose()
+        self.create(contexts_json=raw, profiles_json=raw)
+        self.set_snapshot()
+        self.open_contexts()
+        before = self.configuration_snapshot()
+        hint = self.window.findChild(QQuickItem, "autoContextProfileHint")
+        self.assertTrue(hint.property("visible"))
+        self.assertIn("protegidos", hint.property("text"))
+        self.assertNotIn("Crie", hint.property("text"))
+        self.assertFalse(self.window.findChild(QQuickItem, "orphanProfileBindings").property("visible"))
+        for name in ("activityBind", "desktopBind", "activityUnbind", "desktopUnbind", "autoContextDefaultProfile"):
+            self.assertFalse(self.window.findChild(QQuickItem, name).property("enabled"), name)
+        self.assertTrue(self.window.findChild(QQuickItem, "contextsStatus").property("visible"))
+        QTest.qWait(20)
+        self.assertEqual(self.configuration_snapshot(), before)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.config.property("contextsJSON"), raw)
+
     def test_automatic_default_selector_mouse_and_keyboard_preserve_profile(self):
         for mouse_open in (False, True):
             with self.subTest(mouse_open=mouse_open):

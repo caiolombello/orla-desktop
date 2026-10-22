@@ -1,7 +1,7 @@
 .pragma library
 .import "Appearance.js" as Appearance
 
-var formatVersion = "0.1-experimental";
+var formatVersion = "0.2-experimental";
 var widgetIds = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"];
 var widgetKeys = ["showClock", "showPomodoro", "showMusic", "showSystemBattery", "showQuota", "showPeripherals", "showRecording"];
 var legacyPresentationKeys = ["launchers", "appearance", "widgets", "calendarEvents", "currentDesktopOnly"];
@@ -40,6 +40,13 @@ function objectWithKnownKeys(value, keys) {
 function validName(value) {
     return typeof value === "string" && value.length > 0 && value.length <= 48
         && value.trim() === value && !controls.test(value);
+}
+// Experimental internal allocator; callers supply the live and referenced IDs.
+function nextCustomId(timestamp, counter, reservedIds) {
+    let id;
+    do { id = "custom-" + timestamp.toString(36) + "-" + (++counter).toString(36); }
+    while (reservedIds.indexOf(id) !== -1);
+    return {id: id, counter: counter};
 }
 function validLauncher(value) {
     if (typeof value !== "string" || value.length > 2048 || controls.test(value)) return false;
@@ -116,8 +123,9 @@ function merge(value, patch) {
 }
 function validate(value) {
     if (!Appearance.exactKeys(value, ["formatVersion", "activeProfileId", "profiles"])
-            || value.formatVersion !== formatVersion || !Array.isArray(value.profiles)
-            || value.profiles.length < 1 || value.profiles.length > 16)
+            || (value.formatVersion !== formatVersion && value.formatVersion !== "0.1-experimental")
+            || !Array.isArray(value.profiles) || value.profiles.length > 16
+            || (value.profiles.length === 0 && value.formatVersion === "0.1-experimental"))
         return {error: "Perfis salvos inválidos ou incompatíveis."};
     const ids = new Set();
     const names = new Set();

@@ -1,6 +1,6 @@
 # Manual dock profiles / Perfis manuais do dock
 
-Orla Dock profiles are alpha. P1/C1 are partial; this covers the dock. Profile JSON uses `0.1-experimental`, independently versioned from Orla. Grip reordering and profile rename below are current Source increments, not part of the published 0.2.9 assets. Portable UI checks and installed/native qualification are separate.
+Orla Dock profiles are alpha. P1/C1 are partial; this covers the dock. Current Source reads profile JSON `0.1-experimental` and `0.2-experimental`, independently versioned from Orla. New documents use `0.2-experimental`; loading an existing document does not migrate it. Grip reordering, profile rename and removal below are development increments, not part of the published 0.2.9 assets. Portable UI checks and installed/native qualification are separate.
 
 ## English
 
@@ -16,7 +16,7 @@ Each profile stores pinned apps, theme/icon/motion/custom appearance, the order 
 
 The Pomodoro remains one global timer: switching profiles, including hiding its widget, keeps its object and deadline within the same dock. Native resume across process restarts has not been tested. Integration providers and media state are shared rather than copied into profiles.
 
-Limits: up to 16 named profiles (Previous preferences is separate), unique names of up to 48 characters with no control characters, and up to 32 launcher URLs per profile: local `.desktop` apps or the exact KDE default-app aliases `preferred://browser`, `preferred://mailer`, `preferred://terminal` and `preferred://filemanager`. Default-app bindings remain unchanged when cloning or switching profiles. Leading/trailing name whitespace is trimmed on creation and rename. Rename changes only the active managed profile’s name, preserving its ID, preferences and context associations. Repeating the same valid name causes no write. Delete/import/export controls are not provided yet. Missing apps stay in saved preferences; passive reload does not replace the saved list with only apps currently resolved by KDE. Validated URL spelling is preserved while Qt URL identity is used for app operations. Profiles contain data, not imported community themes or executable plugins.
+Limits: up to 16 named profiles (Previous preferences is separate), unique names of up to 48 characters with no control characters, and up to 32 launcher URLs per profile: local `.desktop` apps or the exact KDE default-app aliases `preferred://browser`, `preferred://mailer`, `preferred://terminal` and `preferred://filemanager`. Default-app bindings remain unchanged when cloning or switching profiles. Leading/trailing name whitespace is trimmed on creation and rename. Rename changes only the active managed profile’s name, preserving its ID, preferences and context associations. Repeating the same valid name causes no write. Import/export controls are not provided yet. Missing apps stay in saved preferences; passive reload does not replace the saved list with only apps currently resolved by KDE. Validated URL spelling is preserved while Qt URL identity is used for app operations. Profiles contain data, not imported community themes or executable plugins.
 
 Empty `profilesJSON` uses the flat settings; there is no implicit migration. Invalid, oversized or future-format profile JSON is preserved and disables presentation writes. On startup the dock falls back to the flat presentation; invalid replacement while running retains the last validated presentation. Report the error rather than editing KConfig while Plasma is running. If a saved custom appearance is invalid when cloning, the new profile uses the earlier theme/icon/motion preferences and shows a message; the original flat value is preserved.
 
@@ -36,9 +36,40 @@ Cada perfil guarda apps fixados, tema/ícones/movimento/aparência personalizada
 
 O Pomodoro continua global: selecionar outro perfil, mesmo ocultando seu widget, mantém objeto e prazo no mesmo dock. A retomada nativa entre processos não foi testada. Providers e estado da mídia continuam compartilhados.
 
-Limites: até 16 perfis nomeados, além de Preferências anteriores; nomes únicos com até 48 caracteres e sem caracteres de controle; até 32 URLs por perfil, de apps `.desktop` locais ou dos atalhos padrão do KDE `preferred://browser`, `preferred://mailer`, `preferred://terminal` e `preferred://filemanager`. Copiar ou trocar um perfil preserva o vínculo com o app padrão. Espaços no início/fim do nome são removidos ao criar ou renomear. Renomear altera apenas o nome do perfil gerenciado ativo, preservando ID, preferências e associações de contexto. Repetir o mesmo nome válido não grava. Ainda não há controles para apagar, importar ou exportar. Apps ausentes permanecem salvos; recarregar não substitui a lista pelos apps resolvidos pelo KDE. A grafia validada das URLs é preservada; operações de apps comparam identidade de URL pelo Qt. Perfis são dados: não importam temas comunitários nem executam plugins.
+Limites: até 16 perfis nomeados, além de Preferências anteriores; nomes únicos com até 48 caracteres e sem caracteres de controle; até 32 URLs por perfil, de apps `.desktop` locais ou dos atalhos padrão do KDE `preferred://browser`, `preferred://mailer`, `preferred://terminal` e `preferred://filemanager`. Copiar ou trocar um perfil preserva o vínculo com o app padrão. Espaços no início/fim do nome são removidos ao criar ou renomear. Renomear altera apenas o nome do perfil gerenciado ativo, preservando ID, preferências e associações de contexto. Repetir o mesmo nome válido não grava. Ainda não há controles para importar ou exportar. Apps ausentes permanecem salvos; recarregar não substitui a lista pelos apps resolvidos pelo KDE. A grafia validada das URLs é preservada; operações de apps comparam identidade de URL pelo Qt. Perfis são dados: não importam temas comunitários nem executam plugins.
 
 `profilesJSON` vazio usa as preferências flat, sem migração implícita. JSON inválido, grande demais ou de formato futuro é preservado e bloqueia gravações da apresentação. Na inicialização, o dock usa flat; substituição inválida durante execução mantém a última apresentação validada. Relate o erro em vez de editar KConfig com o Plasma aberto. Se a aparência personalizada salva for inválida ao copiar, o novo perfil usa as preferências anteriores de tema/ícones/movimento e mostra um aviso; o valor flat original é preservado.
+
+## Remove the active profile / Remover o perfil ativo
+
+In **Perfil ativo**, open **Remover…**, choose another profile or **Preferências anteriores** explicitly, then confirm **Remover perfil**. This deletes the saved active profile, including its presentation; there is no Undo. The pending profile selector does not change the target. Opening, choosing a destination and cancelling do not save. Rename and removal are separate edits: finish or cancel one before opening the other. Escape cancels the inline confirmation, tabs retain it, and closing settings discards it. A changed owner, revision, appearance preview or reference impact blocks the old confirmation; cancel and reopen it.
+
+The warning counts saved Activity/desktop associations, including unavailable contexts, and identifies an automatic default even when automation is off. References remain byte-for-byte unchanged. A removed associated target stays unavailable, with no fallback or name matching. Removing the automatic default pauses enabled automation until a valid default is chosen; repairing it keeps a manual selection in the same context. The Contexts tab explains missing profiles and the recovery actions for available contexts.
+
+Removing the last profile saves an initialized empty `0.2-experimental` document with Previous preferences active. It does not clear `profilesJSON` or recreate Work/Personal/Games. Creating a new profile uses a custom ID and excludes live IDs and IDs retained in validated associations or the automatic default. This does not retain a history of every unreferenced removed ID. A nonempty `0.1-experimental` document keeps its version on removal; removing its last entry upgrades only that document to `0.2-experimental`. Older builds that only understand `0.1-experimental` protect the newer bytes and fall back rather than editing them: rollback does not restore the newer editing controls.
+
+Em **Perfil ativo**, abra **Remover…**, escolha explicitamente outro perfil ou **Preferências anteriores** e confirme **Remover perfil**. Isso apaga o perfil salvo e sua apresentação, sem Desfazer. O seletor pendente não muda o alvo. Abrir, escolher destino ou cancelar não grava. Termine ou cancele Renomear antes de abrir Remover, e vice-versa. Escape cancela a confirmação; abas a mantêm e fechar as configurações a descarta. Se perfil, revisão, prévia ou impacto das referências mudar, cancele e abra novamente.
+
+O aviso conta associações de Activity e área, inclusive contextos indisponíveis, e informa se esse é o padrão automático mesmo com o modo desligado. As referências são preservadas sem remapeamento por nome. Um alvo removido permanece indisponível, sem fallback. Remover o padrão pausa o automático até escolher outro válido; essa correção mantém a seleção manual no mesmo contexto. A aba Contextos explica a recuperação das associações dos contextos disponíveis.
+
+O último perfil deixa um documento vazio e inicializado `0.2-experimental`, com Preferências anteriores ativo. Não limpa `profilesJSON` nem recria os IDs Trabalho/Pessoal/Jogos. Criar outro usa ID próprio, excluindo os IDs vivos e retidos nas associações validadas ou no padrão. Não há histórico de todos os IDs antigos sem referências. Documentos `0.1-experimental` não vazios mantêm sua versão; somente a remoção do último exige `0.2-experimental`. Builds antigos protegem esses bytes e usam o fallback: voltar ao build antigo não restaura os controles novos.
+
+Source verification (16 October 2026): profiles, automatic selection, dock UI,
+contexts and appearance passed 192 tests per style (Fusion/KDE), with two
+TaskManager skips per style requiring Wayland/X11. Design checks found no issues;
+seven design guards passed. Removal has 16 final captures at 350/420 px in both
+schemes. These checks do not qualify an installed Plasma panel or native removal.
+
+The 72-file development package is installed locally with a verified backup and
+main-session preservation. Native R2 passed confirmation, persistence and recovery
+in a private real KDE/Wayland host using synthetic data. R1 remains failed in its
+observer's immediate disk check. This does not qualify the user's physical panel
+or keyboard focus. See the [installation, attempts and remaining gates](validation/profiles-0.2.5.md#active-profile-removal-development-16-october-2026).
+
+| Confirmation / Confirmação | Recovery / Recuperação |
+| --- | --- |
+| ![Dark removal confirmation](screenshots/profiles-remove/profiles-remove-dark-default-350.png) | ![Light last-profile destination](screenshots/profiles-remove/profiles-remove-light-last-350.png) |
+| ![Dark stale confirmation](screenshots/profiles-remove/profiles-remove-dark-stale-420.png) | ![Light unavailable-profile associations](screenshots/profiles-remove/profiles-remove-light-orphan-420.png) |
 
 ## Experimental internal selection contract
 
@@ -55,6 +86,15 @@ state, scope and revision are rechecked after the predicate, so a reentrant manu
 selection, edit or invalid document is preserved instead of being overwritten.
 The caller must validate its own captured context, binding and request generation;
 this method does not infer those authorities or roll back callback side effects.
+
+`ProfileState.removeCurrent(replacementId, expectedScope, expectedRevision,
+continuationGuard)` requires that synchronous predicate. It removes only the
+captured active managed profile and selects an explicitly supplied survivor or
+`legacy` in one `profilesJSON` assignment. The predicate runs once after the
+transition hook; only boolean `true` accepts. Owner, raw bytes, writable state,
+scope and revision are checked again after it. The caller owns confirmation,
+reference-impact and session validation. Callback side effects are not rolled
+back, and a successful return does not establish ownership after setter callbacks.
 
 The opt-in context controller consumes this guard in current Source. It validates
 its captured context, bindings, owners and manual override immediately before the

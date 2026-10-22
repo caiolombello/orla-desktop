@@ -53,6 +53,8 @@ class AutoContextProfilesTests(unittest.TestCase):
     def settle(self):
         for _ in range(5):
             self.app.processEvents()
+            # A retired controller must not keep observing after a fixture restart.
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def initialize(self):
         self.assertTrue(self.evaluate("initializeDefaults(activeProfileId, revision)", self.profiles))
@@ -184,6 +186,108 @@ class AutoContextProfilesTests(unittest.TestCase):
         self.evaluate("configuration.autoContextDefaultProfile='work'; configuration.autoContextEnabled=true; running=true")
         self.assertEqual(self.profiles.property("activeProfileId"), "work")
         self.assertEqual(self.root.property("writes"), before + 1)
+        self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
+
+    def test_remove_associated_active_profile_is_manual_then_missing_target_has_no_fallback(self):
+        self.prepare()
+        self.bind("activity", "work")
+        self.enable("games")
+        self.assertEqual(self.selected(), "work")
+        original = json.loads(self.config.property("profilesJSON"))
+        bindings = self.config.property("contextsJSON")
+        fields = ("autoContextEnabled", "autoContextDefaultProfile", "autoContextPolicy", "launchers", "theme",
+                  "appearanceJSON", "iconSize", "animations", "showClock", "showMusic", "showSystemBattery",
+                  "showPomodoro", "showQuota", "showPeripherals", "showRecording", "showAudioHud",
+                  "calendarEvents", "currentDesktopOnly", "timerDeadline", "timerRemaining", "timerBreak",
+                  "focusMinutes", "breakMinutes", "completedFocus")
+        snapshot = self.evaluate("JSON.stringify(" + json.dumps(list(fields)) + ".map(key=>configuration[key]))")
+        writes = self.root.property("writes")
+        selections = QSignalSpy(self.profiles.activeProfileIdChanged)
+        self.evaluate("busy=true")
+        self.assertTrue(self.evaluate("removeCurrent('personal',activeProfileId,revision,()=>true)", self.profiles))
+        expected = dict(original, activeProfileId="personal",
+                        profiles=[profile for profile in original["profiles"] if profile["id"] != "work"])
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.root.property("writes"), writes + 1)
+        self.assertEqual(selections.count(), 1)
+        self.assertTrue(self.override())
+        self.evaluate("busy=false")
+        self.assertEqual(self.selected(), "personal")
+        self.assertTrue(self.override())
+        self.context("a2")
+        self.assertEqual(self.selected(), "games")
+        self.assertFalse(self.override())
+        self.context()
+        raw = self.config.property("profilesJSON")
+        writes = self.root.property("writes")
+        self.assertEqual(self.selected(), "games")
+        self.assertIn("perfil associado", self.evaluate("automatic.statusText"))
+        self.evaluate("restartController()")
+        self.assertFalse(self.override())
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.root.property("writes"), writes)
+        self.assertEqual(self.config.property("contextsJSON"), bindings)
+        self.assertEqual(self.evaluate("JSON.stringify(" + json.dumps(list(fields))
+                                       + ".map(key=>configuration[key]))"), snapshot)
+
+    def test_remove_automatic_default_pauses_without_rewriting_it_and_repair_keeps_manual_choice(self):
+        self.prepare()
+        self.enable("work")
+        original = json.loads(self.config.property("profilesJSON"))
+        bindings = self.config.property("contextsJSON")
+        writes = self.root.property("writes")
+        self.assertTrue(self.evaluate("removeCurrent('personal',activeProfileId,revision,()=>true)", self.profiles))
+        expected = dict(original, activeProfileId="personal",
+                        profiles=[profile for profile in original["profiles"] if profile["id"] != "work"])
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.root.property("writes"), writes + 1)
+        self.assertEqual(self.config.property("autoContextDefaultProfile"), "work")
+        self.assertTrue(self.config.property("autoContextEnabled"))
+        self.assertFalse(self.evaluate("automatic.canEnable || automatic.observing"))
+        self.assertTrue(self.override())
+        raw = self.config.property("profilesJSON")
+        self.context("a2")
+        self.evaluate("restartController()")
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertFalse(self.override())
+        # A new manual destination remains authoritative when the missing default is repaired.
+        self.manual("games")
+        self.assertTrue(self.evaluate("automatic.setDefaultProfile('personal')"))
+        self.assertTrue(self.override())
+        self.assertEqual(self.selected(), "games")
+        self.context("a3")
+        self.assertEqual(self.selected(), "personal")
+        self.assertFalse(self.override())
+        self.assertEqual(self.config.property("contextsJSON"), bindings)
+        self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
+
+    def test_remove_last_default_restarts_as_initialized_empty_without_recreating_old_ids(self):
+        self.prepare()
+        self.manual("personal")
+        self.assertTrue(self.evaluate("removeCurrent('work',activeProfileId,revision,()=>true)", self.profiles))
+        self.manual("games")
+        self.assertTrue(self.evaluate("removeCurrent('work',activeProfileId,revision,()=>true)", self.profiles))
+        self.enable("work")
+        self.bind("desktop", "work")
+        bindings = self.config.property("contextsJSON")
+        writes = self.root.property("writes")
+        self.assertTrue(self.evaluate("removeCurrent('legacy',activeProfileId,revision,()=>true)", self.profiles))
+        empty = {"formatVersion": "0.2-experimental", "activeProfileId": "legacy", "profiles": []}
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), empty)
+        self.assertEqual(self.root.property("writes"), writes + 1)
+        self.assertTrue(self.profiles.property("initialized"))
+        self.assertFalse(self.evaluate("automatic.canEnable"))
+        self.assertEqual(self.config.property("autoContextDefaultProfile"), "work")
+        self.assertTrue(self.config.property("autoContextEnabled"))
+        self.evaluate("profileState.load(true); restartController()")
+        self.context("a2", "d2")
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), empty)
+        self.assertFalse(self.evaluate("initializeDefaults(activeProfileId,revision)", self.profiles))
+        self.assertTrue(self.evaluate("create('Novo perfil',activeProfileId,revision)", self.profiles))
+        self.assertTrue(self.selected().startswith("custom-"))
+        self.assertEqual(self.config.property("contextsJSON"), bindings)
+        self.context()
+        self.assertFalse(self.evaluate("automatic.canEnable"))
         self.assertEqual(self.config.property("timerDeadline"), 1234567890000)
 
     def enable(self, default="games"):

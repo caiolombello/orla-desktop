@@ -78,6 +78,12 @@ Controls.ScrollView {
             : bindingsState.bindings.desktopBindings;
         return values.filter(binding => !items.some(item => item.id === binding.contextId)).length;
     }
+    function orphanProfileCount(kind) {
+        if (!bindingsState.writable) return 0;
+        const values = kind === "activity" ? bindingsState.bindings.activityBindings
+            : bindingsState.bindings.desktopBindings;
+        return values.filter(binding => !choices.some(profile => profile.id === binding.profileId)).length;
+    }
     function reveal(control) {
         const viewport = contentItem;
         const point = control.mapToItem(viewport, 0, 0);
@@ -113,6 +119,18 @@ Controls.ScrollView {
                     ? qsTr("Associações por ID. Em Somente áreas, as associações de Activity ficam preservadas e são ignoradas pelo automático.")
                     : qsTr("Associações por ID. Com o automático ativado, a Activity tem prioridade sobre a área de trabalho.")
                 : qsTr("Associar organiza suas preferências. As associações não trocam a Activity ou a área de trabalho.")
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+        }
+
+        Controls.Label {
+            objectName: "orphanProfileBindings"
+            Layout.fillWidth: true
+            readonly property int activityCount: controls.orphanProfileCount("activity")
+            readonly property int desktopCount: controls.orphanProfileCount("desktop")
+            visible: activityCount + desktopCount > 0
+            text: qsTr("Associações com perfil indisponível: %1 de Activity e %2 de área. Nos contextos disponíveis, escolha outro perfil e associe novamente ou use Remover. As demais associações continuam preservadas por ID.")
+                .arg(activityCount).arg(desktopCount)
             textFormat: Text.PlainText
             wrapMode: Text.WordWrap
         }

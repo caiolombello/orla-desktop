@@ -762,3 +762,86 @@ This qualifies that private public-accessibility journey. Portable signal counts
 and Native final deltas do not establish exact native KConfig setter counts,
 physical keyboard focus, the user's actual panel or multiple monitors. P1/P2
 remain partial. Private receipts: `.runtime/profile-rename-20261016/`.
+
+## Active profile removal (development, 16 October 2026)
+
+The active-profile module now offers a separate removal confirmation with an
+explicit destination. It counts saved associations, including unavailable
+contexts, and identifies the automatic default even when automation is off.
+One guarded `profilesJSON` assignment removes the captured active entry and
+selects the destination. References remain unchanged; Contexts explains recovery.
+Removing the last entry leaves an initialized empty `0.2-experimental` document
+with `legacy` active. Current Source also reads nonempty `0.1-experimental`
+documents without passive migration. See [usage and downgrade limits](../profiles.md#remove-the-active-profile--remover-o-perfil-ativo).
+
+Profiles, automatic selection, profile UI, contexts and appearance passed
+192 tests plus two existing TaskManager skips per style, separately in Fusion
+and `org.kde.desktop`. The skips require Wayland/X11. Design check found zero
+issues and seven design guards passed. Sixteen final removal captures cover
+350/420 px in both schemes; representative captures are in the usage guide.
+The general gallery produced 142 images but crossed a nonvisual null-guard edit;
+only the final sixteen removal captures represent the frozen Source exactly.
+
+Archive `4ad866d3…` contains the same 72 paths and six changed files, with no
+metadata/version or published-release asset changes. Installation completed with
+a read-only rollback bank and one controlled shell reload. Independent checks
+confirmed Source/archive/installed equality, backup hashes and modes, original
+main configuration plus only the previously recorded 810/630 dialog-size
+footprint, panel inventory, bar roles, launcher and protected layout banks.
+Automatic mode remains OFF and all five profile/context/automatic disk keys
+remain absent in the main session. Autolock is off, the screen unlocked and
+automatic shell restarts zero. This is installation evidence, not removal UI
+qualification. Actual install receipt: `aebe7b9b…`; fresh postcheck: `d578e231…`.
+
+Native R1 remains FAILED (`bbcabc4f…`). In the private KDE/Wayland host with a
+pristine installed package and synthetic data, six public Press and three
+SetFocus actions reached confirmation. Opening and selecting a destination kept
+the old saved bytes. After Confirm, the UI reported Previous preferences and no
+initializer, but the observer immediately required the new disk document and
+failed with `profile_document_changed`, about 459 ms after the action returned.
+The old saved document was retained after cleanup. This does not establish a
+product persistence defect or successful removal persistence.
+
+The visitor lost the bounded disk-persistence wait used by the rename journey.
+KDE's [version-matched save scheduler](https://raw.githubusercontent.com/KDE/libplasma/v6.7.5/src/plasma/private/applet_p.cpp)
+provides an asynchronous save path; that supports a timing explanation without
+proving the exclusive cause of this attempt. Normal exit zero occurred during
+failure cleanup, before the planned successful exit/flush checks. The reader
+failure and its secondary cleanup assertion remain separate from the outer
+`namespace_exit` failure. A fresh independent postcheck confirmed main-session
+preservation, eight owned children gone without forced termination and all
+three owned sockets absent. It does not promote Native R1 to PASS.
+
+Native R2 passed (`18a110c5…`) with the same installed package. Only the visitor
+changed: the first post-confirmation checkpoint now waits within the existing
+8-second phase and 24-second reader deadline. Only the exact original raw seed
+can be pending; every observation checks the complete private configuration,
+context owners, bindings, preferences, timer and package. Other documents fail;
+later checkpoints and normal-exit checks require the final document strictly.
+There is no repeated Confirm, forced config sync or extended timeout.
+
+The reader observed the old raw document twice, then the exact initialized
+empty document within 0.596 seconds of that checkpoint. Nine public Press,
+three distinct SetFocus and zero EditableText calls completed six checkpoints:
+initial state, open confirmation, selected destination, persisted removal,
+recovery guidance and closed settings. The warning identified all three saved
+references; recovery identified one Activity and two desktop associations and
+the missing automatic default, with automation still enabled in the fixture.
+The entire private raw configuration map retained every group/key except the
+intended `profilesJSON` value. No external writer ran after host launch.
+
+Normal host exit zero and a subsequent disk check confirmed persistence.
+The episode completed in 16.402 seconds with no first or cleanup errors.
+A separate fresh postcheck (`PASS_PRIVATE_PROFILE_REMOVE_R2_POSTCHECK`) confirmed
+the same main process, configuration, package, bar, launcher and protected banks,
+automatic mode OFF with five absent disk keys, eight owned children gone without
+forced termination and the three owned sockets absent. The screen remained
+unlocked with autolock off and zero automatic shell restarts.
+
+This qualifies one public-accessibility removal journey in a private real
+KDE/Wayland host with synthetic data and the pristine installed 72-file package.
+It does not qualify the user's physical panel, keyboard/pointer seat, rendered
+visibility of every recovery label, exact native setter counts, other monitors
+or active Pomodoro completion. R1 remains FAILED; R2 does not prove its exclusive
+timing cause. P1/P2 remain partial. Private evidence and diagnoses are retained
+under `.runtime/profile-remove-20261016/`.

@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression
+from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression, QQmlEngine
 from PySide6.QtTest import QSignalSpy
 
 
@@ -183,6 +183,227 @@ class ProfilesTests(unittest.TestCase):
         self.assertTrue(self.command("select", "legacy"))
         self.assertEqual(self.snapshot(), flat)
         self.assertEqual({key: self.config.property(key) for key in timer}, timer)
+        self.assertEqual(self.warnings, [])
+
+    def guarded_remove(self, replacement, guard="() => true"):
+        return json.loads(self.evaluate("""(function() {
+            let changes = 0, guardCalls = 0;
+            const observed = () => changes++;
+            const supplied = %s;
+            const checked = typeof supplied === 'function' ? () => {
+                guardCalls++;
+                return supplied();
+            } : supplied;
+            configuration.profilesJSONChanged.connect(observed);
+            try {
+                const accepted = removeCurrent(%s, activeProfileId, revision, checked);
+                return JSON.stringify({accepted:accepted, changes:changes, guardCalls:guardCalls});
+            } finally { configuration.profilesJSONChanged.disconnect(observed); }
+        })()""" % (guard, json.dumps(replacement))))
+
+    def test_remove_current_to_legacy_writes_once_and_preserves_raw_survivors(self):
+        original = self.initialize()
+        original["activeProfileId"] = "personal"
+        original["formatVersion"] = "0.1-experimental"
+        for profile in original["profiles"]:
+            profile.pop("showAudioHud")
+        self.config.setProperty("profilesJSON", json.dumps(original, indent=2))
+        fields = [self.config.metaObject().property(i).name()
+                  for i in range(self.config.metaObject().propertyOffset(), self.config.metaObject().propertyCount())
+                  if self.config.metaObject().property(i).name() != "profilesJSON"]
+        before = {key: self.configuration_value(key) for key in fields}
+        self.assertEqual(self.guarded_remove("legacy"), {"accepted": True, "changes": 1, "guardCalls": 1})
+        expected = {**original, "activeProfileId": "legacy",
+                    "profiles": [p for p in original["profiles"] if p["id"] != "personal"]}
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual({key: self.configuration_value(key) for key in fields}, before)
+        self.assertTrue(self.state.property("initialized"))
+        self.assertTrue(self.state.property("writable"))
+        self.assertEqual(self.warnings, [])
+
+    def test_remove_last_old_or_current_profile_keeps_initialized_empty_and_custom_recreation(self):
+        baseline = self.initialize()
+        for version in ("0.1-experimental", "0.2-experimental"):
+            with self.subTest(version=version):
+                original = {**baseline, "formatVersion": version, "activeProfileId": "work",
+                            "profiles": [baseline["profiles"][0]]}
+                self.config.setProperty("profilesJSON", json.dumps(original))
+                self.assertEqual(self.guarded_remove("legacy"), {"accepted": True, "changes": 1, "guardCalls": 1})
+                empty = {"formatVersion": "0.2-experimental", "activeProfileId": "legacy", "profiles": []}
+                self.assertEqual(json.loads(self.config.property("profilesJSON")), empty)
+                self.assertTrue(self.state.property("initialized"))
+                self.assertFalse(self.evaluate("initializeDefaults(activeProfileId,revision)"))
+                self.assertEqual(self.guarded_remove("legacy"), {"accepted": False, "changes": 0, "guardCalls": 0})
+                self.assertTrue(self.command("create", "Work"))
+                recreated = json.loads(self.config.property("profilesJSON"))
+                self.assertEqual(recreated["formatVersion"], "0.2-experimental")
+                self.assertEqual(len(recreated["profiles"]), 1)
+                self.assertTrue(recreated["activeProfileId"].startswith("custom-"))
+                self.assertNotIn(recreated["activeProfileId"], ("work", "personal", "games"))
+        self.assertEqual(self.warnings, [])
+
+    def test_remove_requires_explicit_valid_destination_and_exact_true_guard(self):
+        self.initialize()
+        self.assertTrue(self.command("select", "work"))
+        raw = self.config.property("profilesJSON")
+        for destination in (None, True, 1, {}, [], "", "missing", "work"):
+            with self.subTest(destination=destination):
+                self.assertEqual(self.guarded_remove(destination), {"accepted": False, "changes": 0, "guardCalls": 0})
+                self.assertEqual(self.config.property("profilesJSON"), raw)
+        for guard in ("undefined", "null", "true", "{}", "0"):
+            self.assertEqual(self.guarded_remove("personal", guard), {"accepted": False, "changes": 0, "guardCalls": 0})
+        for guard in ("() => false", "() => 1", "() => 'true'", "() => ({})", "() => null",
+                      "() => { throw new Error('fixture'); }"):
+            self.assertEqual(self.guarded_remove("personal", guard), {"accepted": False, "changes": 0, "guardCalls": 1})
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+        revision = self.state.property("revision")
+        for source in ("removeCurrent('personal')", f"removeCurrent('personal','legacy',{revision},()=>true)",
+                       f"removeCurrent('personal','work',{revision-1},()=>true)"):
+            self.assertFalse(self.evaluate(source))
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+        for guard in ("false", "() => false", "() => { throw new Error('fixture'); }"):
+            self.evaluate("transitionGuard=" + guard)
+            self.assertEqual(self.guarded_remove("personal"), {"accepted": False, "changes": 0, "guardCalls": 0})
+            self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.evaluate("transitionGuard=null")
+        self.assertEqual(self.guarded_remove("personal"), {"accepted": True, "changes": 1, "guardCalls": 1})
+        expected = json.loads(raw)
+        expected["profiles"] = [p for p in expected["profiles"] if p["id"] != "work"]
+        expected["activeProfileId"] = "personal"
+        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.warnings, [])
+
+    def test_remove_preserves_invalid_bytes_and_newer_reentrant_operations(self):
+        original = self.initialize()
+        original["activeProfileId"] = "work"
+        raw = json.dumps(original)
+        self.config.setProperty("profilesJSON", raw)
+        for invalid in ('FUTURE-BYTES', '{"formatVersion":"future"}'):
+            self.config.setProperty("profilesJSON", invalid)
+            self.assertEqual(self.guarded_remove("legacy"), {"accepted": False, "changes": 0, "guardCalls": 0})
+            self.assertEqual(self.config.property("profilesJSON"), invalid)
+        mutations = (
+            "select('personal',activeProfileId,revision);",
+            "select('personal',activeProfileId,revision);select('work',activeProfileId,revision);",
+            "commitPresentation({calendarEvents:false},activeProfileId,revision);",
+            "removeCurrent('games',activeProfileId,revision,()=>true);",
+            "configuration.profilesJSON='FUTURE-BYTES';",
+        )
+        for in_transition in (False, True):
+            for mutation in mutations:
+                with self.subTest(transition=in_transition, mutation=mutation):
+                    self.config.setProperty("profilesJSON", raw)
+                    body = "transitionGuard=null;" + mutation
+                    if in_transition:
+                        self.evaluate("transitionGuard=()=>{" + body + "return true;}")
+                        result = self.guarded_remove("legacy")
+                        self.assertEqual(result["guardCalls"], 0)
+                    else:
+                        result = self.guarded_remove("legacy", "()=>{" + body + "return true;}")
+                        self.assertEqual(result["guardCalls"], 1)
+                    self.assertFalse(result["accepted"])
+                    self.assertEqual(result["changes"], 2 if mutation.count("select(") == 2 else 1)
+                    if "FUTURE" in mutation:
+                        self.assertEqual(self.config.property("profilesJSON"), "FUTURE-BYTES")
+                    else:
+                        expected = json.loads(raw)
+                        if "calendarEvents" in mutation: expected["profiles"][0]["calendarEvents"] = False
+                        elif "removeCurrent" in mutation:
+                            expected["profiles"] = expected["profiles"][1:]
+                            expected["activeProfileId"] = "games"
+                        elif mutation.count("select(") == 1: expected["activeProfileId"] = "personal"
+                        self.assertEqual(json.loads(self.config.property("profilesJSON")), expected)
+        self.assertEqual(self.warnings, [])
+
+    def test_remove_guard_observes_transition_cancellation_without_profile_changes(self):
+        self.initialize()
+        self.assertTrue(self.command("select", "work"))
+        raw = self.config.property("profilesJSON")
+        result = json.loads(self.evaluate("""(function() {
+            let valid=true, calls=0, changes=0;
+            transitionGuard=()=>{valid=false;return true;};
+            const observed=()=>changes++;
+            configuration.profilesJSONChanged.connect(observed);
+            try {
+                const accepted=removeCurrent('legacy',activeProfileId,revision,()=>{calls++;return valid;});
+                return JSON.stringify({accepted:accepted,calls:calls,changes:changes});
+            } finally {transitionGuard=null;configuration.profilesJSONChanged.disconnect(observed);}
+        })()"""))
+        self.assertEqual(result, {"accepted": False, "calls": 1, "changes": 0})
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(self.warnings, [])
+
+    def test_create_recreation_keeps_default_and_binding_references_raw_and_allows_invalid_contexts(self):
+        fields = [self.config.metaObject().property(i).name()
+                  for i in range(self.config.metaObject().propertyOffset(), self.config.metaObject().propertyCount())]
+        self.evaluate("""(function() {
+            const original=configuration, wrapper={};
+            %s.forEach(key=>Object.defineProperty(wrapper,key,{get:()=>original[key],set:value=>original[key]=value}));
+            wrapper.contextsJSON='';wrapper.autoContextDefaultProfile='';configuration=wrapper;
+        })()""" % json.dumps(fields))
+        self.assertTrue(self.command("create", "Synthetic old"))
+        removed = self.state.property("activeProfileId")
+        raw_bindings = json.dumps({"formatVersion":"0.1-experimental",
+            "activityBindings":[{"contextId":"old-a","lastKnownName":"Old","profileId":removed}],
+            "desktopBindings":[{"contextId":"old-d","lastKnownName":"Old","profileId":removed}]}, indent=2)
+        self.evaluate("configuration.autoContextDefaultProfile=" + json.dumps(removed)
+                      + ";configuration.contextsJSON=" + json.dumps(raw_bindings))
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        self.assertTrue(self.evaluate("removeCurrent('legacy',activeProfileId,revision,()=>true)"))
+        self.assertEqual(changes.count(), 1)
+        self.evaluate("recreateState()", self.harness)
+        fresh = self.harness.findChild(QObject, "reloadedProfiles")
+        self.engine.rootContext().setContextProperty("originalProfileState", self.state)
+        self.evaluate("configuration=originalProfileState.configuration", fresh)
+        self.assertTrue(self.evaluate("create('Synthetic new',activeProfileId,revision)", fresh))
+        self.assertNotEqual(fresh.property("activeProfileId"), removed)
+        self.assertEqual(self.evaluate("configuration.contextsJSON", fresh), raw_bindings)
+        self.assertEqual(self.evaluate("configuration.autoContextDefaultProfile", fresh), removed)
+        self.evaluate("configuration.contextsJSON='FUTURE-CONTEXTS'", fresh)
+        self.assertTrue(self.evaluate("create('Synthetic third',activeProfileId,revision)", fresh))
+        self.assertEqual(self.evaluate("configuration.contextsJSON", fresh), "FUTURE-CONTEXTS")
+        self.assertEqual(self.warnings, [])
+
+    def test_custom_id_allocation_excludes_live_and_preserved_references(self):
+        expression = QQmlExpression(QQmlEngine.contextForObject(self.harness), self.harness,
+            "JSON.stringify(Profiles.nextCustomId(36,0,['custom-10-1','custom-10-2','custom-10-3']))")
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        self.assertEqual(json.loads(value), {"id": "custom-10-4", "counter": 4})
+
+    def test_profiles_codec_reads_old_nonempty_and_new_empty_without_passive_migration(self):
+        self.assertEqual(self.initialize()["formatVersion"], "0.2-experimental")
+        empty = {"formatVersion": "0.2-experimental", "activeProfileId": "legacy", "profiles": []}
+        self.assertFalse(self.parse(empty)["error"])
+        raw = json.dumps(empty, indent=2) + "  \n"
+        self.config.setProperty("profilesJSON", raw)
+        changes = QSignalSpy(self.config.profilesJSONChanged)
+        self.assertTrue(self.state.property("initialized"))
+        self.assertTrue(self.state.property("writable"))
+        self.assertEqual(self.state.property("activeProfileId"), "legacy")
+        self.assertEqual(self.evaluate("profiles.length"), 0)
+        self.evaluate("recreateState()", self.harness)
+        self.assertEqual(self.config.property("profilesJSON"), raw)
+        self.assertEqual(changes.count(), 0)
+        self.assertFalse(self.evaluate("initializeDefaults(activeProfileId,revision)"))
+        self.assertEqual(changes.count(), 0)
+        self.assertTrue(self.command("create", "Synthetic new"))
+        current = json.loads(self.config.property("profilesJSON"))
+        self.assertEqual(current["formatVersion"], "0.2-experimental")
+        self.assertTrue(current["activeProfileId"].startswith("custom-"))
+        old = {**current, "formatVersion": "0.1-experimental"}
+        old["profiles"][0].pop("showAudioHud")
+        old_raw = json.dumps(old, indent=2)
+        self.config.setProperty("profilesJSON", old_raw)
+        count = changes.count()
+        self.assertTrue(self.state.property("writable"))
+        self.evaluate("recreateState()", self.harness)
+        self.assertEqual(changes.count(), count)
+        self.assertEqual(self.config.property("profilesJSON"), old_raw)
+        for invalid in ({**empty, "formatVersion": "0.1-experimental"},
+                        {**empty, "activeProfileId": "work"},
+                        {**empty, "formatVersion": "future"}):
+            self.assertTrue(self.parse(invalid)["error"])
         self.assertEqual(self.warnings, [])
 
     def test_rename_changes_only_the_active_managed_name_once(self):
@@ -375,7 +596,9 @@ class ProfilesTests(unittest.TestCase):
 
     def test_invalid_document_and_composition_are_rejected_without_rewriting(self):
         saved = self.initialize()
-        invalid = [{**saved, "activeProfileId": "missing"}, {**saved, "profiles": []},
+        invalid = [{**saved, "activeProfileId": "missing"},
+                   {**saved, "formatVersion": "0.1-experimental", "profiles": []},
+                   {**saved, "activeProfileId": "work", "profiles": []},
                    {**saved, "formatVersion": "future"}, {**saved, "timerDeadline": 10}]
         for field, value in (("id", "legacy"), ("name", " "), ("name", "bad\nname"),
                              ("widgets", saved["profiles"][0]["widgets"][:-1]),

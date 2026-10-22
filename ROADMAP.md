@@ -239,10 +239,28 @@ normal. R1 continua FAILED em seu registro. A sessão principal foi preservada;
 isso não qualifica seu painel físico nem completa P1/P2.
 [Evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-rename-development-16-october-2026).
 
-**Próximo incremento de P1/UX:** planejar a remoção de perfil com confirmação e
-destino explícitos. Decidir antes como
-tratar perfil ativo, padrão automático e associações por ID. Importar/exportar
-perfis e escolher barra/launcher/eventos permanecem separados.
+**P1/UX — remover perfil (instalado):** a confirmação identifica o perfil ativo,
+exige um destino explícito e informa associações e padrão automático afetados.
+Uma gravação remove o perfil e seleciona o destino; referências permanecem por ID,
+com recuperação em Contextos. Remover o padrão pausa o automático; o último perfil
+deixa um documento vazio inicializado `0.2-experimental`, sem recriar IDs antigos.
+A leitura de `0.1-experimental` continua disponível sem migração passiva. Escape,
+alterações reentrantes de destino e confirmações desatualizadas têm proteção própria.
+O design system registra o fluxo e a galeria cobre 350/420 px em claro/escuro.
+Passaram 192 testes e dois skips de TaskManager por estilo Fusion/KDE. O pacote
+de 72 arquivos foi instalado com backup e uma recarga; verificação independente
+confirmou preservação da sessão principal e automático desligado. A tentativa
+nativa R1 permanece FAILED: após confirmar, a interface mudou, mas o observador
+exigiu o novo arquivo sem aguardar a persistência. Isso não comprova defeito de
+gravação do app. Com a espera corrigida no mesmo prazo, R2 passou no KDE privado:
+nove Press e três SetFocus públicos, remoção do último perfil, orientação sobre três referências,
+gravação e saída normal, preservando todos os demais campos. O postcheck confirmou
+a sessão principal intacta. Isso não qualifica painel físico, foco/seat ou monitores.
+[Uso e compatibilidade](docs/profiles.md#remove-the-active-profile--remover-o-perfil-ativo),
+[evidência e limites](docs/validation/profiles-0.2.5.md#active-profile-removal-development-16-october-2026).
+Próxima entrega: revisão e remoção individual de associações salvas, inclusive
+antigas, com confirmação e identidade por domínio/ID. Importar/exportar
+perfis e escolher barra/launcher/eventos continuam abertos. P1/P2 permanecem parciais.
 
 `VirtualDesktopInfo` oferece observação ao QML; suas operações de ativação não são invocáveis pelo QML na versão auditada. A interface D-Bus do KWin tem `current` gravável, mas o comportamento por monitor precisa de prova específica. Não inventar um método QML de troca. [API VirtualDesktopInfo 6.7.5](https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libtaskmanager/virtualdesktopinfo.h), [interface KWin 6.7.5](https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/org.kde.KWin.VirtualDesktopManager.xml)
 
