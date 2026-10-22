@@ -488,16 +488,16 @@ Item {
         self.assertEqual(self.warnings, [])
 
     def test_integrations_render_real_percentages_and_neutral_stale_data(self):
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 1, quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'ready', devices: [{name: 'Mouse', percent: 64, stale: false}]}, recording: {status: 'idle', state: 'idle'}}))")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'ready', devices: [{name: 'Mouse', percent: 64, stale: false}]}, recording: {status: 'idle', state: 'idle'}}), ['quota','peripherals','recording'])")
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "codex · 37% usado")
         self.assertEqual(self.evaluate("integrations.batterySummary"), "Mouse · 64%")
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 1, quota: {status: 'stale', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: true}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}))")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'stale', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: true}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}), ['quota','peripherals','recording'])")
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "Dados desatualizados")
         self.assertEqual(self.evaluate("integrations.batterySummary"), "Sem cache local")
-        self.assertFalse(self.evaluate("integrations.acceptSnapshot('{\"schemaVersion\": 999}')"))
+        self.assertFalse(self.evaluate("integrations.acceptSnapshot('{\"schemaVersion\": 999}', ['quota'])"))
 
     def test_failed_integration_neutralizes_previously_fresh_details(self):
-        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 1, quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}))")
+        self.evaluate("integrations.acceptSnapshot(JSON.stringify({schemaVersion: 2, modules: ['quota', 'peripherals', 'recording'], quota: {status: 'ready', windows: [{provider: 'codex', label: '5 h', usedPercent: 37, stale: false}]}, peripherals: {status: 'missing', devices: []}, recording: {status: 'missing', state: 'unknown'}}), ['quota','peripherals','recording'])")
         self.evaluate("integrations.unavailable('Falha de conexão')")
         self.assertEqual(self.evaluate("integrations.quota.windows.length"), 0)
         self.assertEqual(self.evaluate("integrations.quotaSummary"), "Integração indisponível")

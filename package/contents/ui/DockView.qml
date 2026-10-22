@@ -587,7 +587,8 @@ Item {
     }
     Integrations {
         id: localIntegrations
-        active: root.widgetVisible("quota") || root.widgetVisible("peripherals") || root.widgetVisible("recording")
+        active: enabledModules.length > 0
+        enabledModules: ["quota", "peripherals", "recording"].filter(module => root.widgetVisible(module))
     }
     function requestControlCenter(client, host, anchor) {
         return ready && controlCenterPopup.openFromClient(client, host, anchor);

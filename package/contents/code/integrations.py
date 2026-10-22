@@ -11,6 +11,7 @@ import stat
 # Zen exports a percentage of a USD spending limit, not a usage allowance.
 SUBSCRIPTIONS = frozenset(('codex', 'claude', 'gemini', 'grok', 'kiro', 'cursor', 'glm', 'opencode-go'))
 MAX_CACHE_BYTES = 256 * 1024
+MODULE_IDS = ('quota', 'peripherals', 'recording')
 
 
 def _read_bounded(path, history=False):
@@ -163,10 +164,7 @@ def _recording(state_dir, now):
     return result
 
 
-def collect_snapshot(home=None, now=None):
-    use_xdg = home is None
-    home = Path.home() if home is None else Path(home)
-    now = datetime.now(timezone.utc) if now is None else now
+def _quota(home, now):
     quota = {'status': 'missing', 'updatedAt': None, 'windows': [], 'costs': []}
     path = home / '.local/share/codexbar-linux/history.jsonl'
     try:
@@ -205,10 +203,48 @@ def collect_snapshot(home=None, now=None):
                         'resetAt': window.get('resets_at') if _datetime(window.get('resets_at')) else None,
                         'resetDescription': window.get('reset_description', '')[:120] if isinstance(window.get('reset_description', ''), str) else '', 'stale': stale})
         quota['status'] = 'ready' if any(w['usedPercent'] is not None and not w['stale'] for w in quota['windows']) else 'stale' if any(w['stale'] for w in quota['windows']) else 'unknown'
+    return quota
+
+
+def _collect_modules(modules, home, now):
+    use_xdg = home is None
+    home = Path.home() if home is None else Path(home)
+    now = datetime.now(timezone.utc) if now is None else now
     configured_state = os.environ.get('XDG_STATE_HOME', '') if use_xdg else ''
     state_dir = Path(configured_state) if configured_state and Path(configured_state).is_absolute() else home / '.local/state'
-    return {'schemaVersion': 1, 'quota': quota, 'peripherals': _peripherals(state_dir, now),
-            'recording': _recording(state_dir, now)}
+    result = {}
+    if 'quota' in modules:
+        result['quota'] = _quota(home, now)
+    if 'peripherals' in modules:
+        result['peripherals'] = _peripherals(state_dir, now)
+    if 'recording' in modules:
+        result['recording'] = _recording(state_dir, now)
+    return result
+
+
+def collect_snapshot(home=None, now=None):
+    """Legacy schema 1: preserve the complete snapshot for existing callers."""
+    return {'schemaVersion': 1, **_collect_modules(MODULE_IDS, home, now)}
+
+
+def collect_selected_snapshot(modules, home=None, now=None):
+    """Schema 2: validate the finite selection before touching any cache."""
+    if (not isinstance(modules, list) or len(modules) > len(MODULE_IDS)
+            or any(type(module) is not str or module not in MODULE_IDS for module in modules)
+            or len(set(modules)) != len(modules)):
+        raise ValueError('Invalid modules')
+    selected = [module for module in MODULE_IDS if module in modules]
+    if not selected:
+        return {'schemaVersion': 2, 'modules': []}
+    return {'schemaVersion': 2, 'modules': selected, **_collect_modules(selected, home, now)}
+
+
+def _selected_snapshot_json(modules):
+    try:
+        result = collect_selected_snapshot(modules)
+    except ValueError:
+        result = {'schemaVersion': 2, 'error': 'invalid-modules'}
+    return json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
 
 
 def _snapshot_json():
@@ -244,6 +280,11 @@ def serve():
         def Snapshot(self):
             self.idle.start()
             return _snapshot_json()
+
+        @Slot('QStringList', result=str)
+        def SnapshotFor(self, modules):
+            self.idle.start()
+            return _selected_snapshot_json(modules)
 
     bridge = CacheBridge()
     bus = QDBusConnection.sessionBus()

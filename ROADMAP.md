@@ -354,7 +354,7 @@ Começar por dados declarativos, depois contratos de dados/ações com UI render
 | **X1** | Formato de temas/presets, 0.4–0.5 | Primeiro consumidor por colagem e prévia experimental existem; completar schema/compatibilidade, importação segura de arquivo e corpus de consumidores; sem executar código |
 | **X2** | SDK de conteúdo e autoria, 0.4–0.5 | Template, validador, preview e pacote reproduzível; nova pessoa cria tema sem conhecer o núcleo |
 | **X3** | Distribuição de temas, 0.6–0.7 | Origem, licença, compatibilidade, instalação/rollback e revogação local claros |
-| **X4** | Widgets hospedados, 0.7 | Adaptadores internos têm detalhes e estados na aba Widgets, com ativação por perfil e defaults desligados; faltam pacotes externos e leitura granular por módulo; executar provedor comunitário depende de X5 |
+| **X4** | Widgets hospedados, 0.7 | Adaptadores internos têm detalhes e estados na aba Widgets, com ativação por perfil e defaults desligados; leitura granular por módulo implementada; faltam pacotes externos e catálogo; executar provedor comunitário depende de X5 |
 | **X5** | Host de código externo, preview 0.9+ | Isolamento real de arquivos/rede/barramento, broker por capacidade, timeout/cancelamento e revisão independente |
 | **X6** | Provedores de IA | Adaptadores internos seguem A0/A1; terceiros dependem de X5 e A6 |
 | **X7** | Catálogo e economia por classe | Temas após X1–X3; código externo após X5/compatibilidade; pagamentos próprios fora do caminho crítico |
@@ -1151,3 +1151,37 @@ Aplicar/Cancelar nem a persistência da barra após reinício.
 
 
 **Registro histórico da etapa de IA:** publicação de started interrompida por cancelamento/timeout usa o finalizador existente; erros válidos recebem mensagens úteis e fixas. A composição revisada passou build novo de 40 passos, seis CTests em 90,697 s e 116 testes Python. CI da nova revisão, canary compacto, provedores reais e aceite completo continuam abertos.
+
+
+**X4/DX4 — leitura seletiva dos módulos locais (15/10):** a dock agora envia
+somente os IDs efetivamente visíveis no perfil/contexto para `SnapshotFor(as)`
+(schema 2). Lista vazia não resolve home nem abre caches; seleção inválida é
+recusada antes da leitura. A chamada legada schema 1 foi preservada para outros
+consumidores, e a dock nova não faz fallback a ela. Desativar limpa os dados
+imediatamente; chamadas já enviadas podem terminar, mas gerações revogadas não
+publicam sucesso nem erro, inclusive ao voltar ao mesmo perfil. O estado portátil
+separa a regra de seleção do transporte KDE. Requisitos e capturas dos detalhes
+foram atualizados sem novos toggles ou alterações de teclado/foco/layout.
+
+Passaram 128 entradas Fusion (124 aprovadas, quatro skips), 48 de estado,
+módulos, perfis, widgets e periféricos no estilo KDE (47 aprovadas, um skip),
+e as 62 entradas do comando portátil de temas/presets/módulos/estado. Os testes
+incluem barramento privado com QStringList real, compatibilidade legada,
+seleção vazia/inválida, spy de caminho lido, ABA, off/on e callbacks reentrantes.
+A revisão reproduziu uma conclusão duplicada que podia perder a chamada seguinte;
+o teste falhou antes e passou após marcar a operação como em conclusão. Design,
+sete guardas, build e quatro capturas claro/escuro de 350/420 px passaram.
+O smoke QML privado agora ativa a ponte explicitamente e aguarda seu início
+assíncrono. Nenhum teste lê caches pessoais ou chama provedores.
+
+A matriz KDE completa com áudio não foi repetida: a falha de ordem já reproduzida
+na base anterior permanece registrada. O launcher não mudou nem foi recompilado
+nesta fatia. Extração em pacotes, catálogo/SDK/runtime comunitário e validação
+física da nova seleção no painel continuam abertos; leitura seletiva não é uma
+barreira de permissão contra clientes locais que chamem a interface legada.
+A versão de 70 arquivos foi instalada com backup durável e uma única recarga,
+sem alterações no mapa completo de configuração, inventário de painéis, papéis
+da barra, launcher e bancos protegidos. Uma leitura independente confirmou essas
+invariantes e o bloqueio automático desativado. A prova de protocolo continua
+sendo do barramento privado; não houve interação física nem leitura de caches
+pessoais para qualificar a nova seleção na sessão instalada.
