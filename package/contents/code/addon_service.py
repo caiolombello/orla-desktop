@@ -277,7 +277,8 @@ def create_service(app, bus, *, base=None, process_factory=None, clock=time.mono
                     elif self.action in worker.MUTATIONS:
                         committed, generation = True, response['result']['generation']
                 payload = self.error(self.first_failure, committed=committed, generation=generation)
-            elif self.action == 'snapshot':
+            elif self.action in ('snapshot', 'quota'):
+                # Data snapshots carry the bare projection; failures keep the envelope.
                 payload = worker.encoded(response['result']) if response['ok'] else worker.encoded(response)
             else:
                 payload = worker.encoded(response)

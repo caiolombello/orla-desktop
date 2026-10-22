@@ -205,6 +205,10 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(set(snapshot), {'schemaVersion', 'modules', 'peripherals'})
         self.assertEqual(snapshot['schemaVersion'], 2)
         self.assertEqual(snapshot['peripherals']['addon']['reason'], 'export_missing')
+        # Quota snapshots are bare projections too; a battery addon is not a quota source.
+        quota = invoke('SnapshotFor', ['quota'])
+        self.assertEqual(set(quota), {'schemaVersion', 'modules', 'quota'})
+        self.assertEqual((quota['modules'], quota['quota']['addon']['reason']), (['quota'], 'not_installed'))
         self.assertFalse(invoke('DisableAddon', 'org.example.battery', first)['result']['addons'][0]['enabled'])
         p.write_text(json.dumps(manifest('2.0.0')))
         second = invoke('InspectAddonFile', p.as_uri())['result']['sha256']
