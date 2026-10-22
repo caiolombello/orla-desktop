@@ -736,10 +736,31 @@ que funcionam sem checkout; configurações, favoritos, aliases e histórico sã
 preservados. Estado parcial mantém causa e propriedade, e a publicação não
 substitui destinos preexistentes. Passaram 26 testes de instalação, 56 do pacote
 e 23 da CLI, mais o fluxo público sintético com checkout ausente. Runtime segue
-`unverified`; a instalação atual do PC não mudou. Artifact real da CI e abertura
-em perfil limpo são o próximo gate, seguidos por atualização, reversão,
-recuperação e serviço/Meta opcionais. R2 permanece parcial. Consulte o
+`unverified`; a instalação principal do PC não mudou. O incremento seguinte
+qualificou o download real e um fluxo delimitado em perfil limpo. Recuperação,
+atualização, reversão e serviço/Meta opcionais seguem pendentes. R2 permanece parcial. Consulte o
 [fluxo e limites](launcher/README.md#instalação-explícita-para-usuário-novo--experimental-no-fonte).
+
+**R2 — bundle real da CI e prova delimitada em perfil limpo (14/10):** a execução
+[38660941244](https://github.com/caiolombello/orla-desktop/actions/runs/38660941244)
+passou os dois jobs, incluindo os nove CTests, produção → verificação → smoke,
+e publicou o [artifact Fedora44/x86_64](https://github.com/caiolombello/orla-desktop/actions/runs/38660941244/artifacts/11939071577),
+retido por sete dias. Os seis arquivos baixados foram verificados: ZIP schema
+0.3 com sete arquivos de payload, bootstrap independente, inventário declarado,
+observações, descritor e checksums. O produtor vincula fonte rastreado limpo,
+HEAD/commit, bootstrap e staging, com conferência conjunta das observações;
+`caller_assertion_unverified` e os UNKNOWN do catálogo permanecem iguais.
+Passaram 97 testes locais de bundle/pacote/instalação. Após o smoke de filesystem,
+o download foi instalado em perfil isolado e abriu em Wayland/Fusion, escala
+1,45: `2-1` exibiu `1`, com captura própria conferida; Escape encerrou com código
+zero. A remoção independente preservou dados sintéticos e oito configurações/
+wrappers protegidos, sem alterar a instalação principal. A prova pertence ao
+artifact do commit de merge `176960241ce9be9abc97efb02d6330d04d1e93d8` e não
+qualifica Meta/serviço, abertura de aplicativos, outras telas/estilos ou ABI
+geral. Seus metadados anteriores continuam `unverified`/Native `UNRUN`.
+Autenticidade, atualização, reversão e recuperação mantêm seus gates;
+R2 permanece parcial. Consulte o
+[fluxo e limites](launcher/README.md#bundle-acoplado-da-ci--experimental-no-fonte).
 
 ## Prontidão e recomendação de execução
 
