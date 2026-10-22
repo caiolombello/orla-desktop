@@ -183,6 +183,15 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   buttons, glyphs and focus rings to the allocated height; keep the preferred
   28/32 px sizes and the 20 px menu mark. Adapt vertical padding within the panel
   budget while preserving the system font. Review the short-host gallery in both schemes.
+- **Bar settings.** Keep content choices together and appearance in a second rounded
+  module. Menu customization and panel-composition help start collapsed; opening them
+  must not change any `cfg_*` value. Keep aliased native controls instantiated while
+  hidden. Disable ineffective menu fields without clearing their values, and explain
+  the text fallback when no icon is selected. Describe the preset's four changes next
+  to its action. Move descendant focus before collapsing; deferred scroll work reads
+  the current focus and never restores an older target. Reveal expanded help with its
+  disclosure when it fits, or its start when oversized. Keep the Plasma dialog footer
+  native; the gallery renders only configuration content, not Apply/Cancel persistence.
 
 ## Icons
 

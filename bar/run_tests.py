@@ -33,7 +33,7 @@ def main():
         )
         try:
             result = subprocess.run(
-                [sys.executable, "-B", "-m", "unittest", "test_bar", "-v"],
+                [sys.executable, "-B", "-m", "unittest", "test_bar", "test_bar_settings", "-v"],
                 cwd=root, env=env, timeout=30,
             )
         except subprocess.TimeoutExpired:

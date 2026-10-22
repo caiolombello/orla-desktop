@@ -770,3 +770,48 @@ Both recoveries restored resources; neither changes the failed visitor's status.
 The late diff and final projection are `root/LATE-CONFIG-DIFF.json` and
 `root/FINAL-STATE.json`. The accessible recovery receipt's original-map flag is
 valid only for its immediate readback, and is not proof of final equality.
+
+## Bar settings presentation — 15 October 2026
+
+`BarSettings` now groups content and appearance in rounded modules using the bar's
+palette and Orla tokens. Native controls retain the seven `cfg_*` contracts, schema
+defaults and existing object names. Menu customization and composition help start
+collapsed; expanding them writes no preference. Disabled menu fields retain their
+values, and selecting no icon explains the existing always-visible name fallback.
+The preset still changes exactly icon, label visibility, compact height and active
+application name; its summary now describes those changes before use.
+
+The bar is an independent applet, so a local native GroupBox uses the Card module
+pattern without importing files from a separately installed dock. The content uses
+the [Qt 6.11 ScrollView vertical sizing pattern](https://doc.qt.io/qt-6.11/qml-qtquick-controls-scrollview.html).
+Focus moves before descendants are hidden. Deferred reveal work reads the current
+focused control; it cannot restore a superseded target. Expanding help reveals the
+text and disclosure together when they fit, or aligns the start of oversized content.
+
+Verification:
+
+- `python3 bar/run_tests.py`: 39 passed; `--style org.kde.desktop`: 39 passed.
+  Six new offscreen tests cover passive disclosures, preserved dependent values,
+  collapse/newer focus, expanded help, Tab/Backtab skipping hidden fields, and
+  navigation reachability/viewport bounds at 320×240, 520×560 and 1280×720.
+  Reachability is not a proof of every possible focus traversal sequence.
+- The initial passive-disclosure test failed before implementation. A later test
+  exposed help below the viewport; the updated reveal logic passes it. The same
+  iteration caught ItemDelegate's absent Tab stop and added an explicit focus policy.
+- `python3 scripts/design.py check`: zero issues; seven design-system guards passed.
+  The full gallery rendered both schemes; all eight affected captures were viewed.
+  Review corrected centered disclosure alignment and increased the preset target.
+
+Configuration content captures use synthetic data and the KDE control style:
+
+| State | Dark | Light |
+|---|---|---|
+| Common choices, 520×560 | [capture](../screenshots/bar-settings/bar-dark-settings.png) | [capture](../screenshots/bar-settings/bar-light-settings.png) |
+| Narrow, 320×560 | [capture](../screenshots/bar-settings/bar-dark-settings-narrow.png) | [capture](../screenshots/bar-settings/bar-light-settings-narrow.png) |
+| Expanded menu | [capture](../screenshots/bar-settings/bar-dark-settings-expanded.png) | [capture](../screenshots/bar-settings/bar-light-settings-expanded.png) |
+| Focused name, 320×240 | [capture](../screenshots/bar-settings/bar-dark-settings-short-focus.png) | [capture](../screenshots/bar-settings/bar-light-settings-short-focus.png) |
+
+This Source change was not installed in the live session. The fixture renders only
+the settings content: Plasma still owns Apply/Cancel. Native embedding, dismissal,
+seat/focus, fractional geometry and persisted Apply/off-on remain unqualified. The
+previous installed-state two-key ConfigDialog delta and original banks are untouched.
