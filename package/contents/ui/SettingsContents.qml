@@ -10,6 +10,7 @@ ColumnLayout {
     required property var configuration
     required property var resetTimer
     required property var appearance
+    property var themeFileWindow: null
     property var appearancePreset: null
     readonly property bool importing: appearancePreset !== null && appearancePreset.dirty
     required property var profiles
@@ -211,7 +212,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 470
         currentIndex: tabs.currentIndex
-        AppearanceEditor { appearance: settings.appearance; preset: settings.appearancePreset; onProfilesRequested: tabs.currentIndex = 2; onCanceled: settings.appearanceCanceled() }
+        AppearanceEditor { appearance: settings.appearance; preset: settings.appearancePreset; themeFileWindow: settings.themeFileWindow; onProfilesRequested: tabs.currentIndex = 2; onCanceled: settings.appearanceCanceled() }
         Controls.ScrollView {
             id: widgetScroll
             objectName: "widgetScroll"

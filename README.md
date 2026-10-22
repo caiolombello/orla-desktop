@@ -41,7 +41,7 @@ Media controls share one native Plasma MPRIS model. They initially prefer Spotif
 
 System battery reads only UPower’s aggregate display device, every 30 seconds while enabled, with a five-second request timeout. A genuine 0% reading stays visible; absent or unavailable data has a neutral state. External power, charging and estimated time appear only when supplied. It does not control hardware or enumerate peripheral batteries. See [battery and media validation](docs/validation/battery-media-0.2.4.md) for test coverage and limits. Local project integrations read existing state files; they do not start the other apps or call their online APIs.
 
-Appearance uses a separate override, preserving earlier theme/icon/motion preferences. Restore prepares those preferences for preview and requires Apply. The editor now has a paste-only **Experimental JSON theme** preview for the `0.1-experimental` format. It previews ten tokens in memory; Apply saves only the current profile's ordinary appearance. It does not read files, install a theme package, or save its declared metadata. The format and consumer remain experimental; see the [theme guide](docs/theme-format.md) and [consumer validation](docs/validation/theme-consumer-0.2.6.md) for coverage and native limits.
+Appearance uses a separate override, preserving earlier theme/icon/motion preferences. Restore prepares those preferences for preview and requires Apply. In the current source checkout, **Experimental JSON theme** accepts a local JSON file through **Import file…**, or pasted text in the `0.1-experimental` format. Import fills the editor; **Use in preview** previews ten tokens in memory, and **Apply** saves only the current profile's ordinary appearance. It does not install a theme package or save its declared metadata. The format and consumer remain experimental; see the [theme guide](docs/theme-format.md) for requirements and validation limits.
 
 The [local Pomodoro notice](docs/local-events.md) is a separate opt-in preference in **Widgets**, global across profiles and off by default. It lasts up to eight seconds inside a reserved dock area. Only focus and break completion use it; HUD/island surfaces and KDE notification integration remain unimplemented. See the [0.2.7 validation record](docs/validation/local-events-0.2.7.md) for test and native limits.
 
@@ -55,7 +55,7 @@ In **Widgets**, visibility, order, calendar events and the window filter save im
 
 - KDE Plasma 6.7 or newer.
 - Python 3.10 or newer for the packaging helper and local integrations.
-- `kpackagetool6` for installation. PySide6 with QtDBus, `busctl`, and a user D-Bus session are optional requirements for local project integrations. Missing them does not block installing the dock.
+- `kpackagetool6` for installation. PySide6 with QtCore/QtDBus, `busctl`, and a user D-Bus session enable local theme-file import. The local project integrations also use QtDBus and remain optional. Missing these dependencies does not block installing the dock; pasted themes still work.
 - KOrganizer and the appropriate KDE PIM calendar resource for synchronized external calendars.
 
 On a Fedora system that already has Plasma 6.7+, install the package tool. Add the optional integration dependencies if you want project widgets, then run `doctor` inside your desktop session:
@@ -81,7 +81,7 @@ python3 scripts/orla.py doctor
 python3 scripts/orla.py install orla-dock-0.2.9.plasmoid
 ```
 
-The published 0.2.9 ZIP still uses its earlier helper. The options described here apply to the current source checkout: project integrations are off by default. To explicitly enable the bundled experimental adapters, add `--with-integrations` to the install command. Plain install/upgrade preserves any existing integration mapping and saved preferences without enabling new adapters. `doctor` reports optional dependencies separately. A failed D-Bus refresh reports a warning while preserving the installed dock. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
+The published 0.2.9 ZIP still uses its earlier helper. The options described here apply to the current source checkout: project integrations are off by default. To explicitly enable the bundled experimental adapters, add `--with-integrations` to the install command. Plain install/upgrade preserves any existing integration mapping and saved preferences without enabling new adapters. When its dependencies are available, the new helper registers theme-file import independently; its service starts only after you choose a file. `doctor` reports optional dependencies separately. A failed D-Bus refresh reports a warning while preserving the installed dock; reinstall retries the refresh. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
 
 To build and install from a source checkout instead:
 

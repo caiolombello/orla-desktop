@@ -243,8 +243,11 @@ Item {
         profiles: profileState
         appearance: appearanceState
     }
+    ThemeFileTransport { id: nativeThemeFileTransport }
     AppearanceState {
         id: appearanceState
+        themeFileTransport: nativeThemeFileTransport
+        themeFileBlocked: appearancePresetState.dirty
         configuration: root.presentation.appearance
         scopeKey: profileState.activeProfileId
         writeAppearance: (next, scope, signature) => {
@@ -1007,6 +1010,7 @@ Item {
         onAboutToHide: { root.contextCommandsVisible = false; appearancePresetState.cancel(); }
         onClosed: appearancePresetState.cancel()
         SettingsContents {
+            themeFileWindow: settings.nativeDialog
             id: settingsContents
             configuration: root.configuration
             profiles: profileState
