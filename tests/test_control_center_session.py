@@ -148,6 +148,23 @@ class ControlCenterSessionTests(unittest.TestCase):
         self.assertEqual(self.values(self.backend, "calls"), [])
 
 
+    def test_transfer_waits_for_actual_keyboard_departure_not_transient_family_activity(self):
+        self.assertTrue(self.evaluate("session.openFromDock(ownerItem.anchor)"))
+        self.settle()
+        self.evaluate("popup.nativeDialog.activeFocusItem = ownerItem.anchor; popup.nativeDialog.active = false")
+        self.assertTrue(self.evaluate("session.openFromClient(firstClient, barHost, barAnchor)"))
+        self.settle()
+        self.assertFalse(self.popup.property("visible"))
+        self.assertTrue(self.evaluate("session.host === ownerItem"))
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock"])
+        self.evaluate("popup.nativeDialog.active = true; popup.nativeDialog.activeFocusItem = null")
+        self.settle()
+        self.assertTrue(self.evaluate("session.visibleFor(firstClient)"))
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock", "bar"])
+        self.settle()
+        self.assertEqual(self.values(self.window, "openedHosts"), ["dock", "bar"])
+        self.assertEqual(self.values(self.backend, "calls"), [])
+
     def test_transfer_waits_for_exit_and_native_hide_and_only_latest_client_opens(self):
         self.assertTrue(self.evaluate("session.openFromDock(ownerItem.anchor)"))
         self.settle()

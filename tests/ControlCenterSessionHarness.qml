@@ -69,7 +69,7 @@ Window {
         property alias nativeDialog: nativeBoundary
         signal aboutToHide()
         signal closed()
-        QtObject { id: nativeBoundary; property bool visible: false; property bool active: false }
+        QtObject { id: nativeBoundary; property bool visible: false; property bool active: false; property var activeFocusItem: undefined }
         function open() { closing = false; nativeBoundary.visible = true; visible = true; }
         function close() {
             if (!visible || closing) return;
