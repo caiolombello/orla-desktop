@@ -49,6 +49,7 @@ Item {
     property var microphoneBackendOverride: null
     property var powerProfileBackendOverride: null
     property var wifiBackendOverride: null
+    property var bluetoothBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -292,7 +293,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
-        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending || wifiState.pending
+        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending || wifiState.pending || bluetoothState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1196,6 +1197,19 @@ Item {
         active: controlCenterPopup.visible
         backend: root.wifiBackendOverride !== null ? root.wifiBackendOverride : nativeWifiBackend.item
     }
+    Loader {
+        id: nativeBluetoothBackend
+        objectName: "controlCenterBluetoothNativeLoader"
+        // BluezQt is read only while the Control Center is open.
+        active: controlCenterPopup.visible && root.bluetoothBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativeBluetooth.qml") : ""
+    }
+    BluetoothState {
+        id: bluetoothState
+        objectName: "bluetoothState"
+        active: controlCenterPopup.visible
+        backend: root.bluetoothBackendOverride !== null ? root.bluetoothBackendOverride : nativeBluetoothBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1231,6 +1245,7 @@ Item {
         microphone: microphoneState
         powerProfile: powerProfileState
         wifi: wifiState
+        bluetooth: bluetoothState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

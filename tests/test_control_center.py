@@ -70,6 +70,7 @@ class ControlCenterTests(unittest.TestCase):
         for name, target in (("controlCenterSoundAction", "kcm_pulseaudio"),
                              ("controlCenterPowerAction", "kcm_powerdevilprofilesconfig"),
                              ("controlCenterNetworkAction", "kcm_networkmanagement"),
+                             ("controlCenterBluetoothAction", "kcm_bluetooth"),
                              ("controlCenterAllAction", "")):
             self.activate(name)
             self.assertEqual(self.calls()[-1], target)
@@ -485,6 +486,94 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.mic_calls(), [])
         self.assertEqual(self.warnings, [])
 
+
+    def bluetooth_calls(self):
+        calls = self.window.findChild(QObject, "controlCenterBluetoothBackend").property("calls")
+        return list(calls.toVariant() if hasattr(calls, "toVariant") else calls)
+
+    def test_bluetooth_switches_only_after_bluez_reports_it(self):
+        state = self.window.findChild(QObject, "controlCenterBluetoothState")
+        confirmations = QSignalSpy(state.confirmed)
+        toggle = self.item("controlCenterBluetoothToggle")
+        status = self.item("controlCenterBluetoothStatus")
+        self.assertTrue(self.item("controlCenterBluetoothCard").isVisible())
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Conectado a Fone sintético")
+        # Opening the Control Center never writes.
+        self.assertEqual(self.bluetooth_calls(), [])
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.bluetooth_calls(), [False])
+        self.assertFalse(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Desligando…")
+        # Keyboard focus stays on the toggle while waiting; a repeat press is ignored.
+        self.assertTrue(toggle.hasActiveFocus())
+        self.assertTrue(toggle.property("visualFocus"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.bluetooth_calls(), [False])
+        self.evaluate("bluetoothBackend.report({enabled: false, blocked: true, connected: []})", self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(status.property("text"), "Desligado")
+        self.assertEqual(toggle.property("text"), "Ligar Bluetooth")
+        # A change made outside Orla is shown as it is, without a write.
+        self.evaluate('bluetoothBackend.report({enabled: true, blocked: false, connected: ["Fone sintético", "Mouse sintético"]})', self.window)
+        QTest.qWait(20)
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "2 dispositivos conectados")
+        self.evaluate("bluetoothBackend.report({connected: []})", self.window)
+        QTest.qWait(20)
+        self.assertEqual(status.property("text"), "Ligado · nenhum dispositivo conectado")
+        self.assertEqual(self.bluetooth_calls(), [False])
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(self.warnings, [])
+
+    def test_bluetooth_failures_never_look_like_success(self):
+        state = self.window.findChild(QObject, "controlCenterBluetoothState")
+        toggle = self.item("controlCenterBluetoothToggle")
+        error = self.item("controlCenterBluetoothError")
+        self.evaluate("bluetoothBackend.rejectWrites = true", self.window)
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertIn("recusou", error.property("text"))
+        self.assertTrue(toggle.property("checked"))
+        self.evaluate("bluetoothBackend.rejectWrites = false", self.window)
+        # No confirmation: the request expires instead of claiming the change.
+        self.assertTrue(self.evaluate("request(false)", state))
+        QTest.qWait(450)
+        self.assertIn("não confirmou", error.property("text"))
+        self.assertTrue(toggle.property("checked"))
+        # Names stay bounded plain text, and a device list never shows while off.
+        self.evaluate('bluetoothBackend.report({enabled: false, connected: ["<b>x</b>"]})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(self.item("controlCenterBluetoothStatus").property("text"), "Desligado")
+        self.assertEqual(self.evaluate("connected.length", state), 0)
+        self.assertEqual(self.warnings, [])
+
+    def test_bluetooth_absent_or_unavailable_disables_only_its_card(self):
+        card = self.item("controlCenterBluetoothCard")
+        toggle = self.item("controlCenterBluetoothToggle")
+        status = self.item("controlCenterBluetoothStatus")
+        for snapshot, text in (('{status: "absent"}', "Nenhum adaptador Bluetooth disponível"),
+                               ('{status: "unavailable"}', "Serviço de Bluetooth indisponível"),
+                               ('{status: "loading"}', "Lendo o Bluetooth…"),
+                               ('{status: "ready", enabled: true, blocked: false, connected: "x"}', "Serviço de Bluetooth indisponível")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate(f"bluetoothBackend.snapshot = {snapshot}", self.window)
+                QTest.qWait(20)
+                self.assertTrue(card.isVisible())
+                self.assertFalse(toggle.isEnabled())
+                self.assertEqual(status.property("text"), text)
+                self.assertTrue(self.item("controlCenterBluetoothAction").isEnabled())
+                self.assertTrue(self.item("controlCenterWifiToggle").isEnabled())
+        self.evaluate("bluetooth.backend = null", self.window)
+        QTest.qWait(20)
+        self.assertFalse(card.isVisible())
+        self.assertEqual(self.bluetooth_calls(), [])
+        self.assertEqual(self.warnings, [])
 
     def wifi_calls(self):
         calls = self.window.findChild(QObject, "controlCenterWifiBackend").property("calls")

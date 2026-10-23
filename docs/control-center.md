@@ -216,3 +216,33 @@ exercitados nos testes. **Abrir Rede no KDE** foi testado só pelo despacho.
 
 Escolher e conectar redes, inclusive com senha pelo fluxo de autenticação do KDE,
 fica para a próxima fatia.
+
+## Bluetooth — CC2-C
+
+O card **Bluetooth** liga e desliga o rádio Bluetooth do mesmo jeito que o applet
+de Bluetooth do Plasma: pelo BluezQt, retirando ou aplicando o bloqueio de rádio
+(`rfkill`) e ligando ou desligando cada adaptador. Ele mostra o aparelho conectado,
+quantos estão conectados ou “Ligado · nenhum dispositivo conectado”. Com o rádio
+desligado, nenhum aparelho aparece. **Abrir Bluetooth no KDE** abre as
+configurações de Bluetooth do sistema.
+
+A troca só conclui quando o BlueZ informa o novo estado. As escritas só pedem a
+mudança ao BlueZ e ao `rfkill`; os valores mudam quando os serviços avisam. Como
+religar retira o bloqueio antes de ligar o adaptador, a confirmação espera até 5
+segundos. Uma recusa ou a falta de confirmação mostram erro. Sem o serviço BlueZ
+ou sem adaptador, só este card fica desativado. O botão continua focável durante a
+confirmação, e a leitura só acontece com a Central aberta.
+
+Na sessão Plasma 6.7.5 deste registro, sem nenhum aparelho conectado, o card
+mostrou “Ligado · nenhum dispositivo conectado”:
+
+- um clique desligou: o `bluetoothctl` respondeu `Powered: no`, e o `rfkill` mostrou
+  bloqueio por software, como faz o applet do Plasma;
+- Espaço religou em menos de meio segundo, sem bloqueio e com o adaptador ligado;
+- desligar e religar pelo `bluetoothctl` apareceu no card;
+- o contorno de foco ficou visível com Tab, e Escape fechou a Central.
+
+O Bluetooth terminou ligado e sem bloqueio, como estava, e o journal não registrou
+erro da dock. Aparelhos conectados, falta de adaptador e serviço parado só foram
+exercitados nos testes. **Abrir Bluetooth no KDE** foi testado só pelo despacho.
+Conectar e desconectar aparelhos fica para uma fatia seguinte.

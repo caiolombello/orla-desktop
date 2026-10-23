@@ -23,6 +23,8 @@ Window {
     property alias power: fixturePower
     property alias wifiBackend: fixtureWifiBackend
     property alias wifi: fixtureWifi
+    property alias bluetoothBackend: fixtureBluetoothBackend
+    property alias bluetooth: fixtureBluetooth
 
     QtObject {
         id: fixtureBackend
@@ -165,6 +167,23 @@ Window {
         confirmationTimeout: 300
         backend: fixtureWifiBackend
     }
+    QtObject {
+        id: fixtureBluetoothBackend
+        objectName: "controlCenterBluetoothBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"]})
+        function setEnabled(on) { calls = calls.concat([on]); return !rejectWrites; }
+        // Tests report like BlueZ would.
+        function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
+    }
+    DockUI.BluetoothState {
+        id: fixtureBluetooth
+        objectName: "controlCenterBluetoothState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixtureBluetoothBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -184,5 +203,6 @@ Window {
         microphone: fixtureMic
         powerProfile: fixturePower
         wifi: fixtureWifi
+        bluetooth: fixtureBluetooth
     }
 }
