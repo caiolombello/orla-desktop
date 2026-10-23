@@ -4,8 +4,8 @@ O Source atual do Orla inclui `pimevents` em `enabledPlugins` somente enquanto o
 popup do calendário está aberto, a preferência de eventos do perfil está ligada
 e não há fixture de teste. Fechar o popup ou desligar a preferência define
 `enabledPlugins` como uma lista vazia. Isso não comprova que Akonadi, recursos
-KDE ou processos iniciados pelo KDE terminaram. Esta mudança pertence ao
-checkout Source; os assets da alpha 0.2.9 permanecem inalterados.
+KDE ou processos iniciados pelo KDE terminaram. Esta mudança foi
+publicada na alpha 0.2.10.
 
 O calendário aplica as cores de primeiro plano do dock também aos textos
 internos do `MonthView`, inclusive dias fora do mês que o componente KDE marca

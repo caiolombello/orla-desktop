@@ -17,8 +17,11 @@ class ReleaseBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
-            for name in ("release.py", "caiodock.py", "themes.py", "__init__.py", "updates.py", "updates_contract.py", "updates_desktop.py", "updates_desktop_state.py", "orla.py", "panel_layout.py", "search_shortcut.py"):
+            for name in ("release.py", "caiodock.py", "themes.py", "__init__.py", "updates.py", "updates_contract.py", "orla.py", "panel_layout.py", "search_shortcut.py"):
                 shutil.copyfile(source / "scripts" / name, root / "scripts" / name)
+            # Source-only helpers are absent from the kit itself; placeholders prove their exclusion.
+            for name in ("updates_desktop.py", "updates_desktop_state.py"):
+                (root / "scripts" / name).write_text("source-only helper\n", encoding="utf-8")
             for name in ("LICENSE", "README.md", "README.pt-BR.md", "CONTRIBUTING.md",
                          "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore"):
                 (root / name).write_text("synthetic fixture\n", encoding="utf-8")
@@ -45,11 +48,12 @@ class ReleaseBundleTests(unittest.TestCase):
                 target=root/name;target.parent.mkdir(parents=True,exist_ok=True)
                 shutil.copyfile(source/name,target)
             shutil.copytree(source / "themes", root / "themes")
+            shutil.copytree(source / "addons", root / "addons")
             (root / "docs").mkdir(exist_ok=True)
             shutil.copyfile(source / "docs/theme-format.md", root / "docs/theme-format.md")
             (root / "tests").mkdir(exist_ok=True)
             shutil.copyfile(source / "tests/test_themes.py", root / "tests/test_themes.py")
-            for name in ("test_bar.py", "BarHarness.qml", "test_shared_control_center.py",
+            for name in ("test_bar.py", "test_bar_settings.py", "BarHarness.qml", "test_shared_control_center.py",
                          "test_workspace_setup.py", "test_workspace_view.py",
                          "test_workspace_entry.py", "test_workspace_package.py",
                          "test_workspace_install.py", "test_updates_desktop_entry.py", "test_updates_desktop_process.py", "test_updates_desktop_cache.py", "test_updates_desktop_view.py",
@@ -79,6 +83,8 @@ class ReleaseBundleTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 required = ("themes/examples/essential.json", "themes/examples/mare.json",
                             "themes/schema/theme-0.1-experimental.schema.json",
+                            "addons/schema/manifest-0.1.schema.json", "addons/fixtures/peripherals-0.1.json",
+                            "addons/fixtures/quota-0.1.json",
                             "scripts/themes.py", "scripts/updates.py", "scripts/updates_contract.py", "scripts/__init__.py", "docs/theme-format.md", "tests/test_themes.py",
                             "package/contents/code/Theme.js", "package/contents/code/Appearance.js",
                             "package/contents/code/theme_format.py", "package/contents/code/theme_file.py",
@@ -106,7 +112,7 @@ class ReleaseBundleTests(unittest.TestCase):
                     body=text.split(comment+"BEGIN UNICODE LICENSE\n",1)[1].split(comment+"END UNICODE LICENSE",1)[0]
                     self.assertEqual(''.join(line[len(comment):] for line in body.splitlines(True)),profile['license'])
                 for name in ("bar/main.qml", "scripts/updates_desktop.py", "scripts/updates_desktop_state.py",
-                             "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/BarHarness.qml",
+                             "tests/test_updates_desktop_entry.py", "tests/test_updates_desktop_process.py", "tests/test_updates_desktop_cache.py", "tests/test_updates_desktop_view.py", "tests/test_bar.py", "tests/test_bar_settings.py", "tests/BarHarness.qml",
                              "tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                              "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                              "tests/test_workspace_install.py",

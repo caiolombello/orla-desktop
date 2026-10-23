@@ -15,12 +15,17 @@ import zipfile
 from scripts import caiodock
 
 
+# The release ZIP ships these tests without the source-only workspace/ folder.
+SOURCE_CHECKOUT = (Path(__file__).resolve().parents[1] / "workspace").is_dir()
+
+
 class PackageCliTests(unittest.TestCase):
     def test_optional_composition_help_does_not_import_qt_or_touch_layout(self):
         args = caiodock.parser().parse_args(["layout", "setup", "--service", "plasma-fixture.service"])
         self.assertEqual(args.layout_action, "setup")
         self.assertEqual(args.service, "plasma-fixture.service")
 
+    @unittest.skipUnless(SOURCE_CHECKOUT, "needs the source-only workspace/ folder")
     def test_composition_entry_forwards_explicit_service_without_constructing_native_runtime(self):
         from types import SimpleNamespace
         import scripts
@@ -54,6 +59,7 @@ class PackageCliTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("restore", result.stdout)
 
+    @unittest.skipUnless(SOURCE_CHECKOUT, "needs the source-only workspace/ folder")
     def test_updates_source_dispatch_is_lazy_and_forwards_root(self):
         from types import SimpleNamespace
         import scripts

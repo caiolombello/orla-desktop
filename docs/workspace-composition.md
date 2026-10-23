@@ -39,7 +39,7 @@ Para construir a partir do commit revisado, no checkout:
 
 ```sh
 python3 -I -B workspace/package.py build --commit COMMIT_40_HEX --output-dir OUTPUT
-python3 -I -B workspace/package.py verify OUTPUT/orla-workspace-0.2.9.zip \
+python3 -I -B workspace/package.py verify OUTPUT/orla-workspace-0.2.10.zip \
   --sha256 SHA256_64_HEX --commit COMMIT_40_HEX
 ```
 

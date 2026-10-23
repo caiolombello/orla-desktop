@@ -4,7 +4,7 @@
 
 ## Português
 
-O **Menu Orla (experimental)** é um applet separado (`org.orla.bar`, versão 0.1.0) para **Plasma 6.7.x**. É o primeiro componente da barra opcional, disponível somente no checkout de código. **Não está nos assets publicados das releases 0.2.5–0.2.9.** O dock continua independente.
+O **Menu Orla (experimental)** é um applet separado (`org.orla.bar`, versão 0.1.0) para **Plasma 6.7.x**. É o primeiro componente da barra opcional, disponível somente no checkout de código. **Não está nos assets publicados das releases 0.2.5–0.2.10.** O dock continua independente.
 
 ### O que o código oferece
 
@@ -35,7 +35,7 @@ kpackagetool6 -t Plasma/Applet -r org.orla.bar
 
 ### Barra gerenciada — código experimental, sem release
 
-Os comandos abaixo são para um checkout que contenha o helper experimental de layout; não estão disponíveis no bundle 0.2.9. A composição gerenciada ainda requer qualificação nativa. A CLI separada compõe Menu Orla, Menu Global, espaçador, bandeja e relógio KDE. O template [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) propõe um painel superior de 32 px, translúcido e compacto, com áudio/rede nativos na bandeja. O módulo opcional `control-center`, desativado no template, acrescenta uma entrada à direita que usa a mesma Central e o estado do dock. Essa rota ainda exige qualificação na sessão real. Aplicativos recentes permanecem pendentes. Há modos `dock-plus-bar` e `dock-only`; `bar-only` não é suportado. O dock é gerenciado independentemente.
+Os comandos abaixo são para um checkout que contenha o helper experimental de layout; não estão disponíveis nos bundles publicados até 0.2.10. A composição gerenciada ainda requer qualificação nativa. A CLI separada compõe Menu Orla, Menu Global, espaçador, bandeja e relógio KDE. O template [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) propõe um painel superior de 32 px, translúcido e compacto, com áudio/rede nativos na bandeja. O módulo opcional `control-center`, desativado no template, acrescenta uma entrada à direita que usa a mesma Central e o estado do dock. Essa rota ainda exige qualificação na sessão real. Aplicativos recentes permanecem pendentes. Há modos `dock-plus-bar` e `dock-only`; `bar-only` não é suportado. O dock é gerenciado independentemente.
 
 Requer o checkout completo do helper (`scripts/orla.py`, `caiodock.py`, `panel_layout.py`, `panel_layout_update.py` e `panel_layout.js`), Menu Orla e os widgets KDE selecionados instalados, Python 3, `gdbus`, `systemctl` e **Plasma 6.7.5**. Todos os subcomandos exigem `--service`: informe o nome literal do serviço Plasma do usuário atual, cuja identidade/processo/configuração o helper verifica; não há escolha automática de serviço.
 
@@ -112,7 +112,7 @@ Em 12/10/2026, um teste real no painel superior comprovou hover, clique, menu co
 
 ## English
 
-**Orla Menu (experimental)** is a separate applet (`org.orla.bar`, version 0.1.0) for **Plasma 6.7.x**. It is the first optional bar component, available only in the source checkout. **It is excluded from the published 0.2.5–0.2.9 release assets.** The dock remains independent.
+**Orla Menu (experimental)** is a separate applet (`org.orla.bar`, version 0.1.0) for **Plasma 6.7.x**. It is the first optional bar component, available only in the source checkout. **It is excluded from the published 0.2.5–0.2.10 release assets.** The dock remains independent.
 
 ### What the source provides
 
@@ -143,7 +143,7 @@ kpackagetool6 -t Plasma/Applet -r org.orla.bar
 
 ### Managed bar — experimental source, unreleased
 
-These commands require a checkout containing the experimental layout helper; they are unavailable in the 0.2.9 bundle. Managed composition still requires native qualification. The separate CLI composes Orla Menu, KDE Global Menu, spacer, tray and clock widgets. The [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) template proposes a 32 px translucent, compact top panel with native audio/network tray controls. Its optional `control-center` module, disabled in the template, adds a right-side entry using the dock's existing view and state; native qualification of that route remains open. Recent applications remain planned. Modes are `dock-plus-bar` and `dock-only`; `bar-only` is unsupported. The dock is managed independently.
+These commands require a checkout containing the experimental layout helper; they are unavailable in the published bundles through 0.2.10. Managed composition still requires native qualification. The separate CLI composes Orla Menu, KDE Global Menu, spacer, tray and clock widgets. The [mac-inspired-topbar.json](../layouts/mac-inspired-topbar.json) template proposes a 32 px translucent, compact top panel with native audio/network tray controls. Its optional `control-center` module, disabled in the template, adds a right-side entry using the dock's existing view and state; native qualification of that route remains open. Recent applications remain planned. Modes are `dock-plus-bar` and `dock-only`; `bar-only` is unsupported. The dock is managed independently.
 
 Requires the complete helper checkout (`scripts/orla.py`, `caiodock.py`, `panel_layout.py`, `panel_layout_update.py` and `panel_layout.js`), installed Orla Menu and selected KDE widgets, Python 3, `gdbus`, `systemctl` and **Plasma 6.7.5**. Every subcommand requires `--service`: provide the literal current-user Plasma service name, whose identity/process/configuration the helper verifies; there is no automatic service selection.
 

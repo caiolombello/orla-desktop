@@ -27,8 +27,7 @@ inclusive ausência ou idade da leitura, ficam no hover/tooltip e no popup.
 Atualizações não substituem o controle focado. O dock mantém rolagem horizontal
 e revela o item focado, sem uma barra persistente.
 
-Este incremento pertence ao código atual; os arquivos já publicados da
-release 0.2.9 permanecem inalterados. Testes determinísticos e revisão
+Este incremento foi publicado na alpha 0.2.10. Testes determinísticos e revisão
 independente cobrem confirmação, expiração, perfis, agrupamento e anúncios
 de acessibilidade. Hardware, leitor de tela e comportamento em vários
 monitores ainda precisam de validação. Ele não substitui as notificações nem
@@ -61,8 +60,7 @@ names and details, including missing or stale readings, belong in hover labels,
 tooltips and popovers. Updates do not replace the focused control. Horizontal
 scrolling and focus reveal remain available without a persistent scrollbar.
 
-This increment belongs to the current source; published 0.2.9 assets remain
-unchanged. Deterministic tests and independent review cover confirmation,
+This increment shipped in alpha 0.2.10. Deterministic tests and independent review cover confirmation,
 expiry, profiles, grouping and accessibility announcements. Hardware, screen
 readers and multiple monitors still require validation. The HUD preserves
 KDE's notifications and OSD and does not observe global volume keys.

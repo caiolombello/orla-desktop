@@ -96,7 +96,7 @@ O painel **Steam** não lê nada ao abrir. Cada raiz precisa ser informada na se
 
 Somente um resultado atual com estado `installed_candidate` pode encaminhar `steam://rungameid/<appid>` por Enter/clique. **Abrir downloads no Steam** encaminha apenas `steam://open/downloads`. O retorno informa no máximo que o desktop aceitou o pedido; não prova handler, cliente, login, titularidade ou que o jogo abriu. Recarga, cancelamento e mudança de consulta invalidam tickets anteriores. `StateFlags=4` continua sendo uma interpretação experimental de presença local, com `ownership` e `connection` sempre desconhecidos.
 
-Essa integração permanece fora dos assets públicos 0.2.5–0.2.9, não foi executada contra raízes pessoais e não qualifica Steam native/Flatpak, biblioteca desmontada, dois jogos reais ou gesto humano Wayland. Os testes usam árvores e processos próprios, opener injetado e D-Bus/XDG privados; nunca chamam o handler Steam real.
+Essa integração permanece fora dos assets públicos 0.2.5–0.2.10, não foi executada contra raízes pessoais e não qualifica Steam native/Flatpak, biblioteca desmontada, dois jogos reais ou gesto humano Wayland. Os testes usam árvores e processos próprios, opener injetado e D-Bus/XDG privados; nunca chamam o handler Steam real.
 
 ## Comandos Orla — catálogo inicial experimental (L1)
 
@@ -126,7 +126,7 @@ foi qualificado. Quotas e o estado de gravação continuam fora do catálogo.
 
 ## Experimento de compatibilidade com provedores de IA — somente no fonte
 
-O código do launcher inclui um painel experimental **IA**. Ele é separado do dock, começa desligado e não faz parte dos assets publicados 0.2.5–0.2.9. Abrir o painel não inicia helper nem cliente. **Verificar clientes instalados** é uma ação local explícita: consulta uma lista fixa (Codex, Claude Code, OpenCode, Ollama e LM Studio) e mantém todos desativados. Ollama é apenas detecção de presença, pois consultar sua versão pode contatar um servidor.
+O código do launcher inclui um painel experimental **IA**. Ele é separado do dock, começa desligado e não faz parte dos assets publicados 0.2.5–0.2.10. Abrir o painel não inicia helper nem cliente. **Verificar clientes instalados** é uma ação local explícita: consulta uma lista fixa (Codex, Claude Code, OpenCode, Ollama e LM Studio) e mantém todos desativados. Ollama é apenas detecção de presença, pois consultar sua versão pode contatar um servidor.
 
 A ação separada **Testar compatibilidade anônima** exige consentimento próprio e testa somente uma troca limitada `initialize`/`initialized` do Codex para uma versão reconhecida. Não autentica, reutiliza sessão conectada, envia texto/contexto pessoal, inicia modelo, turno ou geração, nem informa uso. Não há chat, fluxo de texto selecionado, cofre de credenciais ou handoff para terminal. Cancelar/fechar é tratado pelo controlador; o resultado permanece no estado da sessão e não vira configuração persistente.
 
@@ -985,7 +985,7 @@ reais permanecem sem qualificação. Os probes e canaries anteriores são histó
 Nesses recibos, Meta permaneceu atribuída ao KRunner. A configuração explícita
 descrita acima exige prova própria, incluindo recuperação do atalho anterior.
 
-As releases públicas 0.2.5–0.2.9 não incluem este componente em seus bundles. O ZIP 0.2.9 carrega apenas os helpers-fonte `scripts/ai.py` e `tests/test_ai.py`; eles não instalam nem habilitam o launcher. O painel experimental de IA permanece apenas no fonte e não é qualificado para uso diário; empacotamento e instalação opcional do launcher seguem pendentes.
+As releases públicas 0.2.5–0.2.10 não incluem este componente em seus bundles. Os ZIPs 0.2.9 e 0.2.10 carregam apenas os helpers-fonte `scripts/ai.py` e `tests/test_ai.py`; eles não instalam nem habilitam o launcher. O painel experimental de IA permanece apenas no fonte e não é qualificado para uso diário; empacotamento e instalação opcional do launcher seguem pendentes.
 
 ## Fontes verificadas
 

@@ -288,8 +288,10 @@ class UpdatesEntryTests(unittest.TestCase):
         before={p:p.read_bytes() for p in self.base.rglob('*') if p.is_file()}
         result=self.gui()
         manifest=(self.bundle/'manifest.json').read_bytes()
-        self.assertEqual(result['reference'],dict(role='bundle',component='workspace',origin='verified-manifest',version='0.2.9',commit='a'*40,digest=hashlib.sha256(manifest).hexdigest()))
-        self.assertEqual(result['label'],'0.2.9')
+        # The bundle carries the dock package's own version, whatever release this checkout is.
+        version=json.loads((ROOT/'package/metadata.json').read_text())['KPlugin']['Version']
+        self.assertEqual(result['reference'],dict(role='bundle',component='workspace',origin='verified-manifest',version=version,commit='a'*40,digest=hashlib.sha256(manifest).hexdigest()))
+        self.assertEqual(result['label'],version)
         self.assertIn('esta cópia do Workspace',result['origin'])
         self.assertIn('bundle verificado',result['origin'])
         self.assertFalse(result['scopeInitiallyVisible'])

@@ -2,6 +2,55 @@
 
 User-visible changes are recorded here for each published release.
 
+## 0.2.10 — 2026-10-22 — Alpha prerelease
+
+This release collects the dock work merged since 0.2.9 (PRs 23–114).
+
+- **Control Center.** The optional Control Center (still off by default, enabled in Widgets) now controls things directly:
+  - default output volume, mute and output choice;
+  - screen brightness;
+  - Plasma's Do Not Disturb;
+  - default microphone mute.
+
+  Each change counts only after the system service reports it, and a missing service disables only its own card. Opening the popup never changes a setting.
+- **New look.** One visual system now covers the dock, popovers and settings: a glass dock slab, glass popovers, rounded settings modules, and light/dark popup schemes that follow the system.
+- **Arranging.** Reorder widgets in Widgets settings by dragging their grips (the arrow buttons remain), and reorder pinned apps by dragging them on the dock. Nothing is saved until a valid drop, and Escape cancels. The hover label is anchored to each slot, and month names follow the system language.
+- **Appearance.**
+  - A compact preset chooser with an opt-in preset catalog.
+  - Portable appearance export/import with a reversible preview.
+  - Advanced controls collapsed by default.
+  - Importing a local theme file into the appearance preview.
+- **Profiles and contexts.**
+  - Opt-in automatic profile switching by Activity and/or virtual desktop. Off by default; a manual choice still wins.
+  - An explicit virtual-desktop switcher in the Contexts tab.
+  - Inline profile rename and confirmed profile removal that keeps saved references.
+  - Review and removal of individual saved associations.
+  - Profiles keep KDE's default application launchers.
+- **Calendar.** The calendar can show KDE calendar events. It enables KDE's event plugin only while its popup is open.
+- **Optional local modules and add-ons.**
+  - Widgets settings explain QuotaLantern, PeriGauge and FalaTrace.
+  - The bridge reads only the caches of enabled modules.
+  - An experimental, opt-in add-on host can supply peripheral battery and AI quota readings from a separately installed exporter. Install, enable, disable and remove add-ons in Widgets → Add-ons. Add-ons are data files, never code.
+- **Helper.** `scripts/orla.py build --output-dir DIR` writes the applet to an explicit directory.
+
+**Excluded from these assets.** These remain source-only and are not in these assets:
+
+- the C++ launcher (aliases, favorites, actions, managed installation and the optional search service);
+- Menu Orla and its managed top-bar layout;
+- the optional Workspace composition window, including its update view.
+
+The ZIP bundles `scripts/`, but the layout helper also needs the `bar/` and `layouts/` source folders.
+
+**Validation.**
+- Portable CI passed on the source commit. Several of these features were also exercised on one Plasma 6.7.5 Wayland session at DPR 2, as recorded in their validation documents.
+- Not yet qualified:
+  - other distributions and multiple monitors;
+  - fractional scaling;
+  - installing into a clean user account;
+  - real Bluetooth/Wi-Fi hardware.
+
+  Control Center hardware coverage remains partial. See the [release validation](docs/validation/release-0.2.10.md).
+
 ## 0.2.9 — 2026-10-11 — Alpha prerelease
 
 - Publish the first experimental Control Center slice: a global, default-off dock button with shared media/battery cards and three explicit KDE settings shortcuts. Independent Source review approved the focused narrow-layout/keyboard correction. Native popup/KCM, service and hardware behavior remain unqualified; CC0 is partial.

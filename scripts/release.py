@@ -17,7 +17,7 @@ SOURCE_ONLY_DESKTOP = frozenset(("scripts/updates_desktop.py", "scripts/updates_
 SOURCE_ONLY_TESTS = frozenset(("tests/test_workspace_setup.py", "tests/test_workspace_view.py",
                                "tests/test_workspace_entry.py", "tests/test_workspace_package.py",
                                "tests/test_workspace_install.py",
-                               "tests/test_bar.py", "tests/BarHarness.qml",
+                               "tests/test_bar.py", "tests/test_bar_settings.py", "tests/BarHarness.qml",
                                "tests/test_shared_control_center.py", "tests/SharedControlCenterBarHarness.qml",
                                "tests/native/control_center_audio.py", "tests/native/control_center_audio_session.py",
                                "tests/native/run_control_center_audio.py", "tests/native/control_center_audio.conf.in",
@@ -32,7 +32,9 @@ def bundle(root: Path) -> tuple[Path, Path, Path]:
         "LICENSE", "README.md", "README.pt-BR.md", "CONTRIBUTING.md",
         "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore",
     )]
-    for directory in (package, root / "scripts", root / "tests", root / "docs", root / "themes", root / "website", root / ".github"):
+    # addons/ holds the published add-on schemas and synthetic fixtures the bundled tests read.
+    for directory in (package, root / "scripts", root / "tests", root / "docs", root / "themes", root / "addons",
+                      root / "website", root / ".github"):
         sources.extend(path for path in directory.rglob("*")
                        if path.is_file() and not path.is_symlink()
                        and "__pycache__" not in path.parts
