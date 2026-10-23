@@ -58,6 +58,26 @@ herdam a paleta correspondente; as cores personalizadas do dock permanecem no
 seu vidro, conforme [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). A mudança visual não
 qualifica os serviços ou hardware nativos.
 
+## Layout em grade, inspirado no macOS
+
+A Central organiza os módulos como no macOS. Com largura para duas colunas
+(300 px ou mais), a primeira linha junta Wi-Fi e Bluetooth num módulo, ao lado
+de **Tocando agora**. A segunda traz **Não perturbe** e **Microfone** lado a
+lado. Abaixo ficam os módulos de largura total: **Tela**, **Som** e **Energia**,
+e no fim **Ajustes do sistema…**. Em larguras menores, a mesma ordem vira uma
+coluna, com rolagem e foco visível no controle ativo.
+
+Cada linha de rádio tem o botão redondo, que liga ou desliga, e o nome com o
+estado. Nas linhas de Wi-Fi e Bluetooth, o nome é um botão que abre a página
+do KDE correspondente. Ele mostra realce ao passar o mouse, anel de foco e uma
+dica. Som e Energia levam o atalho para o KDE como uma seta no título do módulo.
+O popup não tem título visível; o nome acessível continua sendo "Central de
+Controle". Nenhuma regra de confirmação mudou: os estados seguem os mesmos
+serviços e as mesmas mensagens descritas abaixo.
+
+Capturas sintéticas: [escuro](screenshots/control-center-grid/dark.png) e
+[claro](screenshots/control-center-grid/light.png).
+
 ## Brilho da tela — CC1-B
 
 O card **Tela** mostra um slider por tela com brilho ajustável (até quatro),
