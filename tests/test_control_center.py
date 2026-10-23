@@ -54,6 +54,11 @@ class ControlCenterTests(unittest.TestCase):
 
     def activate(self, name):
         item = self.item(name)
+        # Focus scrolls the Control Center to the control, as Tab does, so the click lands on it.
+        # Let a just-shown error settle the layout first, or the scroll uses stale positions.
+        QTest.qWait(20)
+        item.forceActiveFocus(Qt.TabFocusReason)
+        QTest.qWait(20)
         point = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
 
@@ -64,6 +69,7 @@ class ControlCenterTests(unittest.TestCase):
 
         for name, target in (("controlCenterSoundAction", "kcm_pulseaudio"),
                              ("controlCenterPowerAction", "kcm_powerdevilprofilesconfig"),
+                             ("controlCenterNetworkAction", "kcm_networkmanagement"),
                              ("controlCenterAllAction", "")):
             self.activate(name)
             self.assertEqual(self.calls()[-1], target)
@@ -479,6 +485,94 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.mic_calls(), [])
         self.assertEqual(self.warnings, [])
 
+
+    def wifi_calls(self):
+        calls = self.window.findChild(QObject, "controlCenterWifiBackend").property("calls")
+        return list(calls.toVariant() if hasattr(calls, "toVariant") else calls)
+
+    def test_wifi_switches_only_after_network_manager_reports_it(self):
+        state = self.window.findChild(QObject, "controlCenterWifiState")
+        confirmations = QSignalSpy(state.confirmed)
+        toggle = self.item("controlCenterWifiToggle")
+        status = self.item("controlCenterWifiStatus")
+        self.assertTrue(self.item("controlCenterWifiCard").isVisible())
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Conectado a Rede sintética")
+        # Opening the Control Center never writes.
+        self.assertEqual(self.wifi_calls(), [])
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.wifi_calls(), [False])
+        self.assertFalse(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Desligando…")
+        # Keyboard focus stays on the toggle while waiting; a repeat press is ignored.
+        self.assertTrue(toggle.hasActiveFocus())
+        self.assertTrue(toggle.property("visualFocus"))
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.wifi_calls(), [False])
+        self.evaluate('wifiBackend.report({enabled: false, network: ""})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(status.property("text"), "Desligado")
+        self.assertEqual(toggle.property("text"), "Ligar Wi-Fi")
+        # A change made outside Orla is shown as it is, without a write.
+        self.evaluate("wifiBackend.report({enabled: true})", self.window)
+        QTest.qWait(20)
+        self.assertTrue(toggle.property("checked"))
+        self.assertEqual(status.property("text"), "Ligado · sem conexão")
+        self.assertEqual(self.wifi_calls(), [False])
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(self.warnings, [])
+
+    def test_wifi_failures_and_hardware_switch_never_look_like_success(self):
+        state = self.window.findChild(QObject, "controlCenterWifiState")
+        toggle = self.item("controlCenterWifiToggle")
+        error = self.item("controlCenterWifiError")
+        self.evaluate("wifiBackend.rejectWrites = true", self.window)
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertIn("recusou", error.property("text"))
+        self.assertTrue(toggle.property("checked"))
+        self.evaluate("wifiBackend.rejectWrites = false", self.window)
+        # No confirmation: the request expires instead of claiming the change.
+        self.assertTrue(self.evaluate("request(false)", state))
+        QTest.qWait(450)
+        self.assertIn("não confirmou", error.property("text"))
+        self.assertTrue(toggle.property("checked"))
+        # A hardware switch keeps the radio off; software cannot turn it on.
+        self.evaluate('wifiBackend.report({enabled: false, hardwareEnabled: false, network: ""})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Desligado por uma chave do computador")
+        calls = len(self.wifi_calls())
+        self.assertFalse(self.evaluate("request(true)", state))
+        self.assertEqual(len(self.wifi_calls()), calls)
+        self.assertIn("chave", error.property("text"))
+        self.assertEqual(self.warnings, [])
+
+    def test_wifi_absent_or_unavailable_disables_only_its_card(self):
+        card = self.item("controlCenterWifiCard")
+        toggle = self.item("controlCenterWifiToggle")
+        status = self.item("controlCenterWifiStatus")
+        for snapshot, text in (('{status: "absent"}', "Nenhum adaptador Wi-Fi disponível"),
+                               ('{status: "unavailable"}', "Serviço de rede indisponível"),
+                               ('{status: "loading"}', "Lendo o Wi-Fi…"),
+                               ('{status: "ready", enabled: "yes", hardwareEnabled: true}', "Serviço de rede indisponível")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate(f"wifiBackend.snapshot = {snapshot}", self.window)
+                QTest.qWait(20)
+                self.assertTrue(card.isVisible())
+                self.assertFalse(toggle.isEnabled())
+                self.assertEqual(status.property("text"), text)
+                self.assertTrue(self.item("controlCenterNetworkAction").isEnabled())
+                self.assertTrue(self.item("controlCenterAudioVolume").isEnabled())
+        self.evaluate("wifi.backend = null", self.window)
+        QTest.qWait(20)
+        self.assertFalse(card.isVisible())
+        self.assertEqual(self.wifi_calls(), [])
+        self.assertEqual(self.warnings, [])
 
     def power_calls(self):
         calls = self.window.findChild(QObject, "controlCenterPowerBackend").property("calls")

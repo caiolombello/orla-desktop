@@ -21,6 +21,8 @@ Window {
     property alias mic: fixtureMic
     property alias powerBackend: fixturePowerBackend
     property alias power: fixturePower
+    property alias wifiBackend: fixtureWifiBackend
+    property alias wifi: fixtureWifi
 
     QtObject {
         id: fixtureBackend
@@ -146,6 +148,23 @@ Window {
         confirmationTimeout: 300
         backend: fixturePowerBackend
     }
+    QtObject {
+        id: fixtureWifiBackend
+        objectName: "controlCenterWifiBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética"})
+        function setEnabled(on) { calls = calls.concat([on]); return !rejectWrites; }
+        // Tests report like NetworkManager would.
+        function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
+    }
+    DockUI.WifiState {
+        id: fixtureWifi
+        objectName: "controlCenterWifiState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixtureWifiBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -164,5 +183,6 @@ Window {
         doNotDisturb: fixtureDnd
         microphone: fixtureMic
         powerProfile: fixturePower
+        wifi: fixtureWifi
     }
 }
