@@ -108,6 +108,7 @@ jobs:
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_panel_layout*.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_workspace*.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_themes.py' -v
+          QT_QPA_PLATFORM=offscreen $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_plasma_theme.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_theme_file.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_theme_service.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
