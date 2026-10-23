@@ -50,6 +50,10 @@ The ZIP bundles `scripts/`, but the layout helper also needs the `bar/` and `lay
   - real Bluetooth/Wi-Fi hardware.
 
   Control Center hardware coverage remains partial. See the [release validation](docs/validation/release-0.2.10.md).
+- Published as [v0.2.10](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.10) at 2026-10-23 00:10:45 UTC (`prerelease=true`, `latest=false`) from merge `534011993019e91716779ebaaf5d11f14eb03169` ([PR #115](https://github.com/caiolombello/orla-desktop/pull/115); CI [39871861622](https://github.com/caiolombello/orla-desktop/actions/runs/39871861622) passed).
+  - Two builds of the exact merge were byte-identical, and anonymous HTTP 200 downloads matched them.
+  - The README install path was run with the downloaded ZIP: `doctor`, then `install` over an existing dock. The installed files match the `.plasmoid`, managed D-Bus services were preserved, and Plasma reported the running dock as 0.2.10.
+  - A clean-account installation remains unrun.
 
 ## 0.2.9 — 2026-10-11 — Alpha prerelease
 
