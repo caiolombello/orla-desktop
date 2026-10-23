@@ -82,7 +82,9 @@ Item {
         const ticket = generation;
         // The reply only means PowerDevil accepted the call; currentProfileChanged
         // (or the readback below, if that signal was missed) confirms the change.
-        call("setProfile", [profile], "s", () => {
+        // The module takes the argument list as one parenthesized signature; plain "s"
+        // sends no argument and PowerDevil answers UnknownMethod.
+        call("setProfile", [profile], "(s)", () => {
             if (ticket !== generation) return;
             call("currentProfile", [], "", reply => {
                 if (ticket === generation) { current = text(reply.value); changed(); }

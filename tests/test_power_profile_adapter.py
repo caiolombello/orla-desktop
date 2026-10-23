@@ -38,6 +38,11 @@ QtObject {
     property var watchers: []
     function asyncCall(message, resolve, reject) {
         calls = calls.concat([{message: message, resolve: resolve, reject: reject}]);
+        // Like Plasma's module: arguments need a parenthesized signature, or none is sent.
+        const args = message.arguments || [];
+        const signature = String(message.signature || "");
+        if (args.length > 0 && !(signature.startsWith("(") && signature.endsWith(")")))
+            reject({error: {isValid: true, name: "org.freedesktop.DBus.Error.UnknownMethod", message: "no arguments sent"}});
     }
     // Plasma 6.7 shapes: a wrapped string and an array-like list.
     function text(value) { return {value: value}; }
@@ -182,7 +187,7 @@ class PowerProfileAdapterTests(unittest.TestCase):
         self.assertTrue(self.evaluate("request('performance')", self.state))
         index = self.evaluate("find('setProfile')")
         call = self.evaluate("calls[%d].message" % index)
-        self.assertEqual((call["signature"], call["arguments"]), ("s", ["performance"]))
+        self.assertEqual((call["signature"], call["arguments"]), ("(s)", ["performance"]))
         # Accepting the call is not the change: the state keeps waiting.
         self.evaluate("reply(%d, undefined)" % index)
         self.assertTrue(self.state.property("pending"))

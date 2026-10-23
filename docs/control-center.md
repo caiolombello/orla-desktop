@@ -144,3 +144,43 @@ journal não registrou erro da dock.
 Com o microfone, todos os cards básicos do CC1 existem e passaram por uma prova
 nativa nesta máquina. O aceite completo continua aberto: outros ambientes,
 hardware ausente de verdade e as transferências com áudio pendente.
+
+## Perfil de energia — CC2-A
+
+O card **Energia** ganhou uma lista **Perfil de energia** com os perfis que o
+sistema oferece: Economia de energia, Equilibrado e Desempenho. Ela usa o mesmo
+serviço do applet de bateria do Plasma (PowerDevil, que repassa ao
+`power-profiles-daemon` ou ao `tuned-ppd`), então escolher no Orla ou no Plasma é
+um único estado. A leitura só acontece com a Central aberta.
+
+O Orla fala com o PowerDevil direto pelo D-Bus, sem o `PowerProfilesControl` do
+applet. Esse controle marca o perfil como ativo assim que a chamada responde, antes
+de o serviço aplicar. O Orla só conclui a troca quando o PowerDevil anuncia o novo
+perfil. Se o anúncio se perder, ele lê o perfil atual do serviço depois da resposta.
+Uma recusa ou a falta de confirmação em 3 segundos mostram erro e voltam ao perfil
+real. A lista continua focável durante a confirmação, e uma segunda escolha é
+ignorada até a primeira terminar.
+
+Quando o serviço informa um motivo, o Desempenho fica indisponível e o card explica
+por quê: computador no colo ou quente demais. Com o Desempenho ativo e reduzido, o
+card avisa. Um perfil mantido por um aplicativo, como o GameMode, mostra quem o
+mantém. Perfis com nomes desconhecidos não aparecem. Sem serviço de perfis, só a
+lista some; o resumo da bateria e **Abrir Energia no KDE** continuam.
+
+Na sessão Plasma 6.7.5 deste registro, com `tuned-ppd` atendendo o serviço de
+perfis, a lista abriu com os três perfis e mostrou Desempenho, o perfil atual.
+A primeira prova falhou: o card disse que o serviço recusou a troca, sem fingir
+sucesso. A captura do D-Bus mostrou o motivo: o `setProfile` saiu sem argumento,
+porque o módulo D-Bus do Plasma só envia argumentos com a assinatura entre
+parênteses (`(s)`). Depois da correção, coberta pelo teste do adaptador:
+
+- um clique em Equilibrado levou o PowerDevil e o daemon a `balanced`;
+- com o foco de teclado visível na lista, a seta para baixo pediu Desempenho, e o
+  foco ficou na lista;
+- duas trocas feitas por fora, pelo `busctl`, apareceram no card;
+- Escape fechou a Central.
+
+A dock fez uma chamada `setProfile` por ação, com o argumento certo. O perfil
+terminou em Desempenho, como estava antes, e o journal não registrou erro da dock.
+Desempenho bloqueado (computador no colo ou quente), perfis mantidos por apps e um
+sistema sem daemon de perfis só foram exercitados nos testes.
