@@ -479,6 +479,116 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.mic_calls(), [])
         self.assertEqual(self.warnings, [])
 
+
+    def power_calls(self):
+        calls = self.window.findChild(QObject, "controlCenterPowerBackend").property("calls")
+        return list(calls.toVariant() if hasattr(calls, "toVariant") else calls)
+
+    def test_power_profile_changes_only_after_the_service_reports_it(self):
+        state = self.window.findChild(QObject, "controlCenterPowerState")
+        confirmations = QSignalSpy(state.confirmed)
+        selector = self.item("controlCenterPowerProfile")
+        status = self.item("controlCenterPowerProfileStatus")
+        self.assertTrue(selector.isVisible())
+        self.assertEqual(selector.property("displayText"), "Equilibrado")
+        self.assertFalse(status.isVisible())
+        # Opening the Control Center never writes.
+        self.assertEqual(self.power_calls(), [])
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Down)
+        QTest.qWait(20)
+        self.assertEqual(self.power_calls(), ["performance"])
+        self.assertEqual(selector.property("displayText"), "Desempenho")
+        self.assertEqual(status.property("text"), "Aplicando Desempenho…")
+        self.assertTrue(selector.hasActiveFocus())
+        # A second choice while waiting is ignored and does not stay selected.
+        QTest.keyClick(self.window, Qt.Key_Up)
+        QTest.qWait(20)
+        self.assertEqual(self.power_calls(), ["performance"])
+        self.assertEqual(selector.property("displayText"), "Desempenho")
+        self.assertEqual(selector.property("currentIndex"), 2)
+        self.evaluate('powerBackend.report({current: "performance"})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmations.count(), 1)
+        self.assertFalse(state.property("pending"))
+        self.assertFalse(status.isVisible())
+        # A change made outside Orla is shown as it is, without a write.
+        self.evaluate('powerBackend.report({current: "power-saver"})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(selector.property("displayText"), "Economia de energia")
+        self.assertEqual(self.power_calls(), ["performance"])
+        self.assertEqual(confirmations.count(), 1)
+        self.assertEqual(self.warnings, [])
+
+    def test_power_profile_failures_and_limits_never_look_like_success(self):
+        state = self.window.findChild(QObject, "controlCenterPowerState")
+        selector = self.item("controlCenterPowerProfile")
+        status = self.item("controlCenterPowerProfileStatus")
+        self.evaluate("powerBackend.rejectWrites = true", self.window)
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Up)
+        QTest.qWait(20)
+        self.assertIn("recusou", status.property("text"))
+        self.assertEqual(selector.property("displayText"), "Equilibrado")
+        self.evaluate("powerBackend.rejectWrites = false", self.window)
+        # No confirmation: the request expires instead of claiming the profile.
+        self.assertTrue(self.evaluate('request("power-saver")', state))
+        QTest.qWait(450)
+        self.assertIn("não confirmou", status.property("text"))
+        self.assertEqual(selector.property("displayText"), "Equilibrado")
+        # An asynchronous refusal from the service ends the wait at once.
+        self.assertTrue(self.evaluate('request("power-saver")', state))
+        self.evaluate('powerBackend.writeFailed("power-saver")', self.window)
+        QTest.qWait(20)
+        self.assertFalse(state.property("pending"))
+        self.assertIn("recusou", status.property("text"))
+        # Performance is not offered while the service inhibits it.
+        self.evaluate('powerBackend.report({inhibitedReason: "lap-detected"})', self.window)
+        QTest.qWait(20)
+        calls = len(self.power_calls())
+        self.assertFalse(self.evaluate('request("performance")', state))
+        selector.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Down)
+        QTest.qWait(20)
+        self.assertEqual(len(self.power_calls()), calls)
+        self.assertEqual(selector.property("displayText"), "Equilibrado")
+        self.assertEqual(selector.property("currentIndex"), 1)
+        self.assertEqual(status.property("text"), "Desempenho indisponível: o computador pode estar no colo.")
+        # A profile held by an application says who holds it.
+        self.evaluate('powerBackend.report({inhibitedReason: "", current: "performance", '
+                      'holds: [{application: "GameMode", profile: "performance"}]})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(status.property("text"), "Mantido por GameMode")
+        self.assertEqual(self.warnings, [])
+
+    def test_power_profile_absent_or_unavailable_keeps_the_energy_card(self):
+        selector = self.item("controlCenterPowerProfile")
+        status = self.item("controlCenterPowerProfileStatus")
+        for snapshot, text in (('{status: "absent"}', "Este sistema não oferece perfis de energia."),
+                               ('{status: "unavailable"}', "Serviço de energia indisponível"),
+                               ('{status: "loading"}', "Lendo o perfil de energia…"),
+                               ('{status: "ready", profiles: ["custom"], current: "custom"}', "Este sistema não oferece perfis de energia.")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate(f"powerBackend.snapshot = {snapshot}", self.window)
+                QTest.qWait(20)
+                self.assertFalse(selector.isVisible())
+                self.assertEqual(status.property("text"), text)
+                self.assertTrue(self.item("controlCenterPowerCard").isVisible())
+                self.assertTrue(self.item("controlCenterPowerAction").isEnabled())
+        # Unknown names are dropped; an unknown current profile is not shown as a known one.
+        self.evaluate('powerBackend.snapshot = {status: "ready", profiles: ["balanced", "custom", "power-saver"], current: "custom"}', self.window)
+        QTest.qWait(20)
+        self.assertTrue(selector.isVisible())
+        self.assertEqual(self.evaluate("power.profiles", self.window).toVariant()
+                         if hasattr(self.evaluate("power.profiles", self.window), "toVariant")
+                         else self.evaluate("power.profiles", self.window), ["power-saver", "balanced"])
+        self.assertEqual(selector.property("displayText"), "Perfil desconhecido")
+        self.evaluate("power.backend = null", self.window)
+        QTest.qWait(20)
+        self.assertFalse(selector.isVisible())
+        self.assertFalse(status.isVisible())
+        self.assertEqual(self.power_calls(), [])
+        self.assertEqual(self.warnings, [])
     def test_full_volume_keeps_a_separate_visible_keyboard_focus_ring(self):
         self.evaluate("audioBackend.snapshot.outputs[0].volumeRaw = 65536; audioBackend.revision += 1", self.window)
         volume = self.item("controlCenterAudioVolume")

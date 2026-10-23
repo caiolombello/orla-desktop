@@ -19,6 +19,8 @@ Window {
     property alias dnd: fixtureDnd
     property alias micBackend: fixtureMicBackend
     property alias mic: fixtureMic
+    property alias powerBackend: fixturePowerBackend
+    property alias power: fixturePower
 
     QtObject {
         id: fixtureBackend
@@ -125,6 +127,25 @@ Window {
         confirmationTimeout: 300
         backend: fixtureMicBackend
     }
+    QtObject {
+        id: fixturePowerBackend
+        objectName: "controlCenterPowerBackend"
+        property var calls: []
+        property bool rejectWrites: false
+        property var snapshot: ({status: "ready", profiles: ["power-saver", "balanced", "performance"], current: "balanced",
+            inhibitedReason: "", degradedReason: "", holds: []})
+        signal writeFailed(string id)
+        function setProfile(id) { calls = calls.concat([id]); return !rejectWrites; }
+        // Tests report like PowerDevil would.
+        function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
+    }
+    DockUI.PowerProfileState {
+        id: fixturePower
+        objectName: "controlCenterPowerState"
+        active: true
+        confirmationTimeout: 300
+        backend: fixturePowerBackend
+    }
     DockUI.KdeControlActions {
         id: actions
         objectName: "controlCenterActions"
@@ -142,5 +163,6 @@ Window {
         brightness: fixtureBrightness
         doNotDisturb: fixtureDnd
         microphone: fixtureMic
+        powerProfile: fixturePower
     }
 }
