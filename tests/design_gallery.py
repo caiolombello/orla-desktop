@@ -111,6 +111,16 @@ class Gallery:
             popup = next(popup for popup in (evaluate(identifier) for identifier in POPUP_IDS)
                          if popup.property("visible"))
             self.save(f"popup-{host}-{name}", window, self.scene_rect(popup))
+        # The lower Control Center cards (Energy and its power profile) sit below the fold.
+        evaluate("closeContext(); settings.close()")
+        QTest.qWait(60)
+        evaluate("controlCenterPopup.openAt(settingsButton)")
+        QTest.qWait(100)
+        flick = window.findChild(QQuickItem, "controlCenterScroll").property("contentItem")
+        flick.setProperty("contentY", max(0.0, flick.property("contentHeight") - flick.property("height")))
+        QTest.qWait(100)
+        self.save(f"popup-{host}-control-center-energy", window,
+                  self.scene_rect(evaluate("controlCenterPopup")))
         evaluate("closeContext(); settings.close()")
         window.close()
         engine.deleteLater()
