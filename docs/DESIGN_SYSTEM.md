@@ -129,7 +129,8 @@ All live in `package/contents/ui/`. Reuse them before writing a new one.
 | `Card` | Groups and Control Center modules | `radius` (`Style.radius.module` for modules) |
 | `FormRow` | One row of a grouped settings list inside `Card { padding: 0 }` | `last` |
 | `OrlaButton` | Text actions | `variant`: `primary` (at most one per surface), `secondary`, `ghost` |
-| `OrlaIconButton` | Round toggles (mute) | `iconName`, `checked`; `text` is the accessible name |
+| `OrlaIconButton` | Round toggles (mute); `flat` for a module header's "open in KDE" chevron | `iconName`, `checked`, `flat`; `text` is the accessible name |
+| `ControlCenterToggle` | One Control Center row: round toggle, name and state; the name side opens KDE when `actionText` is set | `title`, `status`, `actionText`, `toggle`, `statusLabel`, `action` |
 | `SegmentedTabs` + `SegmentTab` | Switching sections in a popover | `TabBar` API (`currentIndex`) |
 | `SectionLabel` | Opening a group of settings | Short text; rendered uppercase |
 | `EventSurface` | In-dock confirmations | Geometry is test-pinned; change colors only through tokens |

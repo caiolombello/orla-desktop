@@ -33,7 +33,8 @@ DockPopup {
     width: Math.max(1, Math.min(Style.size.popupWidth + 2 * shadowMargin, widthBudget))
     height: Math.max(1, Math.min(implicitHeight, heightBudget))
     dock: geometryHost
-    title: qsTr("Central de Controle")
+    // No title: macOS shows the modules alone. The contents carry the accessible name.
+    title: ""
 
     function openAt(anchor) { return openFromDock(anchor); }
     function openFromDock(anchor) { return session.openFromDock(anchor); }
