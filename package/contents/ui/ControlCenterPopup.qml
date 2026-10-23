@@ -15,6 +15,7 @@ DockPopup {
     property var microphone: null
     property var powerProfile: null
     property var wifi: null
+    property var bluetooth: null
     property QtObject backendLifetime: null
     property bool playing: false
     property var validateClient: function(client) { return false; }
@@ -73,6 +74,7 @@ DockPopup {
         microphone: rootPopup.microphone
         powerProfile: rootPopup.powerProfile
         wifi: rootPopup.wifi
+        bluetooth: rootPopup.bluetooth
         foreground: rootPopup.scheme.text
         muted: rootPopup.scheme.textMuted
     }

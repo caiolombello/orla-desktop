@@ -152,6 +152,13 @@ Window {
         property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética"})
         function setEnabled(on) { calls = calls.concat([on]); return true; }
     }
+    QtObject {
+        id: bluetoothBackend
+        objectName: "dockBluetoothBackend"
+        property var calls: []
+        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"]})
+        function setEnabled(on) { calls = calls.concat([on]); return true; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -185,6 +192,7 @@ Window {
         microphoneBackendOverride: microphoneBackend
         powerProfileBackendOverride: powerProfileBackend
         wifiBackendOverride: wifiBackend
+        bluetoothBackendOverride: bluetoothBackend
         integrations.active: false
         integrations.transport: addonTransport
         addonTransportOverride: addonTransport

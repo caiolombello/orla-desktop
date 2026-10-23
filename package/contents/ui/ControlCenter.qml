@@ -20,12 +20,15 @@ Controls.Control {
     property var powerProfile: null
     // Optional: hosts without a Wi-Fi state show no Wi-Fi card.
     property var wifi: null
+    // Optional: hosts without a Bluetooth state show no Bluetooth card.
+    property var bluetooth: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
     property string soundError: ""
     property string powerError: ""
     property string networkError: ""
+    property string bluetoothError: ""
     property string allError: ""
     implicitWidth: 310
     // Tall enough to show every module (display and focus cards included)
@@ -51,6 +54,7 @@ Controls.Control {
         if (kind === "sound") soundError = message;
         else if (kind === "power") powerError = message;
         else if (kind === "network") networkError = message;
+        else if (kind === "bluetooth") bluetoothError = message;
         else if (kind === "all") allError = message;
         return Boolean(dispatched);
     }
@@ -102,6 +106,18 @@ Controls.Control {
         if (radio.pending) return radio.desired ? qsTr("Ligando…") : qsTr("Desligando…");
         if (!radio.enabled) return radio.hardwareEnabled ? qsTr("Desligado") : qsTr("Desligado por uma chave do computador");
         return radio.network ? qsTr("Conectado a %1").arg(boundedText(radio.network, 64)) : qsTr("Ligado · sem conexão");
+    }
+    function bluetoothText() {
+        const radio = root.bluetooth;
+        if (!radio) return "";
+        if (radio.status === "loading") return qsTr("Lendo o Bluetooth…");
+        if (radio.status === "absent") return qsTr("Nenhum adaptador Bluetooth disponível");
+        if (radio.status === "unavailable") return qsTr("Serviço de Bluetooth indisponível");
+        if (radio.pending) return radio.desired ? qsTr("Ligando…") : qsTr("Desligando…");
+        if (!radio.enabled) return qsTr("Desligado");
+        if (radio.connected.length === 1) return qsTr("Conectado a %1").arg(boundedText(radio.connected[0], 64));
+        if (radio.connected.length > 1) return qsTr("%1 dispositivos conectados").arg(radio.connected.length);
+        return qsTr("Ligado · nenhum dispositivo conectado");
     }
     function doNotDisturbText() {
         const mode = root.doNotDisturb;
@@ -721,6 +737,83 @@ Controls.Control {
                         Layout.fillWidth: true
                         visible: root.networkError.length > 0
                         text: root.networkError
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                }
+            }
+
+            Card {
+                objectName: "controlCenterBluetoothCard"
+                visible: root.bluetooth !== null && root.bluetooth.status !== "inactive"
+                Layout.fillWidth: true
+                radius: Style.radius.module
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Style.space.sm
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.space.md
+                        OrlaIconButton {
+                            objectName: "controlCenterBluetoothToggle"
+                            // Stays enabled while confirming: disabling would drop keyboard focus.
+                            // The state ignores a second request until the first one settles.
+                            enabled: !!root.bluetooth && root.bluetooth.status === "ready"
+                            checked: !!root.bluetooth && root.bluetooth.presentation
+                            iconName: checked ? "network-bluetooth-symbolic" : "network-bluetooth-inactive-symbolic"
+                            text: checked ? qsTr("Desligar Bluetooth") : qsTr("Ligar Bluetooth")
+                            onClicked: root.bluetooth.request(!root.bluetooth.enabled)
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Bluetooth")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
+                                color: root.foreground
+                            }
+                            Controls.Label {
+                                objectName: "controlCenterBluetoothStatus"
+                                Layout.fillWidth: true
+                                text: root.bluetoothText()
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                                color: root.muted
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterBluetoothError"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.bluetooth ? root.bluetooth.error : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                    OrlaButton {
+                        objectName: "controlCenterBluetoothAction"
+                        variant: "ghost"
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 40
+                        text: qsTr("Abrir Bluetooth no KDE")
+                        onClicked: root.request("bluetooth")
+                        onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterBluetoothActionError"
+                        Layout.fillWidth: true
+                        visible: root.bluetoothError.length > 0
+                        text: root.bluetoothError
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.foreground

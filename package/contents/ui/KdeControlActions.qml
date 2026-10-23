@@ -10,6 +10,7 @@ QtObject {
         if (kind === "sound") return "kcm_pulseaudio";
         if (kind === "power") return "kcm_powerdevilprofilesconfig";
         if (kind === "network") return "kcm_networkmanagement";
+        if (kind === "bluetooth") return "kcm_bluetooth";
         if (kind === "all") return "";
         return null;
     }
