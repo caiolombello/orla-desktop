@@ -137,6 +137,14 @@ Window {
         property var snapshot: ({status: "ready", input: {id: "input.synthetic", label: "Microfone sintético", muted: false, writable: true}})
         function setMuted(id, muted) { calls = calls.concat([{id: id, muted: muted}]); return true; }
     }
+    QtObject {
+        id: powerProfileBackend
+        objectName: "dockPowerProfileBackend"
+        property var calls: []
+        property var snapshot: ({status: "ready", profiles: ["power-saver", "balanced", "performance"], current: "balanced",
+            inhibitedReason: "", degradedReason: "", holds: []})
+        function setProfile(id) { calls = calls.concat([id]); return true; }
+    }
     ListModel {
         objectName: "fixtureMedia"
         property var currentPlayer: fixturePlayer
@@ -168,6 +176,7 @@ Window {
         brightnessBackendOverride: brightnessBackend
         doNotDisturbBackendOverride: doNotDisturbBackend
         microphoneBackendOverride: microphoneBackend
+        powerProfileBackendOverride: powerProfileBackend
         integrations.active: false
         integrations.transport: addonTransport
         addonTransportOverride: addonTransport

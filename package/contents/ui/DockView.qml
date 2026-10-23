@@ -47,6 +47,7 @@ Item {
     property var brightnessBackendOverride: null
     property var doNotDisturbBackendOverride: null
     property var microphoneBackendOverride: null
+    property var powerProfileBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -290,7 +291,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
-        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending
+        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1168,6 +1169,19 @@ Item {
         active: controlCenterPopup.visible
         backend: root.microphoneBackendOverride !== null ? root.microphoneBackendOverride : nativeMicrophoneBackend.item
     }
+    Loader {
+        id: nativePowerProfileBackend
+        objectName: "controlCenterPowerProfileNativeLoader"
+        // PowerDevil is read only while the Control Center is open.
+        active: controlCenterPopup.visible && root.powerProfileBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativePowerProfile.qml") : ""
+    }
+    PowerProfileState {
+        id: powerProfileState
+        objectName: "powerProfileState"
+        active: controlCenterPopup.visible
+        backend: root.powerProfileBackendOverride !== null ? root.powerProfileBackendOverride : nativePowerProfileBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1201,6 +1215,7 @@ Item {
         brightness: brightnessControlState
         doNotDisturb: doNotDisturbState
         microphone: microphoneState
+        powerProfile: powerProfileState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

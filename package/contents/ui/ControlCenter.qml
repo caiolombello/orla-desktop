@@ -16,6 +16,8 @@ Controls.Control {
     property var doNotDisturb: null
     // Optional: hosts without a microphone state show no microphone card.
     property var microphone: null
+    // Optional: hosts without a power-profile state show no profile choice.
+    property var powerProfile: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
@@ -57,6 +59,35 @@ Controls.Control {
         if (mic.pending) return mic.desired ? qsTr("Silenciando…") : qsTr("Ativando…");
         const name = boundedText(mic.label, 128);
         return mic.muted ? qsTr("Mudo · %1").arg(name) : qsTr("Ligado · %1").arg(name);
+    }
+    function powerProfileLabel(id) {
+        if (id === "power-saver") return qsTr("Economia de energia");
+        if (id === "balanced") return qsTr("Equilibrado");
+        if (id === "performance") return qsTr("Desempenho");
+        return qsTr("Perfil desconhecido");
+    }
+    function syncPowerProfile() {
+        if (root.powerProfile) profileSelector.currentIndex = root.powerProfile.profiles.indexOf(root.powerProfile.presentation);
+    }
+    function powerProfileText() {
+        const power = root.powerProfile;
+        if (!power) return "";
+        if (power.error) return power.error;
+        if (power.status === "loading") return qsTr("Lendo o perfil de energia…");
+        if (power.status === "absent") return qsTr("Este sistema não oferece perfis de energia.");
+        if (power.status === "unavailable") return qsTr("Serviço de energia indisponível");
+        if (power.pending) return qsTr("Aplicando %1…").arg(powerProfileLabel(power.desired));
+        const held = power.holds.filter(hold => hold.profile === power.current && hold.application.length > 0);
+        if (held.length > 0)
+            return qsTr("Mantido por %1").arg(boundedText(held.map(hold => hold.application).join(", "), 128));
+        if (power.inhibitedReason === "lap-detected")
+            return qsTr("Desempenho indisponível: o computador pode estar no colo.");
+        if (power.inhibitedReason === "high-operating-temperature")
+            return qsTr("Desempenho indisponível: o computador está muito quente.");
+        if (power.inhibitedReason) return qsTr("Desempenho indisponível no momento.");
+        if (power.current === "performance" && power.degradedReason)
+            return qsTr("O desempenho pode estar reduzido para conter o aquecimento.");
+        return "";
     }
     function doNotDisturbText() {
         const mode = root.doNotDisturb;
@@ -669,6 +700,75 @@ Controls.Control {
                                 color: root.muted
                             }
                         }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterPowerProfileHeading"
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: -Style.space.xs
+                        visible: profileRow.visible
+                        text: qsTr("Perfil de energia")
+                        font.pixelSize: Style.type.caption
+                        textFormat: Text.PlainText
+                        color: root.muted
+                    }
+                    RowLayout {
+                        id: profileRow
+                        Layout.fillWidth: true
+                        visible: root.powerProfile !== null && root.powerProfile.status === "ready"
+                        Controls.ComboBox {
+                            id: profileSelector
+                            objectName: "controlCenterPowerProfile"
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: 40
+                            model: root.powerProfile ? root.powerProfile.profiles : []
+                            // Stays enabled while confirming: disabling would drop keyboard focus.
+                            // The state ignores a second request until the first one settles.
+                            enabled: !!root.powerProfile && root.powerProfile.status === "ready"
+                            // The label follows the state, not currentIndex: ComboBox resets
+                            // its index on its own when the list of profiles changes.
+                            displayText: root.powerProfileLabel(root.powerProfile ? root.powerProfile.presentation : "")
+                            onCountChanged: Qt.callLater(root.syncPowerProfile)
+                            delegate: Controls.ItemDelegate {
+                                required property var modelData
+                                width: profileSelector.width
+                                enabled: root.powerProfile.selectable(modelData)
+                                text: root.powerProfileLabel(modelData)
+                                contentItem: Text {
+                                    text: parent.text
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    color: parent.palette.buttonText
+                                    opacity: parent.enabled ? 1 : 0.5
+                                    font: parent.font
+                                }
+                            }
+                            Accessible.name: qsTr("Perfil de energia")
+                            onActivated: index => {
+                                if (index >= 0 && index < root.powerProfile.profiles.length)
+                                    root.powerProfile.request(root.powerProfile.profiles[index]);
+                                // An ignored or refused choice must not stay selected.
+                                root.syncPowerProfile();
+                            }
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        Binding {
+                            target: profileSelector
+                            property: "currentIndex"
+                            value: root.powerProfile ? root.powerProfile.profiles.indexOf(root.powerProfile.presentation) : -1
+                            when: true
+                            restoreMode: Binding.RestoreNone
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterPowerProfileStatus"
+                        Layout.fillWidth: true
+                        visible: root.powerProfile !== null && root.powerProfile.status !== "inactive" && text.length > 0
+                        text: root.powerProfileText()
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.powerProfile && root.powerProfile.error ? root.foreground : root.muted
+                        Accessible.role: root.powerProfile && root.powerProfile.error ? Accessible.AlertMessage : Accessible.StaticText
                     }
                     OrlaButton {
                         objectName: "controlCenterPowerAction"

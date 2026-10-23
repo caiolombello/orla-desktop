@@ -13,6 +13,7 @@ DockPopup {
     property var brightness: null
     property var doNotDisturb: null
     property var microphone: null
+    property var powerProfile: null
     property QtObject backendLifetime: null
     property bool playing: false
     property var validateClient: function(client) { return false; }
@@ -69,6 +70,7 @@ DockPopup {
         brightness: rootPopup.brightness
         doNotDisturb: rootPopup.doNotDisturb
         microphone: rootPopup.microphone
+        powerProfile: rootPopup.powerProfile
         foreground: rootPopup.scheme.text
         muted: rootPopup.scheme.textMuted
     }
