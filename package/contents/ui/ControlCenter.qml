@@ -18,11 +18,14 @@ Controls.Control {
     property var microphone: null
     // Optional: hosts without a power-profile state show no profile choice.
     property var powerProfile: null
+    // Optional: hosts without a Wi-Fi state show no Wi-Fi card.
+    property var wifi: null
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
     property string soundError: ""
     property string powerError: ""
+    property string networkError: ""
     property string allError: ""
     implicitWidth: 310
     // Tall enough to show every module (display and focus cards included)
@@ -47,6 +50,7 @@ Controls.Control {
         const message = dispatched ? "" : qsTr("Não foi possível encaminhar esta ação ao KDE. Tente novamente.");
         if (kind === "sound") soundError = message;
         else if (kind === "power") powerError = message;
+        else if (kind === "network") networkError = message;
         else if (kind === "all") allError = message;
         return Boolean(dispatched);
     }
@@ -88,6 +92,16 @@ Controls.Control {
         if (power.current === "performance" && power.degradedReason)
             return qsTr("O desempenho pode estar reduzido para conter o aquecimento.");
         return "";
+    }
+    function wifiText() {
+        const radio = root.wifi;
+        if (!radio) return "";
+        if (radio.status === "loading") return qsTr("Lendo o Wi-Fi…");
+        if (radio.status === "absent") return qsTr("Nenhum adaptador Wi-Fi disponível");
+        if (radio.status === "unavailable") return qsTr("Serviço de rede indisponível");
+        if (radio.pending) return radio.desired ? qsTr("Ligando…") : qsTr("Desligando…");
+        if (!radio.enabled) return radio.hardwareEnabled ? qsTr("Desligado") : qsTr("Desligado por uma chave do computador");
+        return radio.network ? qsTr("Conectado a %1").arg(boundedText(radio.network, 64)) : qsTr("Ligado · sem conexão");
     }
     function doNotDisturbText() {
         const mode = root.doNotDisturb;
@@ -630,6 +644,83 @@ Controls.Control {
                         Layout.fillWidth: true
                         visible: text.length > 0
                         text: root.doNotDisturb ? root.doNotDisturb.error : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                }
+            }
+
+            Card {
+                objectName: "controlCenterWifiCard"
+                visible: root.wifi !== null && root.wifi.status !== "inactive"
+                Layout.fillWidth: true
+                radius: Style.radius.module
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Style.space.sm
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.space.md
+                        OrlaIconButton {
+                            objectName: "controlCenterWifiToggle"
+                            // Stays enabled while confirming: disabling would drop keyboard focus.
+                            // The state ignores a second request until the first one settles.
+                            enabled: !!root.wifi && root.wifi.status === "ready"
+                            checked: !!root.wifi && root.wifi.presentation
+                            iconName: checked ? "network-wireless-symbolic" : "network-wireless-disconnected-symbolic"
+                            text: checked ? qsTr("Desligar Wi-Fi") : qsTr("Ligar Wi-Fi")
+                            onClicked: root.wifi.request(!root.wifi.enabled)
+                            onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: qsTr("Wi-Fi")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.weight: Style.weight.demiBold
+                                color: root.foreground
+                            }
+                            Controls.Label {
+                                objectName: "controlCenterWifiStatus"
+                                Layout.fillWidth: true
+                                text: root.wifiText()
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                                color: root.muted
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterWifiError"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.wifi ? root.wifi.error : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: root.foreground
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                    OrlaButton {
+                        objectName: "controlCenterNetworkAction"
+                        variant: "ghost"
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 40
+                        text: qsTr("Abrir Rede no KDE")
+                        onClicked: root.request("network")
+                        onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                    }
+                    Controls.Label {
+                        objectName: "controlCenterNetworkError"
+                        Layout.fillWidth: true
+                        visible: root.networkError.length > 0
+                        text: root.networkError
                         textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
                         color: root.foreground

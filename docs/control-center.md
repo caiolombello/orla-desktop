@@ -184,3 +184,35 @@ A dock fez uma chamada `setProfile` por ação, com o argumento certo. O perfil
 terminou em Desempenho, como estava antes, e o journal não registrou erro da dock.
 Desempenho bloqueado (computador no colo ou quente), perfis mantidos por apps e um
 sistema sem daemon de perfis só foram exercitados nos testes.
+
+## Wi-Fi — CC2-B
+
+O card **Wi-Fi** liga e desliga o rádio Wi-Fi pela mesma biblioteca do applet de
+rede do Plasma (`plasma-nm`, sobre o NetworkManager). Ele mostra a rede
+conectada, “Ligado · sem conexão” ou “Desligado”. Uma chave do computador ou um
+bloqueio de rádio aparece como “Desligado por uma chave do computador”; nesse caso
+o Orla não tenta ligar e explica por quê. **Abrir Rede no KDE** abre as
+configurações de rede do sistema.
+
+A troca só conclui quando o NetworkManager publica o novo estado do rádio. O Orla
+não marca a mudança por conta própria: a biblioteca só pede a alteração, e o estado
+mostrado vem dos avisos do serviço. Uma recusa ou a falta de confirmação em 3
+segundos mostram erro, por exemplo quando uma política nega a mudança. O botão
+continua focável durante a confirmação, e um segundo pedido é ignorado até a
+resposta. Sem adaptador Wi-Fi, só este card fica desativado. A leitura só acontece
+com a Central aberta.
+
+Na sessão Plasma 6.7.5 deste registro, com o computador ligado à rede por cabo e
+o Wi-Fi sem rede conectada, o card mostrou “Ligado · sem conexão”:
+
+- um clique desligou o rádio, e o `nmcli` confirmou;
+- Espaço religou;
+- desligar e religar pelo `nmcli` apareceu no card;
+- com Tab, o contorno de foco ficou visível no botão, e Escape fechou a Central.
+
+O Wi-Fi terminou ligado, como estava, e o journal não registrou erro da dock.
+Chave de hardware, política que nega a mudança e um computador sem Wi-Fi só foram
+exercitados nos testes. **Abrir Rede no KDE** foi testado só pelo despacho.
+
+Escolher e conectar redes, inclusive com senha pelo fluxo de autenticação do KDE,
+fica para a próxima fatia.

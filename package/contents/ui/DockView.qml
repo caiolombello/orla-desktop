@@ -48,6 +48,7 @@ Item {
     property var doNotDisturbBackendOverride: null
     property var microphoneBackendOverride: null
     property var powerProfileBackendOverride: null
+    property var wifiBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
@@ -291,7 +292,7 @@ Item {
         || taskDragState.pressed || taskDragState.committing
         || launcherOrderBusy || launcherReloadPending || viewport.moving
         || audioControlState.pendingKind.length > 0 || audioControlState.volumeGestureActive
-        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending
+        || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending || wifiState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
         || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
@@ -1182,6 +1183,19 @@ Item {
         active: controlCenterPopup.visible
         backend: root.powerProfileBackendOverride !== null ? root.powerProfileBackendOverride : nativePowerProfileBackend.item
     }
+    Loader {
+        id: nativeWifiBackend
+        objectName: "controlCenterWifiNativeLoader"
+        // Plasma's network library is read only while the Control Center is open.
+        active: controlCenterPopup.visible && root.wifiBackendOverride === null && root.nativePopups
+        source: active ? Qt.resolvedUrl("NativeWifi.qml") : ""
+    }
+    WifiState {
+        id: wifiState
+        objectName: "wifiState"
+        active: controlCenterPopup.visible
+        backend: root.wifiBackendOverride !== null ? root.wifiBackendOverride : nativeWifiBackend.item
+    }
     AudioControlState {
         id: audioControlState
         objectName: "audioControlState"
@@ -1216,6 +1230,7 @@ Item {
         doNotDisturb: doNotDisturbState
         microphone: microphoneState
         powerProfile: powerProfileState
+        wifi: wifiState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available
