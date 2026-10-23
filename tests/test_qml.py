@@ -370,7 +370,8 @@ Item {
                     self.assertEqual(dialog.width(), 260)
                     self.assertLessEqual(dialog.height(), 320)
                     final_action = self.window.findChild(QQuickItem, "controlCenterAllAction")
-                    for _ in range(12):
+                    # Enough presses for every Control Center control (CC1 and CC2 cards included).
+                    for _ in range(20):
                         QTest.keyClick(dialog, Qt.Key_Tab)
                         QTest.qWait(10)
                         if dialog.activeFocusItem() == final_action:
@@ -842,7 +843,8 @@ Item {
         initial_top = final_action.mapToItem(viewport, QPoint(0, 0)).y()
         self.assertGreater(initial_top + final_action.height(), viewport.height())
         visited = []
-        for _ in range(12):
+        # Enough presses for every Control Center control (CC1 and CC2 cards included).
+        for _ in range(20):
             QTest.keyClick(self.window, Qt.Key_Tab)
             QTest.qWait(10)
             focused = self.window.activeFocusItem()
