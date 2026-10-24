@@ -288,6 +288,38 @@ para não derrubar a conexão em uso.
 Capturas sintéticas: [escuro](screenshots/control-center-wifi-networks/dark.png)
 e [claro](screenshots/control-center-wifi-networks/light.png).
 
+## Aparelhos Bluetooth — CC2-E
+
+Clicar no nome **Bluetooth** abre a página de aparelhos, no mesmo padrão da de
+Wi-Fi. Ela tem:
+
+- o botão de voltar e o interruptor do rádio;
+- os aparelhos **pareados** (até 12), conectados primeiro, com o ícone que o
+  BlueZ informa e a bateria quando o aparelho a relata;
+- **Ajustes de Bluetooth…**, onde continua o pareamento de aparelhos novos.
+
+Escolher um aparelho chama `connectToDevice` do BluezQt; o botão de ejetar
+chama `disconnectFromDevice`. O resultado só aparece quando o BlueZ relata o
+aparelho conectado ou desconectado. Há três formas de falha, e nenhuma parece
+sucesso:
+
+- recusa imediata;
+- erro devolvido pelo BlueZ, em texto simples e limitado. O erro de outro
+  aparelho não encerra a espera;
+- falta de resposta em 20 s.
+
+O card mostra "Conectando …" durante a espera. As linhas da Wi-Fi e do
+Bluetooth usam o mesmo componente, `ControlCenterListRow`.
+
+Prova: testes com fixtures sintéticas cobrem lista, foco, conectar, falhas,
+tempo esgotado e descarte de linhas inválidas. Uma leitura nativa só de leitura
+(offscreen, BluezQt real) listou dois aparelhos pareados (mouse conectado com
+bateria e teclado desconectado) sem registrar nomes. Conectar e desconectar não
+foram executados na sessão real, para não desligar seus periféricos.
+
+Capturas sintéticas: [escuro](screenshots/control-center-bluetooth-devices/dark.png)
+e [claro](screenshots/control-center-bluetooth-devices/light.png).
+
 ## Bluetooth — CC2-C
 
 O card **Bluetooth** liga e desliga o rádio Bluetooth do mesmo jeito que o applet

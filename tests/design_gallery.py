@@ -126,6 +126,10 @@ class Gallery:
         QTest.qWait(150)
         self.save(f"popup-{host}-control-center-wifi", window,
                   self.scene_rect(evaluate("controlCenterPopup")))
+        evaluate("controlCenterPopup.contents.showMain(); controlCenterPopup.contents.showBluetooth()")
+        QTest.qWait(150)
+        self.save(f"popup-{host}-control-center-bluetooth", window,
+                  self.scene_rect(evaluate("controlCenterPopup")))
         evaluate("closeContext(); settings.close()")
         window.close()
         engine.deleteLater()

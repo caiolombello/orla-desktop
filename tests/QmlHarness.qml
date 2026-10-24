@@ -163,8 +163,13 @@ Window {
         id: bluetoothBackend
         objectName: "dockBluetoothBackend"
         property var calls: []
-        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"]})
+        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"],
+            devices: [
+            {id: "/dev/a", name: "Fone sintético", icon: "audio-headphones", connected: true, battery: 70},
+            {id: "/dev/b", name: "Teclado sintético", icon: "input-keyboard", connected: false, battery: -1}]})
         function setEnabled(on) { calls = calls.concat([on]); return true; }
+        function connectDevice(id) { calls = calls.concat([{connect: id}]); return true; }
+        function disconnectDevice(id) { calls = calls.concat([{disconnect: id}]); return true; }
     }
     ListModel {
         objectName: "fixtureMedia"
