@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "KWin/Decoration",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Orla Desktop contributors"
+            }
+        ],
+        "Description": "Barra de título do Orla no estilo do macOS: semáforos à esquerda, título central e sombra suave; segue o esquema de cores do sistema.",
+        "Id": "kwin4_decoration_qml_orla",
+        "License": "MIT",
+        "Name": "Orla",
+        "Version": "0.1.0",
+        "Website": "https://github.com/caiolombello/orla-desktop"
+    }
+}

@@ -25,7 +25,7 @@ Alpha 0.2.10 extends the experimental Control Center: an optional global dock bu
 The source-only [shared Control Center increment](docs/validation/shared-control-center-source.md) adds an optional right-side bar entry using the dock’s existing view and audio state. It stays off in the preset, refuses missing or ambiguous owners, and preserves the dock when removed. Installed-package identity, native positioning/focus and real audio still have separate qualification gates.
 
 
-The Source checkout also builds an optional [Orla Plasma theme](docs/plasma-theme.md): a translucent, blurred top bar and rounded glass for Plasma popups, notifications and tooltips, following the system's light or dark colors. `scripts/plasma_theme.py apply` remembers the previous theme and `restore` switches back.
+The Source checkout also builds an optional [Orla Plasma theme](docs/plasma-theme.md): a translucent, blurred top bar and rounded glass for Plasma popups, notifications and tooltips, following the system's light or dark colors. `scripts/plasma_theme.py apply` remembers the previous theme and `restore` switches back. An optional [Orla window decoration](docs/window-decoration.md) gives KDE windows macOS traffic lights on the left, a centered title and rounded top corners; `scripts/window_decoration.py apply`/`restore` switch it reversibly.
 
 Alpha 0.2.10 also includes an [experimental KDE calendar slice](docs/calendar.md). It enables KDE's existing PIM event plugin in the calendar model only while the popup is open and reports only states the plugin API can support without guessing. Disabling the model entry does not prove that KDE backend processes stopped. Its tests use synthetic events and do not access Akonadi, Google accounts or personal calendars.
 
