@@ -36,6 +36,7 @@ Alpha 0.2.10 also includes an [experimental KDE calendar slice](docs/calendar.md
 - Read optional local snapshots from QuotaLantern, PeriGauge, and FalaTrace when those projects have written supported state files.
 - Create and explicitly select manual profiles for pinned apps, appearance, widget order/visibility, calendar events and the current-desktop window filter. The Pomodoro remains shared.
 - Keep the dock in a Plasma panel and configure its position and visibility through Plasma, including Auto Hide for edge-triggered reveal.
+- Optionally show the Trash at the end of the dock, after its own divider, as in macOS (global setting in **Widgets**). It shows whether the trash is empty or full and opens it in the file manager; it never deletes or restores files ([capture](docs/screenshots/dock-trash/dark.png)).
 
 The calendar reads the same calendar selection as KDE's calendar components without changing it. Changing that selection in KDE also changes KDE's clock/calendar. Orla does not connect Google Calendar by itself: use **Configure in KOrganizer** to add and authenticate the Google resource through KDE PIM, then enable synced events in the desired Orla profile. An empty day cannot distinguish no events from an unavailable or unconfigured KDE PIM backend; see the [calendar guide](docs/calendar.md).
 

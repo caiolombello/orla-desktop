@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import tempfile
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland" if os.environ.get("WAYLAND_DISPLAY") else "offscreen")
@@ -130,6 +131,41 @@ class DockInterfaceTests(unittest.TestCase):
         self.evaluate("systemGlass = false; systemGlassMargins = null")
         QTest.qWait(30)
         self.assertEqual((surface.x(), surface.width(), self.evaluate("implicitWidth")), plain)
+        self.assertEqual(self.warnings, [])
+
+    def test_trash_is_optional_and_follows_its_folder(self):
+        self.assertIsNone(self.window.findChild(QQuickItem, "trashTile"))
+        width = self.dock.width()
+        self.config.setProperty("showTrash", True)
+        QTest.qWait(50)
+        trash = self.window.findChild(QQuickItem, "trashTile")
+        self.assertIsNotNone(trash)
+        self.assertTrue(self.window.findChild(QQuickItem, "trashDivider").isVisible())
+        self.assertGreater(self.dock.width(), width)
+        with tempfile.TemporaryDirectory() as folder:
+            trash.setProperty("filesFolder", QUrl.fromLocalFile(folder))
+            QTest.qWait(200)
+            self.assertEqual(trash.property("iconSource"), "user-trash")
+            self.assertEqual(trash.property("subtitle"), "Vazia")
+            Path(folder, "documento.txt").write_text("x", encoding="utf-8")
+            for _ in range(40):
+                if trash.property("count") == 1:
+                    break
+                QTest.qWait(50)
+            self.assertEqual(trash.property("iconSource"), "user-trash-full")
+            self.assertEqual(trash.property("tooltip"), "Lixeira · 1 item")
+        # Clicking only asks to show the trash; nothing is deleted or restored.
+        expression = QQmlExpression(self.engine.rootContext(), trash, "opener = url => { subtitle = String(url); }")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        center = trash.mapToScene(QPointF(trash.width() / 2, trash.height() / 2))
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, center.toPoint())
+        QTest.qWait(30)
+        self.assertEqual(trash.property("subtitle"), "trash:/")
+        self.config.setProperty("showTrash", False)
+        QTest.qWait(50)
+        self.assertIsNone(self.window.findChild(QQuickItem, "trashTile"))
+        self.assertEqual(self.dock.width(), width)
         self.assertEqual(self.warnings, [])
 
     def test_settings_popup_opens_from_button(self):

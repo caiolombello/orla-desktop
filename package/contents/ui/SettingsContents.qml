@@ -278,6 +278,14 @@ ColumnLayout {
                     onToggled: settings.configuration.showControlCenter = checked
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
+                Controls.CheckBox {
+                    objectName: "showTrash"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar a Lixeira no fim do dock (global)")
+                    checked: Boolean(settings.configuration.showTrash)
+                    onToggled: settings.configuration.showTrash = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
                 Controls.Label {
                     Layout.fillWidth: true
                     text: qsTr("Preferência global salva imediatamente. Não muda com o perfil e pode ser desativada aqui.")
