@@ -1,8 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
-import QtQuick.Templates as Templates
-import org.kde.kirigami as Kirigami
 import "../code/Style.js" as Style
 
 // The Wi-Fi page of the Control Center, as in macOS: the radio switch, the
@@ -97,92 +95,27 @@ ColumnLayout {
             spacing: 0
             Repeater {
                 model: page.wifi ? page.wifi.networks : []
-                delegate: RowLayout {
-                    id: networkRow
+                delegate: ControlCenterListRow {
                     required property var modelData
-                    readonly property bool joining: page.wifi.joining === modelData.id
-                    readonly property bool connected: modelData.state === "connected"
+                    readonly property bool busy: page.wifi.joining === modelData.id || modelData.state === "connecting"
                     Layout.fillWidth: true
-                    spacing: 0
-                    Templates.Button {
-                        id: choose
-                        objectName: "controlCenterWifiNetwork"
-                        Layout.fillWidth: true
-                        implicitHeight: Style.size.target
-                        implicitWidth: implicitContentWidth + leftPadding + rightPadding
-                        padding: Style.space.xs
-                        leftPadding: Style.space.sm
-                        rightPadding: Style.space.sm
-                        hoverEnabled: true
-                        focusPolicy: Qt.StrongFocus
-                        readonly property string spokenName: networkRow.connected ? qsTr("%1, conectada").arg(networkRow.modelData.name)
-                            : networkRow.modelData.secured ? qsTr("Conectar a %1, protegida por senha").arg(networkRow.modelData.name)
-                            : qsTr("Conectar a %1").arg(networkRow.modelData.name)
-                        Accessible.name: spokenName
-                        onClicked: if (!networkRow.connected) page.wifi.join(networkRow.modelData.id)
-                        contentItem: RowLayout {
-                            spacing: Style.space.sm
-                            Kirigami.Icon {
-                                Layout.preferredWidth: Style.size.iconSm
-                                Layout.preferredHeight: Style.size.iconSm
-                                source: page.signalIcon(networkRow.modelData.strength)
-                                isMask: true
-                                color: networkRow.connected ? choose.palette.highlight : page.foreground
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                Controls.Label {
-                                    Layout.fillWidth: true
-                                    text: networkRow.modelData.name
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    font.weight: networkRow.connected ? Style.weight.demiBold : Style.weight.regular
-                                    color: page.foreground
-                                }
-                                Controls.Label {
-                                    Layout.fillWidth: true
-                                    visible: text.length > 0
-                                    text: networkRow.joining || networkRow.modelData.state === "connecting" ? qsTr("Conectando…")
-                                        : page.wifi.leaving === networkRow.modelData.id ? qsTr("Desconectando…")
-                                        : networkRow.connected ? qsTr("Conectada") : ""
-                                    textFormat: Text.PlainText
-                                    font.pixelSize: Style.type.caption
-                                    color: page.muted
-                                }
-                            }
-                            Kirigami.Icon {
-                                Layout.preferredWidth: Style.size.iconSm
-                                Layout.preferredHeight: Style.size.iconSm
-                                visible: networkRow.modelData.secured
-                                source: "object-locked-symbolic"
-                                isMask: true
-                                color: page.muted
-                            }
-                        }
-                        background: Rectangle {
-                            radius: Style.radius.control
-                            color: choose.down ? Style.alpha(page.foreground, Style.state.pressed)
-                                : choose.hovered ? Style.alpha(page.foreground, Style.state.hover) : "transparent"
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: parent.radius
-                                color: "transparent"
-                                visible: choose.visualFocus
-                                border.width: 2
-                                border.color: choose.palette.highlight
-                            }
-                        }
-                    }
-                    OrlaIconButton {
-                        objectName: "controlCenterWifiDisconnect"
-                        visible: networkRow.connected
-                        flat: true
-                        // Monochrome: Breeze's disconnect icon carries a red mark that reads as an error.
-                        iconName: "media-eject-symbolic"
-                        text: qsTr("Desconectar de %1").arg(networkRow.modelData.name)
-                        onClicked: page.wifi.leave(networkRow.modelData.id)
-                    }
+                    foreground: page.foreground
+                    muted: page.muted
+                    name: modelData.name
+                    iconName: page.signalIcon(modelData.strength)
+                    badgeIcon: modelData.secured ? "object-locked-symbolic" : ""
+                    connected: modelData.state === "connected"
+                    detail: busy ? qsTr("Conectando…")
+                        : page.wifi.leaving === modelData.id ? qsTr("Desconectando…")
+                        : connected ? qsTr("Conectada") : ""
+                    spokenName: connected ? qsTr("%1, conectada").arg(modelData.name)
+                        : modelData.secured ? qsTr("Conectar a %1, protegida por senha").arg(modelData.name)
+                        : qsTr("Conectar a %1").arg(modelData.name)
+                    disconnectText: qsTr("Desconectar de %1").arg(modelData.name)
+                    choose.objectName: "controlCenterWifiNetwork"
+                    disconnect.objectName: "controlCenterWifiDisconnect"
+                    onChosen: page.wifi.join(modelData.id)
+                    onDisconnectRequested: page.wifi.leave(modelData.id)
                 }
             }
         }

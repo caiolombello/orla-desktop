@@ -103,17 +103,20 @@ Controls.Control {
         return "";
     }
     // Focus follows the page; the ring shows only when the keyboard opened it.
-    function showWifi() {
-        const reason = wifiDetails.action.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
-        page = "wifi";
-        if (wifi) wifi.scan();
-        Qt.callLater(() => wifiPage.backButton.forceActiveFocus(reason));
+    function showWifi() { showPage("wifi", wifiDetails.action, wifiPage); if (wifi) wifi.scan(); }
+    function showBluetooth() { showPage("bluetooth", bluetoothDetails.action, bluetoothPage); }
+    function showPage(name, opener, loader) {
+        const reason = opener.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+        page = name;
+        Qt.callLater(() => { if (loader.item) loader.item.backButton.forceActiveFocus(reason); });
     }
     function showMain() {
-        const fromWifi = page === "wifi";
-        const reason = wifiPage.backButton.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+        const from = page;
+        const loader = from === "wifi" ? wifiPage : from === "bluetooth" ? bluetoothPage : null;
+        const reason = loader && loader.item && loader.item.backButton.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
         page = "main";
-        if (fromWifi) Qt.callLater(() => wifiDetails.action.forceActiveFocus(reason));
+        const opener = from === "wifi" ? wifiDetails.action : from === "bluetooth" ? bluetoothDetails.action : null;
+        if (opener) Qt.callLater(() => opener.forceActiveFocus(reason));
     }
     function wifiText() {
         const radio = root.wifi;
@@ -134,6 +137,8 @@ Controls.Control {
         if (radio.status === "unavailable") return qsTr("Serviço de Bluetooth indisponível");
         if (radio.pending) return radio.desired ? qsTr("Ligando…") : qsTr("Desligando…");
         if (!radio.enabled) return qsTr("Desligado");
+        if (radio.busyDevice) return radio.busyWantsConnected ? qsTr("Conectando %1…").arg(boundedText(radio.busyName, 64))
+                                                              : qsTr("Desconectando %1…").arg(boundedText(radio.busyName, 64));
         if (radio.connected.length === 1) return qsTr("Conectado a %1").arg(boundedText(radio.connected[0], 64));
         if (radio.connected.length > 1) return qsTr("%1 dispositivos conectados").arg(radio.connected.length);
         return qsTr("Ligado · nenhum dispositivo conectado");
@@ -207,17 +212,37 @@ Controls.Control {
             width: scroll.availableWidth
             spacing: Style.space.sm
 
-            ControlCenterWifiPage {
+            // The list pages exist only while shown: hidden, they would still
+            // cost items and accessibility nodes.
+            Loader {
                 id: wifiPage
-                objectName: "controlCenterWifiPage"
                 Layout.fillWidth: true
-                visible: root.page === "wifi" && root.wifi !== null
-                wifi: root.wifi
-                foreground: root.foreground
-                muted: root.muted
-                actionError: root.networkError
-                onBackRequested: root.showMain()
-                onSettingsRequested: root.request("network")
+                active: root.page === "wifi" && root.wifi !== null
+                visible: active
+                sourceComponent: ControlCenterWifiPage {
+                    objectName: "controlCenterWifiPage"
+                    wifi: root.wifi
+                    foreground: root.foreground
+                    muted: root.muted
+                    actionError: root.networkError
+                    onBackRequested: root.showMain()
+                    onSettingsRequested: root.request("network")
+                }
+            }
+            Loader {
+                id: bluetoothPage
+                Layout.fillWidth: true
+                active: root.page === "bluetooth" && root.bluetooth !== null
+                visible: active
+                sourceComponent: ControlCenterBluetoothPage {
+                    objectName: "controlCenterBluetoothPage"
+                    bluetooth: root.bluetooth
+                    foreground: root.foreground
+                    muted: root.muted
+                    actionError: root.bluetoothError
+                    onBackRequested: root.showMain()
+                    onSettingsRequested: root.request("bluetooth")
+                }
             }
 
             GridLayout {
@@ -282,29 +307,26 @@ Controls.Control {
                             Layout.fillWidth: true
                             spacing: Style.space.xxs
                             ControlCenterToggle {
+                                id: bluetoothDetails
                                 Layout.fillWidth: true
                                 foreground: root.foreground
                                 muted: root.muted
                                 title: qsTr("Bluetooth")
                                 status: root.bluetoothText()
-                                actionText: qsTr("Abrir Bluetooth no KDE")
+                                actionText: qsTr("Mostrar aparelhos Bluetooth")
                                 toggle.objectName: "controlCenterBluetoothToggle"
                                 toggle.enabled: !!root.bluetooth && root.bluetooth.status === "ready"
                                 toggle.checked: !!root.bluetooth && root.bluetooth.presentation
                                 toggle.iconName: toggle.checked ? "network-bluetooth-symbolic" : "network-bluetooth-inactive-symbolic"
                                 toggle.text: toggle.checked ? qsTr("Desligar Bluetooth") : qsTr("Ligar Bluetooth")
                                 statusLabel.objectName: "controlCenterBluetoothStatus"
-                                action.objectName: "controlCenterBluetoothAction"
+                                action.objectName: "controlCenterBluetoothDetails"
                                 onToggled: root.bluetooth.request(!root.bluetooth.enabled)
-                                onActionTriggered: root.request("bluetooth")
+                                onActionTriggered: root.showBluetooth()
                             }
                             ErrorLabel {
                                 objectName: "controlCenterBluetoothError"
                                 text: root.bluetooth ? root.bluetooth.error : ""
-                            }
-                            ErrorLabel {
-                                objectName: "controlCenterBluetoothActionError"
-                                text: root.bluetoothError
                             }
                         }
                         Item { Layout.fillHeight: true }

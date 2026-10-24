@@ -146,6 +146,7 @@ All live in `package/contents/ui/`. Reuse them before writing a new one.
 | `FormRow` | One row of a grouped settings list inside `Card { padding: 0 }` | `last` |
 | `OrlaButton` | Text actions | `variant`: `primary` (at most one per surface), `secondary`, `ghost` |
 | `OrlaIconButton` | Round toggles (mute); `flat` for a module header's "open in KDE" chevron | `iconName`, `checked`, `flat`; `text` is the accessible name |
+| `ControlCenterListRow` | One row of a Control Center list page (networks, devices): icon, name, state, badge; a disconnect button when connected | `name`, `detail`, `iconName`, `badgeIcon`, `connected`, `choose`, `disconnect` |
 | `ControlCenterToggle` | One Control Center row: round toggle, name and state; the name side opens KDE when `actionText` is set | `title`, `status`, `actionText`, `toggle`, `statusLabel`, `action` |
 | `SegmentedTabs` + `SegmentTab` | Switching sections in a popover | `TabBar` API (`currentIndex`) |
 | `SectionLabel` | Opening a group of settings | Short text; rendered uppercase |

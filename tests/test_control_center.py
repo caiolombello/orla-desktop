@@ -72,14 +72,16 @@ class ControlCenterTests(unittest.TestCase):
                              ("controlCenterNetworkAction", "kcm_networkmanagement"),
                              ("controlCenterBluetoothAction", "kcm_bluetooth"),
                              ("controlCenterAllAction", "")):
-            if name == "controlCenterNetworkAction":
-                # Network settings sit at the foot of the Wi-Fi page, as in macOS.
-                self.activate("controlCenterWifiDetails")
-                self.assertEqual(self.center.property("page"), "wifi")
+            # Network and Bluetooth settings sit at the foot of their pages, as in macOS.
+            pages = {"controlCenterNetworkAction": ("controlCenterWifiDetails", "controlCenterWifiBack", "wifi"),
+                     "controlCenterBluetoothAction": ("controlCenterBluetoothDetails", "controlCenterBluetoothBack", "bluetooth")}
+            if name in pages:
+                self.activate(pages[name][0])
+                self.assertEqual(self.center.property("page"), pages[name][2])
             self.activate(name)
             self.assertEqual(self.calls()[-1], target)
-            if name == "controlCenterNetworkAction":
-                self.activate("controlCenterWifiBack")
+            if name in pages:
+                self.activate(pages[name][1])
                 self.assertEqual(self.center.property("page"), "main")
         self.assertEqual(self.warnings, [])
 
@@ -576,8 +578,13 @@ class ControlCenterTests(unittest.TestCase):
                 self.assertTrue(card.isVisible())
                 self.assertFalse(toggle.isEnabled())
                 self.assertEqual(status.property("text"), text)
-                self.assertTrue(self.item("controlCenterBluetoothAction").isEnabled())
                 self.assertTrue(self.item("controlCenterWifiToggle").isEnabled())
+                # The KDE shortcut stays reachable: the page opens whatever the service says.
+                self.evaluate("showBluetooth()")
+                QTest.qWait(20)
+                self.assertTrue(self.item("controlCenterBluetoothAction").isEnabled())
+                self.evaluate("showMain()")
+                QTest.qWait(20)
         self.evaluate("bluetooth.backend = null", self.window)
         QTest.qWait(20)
         self.assertFalse(card.isVisible())
@@ -664,7 +671,12 @@ class ControlCenterTests(unittest.TestCase):
                 self.assertTrue(card.isVisible())
                 self.assertFalse(toggle.isEnabled())
                 self.assertEqual(status.property("text"), text)
+                # The KDE shortcut stays reachable: the page opens whatever the service says.
+                self.evaluate("showWifi()")
+                QTest.qWait(20)
                 self.assertTrue(self.item("controlCenterNetworkAction").isEnabled())
+                self.evaluate("showMain()")
+                QTest.qWait(20)
                 self.assertTrue(self.item("controlCenterAudioVolume").isEnabled())
         self.evaluate("wifi.backend = null", self.window)
         QTest.qWait(20)
@@ -740,9 +752,9 @@ class ControlCenterTests(unittest.TestCase):
     def test_leaving_and_join_failures_never_look_like_success(self):
         state = self.window.findChild(QObject, "controlCenterWifiState")
         left = QSignalSpy(state.networkLeft)
-        error = self.item("controlCenterWifiNetworkError")
         self.activate("controlCenterWifiDetails")
         QTest.qWait(30)
+        error = self.item("controlCenterWifiNetworkError")
         # Refused at once.
         self.evaluate("wifiBackend.rejectWrites = true", self.window)
         self.assertFalse(self.evaluate('join("/ap/2")', state))
@@ -793,6 +805,76 @@ class ControlCenterTests(unittest.TestCase):
         networks = state.property("networks")
         networks = networks.toVariant() if hasattr(networks, "toVariant") else networks
         self.assertEqual([(item["id"], item["strength"]) for item in networks], [("/c", 100)])
+        self.assertEqual(self.warnings, [])
+
+    def test_bluetooth_page_lists_paired_devices_and_connects_after_bluez(self):
+        state = self.window.findChild(QObject, "controlCenterBluetoothState")
+        confirmed = QSignalSpy(state.deviceConfirmed)
+        self.activate("controlCenterBluetoothDetails")
+        QTest.qWait(30)
+        self.assertTrue(self.shown("controlCenterBluetoothPage"))
+        self.assertTrue(self.item("controlCenterBluetoothBack").hasActiveFocus())
+        rows = self.visual_all("controlCenterBluetoothDevice")
+        self.assertEqual([row.property("spokenName") for row in rows],
+                         ["Fone sintético, conectado", "Conectar Teclado sintético"])
+        self.assertEqual([item.isVisible() for item in self.visual_all("controlCenterBluetoothDisconnect")], [True, False])
+        # Opening the list never writes.
+        self.assertEqual(self.bluetooth_calls(), [])
+        rows[1].forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.bluetooth_calls(), [{"connect": "/dev/b"}])
+        self.assertEqual(self.item("controlCenterBluetoothStatus").property("text"), "Conectando Teclado sintético…")
+        self.assertFalse(self.evaluate('setDeviceConnected("/dev/a", false)', state))
+        self.evaluate('bluetoothBackend.report({connected: ["Fone sintético", "Teclado sintético"], devices: ['
+                      '{id: "/dev/a", name: "Fone sintético", icon: "audio-headphones", connected: true, battery: 70},'
+                      '{id: "/dev/b", name: "Teclado sintético", icon: "input-keyboard", connected: true, battery: -1}]})',
+                      self.window)
+        QTest.qWait(20)
+        self.assertEqual(confirmed.count(), 1)
+        self.assertEqual(state.property("busyDevice"), "")
+        self.assertEqual(self.item("controlCenterBluetoothStatus").property("text"), "2 dispositivos conectados")
+        self.activate("controlCenterBluetoothBack")
+        QTest.qWait(30)
+        self.assertTrue(self.item("controlCenterBluetoothDetails").hasActiveFocus())
+        self.assertEqual(self.warnings, [])
+
+    def test_bluetooth_device_failures_never_look_like_success(self):
+        state = self.window.findChild(QObject, "controlCenterBluetoothState")
+        self.activate("controlCenterBluetoothDetails")
+        QTest.qWait(30)
+        error = self.item("controlCenterBluetoothDeviceError")
+        self.evaluate("bluetoothBackend.rejectWrites = true", self.window)
+        self.assertFalse(self.evaluate('setDeviceConnected("/dev/b", true)', state))
+        self.assertIn("recusou", error.property("text"))
+        self.evaluate("bluetoothBackend.rejectWrites = false", self.window)
+        self.assertTrue(self.evaluate('setDeviceConnected("/dev/b", true)', state))
+        # A failure for another device does not end this wait.
+        self.evaluate('bluetoothBackend.deviceFailed("/dev/a", "x")', self.window)
+        self.assertEqual(state.property("busyDevice"), "/dev/b")
+        self.evaluate('bluetoothBackend.deviceFailed("/dev/b", "<i>Page Timeout")', self.window)
+        QTest.qWait(20)
+        self.assertEqual(error.property("text"), "Não foi possível conectar Teclado sintético: <i>Page Timeout")
+        self.assertEqual(self.evaluate("textFormat", error), 0)
+        # No answer: the wait expires and says so.
+        disconnect = self.visual_all("controlCenterBluetoothDisconnect")[0]
+        disconnect.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.bluetooth_calls()[-1], {"disconnect": "/dev/a"})
+        QTest.qWait(550)
+        self.assertEqual(error.property("text"), "Fone sintético não confirmou a desconexão.")
+        # Radio off: no devices, explained; bad rows are dropped.
+        self.evaluate('bluetoothBackend.report({enabled: false, connected: [], devices: []})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(self.item("controlCenterBluetoothListStatus").property("text"), "O Bluetooth está desligado.")
+        self.evaluate('bluetoothBackend.report({enabled: true, devices: [{id: "/x", name: "Ícone ruim", icon: "../../etc",'
+                      ' connected: false, battery: 400}, {id: "/y", name: "", connected: false}, {id: "/z", name: "Sem estado"}]})',
+                      self.window)
+        QTest.qWait(20)
+        devices = state.property("devices")
+        devices = devices.toVariant() if hasattr(devices, "toVariant") else devices
+        self.assertEqual([(d["id"], d["icon"], d["battery"]) for d in devices], [("/x", "preferences-system-bluetooth", -1)])
         self.assertEqual(self.warnings, [])
 
     def power_calls(self):

@@ -182,14 +182,21 @@ Window {
         objectName: "controlCenterBluetoothBackend"
         property var calls: []
         property bool rejectWrites: false
-        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"]})
+        property var snapshot: ({status: "ready", enabled: true, blocked: false, connected: ["Fone sintético"],
+            devices: [
+            {id: "/dev/a", name: "Fone sintético", icon: "audio-headphones", connected: true, battery: 70},
+            {id: "/dev/b", name: "Teclado sintético", icon: "input-keyboard", connected: false, battery: -1}]})
+        signal deviceFailed(string id, string message)
         function setEnabled(on) { calls = calls.concat([on]); return !rejectWrites; }
+        function connectDevice(id) { calls = calls.concat([{connect: id}]); return !rejectWrites; }
+        function disconnectDevice(id) { calls = calls.concat([{disconnect: id}]); return !rejectWrites; }
         // Tests report like BlueZ would.
         function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
     }
     DockUI.BluetoothState {
         id: fixtureBluetooth
         objectName: "controlCenterBluetoothState"
+        deviceTimeout: 400
         active: true
         confirmationTimeout: 300
         backend: fixtureBluetoothBackend
