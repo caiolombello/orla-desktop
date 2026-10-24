@@ -113,6 +113,22 @@ characters, glyph when idle); `music` (local album art when the player offers a
 - Never fetch remote images; only local artwork is drawn.
 - New widget → add a palette in `widgetTiles` and a face, then check both schemes.
 
+## System glass (Orla Plasma theme)
+
+Applets cannot ask KWin for blur. With the optional Orla Plasma theme
+(`scripts/plasma_theme.py`, [guide](plasma-theme.md)) the theme's frames carry
+the blur, and Orla surfaces adapt:
+
+- the dock slab follows the measured bottom panel frame, inset by
+  `Style.dock.systemGlassBandX/Y`; translucent themes tint it at
+  `Style.glass.frostTint`, opaque ones stay opaque, and `GlassShadow` is off;
+- `DockPopup` uses the theme's dialog frame (`Style.glass.frameMargin` of it is
+  part of the visible glass), drops its own surface and shadow margin, and
+  cards become veils (`frostModule`, `frostBorder` over the scheme's text color);
+- `DockLabel` uses the theme's tooltip frame.
+
+Offscreen tests and other themes keep the drawn glass.
+
 ## Components
 
 All live in `package/contents/ui/`. Reuse them before writing a new one.

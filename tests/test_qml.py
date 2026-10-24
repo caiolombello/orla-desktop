@@ -98,6 +98,40 @@ class DockInterfaceTests(unittest.TestCase):
         self.app.processEvents()
         self.assertLess(self.dock.property("implicitWidth"), self.window.width())
 
+    def test_frosted_slab_follows_the_measured_panel_frame(self):
+        surface = self.window.findChild(QQuickItem, "dockSurface")
+        viewport = self.window.findChild(QQuickItem, "appsViewport")
+        content = self.window.findChild(QQuickItem, "dockContent")
+        plain = (surface.x(), surface.width(), self.evaluate("implicitWidth"))
+        # Without the theme, the slab keeps its legacy geometry and opaque tint.
+        self.assertEqual(plain[0], 6)
+        self.assertEqual(plain[2], content.property("implicitWidth") + 24)
+        # The panel adds uneven margins around the dock (measured live: ~9.5 and 14).
+        self.evaluate("systemGlassMargins = {left: 9.5, top: 4, right: 14, bottom: 4}; systemGlass = true")
+        QTest.qWait(30)
+        band_x, band_y = 10, 12
+        self.assertAlmostEqual(surface.x(), -9.5 + band_x)
+        self.assertAlmostEqual(surface.y(), -4 + band_y)
+        self.assertAlmostEqual(surface.width(), self.dock.width() + 9.5 + 14 - 2 * band_x)
+        self.assertAlmostEqual(surface.height(), self.dock.height() + 8 - 2 * band_y)
+        # The dock asks for exactly the slab: content plus 4 px glass inset each side.
+        self.assertAlmostEqual(self.evaluate("implicitWidth"),
+                               content.property("implicitWidth") + 2 * (4 + band_x) - 9.5 - 14)
+        self.assertAlmostEqual(viewport.x(), surface.x() + 4)
+        # Translucent tint so KWin's blur shows; no drawn shadow under it.
+        self.assertTrue(self.evaluate("frosted"))
+        self.assertAlmostEqual(surface.property("color").alphaF(), 0.5, delta=0.01)
+        # An opaque theme stays opaque even with the blur available.
+        self.config.setProperty("theme", "midnight")
+        QTest.qWait(30)
+        self.assertFalse(self.evaluate("frosted"))
+        self.assertEqual(surface.property("color").alphaF(), 1)
+        self.config.setProperty("theme", "glass")
+        self.evaluate("systemGlass = false; systemGlassMargins = null")
+        QTest.qWait(30)
+        self.assertEqual((surface.x(), surface.width(), self.evaluate("implicitWidth")), plain)
+        self.assertEqual(self.warnings, [])
+
     def test_settings_popup_opens_from_button(self):
         button = self.window.findChild(QQuickItem, "settingsButton")
         popup = self.window.findChild(QObject, "settingsPopup")

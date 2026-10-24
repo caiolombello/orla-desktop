@@ -109,7 +109,9 @@ class ControlCenterTests(unittest.TestCase):
         self.battery.setProperty("summary", "Bateria indisponível")
         self.battery.setProperty("subtitle", "Serviço de energia indisponível")
         QTest.qWait(20)
-        self.assertEqual(self.item("controlCenterMediaTitle").property("text"), "Nenhum player aberto")
+        # macOS wording; the detail line says why nothing plays.
+        self.assertEqual(self.item("controlCenterMediaTitle").property("text"), "Nada tocando")
+        self.assertEqual(self.item("controlCenterMediaDetail").property("text"), "Nenhum player aberto")
         self.assertEqual(self.item("controlCenterPowerTitle").property("text"), "Bateria indisponível")
         self.assertTrue(self.item("controlCenterSoundAction").property("enabled"))
         self.assertTrue(self.item("controlCenterPowerAction").property("enabled"))
@@ -138,8 +140,8 @@ class ControlCenterTests(unittest.TestCase):
                      "controlCenterPowerTitle", "controlCenterSoundError",
                      "controlCenterPowerError", "controlCenterAllError"):
             self.assertEqual(self.item(name).property("color").name(), foreground.name(), name)
-        for name in ("controlCenterMediaDetail", "controlCenterOutputHeading",
-                     "controlCenterPowerDetail"):
+        # The output caption left with the compact macOS layout; the selector keeps its accessible name.
+        for name in ("controlCenterMediaDetail", "controlCenterPowerDetail"):
             self.assertEqual(self.item(name).property("color").name(), muted.name(), name)
 
         self.assertEqual(self.evaluate("palette.buttonText", button), button_text_before)
