@@ -121,6 +121,11 @@ class Gallery:
         QTest.qWait(100)
         self.save(f"popup-{host}-control-center-energy", window,
                   self.scene_rect(evaluate("controlCenterPopup")))
+        # The Wi-Fi page: networks in range, as macOS opens from the Wi-Fi name.
+        evaluate("controlCenterPopup.contents.showWifi()")
+        QTest.qWait(150)
+        self.save(f"popup-{host}-control-center-wifi", window,
+                  self.scene_rect(evaluate("controlCenterPopup")))
         evaluate("closeContext(); settings.close()")
         window.close()
         engine.deleteLater()

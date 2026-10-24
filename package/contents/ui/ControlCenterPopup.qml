@@ -61,6 +61,8 @@ DockPopup {
             return rootPopup.visible;
         }
     }
+    // Each opening starts on the modules, as in macOS.
+    onClosed: center.page = "main"
     ControlCenter {
         id: center
         objectName: "controlCenterContents"
