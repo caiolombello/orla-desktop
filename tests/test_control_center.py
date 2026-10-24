@@ -72,8 +72,15 @@ class ControlCenterTests(unittest.TestCase):
                              ("controlCenterNetworkAction", "kcm_networkmanagement"),
                              ("controlCenterBluetoothAction", "kcm_bluetooth"),
                              ("controlCenterAllAction", "")):
+            if name == "controlCenterNetworkAction":
+                # Network settings sit at the foot of the Wi-Fi page, as in macOS.
+                self.activate("controlCenterWifiDetails")
+                self.assertEqual(self.center.property("page"), "wifi")
             self.activate(name)
             self.assertEqual(self.calls()[-1], target)
+            if name == "controlCenterNetworkAction":
+                self.activate("controlCenterWifiBack")
+                self.assertEqual(self.center.property("page"), "main")
         self.assertEqual(self.warnings, [])
 
     def test_action_failure_stays_in_its_card_and_does_not_claim_success(self):
@@ -603,7 +610,7 @@ class ControlCenterTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.qWait(20)
         self.assertEqual(self.wifi_calls(), [False])
-        self.evaluate('wifiBackend.report({enabled: false, network: ""})', self.window)
+        self.evaluate('wifiBackend.report({enabled: false, network: "", networks: []})', self.window)
         QTest.qWait(20)
         self.assertEqual(confirmations.count(), 1)
         self.assertEqual(status.property("text"), "Desligado")
@@ -663,6 +670,129 @@ class ControlCenterTests(unittest.TestCase):
         QTest.qWait(20)
         self.assertFalse(card.isVisible())
         self.assertEqual(self.wifi_calls(), [])
+        self.assertEqual(self.warnings, [])
+
+    def test_wifi_page_lists_networks_in_range_and_returns_focus(self):
+        backend = self.window.findChild(QObject, "controlCenterWifiBackend")
+        self.activate("controlCenterWifiDetails")
+        QTest.qWait(30)
+        # Layout objects crash PySide's wrapper: read their visibility in QML.
+        self.assertTrue(self.shown("controlCenterWifiPage"))
+        self.assertFalse(self.shown("controlCenterTiles"))
+        self.assertFalse(self.item("controlCenterAllAction").isVisible())
+        self.assertEqual(backend.property("scans"), 1)
+        self.assertTrue(self.item("controlCenterWifiBack").hasActiveFocus())
+        rows = self.visual_all("controlCenterWifiNetwork")
+        # Connected first, then by signal; names stay plain and bounded.
+        self.assertEqual([row.property("spokenName") for row in rows],
+                         ["Rede sintética, conectada", "Conectar a Café sintético",
+                          "Conectar a Vizinho sintético, protegida por senha"])
+        self.assertTrue(self.item("controlCenterWifiSwitch").property("checked"))
+        disconnect = self.visual_all("controlCenterWifiDisconnect")
+        self.assertEqual([item.isVisible() for item in disconnect], [True, False, False])
+        # Opening the list never writes.
+        self.assertEqual(self.wifi_calls(), [])
+        self.activate("controlCenterWifiBack")
+        QTest.qWait(30)
+        self.assertEqual(self.center.property("page"), "main")
+        self.assertTrue(self.item("controlCenterWifiDetails").hasActiveFocus())
+        self.assertEqual(self.warnings, [])
+
+    def shown(self, name):
+        return self.evaluate("(function find(item) { if (item.objectName === %r) return item.visible;"
+                             " for (let i = 0; i < item.children.length; ++i) { const f = find(item.children[i]);"
+                             " if (f !== undefined) return f; } return undefined; })(contentItem)" % name, self.center)
+
+    def visual_all(self, name):
+        # Searched in QML: wrapping layout items in Python crashes PySide.
+        found = self.evaluate("(function find(item, out) { if (item.objectName === %r) out.push(item);"
+                              " for (let i = 0; i < item.children.length; ++i) find(item.children[i], out);"
+                              " return out; })(contentItem, [])" % name, self.center)
+        return list(found.toVariant() if hasattr(found, "toVariant") else found)
+
+    def test_joining_a_network_waits_for_network_manager(self):
+        state = self.window.findChild(QObject, "controlCenterWifiState")
+        joined = QSignalSpy(state.networkJoined)
+        self.activate("controlCenterWifiDetails")
+        QTest.qWait(30)
+        cafe = self.visual_all("controlCenterWifiNetwork")[1]
+        cafe.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.wifi_calls(), [{"join": "/ap/2"}])
+        self.assertEqual(state.property("joining"), "/ap/2")
+        self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Conectando a Café sintético…")
+        # A second choice is ignored until NetworkManager answers.
+        self.assertFalse(self.evaluate('join("/ap/3")', state))
+        self.assertEqual(len(self.wifi_calls()), 1)
+        # Joining saves the network: it comes back with a new id, now connected.
+        self.evaluate('wifiBackend.report({network: "Café sintético", networks: ['
+                      '{id: "/settings/9", name: "Café sintético", strength: 55, secured: false, saved: true, state: "connected"},'
+                      '{id: "/settings/1", name: "Rede sintética", strength: 82, secured: true, saved: true, state: "available"}]})',
+                      self.window)
+        QTest.qWait(20)
+        self.assertEqual(joined.count(), 1)
+        self.assertEqual(state.property("joining"), "")
+        self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Conectado a Café sintético")
+        self.assertEqual(state.property("networkError"), "")
+        self.assertEqual(self.warnings, [])
+
+    def test_leaving_and_join_failures_never_look_like_success(self):
+        state = self.window.findChild(QObject, "controlCenterWifiState")
+        left = QSignalSpy(state.networkLeft)
+        error = self.item("controlCenterWifiNetworkError")
+        self.activate("controlCenterWifiDetails")
+        QTest.qWait(30)
+        # Refused at once.
+        self.evaluate("wifiBackend.rejectWrites = true", self.window)
+        self.assertFalse(self.evaluate('join("/ap/2")', state))
+        self.assertIn("recusou", error.property("text"))
+        self.evaluate("wifiBackend.rejectWrites = false", self.window)
+        # Reported failure from NetworkManager, with its message kept as plain bounded text.
+        self.assertTrue(self.evaluate('join("/ap/3")', state))
+        self.evaluate('wifiBackend.joinFailed("/settings/new", "<b>" + "senha incorreta ".repeat(40))', self.window)
+        QTest.qWait(20)
+        self.assertEqual(state.property("joining"), "")
+        text = error.property("text")
+        self.assertTrue(text.startswith("Não foi possível conectar a Vizinho sintético: <b>"))
+        self.assertLessEqual(len(text), 220)
+        self.assertEqual(self.evaluate("textFormat", error), 0)
+        # No answer at all: the wait expires and says so.
+        self.assertTrue(self.evaluate('join("/ap/2")', state))
+        QTest.qWait(550)
+        self.assertIn("ainda não confirmou", error.property("text"))
+        # Leaving: only after the network stops being connected.
+        disconnect = self.visual_all("controlCenterWifiDisconnect")[0]
+        disconnect.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(self.wifi_calls()[-1], {"leave": "/settings/1"})
+        self.assertEqual(state.property("leaving"), "/settings/1")
+        self.assertEqual(left.count(), 0)
+        self.evaluate('wifiBackend.report({network: "", networks: ['
+                      '{id: "/settings/1", name: "Rede sintética", strength: 82, secured: true, saved: true, state: "available"}]})',
+                      self.window)
+        QTest.qWait(20)
+        self.assertEqual(left.count(), 1)
+        self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Ligado · sem conexão")
+        self.assertEqual(self.warnings, [])
+
+    def test_wifi_page_explains_a_radio_that_is_off(self):
+        self.activate("controlCenterWifiDetails")
+        QTest.qWait(30)
+        self.evaluate('wifiBackend.report({enabled: false, network: "", networks: []})', self.window)
+        QTest.qWait(20)
+        self.assertEqual(self.item("controlCenterWifiListStatus").property("text"), "O Wi-Fi está desligado.")
+        self.assertEqual(self.visual_all("controlCenterWifiNetwork"), [])
+        # Ill-formed rows are dropped instead of shown.
+        self.evaluate('wifiBackend.report({enabled: true, networks: [{id: "", name: "x", state: "available"},'
+                      '{id: "/a", name: "  ", state: "available"}, {id: "/b", name: "Ok", state: "weird"},'
+                      '{id: "/c", name: "Válida", strength: 400, state: "available"}]})', self.window)
+        QTest.qWait(20)
+        state = self.window.findChild(QObject, "controlCenterWifiState")
+        networks = state.property("networks")
+        networks = networks.toVariant() if hasattr(networks, "toVariant") else networks
+        self.assertEqual([(item["id"], item["strength"]) for item in networks], [("/c", 100)])
         self.assertEqual(self.warnings, [])
 
     def power_calls(self):

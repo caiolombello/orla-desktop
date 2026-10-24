@@ -155,8 +155,17 @@ Window {
         objectName: "controlCenterWifiBackend"
         property var calls: []
         property bool rejectWrites: false
-        property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética"})
+        property int scans: 0
+        property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética",
+            networks: [
+            {id: "/settings/1", name: "Rede sintética", strength: 82, secured: true, saved: true, state: "connected"},
+            {id: "/ap/2", name: "Café sintético", strength: 55, secured: false, saved: false, state: "available"},
+            {id: "/ap/3", name: "Vizinho sintético", strength: 20, secured: true, saved: false, state: "available"}]})
+        signal joinFailed(string id, string message)
         function setEnabled(on) { calls = calls.concat([on]); return !rejectWrites; }
+        function joinNetwork(id) { calls = calls.concat([{join: id}]); return !rejectWrites; }
+        function leaveNetwork(id) { calls = calls.concat([{leave: id}]); return !rejectWrites; }
+        function scan() { scans += 1; }
         // Tests report like NetworkManager would.
         function report(changes) { snapshot = Object.assign({}, snapshot, changes); }
     }
@@ -165,6 +174,7 @@ Window {
         objectName: "controlCenterWifiState"
         active: true
         confirmationTimeout: 300
+        joinTimeout: 400
         backend: fixtureWifiBackend
     }
     QtObject {

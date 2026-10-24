@@ -149,8 +149,15 @@ Window {
         id: wifiBackend
         objectName: "dockWifiBackend"
         property var calls: []
-        property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética"})
+        property var snapshot: ({status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética",
+            networks: [
+            {id: "/settings/1", name: "Rede sintética", strength: 82, secured: true, saved: true, state: "connected"},
+            {id: "/ap/2", name: "Café sintético", strength: 55, secured: false, saved: false, state: "available"},
+            {id: "/ap/3", name: "Vizinho sintético", strength: 20, secured: true, saved: false, state: "available"}]})
         function setEnabled(on) { calls = calls.concat([on]); return true; }
+        function joinNetwork(id) { calls = calls.concat([{join: id}]); return true; }
+        function leaveNetwork(id) { calls = calls.concat([{leave: id}]); return true; }
+        function scan() {}
     }
     QtObject {
         id: bluetoothBackend

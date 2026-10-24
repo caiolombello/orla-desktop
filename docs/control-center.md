@@ -242,6 +242,52 @@ exercitados nos testes. **Abrir Rede no KDE** foi testado só pelo despacho.
 Escolher e conectar redes, inclusive com senha pelo fluxo de autenticação do KDE,
 fica para a próxima fatia.
 
+## Redes Wi-Fi — CC2-D
+
+Como no macOS, clicar no nome **Wi-Fi** abre a página de redes dentro da
+própria Central. A página tem:
+
+- o botão de voltar e o interruptor do rádio;
+- as redes ao alcance: a conectada primeiro, depois as salvas e as demais por
+  intensidade do sinal, até 12, com ícone de sinal e cadeado nas protegidas;
+- **Ajustes de Rede…**, que abre a página do KDE.
+
+Cada abertura da Central volta aos módulos. A página só pede uma nova busca de
+redes (`requestScan`); abrir a lista não conecta nem desconecta nada.
+
+Escolher uma rede pede a conexão ao NetworkManager pelo `plasma-nm`:
+
+- uma rede salva é reativada (`activateConnection`);
+- uma rede nova é adicionada (`addAndActivateConnection`). Se ela tiver senha,
+  quem pergunta é o agente de segredos do próprio KDE: o Orla nunca vê nem
+  guarda senhas.
+
+A conexão só aparece como feita quando o NetworkManager relata a rede
+conectada. A comparação é pelo nome, porque a rede nova muda de identificador
+ao ser salva. Durante a espera, o card mostra "Conectando a…" e outra escolha é
+ignorada.
+
+Há três formas de falha, e nenhuma parece sucesso:
+
+- recusa imediata;
+- falha relatada pelo NetworkManager, cuja mensagem aparece como texto simples
+  e limitado;
+- falta de resposta em 45 s. Nesse caso o aviso lembra de concluir a senha no
+  diálogo do KDE.
+
+O botão de ejetar na rede conectada desconecta (`deactivateConnection`), também
+com espera pela confirmação. Redes ocultas, sem nome, ficam para as
+configurações do KDE.
+
+Prova: os testes cobrem lista, ordem, foco, conectar, desconectar e falhas,
+com fixtures sintéticas. Uma leitura nativa offscreen, só de leitura, conferiu
+o adaptador contra o `plasma-nm` real (rede conectada, protegida, salva) sem
+registrar nomes. Conectar e desconectar não foram executados na sessão real,
+para não derrubar a conexão em uso.
+
+Capturas sintéticas: [escuro](screenshots/control-center-wifi-networks/dark.png)
+e [claro](screenshots/control-center-wifi-networks/light.png).
+
 ## Bluetooth — CC2-C
 
 O card **Bluetooth** liga e desliga o rádio Bluetooth do mesmo jeito que o applet

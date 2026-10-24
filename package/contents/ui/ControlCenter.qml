@@ -31,6 +31,8 @@ Controls.Control {
     property string networkError: ""
     property string bluetoothError: ""
     property string allError: ""
+    // "main" shows the modules; "wifi" the networks in range, as macOS does.
+    property string page: "main"
     // Two columns of modules, as in macOS, once both fit their toggle and name.
     readonly property bool wide: width >= 300
     implicitWidth: 310
@@ -100,9 +102,23 @@ Controls.Control {
             return qsTr("O desempenho pode estar reduzido para conter o aquecimento.");
         return "";
     }
+    // Focus follows the page; the ring shows only when the keyboard opened it.
+    function showWifi() {
+        const reason = wifiDetails.action.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+        page = "wifi";
+        if (wifi) wifi.scan();
+        Qt.callLater(() => wifiPage.backButton.forceActiveFocus(reason));
+    }
+    function showMain() {
+        const fromWifi = page === "wifi";
+        const reason = wifiPage.backButton.visualFocus ? Qt.TabFocusReason : Qt.OtherFocusReason;
+        page = "main";
+        if (fromWifi) Qt.callLater(() => wifiDetails.action.forceActiveFocus(reason));
+    }
     function wifiText() {
         const radio = root.wifi;
         if (!radio) return "";
+        if (radio.joining) return qsTr("Conectando a %1…").arg(boundedText(radio.joiningName, 64));
         if (radio.status === "loading") return qsTr("Lendo o Wi-Fi…");
         if (radio.status === "absent") return qsTr("Nenhum adaptador Wi-Fi disponível");
         if (radio.status === "unavailable") return qsTr("Serviço de rede indisponível");
@@ -191,9 +207,23 @@ Controls.Control {
             width: scroll.availableWidth
             spacing: Style.space.sm
 
+            ControlCenterWifiPage {
+                id: wifiPage
+                objectName: "controlCenterWifiPage"
+                Layout.fillWidth: true
+                visible: root.page === "wifi" && root.wifi !== null
+                wifi: root.wifi
+                foreground: root.foreground
+                muted: root.muted
+                actionError: root.networkError
+                onBackRequested: root.showMain()
+                onSettingsRequested: root.request("network")
+            }
+
             GridLayout {
                 id: tiles
                 objectName: "controlCenterTiles"
+                visible: root.page === "main"
                 readonly property real half: (width - columnSpacing) / 2
                 Layout.fillWidth: true
                 columns: root.wide ? 2 : 1
@@ -220,12 +250,13 @@ Controls.Control {
                             Layout.fillWidth: true
                             spacing: Style.space.xxs
                             ControlCenterToggle {
+                                id: wifiDetails
                                 Layout.fillWidth: true
                                 foreground: root.foreground
                                 muted: root.muted
                                 title: qsTr("Wi-Fi")
                                 status: root.wifiText()
-                                actionText: qsTr("Abrir Rede no KDE")
+                                actionText: qsTr("Mostrar redes Wi-Fi")
                                 // Stays enabled while confirming: disabling would drop keyboard focus.
                                 // The state ignores a second request until the first one settles.
                                 toggle.objectName: "controlCenterWifiToggle"
@@ -234,17 +265,13 @@ Controls.Control {
                                 toggle.iconName: toggle.checked ? "network-wireless-symbolic" : "network-wireless-disconnected-symbolic"
                                 toggle.text: toggle.checked ? qsTr("Desligar Wi-Fi") : qsTr("Ligar Wi-Fi")
                                 statusLabel.objectName: "controlCenterWifiStatus"
-                                action.objectName: "controlCenterNetworkAction"
+                                action.objectName: "controlCenterWifiDetails"
                                 onToggled: root.wifi.request(!root.wifi.enabled)
-                                onActionTriggered: root.request("network")
+                                onActionTriggered: root.showWifi()
                             }
                             ErrorLabel {
                                 objectName: "controlCenterWifiError"
                                 text: root.wifi ? root.wifi.error : ""
-                            }
-                            ErrorLabel {
-                                objectName: "controlCenterNetworkError"
-                                text: root.networkError
                             }
                         }
                         Item { Layout.fillHeight: true }
@@ -880,6 +907,7 @@ Controls.Control {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                visible: root.page === "main"
                 spacing: Style.space.xs
                 OrlaButton {
                     objectName: "controlCenterAllAction"
