@@ -356,10 +356,13 @@ def main(argv: list[str]) -> int:
             state.write_text(json.dumps({"previous": active}) + "\n", encoding="utf-8")
         _switch(THEME_ID)
         return 0
-    saved = json.loads(state.read_text(encoding="utf-8")) if state.exists() else {}
-    previous = saved.get("previous") or "default"
+    # Without a saved state Orla never switched the theme: leave it alone.
+    if not state.exists():
+        print("Nothing to restore.", file=sys.stderr)
+        return 1
+    previous = json.loads(state.read_text(encoding="utf-8")).get("previous") or "default"
     _switch(previous)
-    state.unlink(missing_ok=True)
+    state.unlink()
     print(previous)
     return 0
 
