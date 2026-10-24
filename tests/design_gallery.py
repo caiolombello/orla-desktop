@@ -104,6 +104,18 @@ class Gallery:
                 QTest.qWait(150)
                 self.save(f"dock-{theme}", window, self.scene_rect(dock))
         config.setProperty("theme", "glass")
+        if host == "dark":
+            # The optional Trash closes the dock after its own divider, as in macOS.
+            config.setProperty("showTrash", True)
+            QTest.qWait(50)
+            # A private empty folder: the capture never reads the user's own trash.
+            empty_trash = tempfile.mkdtemp(prefix="orla-gallery-trash-")
+            window.findChild(QQuickItem, "trashTile").setProperty("filesFolder", QUrl.fromLocalFile(empty_trash))
+            QTest.qWait(200)
+            self.save("dock-glass-trash", window, self.scene_rect(dock))
+            shutil.rmtree(empty_trash, ignore_errors=True)
+            config.setProperty("showTrash", False)
+            QTest.qWait(100)
         for name, source in POPUPS:
             evaluate("closeContext(); settings.close()")
             QTest.qWait(60)

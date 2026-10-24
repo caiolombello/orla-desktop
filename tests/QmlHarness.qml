@@ -50,6 +50,7 @@ Window {
         property bool showLocalToasts: false
         property bool showAudioHud: false
         property bool showControlCenter: false
+        property bool showTrash: false
         property bool calendarEvents: false
         property bool currentDesktopOnly: false
         property int focusMinutes: 25

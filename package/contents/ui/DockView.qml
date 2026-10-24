@@ -938,6 +938,24 @@ Item {
             }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
+            // The Trash closes the dock after its own divider, as in macOS (optional, global).
+            Rectangle { objectName: "trashDivider"; anchors.verticalCenter: parent.verticalCenter; visible: trashLoader.active; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
+            Loader {
+                id: trashLoader
+                anchors.verticalCenter: parent.verticalCenter
+                active: Boolean(root.configuration.showTrash)
+                // An unloaded Loader keeps its last width; hidden, the Row skips it.
+                visible: active
+                sourceComponent: TrashTile {
+                    objectName: "trashTile"
+                    iconSize: root.tileSize
+                    foreground: root.foreground; muted: root.muted; accent: root.accent
+                    animationDuration: root.motion
+                    nativeLabel: root.nativePopups
+                    onHoveredChanged: root.hoverTile(this, hovered)
+                    onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
+                }
+            }
 
         }
     }
