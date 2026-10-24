@@ -67,6 +67,11 @@ lado. Abaixo ficam os módulos de largura total: **Tela**, **Som** e **Energia**
 e no fim **Ajustes do sistema…**. Em larguras menores, a mesma ordem vira uma
 coluna, com rolagem e foco visível no controle ativo.
 
+Os módulos são compactos para caber sem rolagem mesmo quando o Plasma limita
+o popup a cerca de 720 px: **Tocando agora** põe a arte ao lado do texto ("Nada
+tocando" quando não há player), **Som** dispensa a legenda da saída (o seletor
+mantém o nome acessível) e **Energia** põe o perfil na mesma linha da bateria.
+
 Cada linha de rádio tem o botão redondo, que liga ou desliga, e o nome com o
 estado. Nas linhas de Wi-Fi e Bluetooth, o nome é um botão que abre a página
 do KDE correspondente. Ele mostra realce ao passar o mouse, anel de foco e uma

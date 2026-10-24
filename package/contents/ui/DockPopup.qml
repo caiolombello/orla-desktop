@@ -23,8 +23,13 @@ Item {
     onAnchorControlChanged: _focusRestoreGeneration++
     onDockChanged: _focusRestoreGeneration++
     readonly property bool nativeBackend: Boolean(dock && dock.nativePopups)
+    // With the Orla Plasma theme, the native dialog draws the theme's glass, which
+    // KWin blurs and shadows; the popup then draws no surface of its own.
+    readonly property bool systemGlass: nativeBackend && Boolean(dock && dock.systemPopupGlass)
+    // The theme dialog's own margin, already part of the visible glass.
+    readonly property int frameMargin: systemGlass ? Style.glass.frameMargin : 0
     readonly property real screenHeight: dock && dock.Screen.height > 0 ? dock.Screen.height : 640
-    readonly property real maximumPopupHeight: Math.max(1, screenHeight - (dock ? dock.height : 0) - 30)
+    readonly property real maximumPopupHeight: Math.max(1, screenHeight - (dock ? dock.height : 0) - 30 - 2 * frameMargin)
     readonly property alias popupSurface: surface
     readonly property alias background: surfaceBackground
     readonly property alias contentItem: surface.contentItem
@@ -34,7 +39,7 @@ Item {
     readonly property alias nativeDialog: nativeLoader.item
     // Transparent room around the glass for its shadow; the dialog window
     // includes it, so spacing is measured between visible surfaces.
-    readonly property int shadowMargin: Style.space.md + Style.space.xxs
+    readonly property int shadowMargin: systemGlass ? 0 : Style.space.md + Style.space.xxs
     readonly property real glassEdge: dock && dock.glassTop !== undefined ? dock.glassTop : 0
     readonly property real edgeGap: Style.space.sm + Style.space.xxs
     readonly property bool lightScheme: Style.luminance(scheme.surface) > 0.4
@@ -47,7 +52,7 @@ Item {
     signal closed()
     parent: dock
     visible: false
-    width: Style.size.popupWidth + 2 * shadowMargin
+    width: Style.size.popupWidth + 2 * shadowMargin - 2 * frameMargin
     implicitHeight: surface.implicitHeight
     height: Math.min(implicitHeight, maximumPopupHeight)
     // Typed hosts clear during teardown, before their owned facade is deleted.
@@ -141,17 +146,18 @@ Item {
         rightInset: popup.shadowMargin
         topInset: popup.shadowMargin
         bottomInset: popup.shadowMargin
-        padding: Style.space.lg + popup.shadowMargin
+        padding: Style.space.lg + popup.shadowMargin - popup.frameMargin
         focus: true
         Keys.onEscapePressed: event => { popup.close(); event.accepted = true; }
         palette.window: popup.scheme.surface
         palette.windowText: popup.scheme.text
         palette.text: popup.scheme.text
         palette.buttonText: popup.scheme.text
-        palette.base: popup.scheme.raised
+        // Modules on blurred glass are light veils, like macOS; opaque otherwise.
+        palette.base: popup.systemGlass ? Style.alpha(popup.scheme.text, Style.glass.frostModule) : popup.scheme.raised
         palette.alternateBase: popup.scheme.sunken
         palette.button: popup.scheme.raised
-        palette.mid: popup.scheme.border
+        palette.mid: popup.systemGlass ? Style.alpha(popup.scheme.text, Style.glass.frostBorder) : popup.scheme.border
         palette.dark: popup.scheme.borderStrong
         palette.highlight: popup.scheme.accent
         palette.highlightedText: popup.scheme.onAccent
@@ -169,6 +175,7 @@ Item {
         Kirigami.Theme.focusColor: popup.scheme.focus
         Kirigami.Theme.hoverColor: popup.scheme.accent
         background: Item {
+            visible: !popup.systemGlass
             GlassShadow {
                 target: surfaceBackground
                 radius: surfaceBackground.radius

@@ -87,18 +87,27 @@ var dock = {
     slotGap: 8,         // slot width = iconSize + slotGap
     glassInset: 4,      // glass edge, measured outward from the content lane
     glassPadding: 3,    // glass above and below the slot row
-    iconRadius: 0.225   // squircle corner ratio for live icons
+    iconRadius: 0.225,  // squircle corner ratio for live icons
+    // With the Orla Plasma theme, the bottom panel frame's blur mask is the slab:
+    // a rounded rectangle this far inside the frame (scripts/plasma_theme.py).
+    systemGlassBandX: 10,
+    systemGlassBandY: 12
 };
 
-// Glass treatment for Orla surfaces (no compositor blur is available to applets):
-// a soft top sheen, a specular rim brighter at the top, a hairline and a shadow.
+// Glass treatment for Orla surfaces: a soft top sheen, a specular rim brighter at
+// the top, a hairline and a shadow. Applets cannot ask KWin for blur themselves;
+// the optional Orla Plasma theme supplies it (scripts/plasma_theme.py).
 var glass = {
     sheenDark: 0.07, sheenLight: 0.4,
     rimTopDark: 0.28, rimTopLight: 0.9,
     rimBottomDark: 0.04, rimBottomLight: 0.35,
     shadowDark: 0.42, shadowLight: 0.16,
     shadowBlur: 18, shadowOffset: 5,
-    highlight: "#ffffff", shade: "#000000"
+    highlight: "#ffffff", shade: "#000000",
+    // With KWin blur behind (Orla Plasma theme): tint opacity of a translucent
+    // dock, module fill and hairline inside blurred popups, and the theme's
+    // dialog margin that popups subtract from their own padding.
+    frostTint: 0.5, frostModule: 0.07, frostBorder: 0.09, frameMargin: 10
 };
 
 // Live widget icons: gradient squircles from the brand illustration palette.

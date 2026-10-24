@@ -1,6 +1,7 @@
 import gzip
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -143,6 +144,55 @@ class PlasmaThemeTests(unittest.TestCase):
         svg.render(painter, "header-center", QRectF(0, 0, 40, 40))
         painter.end()
         self.assertEqual(image.pixelColor(20, 20).alpha(), 0)
+
+    def test_markers_tell_orla_when_the_theme_provides_glass(self):
+        for base in ("", "translucent/"):
+            self.assertTrue(self.renderer(f"{base}dialogs/background.svgz").elementExists(plasma_theme.POPUP_MARKER))
+            self.assertTrue(self.renderer(f"{base}widgets/panel-background.svgz").elementExists(plasma_theme.DOCK_MARKER))
+        # The markers are exactly the ones the dock looks for.
+        probe = (ROOT / "package/contents/ui/NativeSystemGlass.qml").read_text(encoding="utf-8")
+        self.assertIn(f'hasElement("{plasma_theme.DOCK_MARKER}")', probe)
+        self.assertIn(f'hasElement("{plasma_theme.POPUP_MARKER}")', probe)
+
+    def test_dock_frame_is_an_invisible_slab_mask_matching_the_tokens(self):
+        style = (ROOT / "package/contents/code/Style.js").read_text(encoding="utf-8")
+
+        def token(name):
+            match = re.search(rf"\b{name}:\s*(\d+)", style)
+            self.assertIsNotNone(match, name)
+            return int(match.group(1))
+
+        dock = plasma_theme.DOCK_FRAME
+        bx, by = dock["band"]
+        self.assertEqual((bx, by), (token("systemGlassBandX"), token("systemGlassBandY")))
+        self.assertEqual(plasma_theme.FRAMES["dialogs/background"]["margin"], token("frameMargin"))
+        for base in ("", "translucent/"):
+            svg = self.renderer(f"{base}widgets/panel-background.svgz")
+            for prefix in ("south-", "mask-south-"):
+                for tile in TILES:
+                    self.assertTrue(svg.elementExists(prefix + tile), prefix + tile)
+                corner = svg.boundsOnElement(prefix + "topleft")
+                self.assertEqual((round(corner.width(), 6), round(corner.height(), 6)),
+                                 (bx + dock["radius"], by + dock["radius"]))
+            for side in ("top", "bottom", "left", "right"):
+                hint = svg.boundsOnElement(f"south-hint-{side}-margin")
+                self.assertEqual(hint.height() if side in ("top", "bottom") else hint.width(), dock["margin"])
+
+            def alpha(element, x, y, w, h):
+                image = QImage(w, h, QImage.Format_ARGB32)
+                image.fill(0)
+                painter = QPainter(image)
+                svg.render(painter, element, QRectF(0, 0, w, h))
+                painter.end()
+                return image.pixelColor(x, y).alpha()
+
+            top = svg.boundsOnElement("mask-south-top")
+            w, h = int(top.width()), int(top.height())
+            # The band stays out of the blur; the glass below it is in.
+            self.assertEqual(alpha("mask-south-top", 1, 1, w, h), 0)
+            self.assertEqual(alpha("mask-south-top", 1, h - 1, w, h), 255)
+            # The dock draws the tint; the theme's own frame stays invisible.
+            self.assertEqual(alpha("south-center", 2, 2, 4, 4), 0)
 
     def test_cli_refuses_unknown_commands(self):
         self.assertEqual(plasma_theme.main(["plasma_theme.py"]), 2)

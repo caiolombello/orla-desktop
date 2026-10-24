@@ -30,7 +30,7 @@ DockPopup {
         : geometryHost ? geometryHost.Screen.desktopAvailableWidth : 0
     property real widthBudget: screenWidth > 0 ? Math.max(1, screenWidth - 40) : Style.size.popupWidth
     property real heightBudget: maximumPopupHeight
-    width: Math.max(1, Math.min(Style.size.popupWidth + 2 * shadowMargin, widthBudget))
+    width: Math.max(1, Math.min(Style.size.popupWidth + 2 * shadowMargin - 2 * frameMargin, widthBudget))
     height: Math.max(1, Math.min(implicitHeight, heightBudget))
     dock: geometryHost
     // No title: macOS shows the modules alone. The contents carry the accessible name.

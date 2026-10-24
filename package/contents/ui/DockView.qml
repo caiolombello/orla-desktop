@@ -16,6 +16,16 @@ Item {
     required property var configuration
     property bool popAbove: false
     property bool nativePopups: false
+    // Set by the panel host when the Orla Plasma theme gives the panel frame
+    // the slab's shape (KWin blurs behind it) and when dialogs get theme glass.
+    property bool systemGlass: false
+    property bool systemPopupGlass: false
+    // Space between the dock and the panel frame, {left, top, right, bottom},
+    // as measured by the host; null assumes Breeze's 4 px panel margins.
+    property var systemGlassMargins: null
+    readonly property var frameMargins: systemGlassMargins || ({left: 4, top: 4, right: 4, bottom: 4})
+    readonly property rect glassFrame: Qt.rect(-frameMargins.left, -frameMargins.top,
+        width + frameMargins.left + frameMargins.right, height + frameMargins.top + frameMargins.bottom)
     property date now: new Date()
     property string notice: ""
     property var menuData: ({})
@@ -80,7 +90,10 @@ Item {
         || Boolean(presentation.showAudioHud)
     readonly property int settingsLaneWidth: settingsButton.implicitWidth
     readonly property int minimumTaskWidth: tileSize + 16
-    readonly property int innerWidth: Math.max(0, width - outerMargin * 2)
+    // The lane for slots: inside the glass by its inset when frosted, else by outerMargin.
+    readonly property real laneStart: systemGlass ? dockSurface.x + Style.dock.glassInset : outerMargin
+    readonly property real laneEnd: systemGlass ? dockSurface.x + dockSurface.width - Style.dock.glassInset : width - outerMargin
+    readonly property int innerWidth: Math.max(0, Math.floor(laneEnd - laneStart))
     readonly property int candidateEventSlotWidth: Math.min(224, Math.floor(innerWidth * 0.30),
         Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - minimumTaskWidth))
     readonly property bool localEventsProfileReady: profileState.writable
@@ -89,9 +102,15 @@ Item {
         && candidateEventSlotWidth >= 48
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
     readonly property int centerViewportWidth: innerWidth
-    // The legacy lane reserves 4 px after the content; the glass skips it.
-    readonly property int trailingReserve: 4
-    implicitWidth: content.implicitWidth + root.outerMargin * 2 + trailingReserve
+    // The legacy lane reserves 4 px after the content; the glass skips it. The
+    // theme's frame is symmetric, so the frosted slab gives the reserve up.
+    readonly property int trailingReserve: systemGlass ? 0 : 4
+    // Frosted, ask for exactly the slab the frame will draw: content, glass insets
+    // and the theme band, less what the panel already adds around the dock.
+    implicitWidth: systemGlass
+        ? content.implicitWidth + 2 * (Style.dock.glassInset + Style.dock.systemGlassBandX)
+            - frameMargins.left - frameMargins.right
+        : content.implicitWidth + root.outerMargin * 2 + trailingReserve
     implicitHeight: requestedIconSize + 38
 
     ProfileState {
@@ -706,25 +725,36 @@ Item {
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
     // Glass slab: hugs the slot row like the macOS dock and leaves the rest of the
     // panel transparent. Tokens still drive its color, radius, border and opacity.
-    readonly property int glassHeight: Math.min(height, tileSize + 16 + Style.dock.glassPadding * 2)
+    readonly property int glassHeight: systemGlass ? Math.max(0, glassFrame.height - 2 * Style.dock.systemGlassBandY)
+        : Math.min(height, tileSize + 16 + Style.dock.glassPadding * 2)
     readonly property real glassTop: dockSurface.y
+    // Frosted: KWin blurs behind the slab, so a translucent theme lets it through.
+    // Opaque themes (Midnight, Paper, custom opacity 1) stay opaque.
+    readonly property real surfaceOpacity: appearanceState.overridden ? appearanceState.effective.tokens.opacity
+        : light || presentation.appearance.theme === "midnight" ? 1 : Style.dockThemes.glass.opacity
+    readonly property bool frosted: systemGlass && surfaceOpacity < 1
+    readonly property color surfaceBase: appearanceState.overridden ? appearanceState.effective.tokens.surface
+        : Style.dockThemes.glass.surface
     GlassShadow {
         target: dockSurface
         radius: dockSurface.radius
-        strength: root.lightSurface ? Style.glass.shadowLight : Style.glass.shadowDark
+        // A drawn shadow would darken the glass from below once it is translucent.
+        strength: root.frosted ? 0 : root.lightSurface ? Style.glass.shadowLight : Style.glass.shadowDark
         blur: Style.space.sm + Style.space.xs
         offset: Style.space.xxs
     }
     Rectangle {
         id: dockSurface
         objectName: "dockSurface"
-        x: root.outerMargin - Style.dock.glassInset
-        width: Math.max(0, root.width - 2 * x - root.trailingReserve)
+        // Frosted, the slab is exactly the theme frame's blur mask.
+        x: root.systemGlass ? root.glassFrame.x + Style.dock.systemGlassBandX : root.outerMargin - Style.dock.glassInset
+        width: root.systemGlass ? Math.max(0, root.glassFrame.width - 2 * Style.dock.systemGlassBandX)
+            : Math.max(0, root.width - 2 * x - root.trailingReserve)
         height: root.glassHeight
-        y: Math.round((root.height - height) / 2)
+        y: root.systemGlass ? root.glassFrame.y + Style.dock.systemGlassBandY : Math.round((root.height - height) / 2)
         radius: appearanceState.effective.tokens.radius
-        color: root.surface
-        opacity: appearanceState.overridden ? appearanceState.effective.tokens.opacity : 1
+        color: root.frosted ? Style.alpha(root.surfaceBase, Style.glass.frostTint) : root.surface
+        opacity: !root.frosted && appearanceState.overridden ? appearanceState.effective.tokens.opacity : 1
         border.width: 1
         border.color: appearanceState.effective.tokens.border
         Behavior on color { ColorAnimation { duration: root.motion } }
@@ -764,7 +794,7 @@ Item {
     Flickable {
         id: viewport
         objectName: "appsViewport"
-        x: root.outerMargin
+        x: root.laneStart
         // Full height: lifted and bouncing icons may rise above the glass.
         y: 0
         width: root.centerViewportWidth
@@ -928,7 +958,7 @@ Item {
     }
     EventSurface {
         id: localEventSurface
-        x: root.width - root.outerMargin - width
+        x: root.laneEnd - width
         // Inside the glass, whatever the panel thickness.
         y: dockSurface.y + Style.dock.glassPadding + 1
         width: root.eventSlotWidth
@@ -993,7 +1023,7 @@ Item {
         id: nativeTaskMenu
         objectName: "nativeTaskContextMenu"
         dock: root
-        width: 300 + 2 * shadowMargin
+        width: 300 + 2 * shadowMargin - 2 * frameMargin
         title: root.menuData.title || ""
         ColumnLayout {
             id: nativeTaskActions
@@ -1032,6 +1062,7 @@ Item {
         readonly property bool nativePopups: root.nativePopups
         readonly property var popupScheme: root.popupScheme
         readonly property real glassTop: root.glassTop
+        readonly property bool systemPopupGlass: root.systemPopupGlass
     }
     DockPopup {
         id: settings

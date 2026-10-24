@@ -4,6 +4,7 @@ import QtCore
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
+import org.kde.ksvg as KSvg
 import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
 import "../code/Style.js" as Style
@@ -33,7 +34,16 @@ PlasmoidItem {
         readonly property bool nativePopups: true
         readonly property bool popAbove: Plasmoid.location === PlasmaCore.Types.BottomEdge
         readonly property var popupScheme: Style.scheme(Style.schemeFor(bar.menuControl.palette.window))
+        // With the Orla Plasma theme the shared Control Center uses its blurred dialog glass.
+        readonly property bool systemPopupGlass: root.themeGlass
         // Screen/Window attached geometry belongs to this bar's panel window.
+    }
+    property bool themeGlass: false
+    KSvg.Svg {
+        id: dialogTheme
+        imagePath: "dialogs/background"
+        onRepaintNeeded: root.themeGlass = hasElement("hint-orla-glass")
+        Component.onCompleted: root.themeGlass = hasElement("hint-orla-glass")
     }
     NativePopupHost {
         id: nativePopupHost

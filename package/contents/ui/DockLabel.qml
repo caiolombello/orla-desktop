@@ -30,15 +30,18 @@ PlasmaCore.Dialog {
     type: PlasmaCore.Dialog.Tooltip
     flags: Qt.ToolTip | Qt.WindowDoesNotAcceptFocus | Qt.FramelessWindowHint
     outputOnly: true
-    backgroundHints: PlasmaCore.Dialog.NoBackground
+    // With the Orla Plasma theme the tooltip frame is blurred glass, as in macOS.
+    readonly property bool systemGlass: Boolean(owner.systemPopupGlass)
+    backgroundHints: systemGlass ? PlasmaCore.Dialog.StandardBackground : PlasmaCore.Dialog.NoBackground
     color: "transparent"
     hideOnWindowDeactivate: false
     mainItem: Rectangle {
-        implicitWidth: Math.min(name.implicitWidth, 320) + Style.space.md * 2
-        implicitHeight: name.implicitHeight + Style.space.xs * 2 + 2
+        // The theme's tooltip frame already pads by its margin.
+        implicitWidth: Math.min(name.implicitWidth, 320) + (label.systemGlass ? Style.space.xs : Style.space.md) * 2
+        implicitHeight: name.implicitHeight + (label.systemGlass ? 0 : Style.space.xs * 2 + 2)
         radius: Style.radius.control
-        color: Style.alpha(label.owner.popupScheme.surface, 0.96)
-        border.width: 1
+        color: label.systemGlass ? "transparent" : Style.alpha(label.owner.popupScheme.surface, 0.96)
+        border.width: label.systemGlass ? 0 : 1
         border.color: label.owner.popupScheme.border
         Text {
             id: name

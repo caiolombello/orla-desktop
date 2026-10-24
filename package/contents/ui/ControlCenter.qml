@@ -36,7 +36,7 @@ Controls.Control {
     implicitWidth: 310
     // Tall enough to show every module without scrolling, as macOS does, on a
     // 1080p screen; the popup budget caps shorter screens, which then scroll.
-    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 800)
+    implicitHeight: Math.min(body.implicitHeight + topPadding + bottomPadding, 900)
     Layout.fillHeight: true
     Layout.minimumHeight: 1
     Accessible.role: Accessible.Pane
@@ -291,15 +291,12 @@ Controls.Control {
                     Layout.fillHeight: true
                     Layout.preferredWidth: root.wide ? tiles.half : tiles.width
                     radius: Style.radius.module
-                    GridLayout {
+                    RowLayout {
                         anchors.fill: parent
-                        // Artwork above the text in a half-width tile, beside it otherwise.
-                        columns: root.wide ? 1 : 2
-                        columnSpacing: Style.space.md
-                        rowSpacing: Style.space.sm
+                        spacing: Style.space.sm
                         LiveIcon {
-                            Layout.preferredWidth: Style.size.target + Style.space.xs
-                            Layout.preferredHeight: Style.size.target + Style.space.xs
+                            Layout.preferredWidth: Style.size.control
+                            Layout.preferredHeight: Style.size.control
                             Layout.alignment: Qt.AlignTop
                             kind: "music"
                             live: Boolean(root.player)
@@ -314,7 +311,7 @@ Controls.Control {
                                 objectName: "controlCenterMediaTitle"
                                 Layout.fillWidth: true
                                 text: root.player ? root.boundedText(root.player.track || root.player.identity, 256) || qsTr("Player sem título")
-                                                  : qsTr("Nenhum player aberto")
+                                                  : qsTr("Nada tocando")
                                 textFormat: Text.PlainText
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
@@ -326,7 +323,7 @@ Controls.Control {
                                 objectName: "controlCenterMediaDetail"
                                 Layout.fillWidth: true
                                 text: root.player ? root.boundedText(root.player.artist || root.player.identity, 256)
-                                                  : qsTr("Mídia MPRIS indisponível")
+                                                  : qsTr("Nenhum player aberto")
                                 textFormat: Text.PlainText
                                 font.pixelSize: Style.type.caption
                                 wrapMode: Text.WordWrap
@@ -335,7 +332,6 @@ Controls.Control {
                                 color: root.muted
                             }
                         }
-                        Item { Layout.fillHeight: true }
                     }
                 }
 
@@ -655,15 +651,6 @@ Controls.Control {
                                 color: root.foreground
                             }
                         }
-                        Controls.Label {
-                            objectName: "controlCenterOutputHeading"
-                            Layout.fillWidth: true
-                            Layout.bottomMargin: -Style.space.xs
-                            text: qsTr("Saída padrão")
-                            font.pixelSize: Style.type.caption
-                            textFormat: Text.PlainText
-                            color: root.muted
-                        }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.space.sm
@@ -778,9 +765,12 @@ Controls.Control {
                                 onClicked: root.request("power")
                             }
                         }
-                        RowLayout {
+                        GridLayout {
                             Layout.fillWidth: true
-                            spacing: Style.space.md
+                            // Wide: ring, battery text and profile on one line; narrow: profile below.
+                            columns: root.wide ? 3 : 2
+                            columnSpacing: Style.space.md
+                            rowSpacing: Style.space.sm
                             Item {
                                 Layout.preferredWidth: Style.size.target + Style.space.xs
                                 Layout.preferredHeight: Style.size.target + Style.space.xs
@@ -823,25 +813,13 @@ Controls.Control {
                                     color: root.muted
                                 }
                             }
-                        }
-                        Controls.Label {
-                            objectName: "controlCenterPowerProfileHeading"
-                            Layout.fillWidth: true
-                            Layout.bottomMargin: -Style.space.xs
-                            visible: profileRow.visible
-                            text: qsTr("Perfil de energia")
-                            font.pixelSize: Style.type.caption
-                            textFormat: Text.PlainText
-                            color: root.muted
-                        }
-                        RowLayout {
-                            id: profileRow
-                            Layout.fillWidth: true
-                            visible: root.powerProfile !== null && root.powerProfile.status === "ready"
                             Controls.ComboBox {
                                 id: profileSelector
                                 objectName: "controlCenterPowerProfile"
-                                Layout.fillWidth: true
+                                visible: root.powerProfile !== null && root.powerProfile.status === "ready"
+                                Layout.columnSpan: root.wide ? 1 : 2
+                                Layout.fillWidth: !root.wide
+                                Layout.preferredWidth: root.wide ? Style.size.target * 3 + Style.space.xs : -1
                                 Layout.minimumHeight: 40
                                 model: root.powerProfile ? root.powerProfile.profiles : []
                                 // Stays enabled while confirming: disabling would drop keyboard focus.

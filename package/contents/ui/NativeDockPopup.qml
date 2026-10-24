@@ -21,7 +21,7 @@ PlasmaCore.Dialog {
     // AppletPopup deliberately snaps near-center controls to screen center.
     type: PlasmaCore.Dialog.PopupMenu
     flags: Qt.Window | Qt.FramelessWindowHint
-    backgroundHints: PlasmaCore.Dialog.NoBackground
+    backgroundHints: owner.systemGlass ? PlasmaCore.Dialog.StandardBackground : PlasmaCore.Dialog.NoBackground
     color: "transparent"
     hideOnWindowDeactivate: true
     mainItem: owner.popupSurface

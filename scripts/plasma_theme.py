@@ -38,6 +38,14 @@ FRAMES = {
 }
 # The edge tile length; Plasma stretches it, so its size only affects rounding.
 TILE = 4
+# The bottom panel ("south" prefix) frames the Orla dock: an invisible frame
+# whose blur mask is the dock's glass slab, `band` inside the frame. The dock
+# measures the frame and draws its tint over that mask; the band must equal
+# Style.dock.systemGlassBandX/Y, which the tests check.
+DOCK_FRAME = {"radius": 21, "margin": 4, "band": (10, 12)}
+# Markers Orla looks for before relying on the theme's glass.
+POPUP_MARKER = "hint-orla-glass"
+DOCK_MARKER = "south-hint-orla-dock"
 SHADOW_LAYERS = 10
 SHADOW_ALPHA = 0.06
 CORNERS = ("topleft", "topright", "bottomleft", "bottomright")
@@ -79,9 +87,15 @@ def _corner_path(cx: float, cy: float, r: float, sx: int, sy: int) -> str:
 
 
 def _frame(prefix: str, ox: float, oy: float, radius: int, fill: float | None, rim: float,
-           mask: bool = False) -> list[str]:
-    """Nine tiles of a rounded rectangle whose top-left corner sits at (ox, oy)."""
+           mask: bool = False, band: tuple[int, int] = (0, 0)) -> list[str]:
+    """Nine tiles of a rounded rectangle whose top-left corner sits at (ox, oy).
+
+    `band` keeps a transparent strip (x, y) between the tile edges and the
+    glass, so a frame can be drawn smaller than the window it belongs to.
+    """
     r, t = radius, TILE
+    bx, by = band
+    cw, ch = bx + r, by + r
     out = []
     fill_style = ("fill:#000000" if mask else
                   f"fill:currentColor;fill-opacity:{_n(fill)}" if fill is not None else "fill:none")
@@ -90,9 +104,9 @@ def _frame(prefix: str, ox: float, oy: float, radius: int, fill: float | None, r
     cls_fill = "" if mask else ' class="ColorScheme-Background"'
     cls_rim = ' class="ColorScheme-Text"'
     tiles = {
-        "topleft": (0, 0, r, r), "top": (r, 0, t, r), "topright": (r + t, 0, r, r),
-        "left": (0, r, r, t), "center": (r, r, t, t), "right": (r + t, r, r, t),
-        "bottomleft": (0, r + t, r, r), "bottom": (r, r + t, t, r), "bottomright": (r + t, r + t, r, r),
+        "topleft": (0, 0, cw, ch), "top": (cw, 0, t, ch), "topright": (cw + t, 0, cw, ch),
+        "left": (0, ch, cw, t), "center": (cw, ch, t, t), "right": (cw + t, ch, cw, t),
+        "bottomleft": (0, ch + t, cw, ch), "bottom": (cw, ch + t, t, ch), "bottomright": (cw + t, ch + t, cw, ch),
     }
     for name, (tx, ty, tw, th) in tiles.items():
         x, y = ox + tx, oy + ty
@@ -100,6 +114,7 @@ def _frame(prefix: str, ox: float, oy: float, radius: int, fill: float | None, r
         if name in CORNERS:
             sx = -1 if "left" in name else 1
             sy = -1 if name.startswith("top") else 1
+            # The arc center is the tile corner that touches the frame's center.
             cx = x + (tw if sx < 0 else 0)
             cy = y + (th if sy < 0 else 0)
             parts.append(f'<path{cls_fill} style="{fill_style}" d="{_corner_path(cx, cy, r, sx, sy)}"/>')
@@ -111,11 +126,15 @@ def _frame(prefix: str, ox: float, oy: float, radius: int, fill: float | None, r
                         f"{_n(cx + sx * inner)},{_n(cy)} Z")
                 parts.append(f'<path{cls_rim} style="{rim_style}" d="{ring}"/>')
         else:
-            parts.append(f'<rect{cls_fill} style="{fill_style}" x="{_n(x)}" y="{_n(y)}" '
-                         f'width="{_n(tw)}" height="{_n(th)}"/>')
+            # The glass part of an edge tile: the side next to the center.
+            glass = {"top": (x, y + by, tw, r), "bottom": (x, y, tw, r), "left": (x + bx, y, r, th),
+                     "right": (x, y, r, th), "center": (x, y, tw, th)}[name]
+            parts.append(f'<rect{cls_fill} style="{fill_style}" x="{_n(glass[0])}" y="{_n(glass[1])}" '
+                         f'width="{_n(glass[2])}" height="{_n(glass[3])}"/>')
             if not mask and rim > 0 and name != "center":
-                line = {"top": (x, y, tw, 1), "bottom": (x, y + th - 1, tw, 1),
-                        "left": (x, y, 1, th), "right": (x + tw - 1, y, 1, th)}[name]
+                gx, gy, gw, gh = glass
+                line = {"top": (gx, gy, gw, 1), "bottom": (gx, gy + gh - 1, gw, 1),
+                        "left": (gx, gy, 1, gh), "right": (gx + gw - 1, gy, 1, gh)}[name]
                 parts.append(f'<rect{cls_rim} style="{rim_style}" x="{_n(line[0])}" y="{_n(line[1])}" '
                              f'width="{_n(line[2])}" height="{_n(line[3])}"/>')
         element = f"{prefix}{name}"
@@ -177,11 +196,11 @@ def _shadow(ox: float, oy: float, radius: int, spread: int) -> list[str]:
     return out
 
 
-def _hints(ox: float, oy: float, margin: int) -> list[str]:
+def _hints(ox: float, oy: float, margin: int, prefix: str = "") -> list[str]:
     out = []
     for index, side in enumerate(("top", "bottom", "left", "right")):
         w, h = (2, margin) if side in ("top", "bottom") else (margin, 2)
-        out.append(f'<rect id="hint-{side}-margin" x="{_n(ox + index * (margin + 4))}" y="{_n(oy)}" '
+        out.append(f'<rect id="{prefix}hint-{side}-margin" x="{_n(ox + index * (margin + 4))}" y="{_n(oy)}" '
                    f'width="{_n(w)}" height="{_n(h)}" style="fill:none;stroke:none"/>')
     return out
 
@@ -191,7 +210,11 @@ def _document(body: list[str], width: float, height: float) -> str:
             f'viewBox="0 0 {_n(width)} {_n(height)}">' + STYLE + "".join(body) + "</svg>\n")
 
 
-def frame_svg(spec: dict, translucent: bool) -> str:
+def _marker(element: str, x: float, y: float) -> str:
+    return f'<rect id="{element}" x="{_n(x)}" y="{_n(y)}" width="2" height="2" style="fill:none;stroke:none"/>'
+
+
+def frame_svg(name: str, spec: dict, translucent: bool) -> str:
     r, s = spec["radius"], spec["shadow"]
     size = 2 * r + TILE
     fill = spec["translucent"] if translucent else spec["fill"]
@@ -200,10 +223,24 @@ def frame_svg(spec: dict, translucent: bool) -> str:
     body += _hints(0, size + 8, spec["margin"])
     height = size + 8 + spec["margin"] + 8
     width = 2 * size + 16
+    if name == "dialogs/background":
+        body.append(_marker(POPUP_MARKER, 2 * size + 16, 0))
+        width += 4
     if s:
         body += _shadow(0, height, r, s)
         width = max(width, 2 * (r + s) + TILE + 8 + 4 * (s + 4))
         height += 2 * (r + s) + TILE
+    if name == "widgets/panel-background":
+        dock = DOCK_FRAME
+        dr, (bx, by) = dock["radius"], dock["band"]
+        dsize = (2 * (bx + dr) + TILE, 2 * (by + dr) + TILE)
+        # Invisible glass: only its mask matters, for KWin's blur.
+        body += _frame("south-", 0, height, dr, 0, 0, band=dock["band"])
+        body += _frame("mask-south-", dsize[0] + 8, height, dr, None, 0, mask=True, band=dock["band"])
+        body += _hints(0, height + dsize[1] + 8, dock["margin"], prefix="south-")
+        body.append(_marker(DOCK_MARKER, 2 * dsize[0] + 16, height))
+        width = max(width, 2 * dsize[0] + 20)
+        height += dsize[1] + 8 + dock["margin"] + 8
     return _document(body, width, height)
 
 
@@ -265,7 +302,7 @@ def build(output: Path) -> Path:
         for translucent, base in ((False, theme), (True, theme / "translucent")):
             path = base / f"{name}.svgz"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(_svgz(frame_svg(spec, translucent)))
+            path.write_bytes(_svgz(frame_svg(name, spec, translucent)))
     heading = theme / "widgets" / "plasmoidheading.svgz"
     heading.write_bytes(_svgz(heading_svg()))
     return theme
