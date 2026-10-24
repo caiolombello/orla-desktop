@@ -1042,6 +1042,9 @@ Item {
         self.assertTrue(expired.wait(audio.property("confirmationTimeout") + 200))
 
     def test_audio_output_pointer_failures_restore_confirmed_presentation(self):
+        # Pointer clicks must land inside the window: give the Control Center room.
+        self.window.setProperty("height", 1000)
+        QTest.qWait(30)
         self.config.setProperty("showControlCenter", True)
         popup = self.window.findChild(QObject, "controlCenterPopup")
         self.assertTrue(popup.setProperty("popupType", 0))
