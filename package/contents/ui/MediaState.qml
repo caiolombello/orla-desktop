@@ -15,6 +15,15 @@ QtObject {
         && (playing ? player.canPause : player.canPlay))
     readonly property bool canPrevious: Boolean(player && player.canControl && player.canGoPrevious)
     readonly property bool canNext: Boolean(player && player.canControl && player.canGoNext)
+    // Now playing, as macOS shows it: cover, album and progress. Only local or
+    // HTTPS covers load; times are microseconds from libkmpris.
+    readonly property string artUrl: player && /^(https:\/\/|file:\/\/)\S{1,2040}$/.test(String(player.artUrl || ""))
+        ? String(player.artUrl) : ""
+    readonly property string album: player ? boundedText(player.album, 512) : ""
+    readonly property double lengthUs: player && isFinite(Number(player.length)) && Number(player.length) > 0
+        ? Number(player.length) : 0
+    readonly property double positionUs: lengthUs > 0 ? Math.max(0, Math.min(Number(player.position) || 0, lengthUs)) : 0
+    readonly property bool canRaise: Boolean(player && player.canRaise)
     property bool selectionMade: false
     property Instantiator candidates: Instantiator {
         model: root.media
@@ -67,6 +76,22 @@ QtObject {
             actionError = qsTr("O player não pôde receber o comando. Tente novamente.");
             return false;
         }
+    }
+    // "m:ss", or "h:mm:ss" past an hour.
+    function timeText(microseconds) {
+        const total = Math.max(0, Math.floor(microseconds / 1000000));
+        const hours = Math.floor(total / 3600), minutes = Math.floor(total % 3600 / 60), seconds = total % 60;
+        const pad = value => (value < 10 ? "0" : "") + value;
+        return hours > 0 ? hours + ":" + pad(minutes) + ":" + pad(seconds) : minutes + ":" + pad(seconds);
+    }
+    // libkmpris only refreshes `position` when asked.
+    function refreshPosition() {
+        if (player && playing && typeof player.updatePosition === "function") player.updatePosition();
+    }
+    function raise() {
+        if (!canRaise) return false;
+        try { player.Raise(); actionError = ""; return true; }
+        catch (error) { actionError = qsTr("Não foi possível abrir o player."); return false; }
     }
     function previous() {
         if (!canPrevious) return false;

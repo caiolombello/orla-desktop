@@ -19,7 +19,7 @@ class FixturePlayer(QObject):
         super().__init__()
         self.values = dict(identity=identity, desktopEntry=desktop, track="Faixa sintética", artist="Artista sintético",
                            canControl=True, canPlay=True, canPause=True, canGoPrevious=True, canGoNext=True,
-                           playbackStatus=3)
+                           playbackStatus=3, artUrl="", album="", length=0.0, position=0, canRaise=False)
         self.values.update(values)
         self.calls = []
 
@@ -37,6 +37,20 @@ class FixturePlayer(QObject):
     canGoPrevious = Property(bool, lambda self: self.values["canGoPrevious"], notify=changed)
     canGoNext = Property(bool, lambda self: self.values["canGoNext"], notify=changed)
     playbackStatus = Property(int, lambda self: self.values["playbackStatus"], notify=changed)
+    artUrl = Property(str, lambda self: self.values["artUrl"], notify=changed)
+    album = Property(str, lambda self: self.values["album"], notify=changed)
+    length = Property(float, lambda self: self.values["length"], notify=changed)
+    # Microseconds; a long track overflows 32 bits.
+    position = Property("qlonglong", lambda self: self.values["position"], notify=changed)
+    canRaise = Property(bool, lambda self: self.values["canRaise"], notify=changed)
+
+    @Slot()
+    def Raise(self):
+        self.calls.append("Raise")
+
+    @Slot()
+    def updatePosition(self):
+        self.calls.append("updatePosition")
 
     @Slot()
     def Play(self):
@@ -146,6 +160,48 @@ class MediaTests(unittest.TestCase):
         self.media.replace([self.player, self.player])
         QTest.qWait(30)
         return self.player
+
+    def test_now_playing_shows_album_progress_and_opens_the_player(self):
+        self.populate(album="<b>Álbum</b>\nsintético", length=245_000_000.0, position=65_000_000, canRaise=True)
+        self.assertTrue(self.item("mediaNowPlaying").property("visible"))
+        self.assertEqual(self.item("mediaAlbum").property("text"), "<b>Álbum</b> sintético")
+        self.assertEqual(self.evaluate("textFormat", self.item("mediaAlbum")), 0)
+        self.assertTrue(self.item("mediaProgress").property("visible"))
+        self.assertEqual(self.item("mediaElapsed").property("text"), "1:05")
+        self.assertEqual(self.item("mediaRemaining").property("text"), "-3:00")
+        self.player.update(length=3_725_000_000.0, position=3_725_000_000 + 5)
+        self.assertEqual(self.item("mediaElapsed").property("text"), "1:02:05")
+        self.assertEqual(self.item("mediaRemaining").property("text"), "-0:00")
+        raise_button = self.item("mediaRaise")
+        self.assertTrue(raise_button.property("visible"))
+        self.assertEqual(raise_button.property("text"), "Abrir Spotify")
+        self.evaluate("clicked()", raise_button)
+        self.assertIn("Raise", self.player.calls)
+        self.player.update(canRaise=False, length=0.0)
+        self.assertFalse(raise_button.property("visible"))
+        self.assertFalse(self.item("mediaProgress").property("visible"))
+        self.assertFalse(self.evaluate("mediaState.raise()"))
+
+    def test_position_refreshes_only_while_playing(self):
+        # libkmpris: Unknown 0, Stopped 1, Playing 2, Paused 3.
+        self.populate(length=200_000_000.0, playbackStatus=2)
+        QTest.qWait(1300)
+        self.assertIn("updatePosition", self.player.calls)
+        self.player.calls.clear()
+        self.player.update(playbackStatus=3)
+        QTest.qWait(1300)
+        self.assertNotIn("updatePosition", self.player.calls)
+
+    def test_only_local_or_https_covers_load(self):
+        self.populate()
+        for url, expected in (("https://example.invalid/cover.jpg", "https://example.invalid/cover.jpg"),
+                              ("file:///tmp/cover.png", "file:///tmp/cover.png"),
+                              ("http://example.invalid/cover.jpg", ""), ("javascript:alert(1)", ""),
+                              ("https://example.invalid/a b.jpg", ""), ("", "")):
+            self.player.update(artUrl=url)
+            self.assertEqual(self.evaluate("mediaState.artUrl"), expected, url)
+        # Without a loaded cover, the placeholder keeps the layout.
+        self.assertFalse(self.item("mediaArt").property("visible"))
 
     def test_empty_state_and_no_actions(self):
         self.assertTrue(self.item("mediaEmptyState").property("visible"))

@@ -99,27 +99,152 @@ Controls.Control {
                 wrapMode: Text.WordWrap
                 color: root.foreground
             }
-            Controls.Label {
-                objectName: "mediaTrack"
+            // Now playing, as in macOS: the cover beside title, artist and album.
+            RowLayout {
+                objectName: "mediaNowPlaying"
                 Layout.fillWidth: true
                 visible: Boolean(root.mediaState.player)
-                text: root.mediaState.player ? root.mediaState.boundedText(root.mediaState.player.track, 512) || qsTr("Sem título") : ""
-                textFormat: Text.PlainText
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                font.bold: true
-                color: root.foreground
+                spacing: Style.space.md
+                Item {
+                    objectName: "mediaCover"
+                    Layout.preferredWidth: Style.size.target + Style.space.lg
+                    Layout.preferredHeight: Style.size.target + Style.space.lg
+                    Layout.alignment: Qt.AlignTop
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: !art.visible
+                        radius: Style.radius.control
+                        color: Style.alpha(root.foreground, 0.1)
+                        Controls.Label {
+                            anchors.centerIn: parent
+                            text: "♪"
+                            textFormat: Text.PlainText
+                            font.pixelSize: Style.type.headline
+                            color: root.muted
+                        }
+                    }
+                    // Natural size of the cover, for the center crop below.
+                    Image {
+                        id: artSource
+                        visible: false
+                        source: root.mediaState.artUrl
+                        asynchronous: true
+                    }
+                    // Rounded corners without a shader, so software rendering shows the cover too.
+                    Canvas {
+                        id: art
+                        objectName: "mediaArt"
+                        anchors.fill: parent
+                        readonly property string url: root.mediaState.artUrl
+                        property string loadedUrl: ""
+                        visible: url.length > 0 && loadedUrl === url && artSource.status === Image.Ready
+                        onUrlChanged: if (url.length > 0) loadImage(url)
+                        onImageLoaded: {
+                            if (isImageLoaded(url)) loadedUrl = url;
+                            requestPaint();
+                        }
+                        onVisibleChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onPaint: {
+                            const context = getContext("2d");
+                            context.reset();
+                            const naturalWidth = artSource.implicitWidth, naturalHeight = artSource.implicitHeight;
+                            if (!visible || naturalWidth <= 0 || naturalHeight <= 0) return;
+                            // Crop the center square, like PreserveAspectCrop.
+                            const side = Math.min(naturalWidth, naturalHeight);
+                            context.beginPath();
+                            context.roundedRect(0, 0, width, height, Style.radius.control, Style.radius.control);
+                            context.clip();
+                            context.drawImage(url, (naturalWidth - side) / 2, (naturalHeight - side) / 2, side, side,
+                                0, 0, width, height);
+                        }
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space.xxs
+                    Controls.Label {
+                        objectName: "mediaTrack"
+                        Layout.fillWidth: true
+                        text: root.mediaState.player ? root.mediaState.boundedText(root.mediaState.player.track, 512) || qsTr("Sem título") : ""
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                        font.bold: true
+                        color: root.foreground
+                    }
+                    Controls.Label {
+                        objectName: "mediaArtist"
+                        Layout.fillWidth: true
+                        text: root.mediaState.player ? root.mediaState.boundedText(root.mediaState.player.artist || root.mediaState.player.identity, 512) : ""
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                        color: root.muted
+                        opacity: 0.75
+                    }
+                    Controls.Label {
+                        objectName: "mediaAlbum"
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.mediaState.album
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                        font.pixelSize: Style.type.caption
+                        color: root.muted
+                        opacity: 0.75
+                    }
+                }
             }
-            Controls.Label {
-                objectName: "mediaArtist"
+            // Elapsed and remaining time over a capsule bar; read only.
+            ColumnLayout {
+                objectName: "mediaProgress"
                 Layout.fillWidth: true
-                visible: Boolean(root.mediaState.player)
-                text: root.mediaState.player ? root.mediaState.boundedText(root.mediaState.player.artist || root.mediaState.player.identity, 512) : ""
-                textFormat: Text.PlainText
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                color: root.muted
-                opacity: 0.75
+                visible: Boolean(root.mediaState.player) && root.mediaState.lengthUs > 0
+                spacing: Style.space.xxs
+                Accessible.role: Accessible.ProgressBar
+                Accessible.name: qsTr("Posição na faixa")
+                Accessible.description: qsTr("%1 de %2").arg(root.mediaState.timeText(root.mediaState.positionUs))
+                    .arg(root.mediaState.timeText(root.mediaState.lengthUs))
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Style.space.xs
+                    radius: height / 2
+                    color: Style.alpha(root.foreground, 0.16)
+                    Rectangle {
+                        width: parent.width * (root.mediaState.lengthUs > 0 ? root.mediaState.positionUs / root.mediaState.lengthUs : 0)
+                        height: parent.height
+                        radius: height / 2
+                        color: root.foreground
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Controls.Label {
+                        objectName: "mediaElapsed"
+                        text: root.mediaState.timeText(root.mediaState.positionUs)
+                        textFormat: Text.PlainText
+                        font.pixelSize: Style.type.caption
+                        font.features: {"tnum": 1}
+                        color: root.muted
+                    }
+                    Item { Layout.fillWidth: true }
+                    Controls.Label {
+                        objectName: "mediaRemaining"
+                        text: "-" + root.mediaState.timeText(root.mediaState.lengthUs - root.mediaState.positionUs)
+                        textFormat: Text.PlainText
+                        font.pixelSize: Style.type.caption
+                        font.features: {"tnum": 1}
+                        color: root.muted
+                    }
+                }
+            }
+            Timer {
+                interval: 1000
+                repeat: true
+                running: root.visible && root.mediaState.playing
+                onTriggered: root.mediaState.refreshPosition()
             }
             Controls.Label {
                 objectName: "mediaPlaybackState"
@@ -213,6 +338,15 @@ Controls.Control {
                     onEnabledChanged: if (!enabled && root.focusedTransport === objectName) Qt.callLater(root.recoverFocus)
                     onClicked: root.mediaState.next()
                 }
+            }
+            Controls.Button {
+                objectName: "mediaRaise"
+                Layout.fillWidth: true
+                flat: true
+                visible: Boolean(root.mediaState.player) && root.mediaState.canRaise
+                text: qsTr("Abrir %1").arg(root.mediaState.player ? root.mediaState.boundedText(root.mediaState.player.identity, 64) : "")
+                onActiveFocusChanged: if (activeFocus) root.reveal(this)
+                onClicked: root.mediaState.raise()
             }
         }
     }
