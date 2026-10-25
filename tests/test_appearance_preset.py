@@ -322,7 +322,7 @@ class AppearancePresetTests(unittest.TestCase):
         disclosure = self.owned_item('appearancePresetCatalogDisclosure')
         self.assertIsNotNone(disclosure)
         self.assertFalse(disclosure.property('checked'))
-        for key in ('essencial', 'mare', 'estudio', 'jogo'):
+        for key in ('essencial', 'mare', 'estudio', 'jogo', 'macos'):
             self.assertFalse(self.owned_item('appearancePresetCatalog-' + key).isVisible())
         self.assertFalse(self.owned_item('appearancePresetJSON').isVisible())
         self.focus(disclosure)
@@ -640,7 +640,8 @@ class AppearancePresetTests(unittest.TestCase):
         writes = QSignalSpy(self.config.profilesJSONChanged)
         self.open_catalog()
         self.focus(self.owned_item('appearancePresetCatalog-essencial'))
-        for index, key in enumerate(['essencial', 'mare', 'estudio', 'jogo']):
+        # Five built-in presets since the macOS-inspired one (ROADMAP C1).
+        for index, key in enumerate(['essencial', 'mare', 'estudio', 'jogo', 'macos']):
             if index:
                 QTest.keyClick(self.window, Qt.Key_Tab)
             button = self.owned_item('appearancePresetCatalog-' + key)
@@ -668,10 +669,10 @@ class AppearancePresetTests(unittest.TestCase):
             self.assertEqual(writes.count(), 0)
         QTest.keyClick(self.window, Qt.Key_Tab)
         self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetJSON')
-        for key in ['jogo', 'estudio', 'mare', 'essencial']:
+        for key in ['macos', 'jogo', 'estudio', 'mare', 'essencial']:
             QTest.keyClick(self.window, Qt.Key_Backtab)
             self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetCatalog-' + key)
-        for _ in range(4):
+        for _ in range(5):
             QTest.keyClick(self.window, Qt.Key_Tab)
         QTest.keyClick(self.window, Qt.Key_Space)
         QTest.keyClick(self.window, Qt.Key_Tab)
@@ -686,11 +687,11 @@ class AppearancePresetTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key_Return)
         self.assertTrue(self.evaluate('appearancePreset.error.length > 0'))
         self.assertEqual(self.window.activeFocusItem().objectName(), 'appearancePresetInput')
-        for name in ['appearancePresetOutput', 'appearancePresetExport', 'appearancePresetJSON', 'appearancePresetCatalog-jogo']:
+        for name in ['appearancePresetOutput', 'appearancePresetExport', 'appearancePresetJSON', 'appearancePresetCatalog-macos']:
             QTest.keyClick(self.window, Qt.Key_Backtab)
             self.assertEqual(self.window.activeFocusItem().objectName(), name)
         QTest.qWait(50)
-        button = self.owned_item('appearancePresetCatalog-jogo')
+        button = self.owned_item('appearancePresetCatalog-macos')
         parent = button.parentItem()
         while parent:
             if parent.property('clip') and parent.width() > 0 and parent.height() > 0:
