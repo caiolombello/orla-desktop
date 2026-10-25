@@ -9,6 +9,13 @@ DockUI.IntegrationState {
     height: 480
     property string schemeName: "dark"
     readonly property var ui: Style.scheme(schemeName)
+    // The palette a dock popup gives its contents, so cards match the scheme.
+    palette.window: ui.surface
+    palette.windowText: ui.text
+    palette.base: ui.raised
+    palette.mid: ui.border
+    palette.highlight: ui.accent
+    palette.highlightedText: ui.onAccent
     readonly property bool inside: Qt.application.arguments.indexOf("--inside") >= 0
     active: inside
     enabledModules: ["quota"]

@@ -228,6 +228,15 @@ daí usa só o complemento, mesmo se ele falhar, e volta à ponte somente quando
 uma leitura válida mostra que não há complemento ativo. Voltar para uma dock
 anterior com bateria e quota ativas exige desativar um deles antes.
 
+Na dock, a quota de um complemento aparece agrupada como no menu do
+QuotaLantern: no topo, o anel da janela mais usada e o tempo até ela zerar;
+depois as seções **No limite** (90% ou mais), **Ativos**, **Sem leitura
+recente** e **Não conectados**, com um cartão por provedor (percentual da
+janela mais usada e, para cada janela, nome, duração, barra e "zera em…").
+Cores e limites são os mesmos do anel do widget. A leitura pela ponte legada
+mantém a lista simples. Capturas sintéticas: [escuro](screenshots/addon-quota/grouped-dark.png)
+e [claro](screenshots/addon-quota/grouped-light.png).
+
 ### Gerenciar nas configurações
 
 No Source desta camada, abra **Configurações → Widgets → Complementos** e

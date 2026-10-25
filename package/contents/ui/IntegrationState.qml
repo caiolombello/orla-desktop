@@ -155,8 +155,13 @@ Item {
             glm: "GLM (z.ai)", "opencode-go": "OpenCode Go", zen: "Zen"};
         const labels = {primary: qsTr("Janela principal"), secondary: qsTr("Janela secundária"), tertiary: qsTr("Janela terciária")};
         const windows = [];
+        // Grouped like QuotaLantern's tray menu: one entry per provider with its windows.
+        const providers = [];
         for (const provider of value.providers || []) {
             const name = names[provider.id] || provider.id;
+            providers.push({id: provider.id, name: name, state: provider.state,
+                windows: provider.windows.map(window => ({key: window.key, minutes: window.windowMinutes,
+                    usedPercent: window.usedPercent, resetAtMs: window.resetAtMs}))});
             // A provider without windows still shows that it has no reading.
             if (!provider.windows.length) windows.push({provider: name, label: qsTr("Sem leitura"), usedPercent: null,
                 resetAt: null, resetDescription: "", stale: provider.state === "stale"});
@@ -171,7 +176,7 @@ Item {
         }
         return {status: value.status === "disabled" ? "unknown" : value.status, source: "addon",
             updatedAt: typeof value.generatedAtMs === "number" ? new Date(value.generatedAtMs).toISOString() : null,
-            windows: windows, costs: []};
+            windows: windows, providers: providers, costs: []};
     }
     function quotaReadingChanged(value) {
         internal.quota = value;

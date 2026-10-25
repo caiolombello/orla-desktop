@@ -314,6 +314,46 @@ class QuotaDetailsTests(unittest.TestCase):
         transport = self.integration.findChild(QObject, 'fixtureTransport')
         self.evaluate('reply(%s, "org.orla.Addons")' % json.dumps(json.dumps(frame)), transport)
 
+    def grouped(self, expression):
+        """Evaluate on the grouped quota view inside QML; only JSON comes back to Python."""
+        source = ("(function() { const find = item => { if (item.objectName === 'quotaUsage') return item;"
+                  " for (let i = 0; i < item.children.length; ++i) { const f = find(item.children[i]); if (f) return f; }"
+                  " return null; }; let u = null; for (let i = 0; i < children.length && !u; ++i) u = find(children[i]);"
+                  " return JSON.stringify(u ? (%s) : null); })()" % expression)
+        return json.loads(self.evaluate(source, self.quota_details()))
+
+    def test_addon_quota_is_grouped_like_the_tray_menu(self):
+        frame = quota_frame()
+        H, D, now = 3600000, 86400000, 100000
+        def ready(pid, windows):
+            return dict(id=pid, state='ready', observedAt=now / 1000, observedAtMs=now, windows=windows)
+        frame['quota']['providers'] = [
+            ready('codex', [dict(key='primary', usedPercent=12, windowMinutes=300, resetAtMs=now + 4 * H + 600000),
+                            dict(key='secondary', usedPercent=42, windowMinutes=10080, resetAtMs=now + 2 * D + 5 * H)]),
+            ready('claude', [dict(key='primary', usedPercent=96, windowMinutes=300, resetAtMs=now + H + 1200000)]),
+            ready('opencode-go', [dict(key='primary', usedPercent=78, windowMinutes=None, resetAtMs=None)]),
+            dict(id='grok', state='stale', observedAt=0.05, observedAtMs=50, windows=[
+                dict(key='primary', usedPercent=None, windowMinutes=None, resetAtMs=None)]),
+            dict(id='gemini', state='unavailable', observedAt=None, observedAtMs=None, windows=[])]
+        self.answer_addon(frame)
+        self.assertTrue(self.integration.property('quotaAddonActive'))
+        # Sections in the tray's order, the most used first inside each one.
+        self.assertEqual(self.grouped("u.view.sections.map(s => [s.key, s.providers.map(p => p.name)])"), [
+            ['limit', ['Claude']], ['active', ['OpenCode Go', 'Codex']], ['stale', ['Grok']], ['offline', ['Gemini']]])
+        bottleneck = self.grouped("[u.view.bottleneck.provider.name, u.windowName(u.view.bottleneck.window),"
+                                  " u.resetText(u.view.bottleneck.window)]")
+        self.assertEqual(bottleneck, ['Claude', 'Sessão · 5 h', 'zera em 1 h 20 min'])
+        codex = "u.view.sections[1].providers[1]"
+        self.assertEqual(self.grouped(f"{codex}.windows.map(w => u.windowName(w) + ' ' + u.resetText(w))"),
+                         ['Sessão · 5 h zera em 4 h 10 min', 'Semana · 7 d zera em 2 d 5 h'])
+        self.assertEqual(self.grouped("u.view.sections.map(s => s.providers.map(p => u.stateText(p)))"),
+                         [['96%'], ['78%', '42%'], ['sem leitura recente'], ['não conectado']])
+        self.assertTrue(self.evaluate("groupedQuota", self.quota_details()))
+
+    def test_legacy_quota_keeps_the_flat_list(self):
+        self.evaluate('enabledModules = ["quota"]; active = true')
+        self.assertFalse(self.evaluate("groupedQuota", self.quota_details()))
+
     def test_legacy_quota_keeps_the_project_and_cache_wording(self):
         self.evaluate('enabledModules = ["quota"]; active = true')
         self.assertIn('QuotaLantern', self.part('integrationDescription').property('text'))

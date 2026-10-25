@@ -14,7 +14,24 @@ ColumnLayout {
     readonly property bool addonRoute: selected === "peripherals"
         || (selected === "quota" && integrations.quotaAddonActive === true)
     readonly property bool reloadRequired: addonRoute && addonsSession !== null && addonsSession.reloadRequired === true
+    // Shared quota is grouped by provider, as in QuotaLantern's tray; the legacy cache keeps its list.
+    readonly property bool groupedQuota: selected === "quota" && addonRoute
+        && Array.isArray(integrations.quota.providers) && integrations.quota.providers.length > 0
+    // The integrations' own clock, so countdowns and data age agree (tests pin it).
+    function clock() {
+        return integrations.nowMsOverride !== undefined && integrations.nowMsOverride >= 0 ? integrations.nowMsOverride : Date.now();
+    }
+    property double nowMs: clock()
     spacing: Style.space.md
+
+    Timer {
+        // Reset countdowns move by the minute while the details are shown.
+        interval: 30000
+        repeat: true
+        running: root.visible && root.groupedQuota
+        triggeredOnStart: true
+        onTriggered: root.nowMs = root.clock()
+    }
 
     function stateText(modelData) {
         if (root.selected === "peripherals" && modelData.present === false) return qsTr("Fora de alcance");
@@ -69,9 +86,27 @@ ColumnLayout {
         color: root.dock.foreground
     }
     Controls.ScrollView {
+        objectName: "quotaUsageScroll"
         Layout.fillWidth: true
-        Layout.preferredHeight: root.selected === "recording" ? 0 : Math.min(entries.implicitHeight, 230)
-        visible: root.selected !== "recording"
+        Layout.preferredHeight: Math.min(quotaUsage.implicitHeight, 460)
+        visible: root.groupedQuota
+        clip: true
+        contentWidth: availableWidth
+        Controls.ScrollBar.horizontal.policy: Controls.ScrollBar.AlwaysOff
+        QuotaUsage {
+            id: quotaUsage
+            objectName: "quotaUsage"
+            width: parent.width
+            providers: root.groupedQuota ? root.integrations.quota.providers : []
+            nowMs: root.nowMs
+            foreground: root.dock.foreground
+            muted: root.dock.muted
+        }
+    }
+    Controls.ScrollView {
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.selected === "recording" || root.groupedQuota ? 0 : Math.min(entries.implicitHeight, 230)
+        visible: root.selected !== "recording" && !root.groupedQuota
         clip: true
         ColumnLayout {
             id: entries
