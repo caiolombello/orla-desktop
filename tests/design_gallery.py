@@ -1321,6 +1321,13 @@ def host_environment(host: str, config: Path) -> dict[str, str]:
     return environment
 
 
+def private_bus(command: list[str]) -> list[str]:
+    """Run a render on its own session bus: the dock's native models (MPRIS players,
+    notifications) must never see the user's session, or captures show private data."""
+    runner = shutil.which("dbus-run-session")
+    return [runner, "--", *command] if runner else command
+
+
 def main(argv: list[str]) -> int:
     if len(argv)>2 and argv[1]=='--render-updates':
         app=QGuiApplication.instance() or QGuiApplication([])
@@ -1332,7 +1339,7 @@ def main(argv: list[str]) -> int:
         output=Path(argv[2]);output.mkdir(parents=True,exist_ok=True)
         for host in ('dark','light'):
             with tempfile.TemporaryDirectory(prefix='orla-updates-scheme-') as config:
-                result=subprocess.run([sys.executable,'-B',__file__,'--render-updates',host,str(output)],
+                result=subprocess.run(private_bus([sys.executable,'-B',__file__,'--render-updates',host,str(output)]),
                     cwd=ROOT,env=host_environment(host,Path(config)),timeout=60)
                 if result.returncode:return result.returncode
         return 0
@@ -1344,7 +1351,7 @@ def main(argv: list[str]) -> int:
         stale.unlink()
     for host in ("dark", "light"):
         with tempfile.TemporaryDirectory(prefix=f"orla-gallery-{host}-") as config:
-            result = subprocess.run([sys.executable, "-B", __file__, "--render", host, str(output)],
+            result = subprocess.run(private_bus([sys.executable, "-B", __file__, "--render", host, str(output)]),
                                     env=host_environment(host, Path(config)), timeout=300)
             if result.returncode:
                 return result.returncode
