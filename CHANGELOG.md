@@ -47,6 +47,10 @@ The ZIP now bundles `notifications/`, which `scripts/macos_look.py` and `scripts
   - joining networks or pairing devices beyond the recorded runs.
 
   See the [release validation](docs/validation/release-0.2.11.md).
+- Published as [v0.2.11](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.11) at 2026-10-25 19:23:53 UTC (`prerelease=true`, `latest=false`) from merge `d363ea726a8139136a013fbc469b7a9295029014` ([PR #140](https://github.com/caiolombello/orla-desktop/pull/140); CI [40225359003](https://github.com/caiolombello/orla-desktop/actions/runs/40225359003) passed).
+  - Builds of the PR and of the merge were byte-identical, and anonymous HTTP 200 downloads matched them.
+  - The README install path ran with the downloaded ZIP: `doctor`, then `install` over the 0.2.10 dock. The installed files match the `.plasmoid`, and after a plasmashell restart Plasma reported the running dock as 0.2.11 with Orla Notifications still in the tray.
+  - A clean-account installation remains unrun.
 
 ## 0.2.10 — 2026-10-22 — Alpha prerelease
 
