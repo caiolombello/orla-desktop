@@ -10,7 +10,7 @@ Item {
 
     property bool active: false
     // {snapshot: {status, enabled, hardwareEnabled, network, networks: [{id, name, strength,
-    //  secured, saved, state}]}, setEnabled(on), joinNetwork(id), leaveNetwork(id) -> bool,
+    //  secured, saved, state}], wired: {connected, name}}, setEnabled(on), joinNetwork(id), leaveNetwork(id) -> bool,
     //  scan(), signal joinFailed(id, message)}
     property var backend: null
     property int confirmationTimeout: 3000
@@ -26,6 +26,8 @@ Item {
     readonly property string network: _validated.network
     // In range, connected first, then saved, then by signal; empty while the radio is off.
     readonly property var networks: _validated.networks
+    // An active cable connection ({connected, name}); shown even without a Wi-Fi adapter.
+    readonly property var wired: _validated.wired
     property string joining: ""
     property string joiningName: ""
     property string leaving: ""
@@ -66,10 +68,16 @@ Item {
         out.sort((a, b) => rank(a) - rank(b) || b.strength - a.strength || a.name.localeCompare(b.name));
         return out.slice(0, maximumNetworks);
     }
+    function validateWired(value) {
+        if (!value || typeof value !== "object" || value.connected !== true) return {connected: false, name: ""};
+        return {connected: true, name: bounded(value.name, 64)};
+    }
     function validate(value) {
-        const none = {status: "unavailable", enabled: false, hardwareEnabled: false, network: "", networks: []};
+        const none = {status: "unavailable", enabled: false, hardwareEnabled: false, network: "", networks: [],
+            wired: {connected: false, name: ""}};
         if (!value || typeof value !== "object") return Object.assign({}, none, {status: "loading"});
-        if (value.status === "loading" || value.status === "absent") return Object.assign({}, none, {status: value.status});
+        if (value.status === "loading" || value.status === "absent")
+            return Object.assign({}, none, {status: value.status, wired: validateWired(value.wired)});
         if (value.status !== "ready" || typeof value.enabled !== "boolean" || typeof value.hardwareEnabled !== "boolean")
             return none;
         const networks = value.enabled ? validateNetworks(value.networks) : [];
@@ -77,7 +85,7 @@ Item {
         // The applet's SSID can lag behind the list; either one names the network.
         const network = bounded(value.network, 64) || (current ? current.name : "");
         return {status: "ready", enabled: value.enabled, hardwareEnabled: value.hardwareEnabled,
-            network: value.enabled ? network : "", networks: networks};
+            network: value.enabled ? network : "", networks: networks, wired: validateWired(value.wired)};
     }
     function find(id) {
         return networks.find(item => item.id === id) || null;

@@ -11,7 +11,8 @@ Item {
     // id -> {connection, device, specific}: object paths stay inside the adapter.
     property var routes: ({})
     readonly property var snapshot: buildSnapshot(revision)
-    // NetworkManager's connection type for Wi-Fi (NetworkManager::ConnectionSettings::Wireless).
+    // NetworkManager's connection types (NetworkManager::ConnectionSettings): Wired 13, Wireless 14.
+    readonly property int wiredType: 13
     readonly property int wirelessType: 14
     signal joinFailed(string id, string message)
 
@@ -43,11 +44,24 @@ Item {
         routes = paths;
         return found;
     }
+    // An active cable connection, so the Control Center can say the computer is online.
+    function readWired() {
+        const rows = Math.min(networks.rowCount(), 128);
+        for (let row = 0; row < rows; ++row) {
+            const index = networks.index(row, 0);
+            if (Number(networks.data(index, role("TypeRole"))) === wiredType
+                    && Number(networks.data(index, role("ConnectionStateRole"))) === 2)
+                return {connected: true, name: String(networks.data(index, role("NameRole")) || "").slice(0, 64)};
+        }
+        return {connected: false, name: ""};
+    }
     function buildSnapshot(witness) {
+        const wired = readWired();
         // Without a Wi-Fi device (or without NetworkManager) there is nothing to switch.
-        if (!devices.wirelessDeviceAvailable) return {status: "absent"};
+        if (!devices.wirelessDeviceAvailable) return {status: "absent", wired: wired};
         return {status: "ready", enabled: Boolean(radio.wirelessEnabled), hardwareEnabled: Boolean(radio.wirelessHwEnabled),
-            network: String(wireless.wifiSSID || "").slice(0, 64), networks: radio.wirelessEnabled ? readNetworks() : []};
+            network: String(wireless.wifiSSID || "").slice(0, 64), networks: radio.wirelessEnabled ? readNetworks() : [],
+            wired: wired};
     }
     function setEnabled(on) {
         if (!devices.wirelessDeviceAvailable) return false;

@@ -75,6 +75,19 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         color: page.muted
     }
+    // The cable connection, which Wi-Fi settings alone do not show.
+    Controls.Label {
+        objectName: "controlCenterWiredStatus"
+        Layout.fillWidth: true
+        visible: !!page.wifi && page.wifi.wired.connected
+        text: !page.wifi || !page.wifi.wired.connected ? ""
+            : page.wifi.wired.name ? qsTr("Conectado por cabo · %1").arg(page.wifi.wired.name)
+            : qsTr("Conectado por cabo")
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        color: page.foreground
+        Accessible.name: text
+    }
     Controls.Label {
         objectName: "controlCenterWifiPageError"
         Layout.fillWidth: true
