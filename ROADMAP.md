@@ -599,6 +599,32 @@ Revisar prioridades ao concluir cada marco ou invalidar uma prova técnica. A m�
 
 ## Próxima execução em incrementos
 
+**Visual macOS aplicado na sessão do mantenedor (25/10/2026):** relógio da barra
+com data (#134), itens recentes e "Forçar encerramento…" no Menu Orla (#135),
+notificações no estilo macOS que substituem o applet do KDE na bandeja sem
+duplicar popups (#136, primeira fatia de N3), "Tocando agora" com capa,
+progresso e abrir o player (#137, M1) e bandeja enxuta (#138). Tudo isso faz
+parte de `scripts/macos_look.py` e pode ser desfeito com `restore`. Na mesma
+sessão, apareceu um achado do ambiente: o `kactivitymanagerd` não tinha
+Activity atual (`CurrentActivity` vazio), e o KDE deixou de registrar os apps
+usados. Ele foi corrigido com `SetCurrentActivity`. Também ficou registrado o
+cuidado ao atualizar applets da bandeja (veja a seção Notificações em
+[macos-look.md](docs/macos-look.md#notificações)).
+
+O que segue depende de uso real ou de dados da pessoa, e por isso não fecha
+com testes offscreen:
+
+- M1: Spotify real com áudio e um segundo player;
+- S1: dois jogos reais e uma biblioteca em outro disco;
+- G1: conta Google pelo KOrganizer;
+- N3: dois monitores, resposta inline e miniaturas;
+- T3: matriz de apps com Menu Global;
+- R1: cliques reais no painel;
+- R2: instalação em um usuário limpo;
+- critério 1.0: o piloto de sete dias.
+
+Releases e tags continuam pedindo aprovação explícita.
+
 **Próximos resultados:** seleção por clique, leitura real e prévia/Cancelar dos
 componentes passaram em Wayland isolado, e o pacote foi atualizado localmente
 com backup. A [validação](docs/validation/theme-file-import-0.2.9.md) separa esse
