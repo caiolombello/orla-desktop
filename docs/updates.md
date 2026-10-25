@@ -158,3 +158,43 @@ Uma prova sem janela, com os dados reais deste usuário e configuração/cache
 temporários, leu a dock 0.2.9 instalada e consultou o canal beta anonimamente:
 `up_to_date`, com a release 0.2.9. Uma leitura sob pedido, também sem janela, recebeu
 do Plasma a dock 0.2.9 em execução e não gravou arquivos.
+
+## Atualizar a dock — U2
+
+```bash
+python3 scripts/orla.py update apply      # canal beta; --channel stable para só estáveis
+python3 scripts/orla.py update status
+python3 scripts/orla.py update rollback   # volta à versão guardada pelo último apply
+```
+
+**Confiança (decidida pelo mantenedor em 25/10/2026):** só o repositório oficial
+no GitHub, por HTTPS, e o `SHA256SUMS` publicado na mesma release. É a mesma
+confiança do caminho de instalação do README; os artefatos ainda não são
+assinados. Os downloads seguem apenas os redirecionamentos HTTPS do próprio
+GitHub (`github.com`, `objects.githubusercontent.com`,
+`release-assets.githubusercontent.com`) e têm limite de tamanho.
+
+O `apply` faz, nesta ordem:
+
+1. consulta a release mais nova do canal com a CLI de updates, num processo
+   próprio. Se não há versão mais nova, nada é baixado;
+2. baixa o `SHA256SUMS`, que precisa listar o applet uma única vez, e o
+   `.plasmoid`, e confere o hash;
+3. confere o pacote: caminhos seguros, `org.caiodock.dock`, a versão igual à da
+   release e o Plasma em execução igual ou mais novo que o mínimo do pacote;
+4. guarda a dock instalada como `.plasmoid` em
+   `~/.local/state/orla/dock-update/kept/`;
+5. instala pelo mesmo caminho do `install` (upgrade). Se a instalação falha ou a
+   versão não muda, reinstala a guardada sozinho e registra `rolled_back`.
+
+Perfis e configurações ficam fora do pacote e não são tocados. Depois de
+atualizar ou voltar, o Plasma precisa reiniciar (ou sair e entrar) para carregar
+a versão nova. O registro fica em `~/.local/state/orla/dock-update/state.json`.
+
+Testes: `tests/test_dock_update.py` (offline) cobre a atualização com a versão
+guardada, as recusas sem mudar nada (hash, SHA256SUMS duplicado, versão,
+pacote de outro applet, Plasma antigo, arquivo que não é ZIP), a volta
+automática depois de uma instalação falha, os erros finitos e os hosts
+permitidos. Numa pasta de dados temporária, com a rede e o `kpackagetool6`
+reais, a 0.2.10 publicada foi atualizada para a 0.2.11 e voltou para a 0.2.10.
+
