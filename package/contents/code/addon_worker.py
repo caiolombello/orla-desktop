@@ -353,10 +353,17 @@ def _validate_projection(p, backend):
     if type(p['devices']) is not list or len(p['devices']) > 128:
         raise ValueError('devices')
     for d in p['devices']:
-        _fields(d, 'name kind percent level charging estimated stale present observedAt observedAtMs components')
+        named = type(d) is dict and 'displayName' in d
+        _fields(d, 'name kind percent level charging estimated stale present observedAt observedAtMs components'
+                + (' displayName' if named else ''))
         if (d['kind'] not in backend.f.KINDS or type(d['name']) is not str
                 or re.fullmatch(re.escape(d['kind']) + r'(?: [1-9][0-9]{0,2})?', d['name']) is None):
             raise ValueError('name')
+        # A name the user chose to share, bounded like the export field it comes from.
+        if named:
+            backend.f.text(d['displayName'], 64)
+            if d['displayName'] != d['displayName'].strip(' '):
+                raise ValueError('name')
         for key in ('estimated', 'stale', 'present'):
             if type(d[key]) is not bool:
                 raise ValueError('boolean')
