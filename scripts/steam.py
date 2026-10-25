@@ -304,7 +304,9 @@ class _Scanner:
                             or any(unicodedata.category(c).startswith("C") for c in install)):
                         raise _Issue("unsafe_installdir")
                     flags = state.get("stateflags")
-                    if flags == "4":
+                    # 4: fully installed. 6 adds "update required" (bit 2); a real library
+                    # showed it on 25/10/2026 with the game folder present, still installed.
+                    if flags in ("4", "6"):
                         try:
                             common = os.open("common", DIRECTORY_FLAGS, dir_fd=directory)
                             try:

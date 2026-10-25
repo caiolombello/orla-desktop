@@ -121,7 +121,7 @@ ou desconhecidos. Respostas contraditórias falham fechadas e não geram ação.
 | Raiz `absent` | A pasta raiz informada não existe; não comprova ausência global do Steam |
 | Raiz `missing` | A pasta raiz existe, mas sua pasta primária `steamapps` não foi encontrada; a biblioteca correspondente também fica `missing` |
 | Biblioteca `missing` | A pasta da biblioteca ou sua `steamapps` não foi encontrada; pode estar desmontada, movida ou removida, sem inferir a causa |
-| App `installed_candidate` | `StateFlags` exatamente `4` e diretório `common/installdir` seguro presente; interpretação experimental de presença local |
+| App `installed_candidate` | `StateFlags` exatamente `4`, ou `6` (instalado com atualização pendente), e diretório `common/installdir` seguro presente; interpretação experimental de presença local |
 | App `partial` | Hint `4`, mas diretório de instalação não encontrado |
 | App `unknown` | Flags ausentes/não qualificadas ou alvo inacessível/inseguro; não é classificação de jogo desinstalado |
 | `connection` e `ownership` | Sempre `unknown`; não se distingue online/offline nem titularidade por manifesto |

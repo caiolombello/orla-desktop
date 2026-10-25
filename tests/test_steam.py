@@ -53,6 +53,23 @@ class SteamDiscoveryTests(unittest.TestCase):
                          ("42", "Synthetic Game", "installed_candidate", "unknown"))
         self.assertNotIn(str(self.base), json.dumps(result))
 
+    def test_update_pending_is_installed_and_other_flags_stay_unqualified(self):
+        # StateFlags 6 = fully installed (4) plus "update required" (2), as a real library showed.
+        self.manifest(flags="6")
+        result = self.scan()
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["apps"][0]["status"], "installed_candidate")
+        self.assertEqual(result["errors"], [])
+        # Without the game folder it is not claimed as installed.
+        (self.root / "steamapps" / "common" / "Synthetic Game").rmdir()
+        self.assertEqual(self.scan()["apps"][0]["status"], "partial")
+        for flags in ("2", "1026", "5"):
+            with self.subTest(flags=flags):
+                self.manifest(flags=flags)
+                result = self.scan()
+                self.assertEqual(result["apps"][0]["status"], "unknown")
+                self.assertEqual(result["errors"][0]["code"], "unqualified_state_flags")
+
     def test_flatpak_external_and_missing_libraries_are_distinct_without_recursive_discovery(self):
         self.manifest()
         external = self.base / "other-disk"
