@@ -11,6 +11,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_menu_bar_clock import install_fake_gdbus, plasma  # noqa: E402
 
 # Fake KDE tools: they edit INI files under XDG_CONFIG_HOME and log D-Bus calls.
 FAKE_KWRITECONFIG = textwrap.dedent("""\
@@ -72,6 +74,7 @@ class MacosLookTests(unittest.TestCase):
             path = tools / name
             path.write_text(body, encoding="utf-8")
             path.chmod(path.stat().st_mode | stat.S_IXUSR)
+        install_fake_gdbus(tools)
         self.env = dict(os.environ, PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
                         XDG_CONFIG_HOME=str(base / "config"), XDG_DATA_HOME=str(base / "data"),
                         XDG_STATE_HOME=str(base / "state"))
@@ -79,6 +82,7 @@ class MacosLookTests(unittest.TestCase):
             (base / key).mkdir()
         (base / "config/kwinrc").write_text("[TabBox]\nLayoutName=thumbnail_grid\n", encoding="utf-8")
         (base / "config/plasmarc").write_text("[Theme]\nname=breeze-dark\n", encoding="utf-8")
+        (base / "state/fake-plasma.json").write_text(json.dumps(plasma()), encoding="utf-8")
         self.base = base
 
     def tearDown(self):
@@ -108,6 +112,7 @@ class MacosLookTests(unittest.TestCase):
         self.assertTrue((self.base / "data/plasma/desktoptheme/orla/metadata.json").exists())
         status = json.loads(self.run_script("macos_look.py", "status"))
         self.assertTrue(status["kwinApplied"])
+        self.assertEqual(self.top_clock()["dateFormat"], "custom")
         # Effects switch now, not only after the next login.
         log = (self.base / "state/busctl.log").read_text(encoding="utf-8")
         self.assertIn("loadEffect s magiclamp", log)
@@ -120,6 +125,8 @@ class MacosLookTests(unittest.TestCase):
         self.assertEqual({k: v for k, v in after.items() if v}, before_kwin)
         self.assertEqual(self.ini("plasmarc"), before_plasma)
         self.assertFalse((self.base / "state/orla/macos-look.json").exists())
+        self.assertEqual(self.top_clock(), {"showDate": False, "dateFormat": "shortDate",
+                                            "customDateFormat": "ddd d", "dateDisplayFormat": 0})
         log = (self.base / "state/busctl.log").read_text(encoding="utf-8").splitlines()
         # KWin's defaults come back: Magic Lamp off, Squash on.
         self.assertIn("--user call org.kde.KWin /Effects org.kde.kwin.Effects unloadEffect s magiclamp", log[-4:])
@@ -127,6 +134,16 @@ class MacosLookTests(unittest.TestCase):
         # Restoring again changes nothing and does not fail.
         self.run_script("macos_look.py", "restore")
         self.assertEqual(self.ini("plasmarc"), before_plasma)
+
+    def top_clock(self):
+        model = json.loads((self.base / "state/fake-plasma.json").read_text(encoding="utf-8"))
+        return model["panels"][0]["widgets"][1]["config"]["Appearance"]
+
+    def test_apply_without_plasma_skips_only_the_clock(self):
+        (self.base / "state/fake-plasma.json").unlink()
+        self.run_script("macos_look.py", "apply")
+        self.assertEqual(self.ini("plasmarc")["Theme"]["name"], "orla")
+        self.assertFalse((self.base / "state/orla/menu-bar-clock.json").exists())
 
     def test_theme_restore_without_saved_state_leaves_the_theme_alone(self):
         self.run_script("plasma_theme.py", "restore", expect=1)
