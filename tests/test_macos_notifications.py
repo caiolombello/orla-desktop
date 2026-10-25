@@ -81,6 +81,27 @@ class MacosNotificationsTests(unittest.TestCase):
         self.assertFalse((self.base / "state/orla/macos-notifications.json").exists())
         self.assertIn("nothing saved", self.run_swap("restore", expect=1))
 
+    def test_apply_repairs_a_tray_that_forgot_orla_after_an_update(self):
+        self.publish(plasma())
+        self.install()
+        self.run_swap("apply")
+        # Updating the package makes the tray drop it from every list, as Plasma does.
+        model = json.loads((self.base / "state/fake-plasma.json").read_text(encoding="utf-8"))
+        tray = model["panels"][0]["widgets"][0]["config"]["General"]
+        for key in ("extraItems", "hiddenItems", "shownItems", "knownItems"):
+            tray[key] = [item for item in tray[key] if item != swap.ORLA]
+        self.publish(model)
+        self.assertEqual(self.run_swap("status")["presenters"], {"7": None})
+        self.run_swap("apply")
+        tray = self.tray()
+        self.assertIn(swap.ORLA, tray["extraItems"])
+        self.assertIn(swap.ORLA, tray["knownItems"])
+        self.assertEqual(tray["hiddenItems"], [swap.ORLA])
+        self.assertNotIn(swap.KDE, tray["extraItems"])
+        # Restore still brings KDE's original lists back.
+        self.run_swap("restore")
+        self.assertEqual(self.tray(), KDE_TRAY)
+
     def test_a_tray_without_kde_notifications_is_left_alone(self):
         self.install()
         tray = dict(KDE_TRAY, extraItems=["org.kde.plasma.volume"])

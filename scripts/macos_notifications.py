@@ -12,6 +12,10 @@ adding one. Plasma's notification service, history, actions and Do Not Disturb
 stay KDE's. Changes go through Plasma's scripting API; the tray loads and
 unloads the applets at once. Orla Notifications must be installed first
 (`install`, or kpackagetool6 -t Plasma/Applet -i notifications).
+
+Updating or removing a tray applet's package makes the tray forget it. So
+`install` puts Orla back after updating it, and `apply` repairs a tray that
+lost it; before removing the package, run `restore` to get KDE's applet back.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 KDE = "org.kde.plasma.notifications"
 ORLA = "org.orla.notifications"
@@ -104,6 +109,17 @@ def evaluate(write: dict | None = None) -> dict:
     return parse_reply(result.stdout)
 
 
+def repaired(values: dict, previous: dict) -> dict:
+    """A tray that forgot Orla (its package was updated): add it back like the swap did."""
+    result = {key: list(values[key]) for key in KEYS}
+    result["extraItems"] = list(dict.fromkeys(result["extraItems"] + [ORLA]))
+    result["knownItems"] = list(dict.fromkeys(result["knownItems"] + [ORLA]))
+    for key in ("hiddenItems", "shownItems"):
+        if KDE in previous[key]:
+            result[key] = list(dict.fromkeys(result[key] + [ORLA]))
+    return result
+
+
 def swapped(values: dict, old: str, new: str) -> dict:
     """The same lists with `new` where `old` was; `old` stays known, so the tray keeps it off."""
     result = {}
@@ -130,6 +146,11 @@ def install() -> None:
         raise SwapError("kpackagetool6 is not available") from exc
     if result.returncode or not installed():
         raise SwapError("Orla Notifications could not be installed")
+    # The tray forgets an updated applet when the package signal arrives; let
+    # it settle, then, if Orla was in use, put it back.
+    if _saved() is not None:
+        time.sleep(1.5)
+        apply()
 
 
 def _state_file() -> Path:
@@ -157,16 +178,20 @@ def apply() -> dict:
     if not installed():
         raise SwapError("Orla Notifications is not installed")
     current = evaluate()
-    targets = {tray: values for tray, values in current.items() if KDE in values["extraItems"]}
-    if not targets:
-        return current
     saved = _saved() or {}
+    targets = {tray: values for tray, values in current.items() if KDE in values["extraItems"]}
+    lost = {tray: values for tray, values in current.items()
+            if tray in saved and tray not in targets and ORLA not in values["extraItems"]}
+    if not targets and not lost:
+        return current
     # Keep the first values: applying twice must not forget the original.
     previous = {**{tray: current[tray] for tray in targets}, **saved}
     if previous != saved:
         _save(previous)
-    after = evaluate({tray: swapped(values, KDE, ORLA) for tray, values in targets.items()})
-    if any(KDE in after[tray]["extraItems"] or ORLA not in after[tray]["extraItems"] for tray in targets):
+    writes = {tray: swapped(values, KDE, ORLA) for tray, values in targets.items()}
+    writes.update({tray: repaired(values, previous[tray]) for tray, values in lost.items()})
+    after = evaluate(writes)
+    if any(KDE in after[tray]["extraItems"] or ORLA not in after[tray]["extraItems"] for tray in writes):
         raise SwapError("the tray did not take Orla Notifications")
     return after
 
@@ -195,6 +220,7 @@ def main(argv: list[str]) -> int:
             return 0
         if argv[1] == "status":
             current = evaluate()
+            # None means no presenter at all: run `apply` (repair) or `restore`.
             presenters = {tray: (ORLA if ORLA in values["extraItems"] else KDE if KDE in values["extraItems"] else None)
                           for tray, values in current.items()}
             print(json.dumps({"presenters": presenters, "installed": installed(), "saved": _saved() is not None},

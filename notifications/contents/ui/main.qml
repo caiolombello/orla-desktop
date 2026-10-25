@@ -55,7 +55,7 @@ PlasmoidItem {
     toolTipSubText: !serviceAvailable ? qsTr("Serviço de notificações indisponível")
         : inhibited ? qsTr("Não perturbe ativo")
         : unread > 0 ? qsTr("%1 não lidas").arg(Math.min(99, unread)) : qsTr("Nenhuma notificação nova")
-    onExpandedChanged: if (expanded) markAllRead()
+    onExpandedChanged: if (root.expanded) markAllRead()
 
     function setDoNotDisturb(on) {
         if (on) {

@@ -84,6 +84,11 @@ primeira troca. A troca passa pelos scripts do Plasma, e a bandeja carrega e
 descarrega os applets na hora. O applet também aparece em "Mostrar
 alternativas…" do applet de notificações do KDE (`X-Plasma-Provides`).
 
+Atualizar ou remover o pacote de um applet da bandeja faz a bandeja esquecê-lo.
+Por isso `install` recoloca o Orla depois de atualizá-lo, e `apply` repara uma
+bandeja que o perdeu. `status` mostra `null` quando não há nenhum applet de
+notificações. Antes de remover o pacote, rode `restore` para voltar ao do KDE.
+
 Testes: `tests/test_notifications.py` cobre o texto simples, os tempos, o
 empilhamento, o agrupamento, o banner (teclado, foco, expiração e progresso) e a
 central. `tests/test_macos_notifications.py` roda o script da bandeja num
