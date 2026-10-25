@@ -33,8 +33,9 @@ def bundle(root: Path) -> tuple[Path, Path, Path]:
         "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore",
     )]
     # addons/ holds the published add-on schemas and synthetic fixtures the bundled tests read.
+    # notifications/ is the optional applet that scripts/macos_notifications.py installs.
     for directory in (package, root / "scripts", root / "tests", root / "docs", root / "themes", root / "addons",
-                      root / "website", root / ".github"):
+                      root / "notifications", root / "website", root / ".github"):
         sources.extend(path for path in directory.rglob("*")
                        if path.is_file() and not path.is_symlink()
                        and "__pycache__" not in path.parts

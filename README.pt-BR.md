@@ -22,6 +22,8 @@ A [Central compartilhada S1 no Source](docs/validation/shared-control-center-sou
 
 ## O que funciona hoje
 
+A alpha 0.2.11 aproxima a dock do macOS. `scripts/macos_look.py apply` aplica, e `restore` desfaz, o tema Plasma Orla com vidro fosco, a decoração de janelas Orla, o alternador de apps e o efeito de minimizar no estilo macOS, banners de notificação no estilo macOS com uma central de notificações (o applet opcional [Notificações Orla](docs/macos-look.md#notificações), que substitui o applet de notificações do KDE na bandeja para nunca duplicar popups) e uma bandeja mais enxuta. A Central de Controle ganha a grade no estilo macOS, perfis de energia, redes Wi-Fi e aparelhos Bluetooth pareados; a dock ganha uma Lixeira opcional e o cartão "Tocando agora" com capa e progresso. Veja o [changelog](CHANGELOG.md) e o [registro de validação da 0.2.11](docs/validation/release-0.2.11.md).
+
 A alpha 0.2.10 amplia a Central de Controle experimental: um botão global opcional no dock, desligado por padrão, com estado de mídia e bateria, volume/mudo/saída de som, brilho da tela, Não perturbe e mudo do microfone. Cada mudança só conta depois que o serviço do sistema confirma, e um serviço ausente desativa somente o próprio card. O comportamento nativo foi exercitado em uma sessão Plasma 6.7.5/Wayland; outros ambientes e hardware continuam sem qualificação. Veja o [guia da Central de Controle](docs/control-center.md) e o [registro de validação da 0.2.10](docs/validation/release-0.2.10.md).
 
 - Fixar, reordenar, abrir e remover aplicativos; alternar para janelas abertas ou minimizá-las. Abrir menus com Menu ou Shift+F10; Escape fecha o menu.
@@ -67,15 +69,15 @@ A base atual de validação é Fedora 44, Plasma 6.7.5, Qt 6.11.2 e Wayland. Out
 
 ## Instalar uma versão publicada
 
-Os comandos abaixo apontam para a [prerelease alpha 0.2.10](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.10). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
+Os comandos abaixo apontam para a [prerelease alpha 0.2.11](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.11). Baixe seu `.zip`, verifique o checksum usando o `SHA256SUMS` publicado e extraia o arquivo. O pacote inclui o helper junto com o applet:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.10.zip
-cd orla-dock-0.2.10
+unzip orla-dock-0.2.11.zip
+cd orla-dock-0.2.11
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.10.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.11.plasmoid
 ```
 
 As integrações de projetos ficam desligadas por padrão. Para habilitar explicitamente os adaptadores experimentais incluídos, acrescente `--with-integrations` ao comando de instalação. Instalar/atualizar sem essa opção preserva serviços e preferências existentes sem habilitar novos adaptadores. `doctor` identifica dependências opcionais ausentes. Uma falha ao atualizar o D-Bus gera aviso e preserva o dock instalado. O helper não precisa de acesso de administrador. Depois, adicione **Orla Dock** pela interface Adicionar Widgets do Plasma. Guarde o diretório extraído caso queira executar o helper novamente.
@@ -87,7 +89,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.10.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.11.plasmoid
 ```
 
 Para verificar a configuração local ou remover os arquivos gerenciados pelo Orla:

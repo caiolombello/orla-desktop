@@ -20,6 +20,8 @@ The alpha prerelease ZIP includes the experimental local Steam inventory CLI. It
 
 ## What works today
 
+Alpha 0.2.11 brings the dock closer to macOS. `scripts/macos_look.py apply` sets, and `restore` undoes, the frosted Orla Plasma theme, the Orla window decoration, a macOS-style app switcher and minimize effect, macOS-style notification banners with a Notification Center (the optional [Orla Notifications](docs/macos-look.md#notificações) applet, which replaces KDE's notification applet in the tray so popups are never doubled) and a sparser tray. The Control Center gains a macOS-style grid, power profiles, Wi-Fi networks and paired Bluetooth devices; the dock adds an optional Trash and a Now Playing card with cover and progress. See the [changelog](CHANGELOG.md) and the [0.2.11 validation record](docs/validation/release-0.2.11.md).
+
 Alpha 0.2.10 extends the experimental Control Center: an optional global dock button, off by default, with media and battery status, output volume/mute/device, screen brightness, Do Not Disturb and microphone mute. Each change counts only after the system service confirms it, and a missing service disables only its card. Native behavior was exercised on one Plasma 6.7.5/Wayland session; other environments and hardware remain unqualified. See the [Control Center guide](docs/control-center.md) and the [0.2.10 validation record](docs/validation/release-0.2.10.md).
 
 The source-only [shared Control Center increment](docs/validation/shared-control-center-source.md) adds an optional right-side bar entry using the dock’s existing view and audio state. It stays off in the preset, refuses missing or ambiguous owners, and preserves the dock when removed. Installed-package identity, native positioning/focus and real audio still have separate qualification gates.
@@ -73,15 +75,15 @@ The current validation baseline is Fedora 44, Plasma 6.7.5, Qt 6.11.2, and Wayla
 
 ## Install a release
 
-These commands target the [0.2.10 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.10). Download its release `.zip`, verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
+These commands target the [0.2.11 alpha prerelease](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.11). Download its release `.zip`, verify its checksum using the published `SHA256SUMS`, and extract it. The bundle contains the helper and applet archive together:
 
 ```bash
 cd ~/Downloads
 sha256sum --ignore-missing -c SHA256SUMS
-unzip orla-dock-0.2.10.zip
-cd orla-dock-0.2.10
+unzip orla-dock-0.2.11.zip
+cd orla-dock-0.2.11
 python3 scripts/orla.py doctor
-python3 scripts/orla.py install orla-dock-0.2.10.plasmoid
+python3 scripts/orla.py install orla-dock-0.2.11.plasmoid
 ```
 
 Project integrations are off by default. To explicitly enable the bundled experimental adapters, add `--with-integrations` to the install command. Plain install/upgrade preserves any existing integration mapping and saved preferences without enabling new adapters. When its dependencies are available, the new helper registers theme-file import independently; its service starts only after you choose a file. `doctor` reports optional dependencies separately. A failed D-Bus refresh reports a warning while preserving the installed dock; reinstall retries the refresh. The helper does not need administrator access. After installation, add **Orla Dock** from Plasma's Add Widgets interface. Keep the extracted directory if you may want to run the helper again.
@@ -93,7 +95,7 @@ git clone https://github.com/caiolombello/orla-desktop.git
 cd orla-desktop
 python3 scripts/orla.py doctor
 python3 scripts/orla.py build
-python3 scripts/orla.py install dist/orla-dock-0.2.10.plasmoid
+python3 scripts/orla.py install dist/orla-dock-0.2.11.plasmoid
 ```
 
 The CLI also accepts `build --output-dir DIR`. This changes only
