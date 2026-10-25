@@ -520,6 +520,9 @@ def parser() -> argparse.ArgumentParser:
     preview_parser = subparsers.add_parser("preview", help="run plasmawindowed with temporary XDG user directories")
     preview_parser.add_argument("--project-root")
     preview_parser.add_argument("--timeout", type=float, help="stop the preview after this many seconds")
+    update_parser = subparsers.add_parser("update", help="update the installed dock from the official releases, or go back")
+    update_parser.add_argument("update_action", choices=("apply", "rollback", "status"))
+    update_parser.add_argument("--channel", choices=("beta", "stable"), default="beta")
     updates_parser = subparsers.add_parser("updates", help="optional read-only release window")
     updates_parser.add_subparsers(dest="updates_action", required=True).add_parser("desktop")
     launcher_parser = subparsers.add_parser("launcher", help="install and manage the optional Orla Launcher")
@@ -569,6 +572,24 @@ def main(argv: list[str] | None = None) -> int:
             print("Orla Dock desinstalado; configurações e caches dos projetos foram preservados" if removed else "Serviço próprio removido; pacote não estava instalado")
         elif args.command == "doctor":
             return doctor()
+        elif args.command == "update":
+            if __package__:
+                from . import dock_update
+            else:
+                import dock_update
+            try:
+                if args.update_action == "apply":
+                    result = dock_update.apply(args.channel)
+                elif args.update_action == "rollback":
+                    result = dock_update.rollback()
+                else:
+                    result = dock_update.status()
+            except dock_update.UpdateError as exc:
+                print(f"orla: {exc}", file=sys.stderr)
+                return 1
+            print(json.dumps(result, sort_keys=True))
+            if result.get("status") in ("updated", "rolled_back"):
+                print("orla: reinicie o Plasma (ou saia e entre de novo) para usar esta versão", file=sys.stderr)
         elif args.command == "launcher":
             installer_path = Path(__file__).resolve().parents[1] / "launcher" / "install.py"
             spec = importlib.util.spec_from_file_location("orla_launcher_install_bootstrap", installer_path)

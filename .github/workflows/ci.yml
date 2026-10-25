@@ -119,6 +119,7 @@ jobs:
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_theme_service.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_release.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_updates.py' -v
+          $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_dock_update.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_steam.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_ai.py' -v
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_ai_text.py' -v
