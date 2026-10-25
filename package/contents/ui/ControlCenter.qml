@@ -121,13 +121,21 @@ Controls.Control {
     function wifiText() {
         const radio = root.wifi;
         if (!radio) return "";
+        // A cable keeps the computer online even with Wi-Fi off or missing; say so.
+        const cable = Boolean(radio.wired && radio.wired.connected);
         if (radio.joining) return qsTr("Conectando a %1…").arg(boundedText(radio.joiningName, 64));
         if (radio.status === "loading") return qsTr("Lendo o Wi-Fi…");
-        if (radio.status === "absent") return qsTr("Nenhum adaptador Wi-Fi disponível");
+        if (radio.status === "absent") return cable ? qsTr("Conectado por cabo") : qsTr("Nenhum adaptador Wi-Fi disponível");
         if (radio.status === "unavailable") return qsTr("Serviço de rede indisponível");
         if (radio.pending) return radio.desired ? qsTr("Ligando…") : qsTr("Desligando…");
-        if (!radio.enabled) return radio.hardwareEnabled ? qsTr("Desligado") : qsTr("Desligado por uma chave do computador");
-        return radio.network ? qsTr("Conectado a %1").arg(boundedText(radio.network, 64)) : qsTr("Ligado · sem conexão");
+        if (!radio.enabled) {
+            const off = radio.hardwareEnabled ? qsTr("Desligado") : qsTr("Desligado por uma chave do computador");
+            return cable ? qsTr("%1 · conectado por cabo").arg(off) : off;
+        }
+        if (radio.network)
+            return cable ? qsTr("Conectado a %1 · cabo").arg(boundedText(radio.network, 64))
+                         : qsTr("Conectado a %1").arg(boundedText(radio.network, 64));
+        return cable ? qsTr("Conectado por cabo") : qsTr("Ligado · sem conexão");
     }
     function bluetoothText() {
         const radio = root.bluetooth;

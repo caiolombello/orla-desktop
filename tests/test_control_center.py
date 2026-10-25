@@ -789,6 +789,34 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Ligado · sem conexão")
         self.assertEqual(self.warnings, [])
 
+    def test_a_cable_connection_is_shown_with_wifi_off_on_or_missing(self):
+        status = self.item("controlCenterWifiStatus")
+        cable = '{connected: true, name: "<b>Conexão cabeada</b>\\n1"}'
+        for snapshot, text in (
+                ('{status: "ready", enabled: false, hardwareEnabled: true, network: "", networks: [], wired: CABLE}',
+                 "Desligado · conectado por cabo"),
+                ('{status: "ready", enabled: true, hardwareEnabled: true, network: "", networks: [], wired: CABLE}',
+                 "Conectado por cabo"),
+                ('{status: "ready", enabled: true, hardwareEnabled: true, network: "Rede sintética", networks: [], wired: CABLE}',
+                 "Conectado a Rede sintética · cabo"),
+                ('{status: "absent", wired: CABLE}', "Conectado por cabo"),
+                ('{status: "absent", wired: {connected: "yes", name: "x"}}', "Nenhum adaptador Wi-Fi disponível"),
+                ('{status: "ready", enabled: false, hardwareEnabled: true, network: "", networks: []}', "Desligado")):
+            with self.subTest(snapshot=snapshot):
+                self.evaluate("wifiBackend.snapshot = " + snapshot.replace("CABLE", cable), self.window)
+                QTest.qWait(20)
+                self.assertEqual(status.property("text"), text)
+        self.evaluate("wifiBackend.snapshot = " + '{status: "ready", enabled: false, hardwareEnabled: true, network: "", '
+                      'networks: [], wired: ' + cable + '}', self.window)
+        self.evaluate("showWifi()")
+        QTest.qWait(30)
+        wired = self.item("controlCenterWiredStatus")
+        self.assertTrue(wired.isVisible())
+        self.assertEqual(wired.property("text"), "Conectado por cabo · <b>Conexão cabeada</b> 1")
+        self.assertEqual(self.evaluate("textFormat", wired), 0)
+        self.assertEqual(self.wifi_calls(), [])
+        self.assertEqual(self.warnings, [])
+
     def test_wifi_page_explains_a_radio_that_is_off(self):
         self.activate("controlCenterWifiDetails")
         QTest.qWait(30)
