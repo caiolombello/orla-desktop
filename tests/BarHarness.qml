@@ -14,6 +14,7 @@ Window {
         controlCenterHost: bar
         sessionBackend: fixtureSession
         applicationBackend: fixtureApplication
+        recentApplicationsBackend: fixtureRecent
         hostVersion: "6.7.5"
         onOpenRequested: kind => fixtureSession.open(kind)
     }
