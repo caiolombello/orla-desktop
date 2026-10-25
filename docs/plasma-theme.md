@@ -54,7 +54,6 @@ outros widgets, nada muda.
   Plasma usa as variantes quase opacas do tema.
 - Outros painéis inferiores (por exemplo uma barra de tarefas do KDE) ficam sem
   fundo visível com este tema, porque o fundo "south" é a moldura invisível da dock.
-- A Central aberta pela entrada da barra continua com o vidro Orla desenhado.
 - A barra mantém as margens de 4 px do Breeze, que os testes de encaixe da barra
   supõem.
 - Os testes (`tests/test_plasma_theme.py`) conferem a geração: peças com limites
