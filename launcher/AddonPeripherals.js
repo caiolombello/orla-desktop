@@ -20,6 +20,11 @@ function percent(value) { return value === null || integer(value, 0, 100); }
 function hex(value, length) { return typeof value === "string" && value.length === length && new RegExp("^[0-9a-f]{" + length + "}$").test(value); }
 function choice(value, choices) { return typeof value === "string" && choices.indexOf(value) >= 0; }
 function nullableHex(value, length) { return value === null || hex(value, length); }
+// A name the user chose to share: up to 64 code points, no control characters, no edge spaces.
+function displayName(value) {
+    return typeof value === "string" && Array.from(value).length >= 1 && Array.from(value).length <= 64
+        && value === value.trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value);
+}
 
 // Bound UTF-8 bytes before parsing. JSON.parse alone silently accepts duplicate keys.
 function parse(text) {
@@ -122,7 +127,10 @@ function validate(p) {
     const counts = {}, ordinals = {};
     for (const d of p.devices) counts[d.kind] = (counts[d.kind] || 0) + 1;
     for (const d of p.devices) {
-        fields(d, "name kind percent level charging estimated stale present observedAt observedAtMs components");
+        const named = d !== null && typeof d === "object" && Object.prototype.hasOwnProperty.call(d, "displayName");
+        fields(d, "name kind percent level charging estimated stale present observedAt observedAtMs components"
+            + (named ? " displayName" : ""));
+        requireValue(!named || displayName(d.displayName));
         requireValue(choice(d.kind, kinds));
         ordinals[d.kind] = (ordinals[d.kind] || 0) + 1;
         requireValue(d.name === d.kind + (counts[d.kind] > 1 ? " " + ordinals[d.kind] : ""));
@@ -185,8 +193,10 @@ function current(value, now, freshnessFloor) {
         p.addon.reason = now < p.generatedAtMs ? "future" : "expired";
         return p;
     }
+    // Disconnected devices stay out of the views, as in the producer's own widget.
+    p.devices = p.devices.filter(d => d.present);
     for (const d of p.devices) {
-        if (!d.present || d.stale || d.observedAtMs === null || now < d.observedAtMs
+        if (d.stale || d.observedAtMs === null || now < d.observedAtMs
                 || d.observedAtMs > p.generatedAtMs || ageNow - d.observedAtMs >= p.leaseMs) {
             clearDevice(d); d.stale = true; p.limited = true;
         } else if (d.kind === "earbuds" && d.components.some(c => c.label === "case")

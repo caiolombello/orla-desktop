@@ -1008,7 +1008,13 @@ def validate_export(value: object, *, producer_namespace: str) -> dict:
     if len(e['devices']) > 128:
         raise AddonError('size')
     for d in e['devices']:
-        object_fields(d, ('kind', 'link', 'present', 'stale', 'observedAtMs', 'battery', 'components'))
+        device_fields = ('kind', 'link', 'present', 'stale', 'observedAtMs', 'battery', 'components')
+        # The name is optional: producers send it only when the user chose to share names.
+        object_fields(d, device_fields + ('name',) if type(d) is dict and 'name' in d else device_fields)
+        if 'name' in d:
+            text(d['name'], 64)
+            if d['name'] != d['name'].strip(' '):
+                raise AddonError('format')
         _enum(d['kind'], KINDS)
         _enum(d['link'], LINKS)
         if type(d['present']) is not bool or type(d['stale']) is not bool:
@@ -1148,17 +1154,20 @@ def peripherals_schema() -> dict:
     components['allOf'] = [dict(contains=dict(properties=dict(label=dict(const=label)),
                                             required=['label']), minContains=0, maxContains=1)
                            for label in LABELS]
+    device = _schema_object(dict(
+        kind=dict(enum=list(KINDS)), link=dict(enum=list(LINKS)), present=dict(type='boolean'),
+        stale=dict(type='boolean'), observedAtMs={**stamp, 'type': ['integer', 'null']},
+        battery=_schema_object(dict(percent=percent, level=dict(enum=[*LEVELS, None]),
+            charging=dict(enum=list(CHARGING)), estimated=dict(type='boolean'))),
+        components=components))
+    # Optional, so not required: sent only when the user chose to share device names.
+    device['properties']['name'] = _schema_text(64, '[^ ](?:.*[^ ])?')
     schema = _schema_object(dict(formatVersion=dict(const=FORMAT_VERSION),
         producer=_schema_text(64, NAMESPACE_PATTERN),
         producerVersion=_schema_text(40, r'[A-Za-z0-9.+_-]{1,40}'),
         generatedAtMs=stamp, expiresAtMs=stamp,
         intervalSeconds=dict(type='integer', minimum=10, maximum=3600),
-        devices=dict(type='array', maxItems=128, items=_schema_object(dict(
-            kind=dict(enum=list(KINDS)), link=dict(enum=list(LINKS)), present=dict(type='boolean'),
-            stale=dict(type='boolean'), observedAtMs={**stamp, 'type': ['integer', 'null']},
-            battery=_schema_object(dict(percent=percent, level=dict(enum=[*LEVELS, None]),
-                charging=dict(enum=list(CHARGING)), estimated=dict(type='boolean'))),
-            components=components)))))
+        devices=dict(type='array', maxItems=128, items=device)))
     schema['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
     schema['$comment'] = ('Experimental. Normative stdlib parser also checks strict UTF-8, '
         '65536 bytes, depth <=8, duplicate keys, nonfinite numbers, integer tokens, '

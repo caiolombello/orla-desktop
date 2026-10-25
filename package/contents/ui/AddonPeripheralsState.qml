@@ -82,6 +82,7 @@ Item {
         if (generation === internal.generation) queueRefresh(generation);
     }
     function genericName(device) {
+        if (typeof device.displayName === "string") return device.displayName;
         const labels = {mouse: qsTr("Mouse"), keyboard: qsTr("Teclado"), earbuds: qsTr("Fones de ouvido"),
             headset: qsTr("Headset"), touchpad: qsTr("Touchpad"), gamepad: qsTr("Controle"), other: qsTr("Periférico")};
         return labels[device.kind] + device.name.slice(device.kind.length);

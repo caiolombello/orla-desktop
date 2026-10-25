@@ -21,8 +21,7 @@ Row {
                 .some(window => window && finiteNumber(window.usedPercent));
         if (key === "peripherals") return (dock.integrations.peripherals.devices || [])
             .some(device => device && ((dock.integrations.peripherals.status === "ready"
-                    || dock.integrations.peripherals.status === "stale") && (finiteNumber(device.percent) || device.level || device.stale || (device.components || []).some(part => finiteNumber(part.percent)))
-                || device.present === false && typeof device.name === "string" && device.name.trim().length > 0));
+                    || dock.integrations.peripherals.status === "stale") && (finiteNumber(device.percent) || device.level || device.stale || (device.components || []).some(part => finiteNumber(part.percent)))));
         const state = dock.integrations.recording.state;
         return state === "starting" || state === "recording" || state === "stopped";
     }

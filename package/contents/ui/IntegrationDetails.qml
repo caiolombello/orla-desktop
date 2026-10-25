@@ -34,7 +34,6 @@ ColumnLayout {
     }
 
     function stateText(modelData) {
-        if (root.selected === "peripherals" && modelData.present === false) return qsTr("Fora de alcance");
         if (modelData.stale) return qsTr("Leitura desatualizada");
         if (root.selected === "quota") return typeof modelData.usedPercent === "number"
             ? Math.round(modelData.usedPercent) + "% usado" : qsTr("Quota desconhecida");

@@ -160,20 +160,21 @@ class WidgetStripTests(unittest.TestCase):
             recording={"status": "unknown", "state": "recording"},
         )
         QTest.qWait(10)
-        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
+        # A disconnected device is not shown (user request; PeriGauge's own widget hides it too).
+        self.assert_idle(peripherals, "Bateria de periféricos", "Nenhum periférico conectado")
 
         self.evaluate("unavailable('Falha de conexão')", self.integrations)
         self.evaluate("status = 'unavailable'; percentKnown = false; percent = -1", self.battery)
         QTest.qWait(10)
         self.assert_idle(quota, "QuotaLantern", "Integração indisponível")
-        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
+        self.assert_idle(peripherals, "Bateria de periféricos", "Nenhum periférico conectado")
         self.evaluate("refresh(); transport.replyAddons('', true)", self.integrations)
         self.assert_idle(peripherals, "Bateria de periféricos", "Integração indisponível")
         self.assert_idle(battery, "Energia", "Bateria indisponível")
         self.assert_idle(recording, "FalaTrace", "Sem estado disponível")
         self.assertEqual([self.tile(name) for name in ("quotaTile", "peripheralsTile", "systemBatteryTile", "recordingTile")], identities)
 
-    def test_unvalidated_names_fail_closed_and_valid_generic_absent_name_preserves_focus(self):
+    def test_unvalidated_names_fail_closed_and_valid_names_preserve_focus(self):
         peripherals = self.tile("peripheralsTile")
         identity = peripherals
         peripherals.forceActiveFocus(Qt.TabFocusReason)
@@ -185,8 +186,21 @@ class WidgetStripTests(unittest.TestCase):
             self.assertIs(self.tile("peripheralsTile"), identity)
             self.assertTrue(peripherals.property("activeFocus"))
             self.assert_idle(peripherals, "Bateria de periféricos", "Integração indisponível")
-        self.publish(peripherals=peripheral_frame(percent=None, present=False))
-        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · fora de alcance")
+        self.publish(peripherals=peripheral_frame(percent=48))
+        self.assert_live(peripherals, "Bateria de periféricos", "Mouse · 48%")
+        # A name the user shared replaces the generic label; it is plain text.
+        for name, shown in (("Mouse de teste", "Mouse de teste · 48%"), ("<b>Mouse</b>", "<b>Mouse</b> · 48%")):
+            frame = peripheral_frame(percent=48)
+            frame['peripherals']['devices'][0]['displayName'] = name
+            self.publish(peripherals=frame)
+            self.assertIs(self.tile("peripheralsTile"), identity)
+            self.assert_live(peripherals, "Bateria de periféricos", shown)
+        for name in ("", " Mouse", "Mouse\n", "M" * 65):
+            frame = peripheral_frame(percent=48)
+            frame['peripherals']['devices'][0]['displayName'] = name
+            self.publish(peripherals=frame)
+            self.assert_idle(peripherals, "Bateria de periféricos", "Integração indisponível")
+        self.assertTrue(peripherals.property("activeFocus"))
 
     def test_coarse_level_has_text_and_icon_without_manufactured_ring_or_percentage(self):
         self.publish(peripherals=peripheral_frame(percent=None, level='low', charging='charging'))

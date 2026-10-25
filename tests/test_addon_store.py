@@ -308,6 +308,30 @@ class StoreTests(unittest.TestCase):
         self.assertNotIn('private-sentinel', json.dumps(bad))
         self.assertEqual(bad['devices'], [])
 
+    def test_shared_names_are_bounded_and_ordinals_count_connected_devices_only(self):
+        _, digest = self.install()
+        self.operation('enable', digest)
+        e = export()
+        away = json.loads(json.dumps(e['devices'][0]))
+        away['present'] = False
+        e['devices'].insert(0, away)
+        named = json.loads(json.dumps(e['devices'][1]))
+        named['name'] = 'Mouse de teste'
+        e['devices'].append(named)
+        self.publish(e)
+        result = self.snapshot()
+        self.assertEqual([d['name'] for d in result['devices']], ['mouse 1', 'mouse 2'])
+        self.assertNotIn('displayName', result['devices'][0])
+        self.assertEqual(result['devices'][1]['displayName'], 'Mouse de teste')
+        for bad in ('', ' Mouse', 'Mouse ', 'Mouse\n', 'M' * 65, 7, None):
+            with self.subTest(name=bad):
+                e = export()
+                e['devices'][0]['name'] = bad
+                self.publish(e)
+                result = self.snapshot()
+                self.assertEqual(result['status'], 'invalid')
+                self.assertEqual(result['devices'], [])
+
     def test_expiry_rollback_clock_and_absent_observations_are_unavailable(self):
         _, digest = self.install()
         self.operation('enable', digest)
@@ -318,7 +342,13 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(expired['addon']['reason'], 'expired')
         self.assertEqual(expired['devices'], [])
         self.assertEqual(self.snapshot(99999)['addon']['reason'], 'future')
-        for change in (dict(present=False), dict(stale=True), dict(observedAtMs=None),
+        # Disconnected devices are left out of the projection (user request, as in PeriGauge's widget).
+        e = export()
+        e['devices'][0].update(present=False)
+        self.publish(e)
+        self.assertEqual(self.snapshot()['devices'], [])
+        self.assertEqual(self.snapshot()['status'], 'unknown')
+        for change in (dict(stale=True), dict(observedAtMs=None),
                        dict(observedAtMs=100001), dict(observedAtMs=70000)):
             e = export()
             e['devices'][0].update(change)

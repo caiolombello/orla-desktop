@@ -186,7 +186,6 @@ class AddonPeripheralsTests(IntegrationStateCase):
         self.select(['peripherals'])
         cases = [(dict(percent=0, estimated=True, charging='charging'), 0, None, 'charging', True),
             (dict(percent=None, level='low'), None, 'low', 'discharging', False),
-            (dict(present=False), None, None, 'unknown', False),
             (dict(stale=True), None, None, 'unknown', False),
             (dict(observed=None), None, None, 'unknown', False),
             (dict(kind='earbuds', name='earbuds', components=[dict(label='case', percent=80, charging='charging')]),
@@ -202,6 +201,21 @@ class AddonPeripheralsTests(IntegrationStateCase):
                 if changes.get('kind') == 'earbuds':
                     self.assertEqual(self.evaluate('peripherals.devices[0].components[0].percent'), 80)
                     self.assertNotIn('%', self.state.property('batterySummary'))
+
+    def test_disconnected_devices_are_hidden_and_shared_names_replace_generic_labels(self):
+        self.select(['peripherals'])
+        frame = peripheral_frame()
+        away = dict(frame['peripherals']['devices'][0], name='keyboard', kind='keyboard', present=False)
+        frame['peripherals']['devices'].append(away)
+        self.addon_reply(frame)
+        self.assertEqual(self.evaluate('peripherals.devices.length'), 1)
+        self.assertEqual(self.state.property('batterySummary'), 'Mouse · 70%')
+        self.evaluate('refresh()')
+        frame = peripheral_frame()
+        frame['peripherals']['devices'][0]['displayName'] = 'Mouse de teste'
+        self.addon_reply(frame)
+        self.assertEqual(self.state.property('addonErrorCode'), '')
+        self.assertEqual(self.state.property('batterySummary'), 'Mouse de teste · 70%')
 
     def test_malformed_and_management_frames_clear_previous_values_without_sensitive_errors(self):
         self.select(['peripherals'])
@@ -268,7 +282,8 @@ class AddonPeripheralsTests(IntegrationStateCase):
             target.parent.mkdir(mode=0o700, parents=True)
             target.parent.parent.chmod(0o700)
             variants = [(export(), 'ready')]
-            for changes, status in [(dict(present=False), 'stale'), (dict(observedAtMs=None), 'stale'),
+            # A disconnected device is dropped, so nothing is left to be stale.
+            for changes, status in [(dict(present=False), 'unknown'), (dict(observedAtMs=None), 'stale'),
                                     (dict(stale=True), 'stale')]:
                 e = export()
                 e['devices'][0].update(changes)
