@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls as Controls
 import QtQuick.Templates as Templates
+import QtQuick.Controls.impl as ControlsImpl
 import QtQuick.Layouts
 import "../code/Style.js" as Style
 
@@ -10,6 +11,7 @@ Item {
     id: root
     property var sessionBackend: null
     property var applicationBackend: null
+    property var recentApplicationsBackend: null
     property var popupHost: null
     property var menuTooltipBackend: null
     property var controlCenterTooltipBackend: null
@@ -56,7 +58,8 @@ Item {
     readonly property bool nativeSessionLoaded: actions.nativeLoaded
     readonly property bool nativeApplicationLoaded: nativeApplication.item !== null
     readonly property string sessionStatus: actions.status
-    readonly property string actionError: actions.error
+    readonly property string actionError: actions.error || recent.error
+    readonly property bool nativeRecentApplicationsLoaded: recent.nativeLoaded
     readonly property var application: applicationBackend !== null ? applicationBackend : nativeApplication.item
     property bool preserveApplication: false
     readonly property var nextApplication: ({active: Boolean(application && application.hasActiveApplication),
@@ -78,6 +81,12 @@ Item {
         id: actions
         backend: root.sessionBackend
         hostVersion: root.showOrlaMenu || root.showApplicationName ? root.hostVersion : ""
+    }
+    RecentApplications {
+        id: recent
+        backend: root.recentApplicationsBackend
+        hostVersion: root.hostVersion
+        wanted: root.showOrlaMenu
     }
     Loader {
         id: nativeApplication
@@ -146,9 +155,19 @@ Item {
         menu.restoreFocus = false;
         menu.close();
         if (kind === "about") { about.open(); return true; }
-        if (kind !== "system" && kind !== "settings" && kind !== "configure") return false;
+        if (["system", "settings", "configure", "forceQuit"].indexOf(kind) < 0) return false;
         openRequested(kind);
         return true;
+    }
+    // By ID, never by row: the list reorders as soon as another app starts.
+    function launchRecent(slot) {
+        const item = recent.items[slot];
+        if (!item) return false;
+        menu.restoreFocus = false;
+        menu.close();
+        const launched = recent.launch(item.id);
+        if (!launched) menuButton.forceActiveFocus(Qt.PopupFocusReason);
+        return launched;
     }
     RowLayout {
         id: row
@@ -366,6 +385,8 @@ Item {
     // Use the controls' keyboard semantics with our own compact presentation.
     component OrlaMenuItem: Templates.MenuItem {
         id: entry
+        // App icons keep their own colors; only a theme name is accepted.
+        property string iconName: ""
         implicitWidth: 248
         implicitHeight: Style.size.control - Style.space.sm - Style.space.xxs
         height: visible ? implicitHeight : 0
@@ -373,14 +394,26 @@ Item {
         leftPadding: Style.space.md - Style.space.xxs
         rightPadding: Style.space.md - Style.space.xxs
         font: menuButton.font
-        contentItem: Text {
-            text: entry.text
-            textFormat: Text.PlainText
-            font: entry.font
-            color: entry.enabled ? (entry.highlighted ? entry.palette.highlightedText : entry.palette.windowText)
-                : entry.palette.disabled.windowText
-            elide: Text.ElideRight
-            verticalAlignment: Text.AlignVCenter
+        contentItem: RowLayout {
+            spacing: Style.space.sm
+            ControlsImpl.IconImage {
+                visible: entry.iconName !== ""
+                name: entry.iconName
+                sourceSize.width: Style.size.iconSm
+                sourceSize.height: Style.size.iconSm
+                Layout.preferredWidth: Style.size.iconSm
+                Layout.preferredHeight: Style.size.iconSm
+            }
+            Text {
+                text: entry.text
+                textFormat: Text.PlainText
+                font: entry.font
+                color: entry.enabled ? (entry.highlighted ? entry.palette.highlightedText : entry.palette.windowText)
+                    : entry.palette.disabled.windowText
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+                Layout.fillWidth: true
+            }
         }
         background: Rectangle {
             radius: Style.radius.sm
@@ -390,11 +423,22 @@ Item {
     }
     component OrlaMenuSeparator: Templates.MenuSeparator {
         implicitHeight: 9
+        height: visible ? implicitHeight : 0
         padding: 4
         contentItem: Rectangle {
             implicitHeight: 1
             color: Style.alpha(menuButton.palette.windowText, 0.12)
         }
+    }
+    component RecentMenuItem: OrlaMenuItem {
+        required property int slot
+        readonly property var app: recent.items[slot] || null
+        objectName: "recentApplication" + slot
+        visible: app !== null
+        text: app ? app.name : ""
+        iconName: app ? app.icon : ""
+        Accessible.name: app ? qsTr("Abrir %1").arg(app.name) : ""
+        onTriggered: root.launchRecent(slot)
     }
     Controls.Menu {
         id: menu
@@ -427,6 +471,15 @@ Item {
         OrlaMenuItem { objectName: "aboutSystem"; text: qsTr("Sobre o sistema"); onTriggered: root.open("system") }
         OrlaMenuItem { objectName: "systemSettings"; text: qsTr("Configurações do sistema"); onTriggered: root.open("settings") }
         OrlaMenuItem { objectName: "configureBar"; text: qsTr("Configurar barra…"); onTriggered: root.open("configure") }
+        OrlaMenuSeparator { visible: recent.items.length > 0 }
+        OrlaMenuItem { objectName: "recentHeader"; enabled: false; visible: recent.items.length > 0; text: qsTr("Recentes") }
+        RecentMenuItem { slot: 0 }
+        RecentMenuItem { slot: 1 }
+        RecentMenuItem { slot: 2 }
+        RecentMenuItem { slot: 3 }
+        RecentMenuItem { slot: 4 }
+        OrlaMenuSeparator {}
+        OrlaMenuItem { objectName: "forceQuit"; text: qsTr("Forçar encerramento…"); onTriggered: root.open("forceQuit") }
         OrlaMenuSeparator {}
         OrlaMenuItem {
             objectName: "sessionAvailability"

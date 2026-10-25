@@ -70,6 +70,28 @@ class FixtureApplication(QObject):
     hasActiveApplication = Property(bool, lambda self: self.active, notify=changed)
 
 
+class FixtureRecent(QObject):
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.values = dict(status="ready", items=[])
+        self.calls = []
+        self.result = True
+
+    def update(self, **values):
+        self.values.update(values)
+        self.changed.emit()
+
+    status = Property(str, lambda self: self.values["status"], notify=changed)
+    items = Property("QVariantList", lambda self: self.values["items"], notify=changed)
+
+    @Slot(str, result=bool)
+    def launch(self, app_id):
+        self.calls.append(app_id)
+        return self.result
+
+
 class FixtureControlCenter(QObject):
     changed = Signal()
 
@@ -111,12 +133,14 @@ class BarTests(unittest.TestCase):
         self.session = FixtureSession()
         self.application = FixtureApplication()
         self.control_center = FixtureControlCenter()
+        self.recent = FixtureRecent()
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
         self.engine.rootContext().setContextProperty("fixtureSession", self.session)
         self.engine.rootContext().setContextProperty("fixtureApplication", self.application)
         self.engine.rootContext().setContextProperty("fixtureControlCenter", self.control_center)
+        self.engine.rootContext().setContextProperty("fixtureRecent", self.recent)
         self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("BarHarness.qml").resolve())))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.window = self.engine.rootObjects()[0]
@@ -752,14 +776,68 @@ class BarTests(unittest.TestCase):
         self.assertEqual(self.session.calls, ["system", "settings", "configure"])
         self.assertEqual(self.warnings, [])
 
+    def test_recent_applications_are_bounded_plain_and_launch_by_id(self):
+        button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertFalse(self.item("recentHeader").property("visible"))
+        self.assertFalse(self.item("recentApplication0").property("visible"))
+        apps = [dict(id="org.example.Files.desktop", name="Arquivos", icon="system-file-manager"),
+                dict(id="../../etc/passwd", name="Caminho", icon="x"),
+                dict(id="org.example.Blank.desktop", name="   ", icon="x"),
+                dict(id="org.example.Html.desktop", name="<b>Editor</b>\nlinha", icon="/opt/app/icon.png"),
+                dict(id="org.example.C.desktop", name="C", icon="c"),
+                dict(id="org.example.D.desktop", name="D", icon="d"),
+                dict(id="org.example.E.desktop", name="E" * 200, icon="e"),
+                dict(id="org.example.F.desktop", name="F", icon="f")]
+        self.recent.update(items=apps)
+        self.assertTrue(self.item("recentHeader").property("visible"))
+        shown = [self.item(f"recentApplication{slot}") for slot in range(5)]
+        self.assertEqual([item.property("text") for item in shown[:3]], ["Arquivos", "<b>Editor</b> linha", "C"])
+        self.assertEqual(len(shown[4].property("text")), 80)
+        # A path is not an icon name; the row keeps its text.
+        self.assertEqual(shown[1].property("iconName"), "")
+        self.assertEqual(shown[0].property("iconName"), "system-file-manager")
+        # Moving through the open menu launches nothing.
+        for key in (Qt.Key_Down, Qt.Key_Down, Qt.Key_Down):
+            QTest.keyClick(self.key_window(), key)
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.assertEqual(self.recent.calls, [])
+        # The list may reorder before the click; the shown slot's ID is launched.
+        self.evaluate("triggered()", shown[1])
+        self.assertEqual(self.recent.calls, ["org.example.Html.desktop"])
+        self.assertEqual(self.bar.property("actionError"), "")
+        self.recent.result = False
+        self.evaluate("triggered()", shown[0])
+        self.assertIn("Não foi possível abrir", self.bar.property("actionError"))
+        self.evaluate("recentApplicationsBackend = ({status: 'ready', items: [{id: 'org.example.Files.desktop', name: 'Arquivos', icon: ''}],"
+                      " launch: function() { throw new Error('private launcher details'); }})")
+        self.assertFalse(self.evaluate("launchRecent(0)"))
+        self.assertIn("Não foi possível abrir", self.bar.property("actionError"))
+        self.assertNotIn("private", self.bar.property("actionError"))
+        self.evaluate("recentApplicationsBackend = fixtureRecent")
+        self.recent.update(status="loading")
+        self.assertEqual(shown[0].property("text"), "")
+        self.assertFalse(self.evaluate("launchRecent(0)"))
+        self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def test_force_quit_hands_off_to_the_host_only_when_chosen(self):
+        self.evaluate("triggered()", self.item("forceQuit"))
+        self.assertEqual(self.session.calls, ["forceQuit"])
+        self.assertEqual(self.warnings, [])
+
     def test_mock_backends_prevent_native_adapters_even_on_a_supported_host(self):
         self.assertFalse(self.bar.property("nativeSessionLoaded"))
         self.assertFalse(self.bar.property("nativeApplicationLoaded"))
+        self.assertFalse(self.bar.property("nativeRecentApplicationsLoaded"))
         self.assertEqual(self.bar.property("sessionStatus"), "ready")
-        self.evaluate("hostVersion = '6.8.0'; sessionBackend = null; applicationBackend = null")
+        self.evaluate("hostVersion = '6.8.0'; sessionBackend = null; applicationBackend = null; recentApplicationsBackend = null")
         self.assertEqual(self.bar.property("sessionStatus"), "unavailable")
         self.assertFalse(self.bar.property("nativeSessionLoaded"))
         self.assertFalse(self.bar.property("nativeApplicationLoaded"))
+        self.assertFalse(self.bar.property("nativeRecentApplicationsLoaded"))
         self.assertFalse(self.evaluate("requestSession('shutdown')"))
         self.assertEqual(self.session.calls, [])
         self.assertEqual(self.warnings, [])

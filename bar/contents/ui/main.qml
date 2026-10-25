@@ -7,6 +7,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.ksvg as KSvg
 import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.workspace.dbus as DBus
 import "../code/Style.js" as Style
 
 PlasmoidItem {
@@ -73,6 +74,9 @@ PlasmoidItem {
             if (kind === "system") KCMUtils.KCMLauncher.openInfoCenter("kcm_about-distro");
             else if (kind === "settings") KCMUtils.KCMLauncher.openSystemSettings("");
             else if (kind === "configure") Plasmoid.containment.configureRequested(Plasmoid);
+            // KWin's own "kill window" pointer, the KDE counterpart of Force Quit.
+            else if (kind === "forceQuit") DBus.SessionBus.asyncCall({service: "org.kde.KWin", path: "/KWin",
+                iface: "org.kde.KWin", member: "killWindow", signature: "", arguments: []}, () => {}, () => {});
         }
     }
     PlasmaCore.ToolTipArea {
