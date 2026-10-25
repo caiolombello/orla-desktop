@@ -98,11 +98,9 @@ Item {
             && typeof device.percent === "number" && isFinite(device.percent));
         available.sort((a, b) => a.percent - b.percent);
         if (available.length) return available[0].name + " · " + Math.round(available[0].percent) + "%";
-        const absent = devices.find(device => device.present === false);
-        if (absent) return absent.name + " · " + qsTr("fora de alcance");
         if (peripherals.status === "stale" || devices.some(device => device.stale)) return qsTr("Dados desatualizados");
         if (devices.length) return qsTr("Percentual desconhecido");
-        return peripherals.status === "missing" ? qsTr("Sem cache local") : qsTr("Sem bateria disponível");
+        return peripherals.status === "missing" ? qsTr("Sem cache local") : qsTr("Nenhum periférico conectado");
     }
     readonly property string peripheralsMetadataSummary: {
         const parts = [];

@@ -175,10 +175,15 @@ produtor são escolhas adicionais. Nenhum desses comandos inicia o produtor.
 O namespace do manifesto determina somente
 `$XDG_STATE_HOME/<namespace>/exports/orla-peripherals-v1.json`, com o fallback
 XDG habitual. Orla não consulta caches privados do produtor por esse contrato.
-As leituras têm prazos de validade explícitos, sem nomes, aliases ou IDs de
-hardware. Percentual zero, nível aproximado, estimativa, ausência e observação
-antiga permanecem distintos. `snapshot` permite conferir a projeção passiva
-pela CLI depois de uma ativação explícita.
+As leituras têm prazos de validade explícitos e não trazem IDs de hardware.
+O nome do aparelho (`name`, até 64 caracteres do perfil de texto, sem espaço
+nas pontas) é opcional: o produtor só o envia quando a pessoa escolhe
+compartilhar nomes, e então a dock o mostra no lugar do rótulo genérico
+("Mouse", "Teclado 2"). Percentual zero, nível aproximado, estimativa e
+observação antiga permanecem distintos. Aparelhos desconectados
+(`present: false`) ficam fora da projeção e da dock, como no widget do próprio
+produtor. `snapshot` permite conferir a projeção passiva pela CLI depois de uma
+ativação explícita.
 
 O armazenamento em `$XDG_DATA_HOME/orla-desktop/addons` preserva preferências
 ao remover um pacote. Esta versão limita o registro a 32 IDs e retém até

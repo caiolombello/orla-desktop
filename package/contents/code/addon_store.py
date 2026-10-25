@@ -371,9 +371,11 @@ def _project_export(record, result, now_ms):
         result.update(status='stale', limited=True)
         result['addon']['reason'] = 'future' if now_ms < generated else 'expired'
         return result
-    counts = {kind: sum(d['kind'] == kind for d in record['devices']) for kind in f.KINDS}
+    # Only connected devices are shown; a disconnected one has nothing current to say.
+    devices = [d for d in record['devices'] if d['present']]
+    counts = {kind: sum(d['kind'] == kind for d in devices) for kind in f.KINDS}
     ordinals = {kind: 0 for kind in f.KINDS}
-    for d in record['devices']:
+    for d in devices:
         observed = d['observedAtMs']
         time_valid = observed is not None and observed <= generated and observed <= now_ms
         stale = (not d['present'] or d['stale'] or not time_valid
@@ -386,9 +388,9 @@ def _project_export(record, result, now_ms):
                                  for c in d['components']))
         aggregate_confirmed = confirmed and not case_only
         ordinals[kind] += 1
-        # Views translate generic kinds; no producer names or persistent identity.
+        # Views translate generic kinds; a producer name appears only when the user shared it.
         name = kind + (' ' + str(ordinals[kind]) if counts[kind] > 1 else '')
-        result['devices'].append(dict(name=name, kind=kind,
+        device = dict(name=name, kind=kind,
             percent=b['percent'] if aggregate_confirmed else None,
             level=b['level'] if aggregate_confirmed else None,
             charging=b['charging'] if aggregate_confirmed else 'unknown',
@@ -397,7 +399,10 @@ def _project_export(record, result, now_ms):
             observedAtMs=observed if time_valid else None,
             components=[dict(label=c['label'], percent=c['percent'] if confirmed else None,
                              charging=c['charging'] if confirmed else 'unknown')
-                        for c in d['components']]))
+                        for c in d['components']])
+        if 'name' in d:
+            device['displayName'] = d['name']
+        result['devices'].append(device)
         result['limited'] |= stale
     ready = any(d['percent'] is not None or d['level'] is not None
                 or any(c['percent'] is not None for c in d['components'])

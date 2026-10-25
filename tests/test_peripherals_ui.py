@@ -52,7 +52,8 @@ class PeripheralsUiTests(unittest.TestCase):
     def test_summary_distinguishes_absent_stale_unknown_and_missing_export(self):
         from test_addon_peripherals import peripheral_frame, missing_frame
         cases = (
-            (peripheral_frame(present=False), 'Mouse · fora de alcance'),
+            # Disconnected devices are hidden (user request), so none is left to describe.
+            (peripheral_frame(present=False), 'Nenhum periférico conectado'),
             (peripheral_frame(stale=True), 'Dados desatualizados'),
             (peripheral_frame(percent=None), 'Percentual desconhecido'),
             (missing_frame(), 'Sem cache local'),

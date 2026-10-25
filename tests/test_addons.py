@@ -79,7 +79,7 @@ class FormatTests(unittest.TestCase):
             e = export()
             e[key] = value
             cases.append(e)
-        for key, value in [('present', 1), ('observedAtMs', False), ('name', 'private-alias')]:
+        for key, value in [('present', 1), ('observedAtMs', False), ('alias', 'private-alias')]:
             e = export()
             e['devices'][0][key] = value
             cases.append(e)
