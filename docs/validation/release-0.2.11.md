@@ -94,7 +94,10 @@ O caminho do README rodou com os arquivos baixados. O ZIP foi extraído;
 `scripts/orla.py doctor` aprovou Python, `kpackagetool6`, `busctl`, PySide6, a
 sessão D-Bus e o Plasma 6.7.5. Em seguida, `scripts/orla.py install
 orla-dock-0.2.11.plasmoid` atualizou a dock deste usuário, que antes tinha a 0.2.10.
-Os arquivos instalados são idênticos ao `.plasmoid` publicado.
+Os arquivos instalados são idênticos ao `.plasmoid` publicado. Depois de reiniciar
+o `plasmashell` num momento ocioso, a leitura somente leitura do Plasma respondeu
+`{"docks":["0.2.11"]}`, sem erro da dock no journal. As Notificações Orla
+continuaram na bandeja, e o servidor de notificações respondeu.
 
 Isso cobre uma atualização numa conta já configurada. Instalação limpa, outra
 distribuição e remoção continuam sem prova nesta release.
