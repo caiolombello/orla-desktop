@@ -20,10 +20,12 @@ PlasmaCore.Dialog {
     signal closeRequested()
     signal actionRequested(string name)
     signal jobControlRequested(string control)
+    signal replyRequested(string text)
     signal expired()
 
     type: notification && notification.critical ? PlasmaCore.Dialog.CriticalNotification : PlasmaCore.Dialog.Notification
-    flags: Qt.WindowDoesNotAcceptFocus
+    // Only a reply in progress takes the keyboard; Dialog re-applies focus on a flags change.
+    flags: banner.replying ? 0 : Qt.WindowDoesNotAcceptFocus
     location: PlasmaCore.Types.Floating
     backgroundHints: PlasmaCore.Dialog.StandardBackground
     hideOnWindowDeactivate: false
@@ -45,6 +47,8 @@ PlasmaCore.Dialog {
         onCloseRequested: window.closeRequested()
         onActionRequested: name => window.actionRequested(name)
         onJobControlRequested: control => window.jobControlRequested(control)
+        onReplyRequested: text => window.replyRequested(text)
+        onReplyingChanged: if (replying) window.requestActivate()
         onExpired: window.expired()
     }
 }

@@ -23,6 +23,7 @@ Window {
             onActivated: record("activated")
             onCloseRequested: record("close")
             onActionRequested: name => record("action", name)
+            onReplyRequested: text => record("reply", text)
             onJobControlRequested: control => record("job", control)
             onExpired: record("expired")
         }

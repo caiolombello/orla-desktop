@@ -11,7 +11,8 @@ import "../code/NotificationView.js" as View
 Item {
     id: root
     // {id, appName, appIcon, summary, body, actions: [{name, label}], hasDefaultAction,
-    //  closable, critical, createdMs, job: null | {state, percentage, suspendable, killable, error}}
+    //  closable, critical, createdMs, job: null | {state, percentage, suspendable, killable, error},
+    //  reply: null | {label, placeholder, submit}, thumbnail: "" | local image URL}
     required property var notification
     property var scheme: Style.scheme("dark")
     property double nowMs: Date.now()
@@ -20,16 +21,36 @@ Item {
     property bool reducedMotion: false
     // The native host may show images (QImage) through Kirigami; tests use the theme icon.
     property Component iconComponent: themeIcon
+    // While replying the banner stays, and the host lets its window take keyboard focus.
+    property bool replying: false
     readonly property bool engaged: hover.hovered || root.activeFocus || closeButton.activeFocus
-        || actionRepeater.focused
+        || actionRepeater.focused || replying
     readonly property bool isJob: !!(notification && notification.job)
     readonly property var shownActions: notification && notification.actions ? notification.actions.slice(0, View.limits.actions) : []
+    readonly property var replyOffer: notification && notification.reply ? notification.reply : null
+    onNotificationChanged: if (!replyOffer) replying = false
 
     signal activated()
     signal closeRequested()
     signal actionRequested(string name)
     signal jobControlRequested(string control)
+    signal replyRequested(string text)
     signal expired()
+
+    function beginReply() {
+        if (!replyOffer) return false;
+        replying = true;
+        Qt.callLater(() => replyField.forceActiveFocus(Qt.OtherFocusReason));
+        return true;
+    }
+    function sendReply() {
+        const text = replyField.text.trim().slice(0, 1000);
+        if (!replying || !text) return false;
+        replying = false;
+        replyField.text = "";
+        root.replyRequested(text);
+        return true;
+    }
 
     implicitWidth: Style.size.popupWidth - Style.space.xxs * 3
     implicitHeight: content.implicitHeight
@@ -173,13 +194,29 @@ Item {
                     }
                 }
             }
+            // A screenshot or other image the notification carries, like macOS attachments.
+            Image {
+                objectName: "notificationThumbnail"
+                Layout.preferredWidth: Style.size.target + Style.space.lg
+                Layout.preferredHeight: Style.size.target + Style.space.lg
+                Layout.alignment: Qt.AlignTop
+                visible: source.toString().length > 0 && status === Image.Ready
+                source: root.notification && root.notification.thumbnail ? root.notification.thumbnail : ""
+                // A constant decode size: tying it to width loops while the item is hidden.
+                sourceSize.width: (Style.size.target + Style.space.lg) * 2
+                sourceSize.height: (Style.size.target + Style.space.lg) * 2
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                clip: true
+            }
         }
 
         // Actions, and pause/cancel for jobs, appear while the banner is engaged.
         RowLayout {
             objectName: "notificationActions"
             Layout.fillWidth: true
-            visible: root.engaged && (root.shownActions.length > 0 || jobControls.visible)
+            visible: root.engaged && !root.replying && (root.shownActions.length > 0 || jobControls.visible
+                || root.replyOffer !== null)
             spacing: Style.space.sm
             Repeater {
                 id: actionRepeater
@@ -199,6 +236,13 @@ Item {
                     onClicked: root.actionRequested(modelData.name)
                 }
             }
+            Controls.Button {
+                objectName: "notificationReply"
+                Layout.fillWidth: true
+                visible: root.replyOffer !== null
+                text: root.replyOffer && root.replyOffer.label ? root.replyOffer.label : qsTr("Responder")
+                onClicked: root.beginReply()
+            }
             RowLayout {
                 id: jobControls
                 visible: root.isJob && root.notification.job.state !== "stopped"
@@ -215,6 +259,35 @@ Item {
                     text: qsTr("Cancelar")
                     onClicked: root.jobControlRequested("kill")
                 }
+            }
+        }
+
+        // The reply field replaces the actions while it is open; Escape closes it.
+        RowLayout {
+            objectName: "notificationReplyRow"
+            Layout.fillWidth: true
+            visible: root.replying
+            spacing: Style.space.sm
+            Controls.TextField {
+                id: replyField
+                objectName: "notificationReplyField"
+                Layout.fillWidth: true
+                maximumLength: 1000
+                placeholderText: root.replyOffer && root.replyOffer.placeholder ? root.replyOffer.placeholder
+                                                                                : qsTr("Escreva uma resposta…")
+                Accessible.name: placeholderText
+                onAccepted: root.sendReply()
+                Keys.onEscapePressed: {
+                    root.replying = false;
+                    text = "";
+                    root.forceActiveFocus(Qt.OtherFocusReason);
+                }
+            }
+            Controls.Button {
+                objectName: "notificationReplySend"
+                enabled: replyField.text.trim().length > 0
+                text: root.replyOffer && root.replyOffer.submit ? root.replyOffer.submit : qsTr("Enviar")
+                onClicked: root.sendReply()
             }
         }
     }

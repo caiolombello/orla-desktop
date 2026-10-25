@@ -220,6 +220,9 @@ PlasmoidItem {
             required property list<string> actionLabels
             required property string configureActionLabel
             required property bool hasReplyAction
+            required property string replyActionLabel
+            required property string replyPlaceholderText
+            required property string replySubmitButtonText
             required property int urgency
             required property int timeout
             required property list<url> urls
@@ -255,6 +258,8 @@ PlasmoidItem {
             notification: ({
                 id: notificationId, appName: applicationName, appIcon: applicationIconName,
                 summary: summary, body: body, actions: View.actions(actionNames, actionLabels),
+                reply: View.reply(hasReplyAction, replyActionLabel, replyPlaceholderText, replySubmitButtonText),
+                thumbnail: View.thumbnail(urls),
                 hasDefaultAction: hasDefaultAction || fallbackWindow !== null, closable: closable,
                 critical: urgency === NotificationManager.Notifications.CriticalUrgency,
                 createdMs: (isNaN(updated) ? created : updated).getTime(),
@@ -284,6 +289,7 @@ PlasmoidItem {
             }
             onCloseRequested: popupModel.close(modelIndex())
             onActionRequested: name => popupModel.invokeAction(modelIndex(), name, closeBehavior)
+            onReplyRequested: text => popupModel.reply(modelIndex(), text, closeBehavior)
             onJobControlRequested: control => {
                 if (control === "suspend") popupModel.suspendJob(modelIndex());
                 else if (control === "resume") popupModel.resumeJob(modelIndex());
