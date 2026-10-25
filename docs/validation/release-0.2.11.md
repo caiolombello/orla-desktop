@@ -1,7 +1,7 @@
 # Alpha 0.2.11 — registro da release
 
-**Estado:** preparada a partir do `main` depois dos PRs 117–139. A publicação
-como prerelease alpha (`latest=false`) acontece depois do merge.
+**Estado:** publicada como prerelease alpha (`latest=false`) em 25/10/2026 19:23:53 UTC,
+a partir do `main` depois dos PRs 117–139.
 Nenhum marco do roadmap fica concluído só por esta publicação. Os registros de
 cada funcionalidade continuam sendo a fonte das provas e dos limites.
 
@@ -67,3 +67,34 @@ Antes da publicação, rodam:
 - Spotify real com áudio e segundo player; resposta inline e miniaturas nas
   notificações; a central de notificações aberta pela bandeja na sessão real.
 - Hardware de rede/Bluetooth além das execuções registradas no guia da Central.
+
+## Publicação e artefatos
+
+A preparação entrou pelo [PR 140](https://github.com/caiolombello/orla-desktop/pull/140),
+merge `d363ea726a8139136a013fbc469b7a9295029014`, que é o alvo da tag `v0.2.11`. O PR
+passou os dois jobs da CI ([run 40224759447](https://github.com/caiolombello/orla-desktop/actions/runs/40224759447)),
+e o `main` no merge também ([run 40225359003](https://github.com/caiolombello/orla-desktop/actions/runs/40225359003)).
+
+Duas builds do commit do PR, feitas em worktrees limpas, produziram os mesmos bytes, e
+a build do merge é idêntica a elas. Os 65 módulos `tests/test_*.py` incluídos no ZIP
+passaram de dentro do pacote extraído, um processo por módulo, com Qt offscreen e
+estilo Fusion; os pulos são os já declarados na 0.2.10 (calendário sem o plugin PIM
+do KDE, casos nativos). Os três downloads anônimos retornaram HTTP 200, são idênticos
+às builds e o `SHA256SUMS` publicado valida o applet e o ZIP.
+
+| Asset | Tamanho | SHA-256 |
+|---|---:|---|
+| [Applet `.plasmoid`](https://github.com/caiolombello/orla-desktop/releases/download/v0.2.11/orla-dock-0.2.11.plasmoid) | 266,852 bytes | `7a45ca703417bb9050c6fa011150ccb920df36ca5c929c75d2c33292a9e534f6` |
+| [Bundle ZIP](https://github.com/caiolombello/orla-desktop/releases/download/v0.2.11/orla-dock-0.2.11.zip) | 8,912,293 bytes | `e8892b67f4fa824dece414f468e8c6e44303f777c03a0e5f411670a379e33867` |
+| [`SHA256SUMS`](https://github.com/caiolombello/orla-desktop/releases/download/v0.2.11/SHA256SUMS) | 179 bytes | `14d2b7ee5a34e959c9c3f7d650f21e3ba8920a39f9545e99a5a5f82947c62144` |
+
+## Instalação a partir dos assets publicados
+
+O caminho do README rodou com os arquivos baixados. O ZIP foi extraído;
+`scripts/orla.py doctor` aprovou Python, `kpackagetool6`, `busctl`, PySide6, a
+sessão D-Bus e o Plasma 6.7.5. Em seguida, `scripts/orla.py install
+orla-dock-0.2.11.plasmoid` atualizou a dock deste usuário, que antes tinha a 0.2.10.
+Os arquivos instalados são idênticos ao `.plasmoid` publicado.
+
+Isso cobre uma atualização numa conta já configurada. Instalação limpa, outra
+distribuição e remoção continuam sem prova nesta release.
