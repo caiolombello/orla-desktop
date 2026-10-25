@@ -4,13 +4,15 @@
   macos_look.py apply      Orla Plasma theme (glass panels and popups), Orla window
                            decoration (traffic lights), an app switcher with large
                            icons and one entry per app (like Cmd+Tab), the
-                           Magic Lamp minimize animation (like the Genie effect)
-                           and the date beside the time in the Orla top bar
+                           Magic Lamp minimize animation (like the Genie effect),
+                           the date beside the time in the Orla top bar and
+                           macOS-style notification banners
   macos_look.py restore    undo all of it, back to the saved settings
   macos_look.py status     print what is active and what restore would bring back
 
-The theme, decoration and top bar clock keep their own saved states (see
-plasma_theme.py, window_decoration.py and menu_bar_clock.py). The KWin keys below are saved here before the first
+The theme, decoration, top bar clock and notifications keep their own saved
+states (see plasma_theme.py, window_decoration.py, menu_bar_clock.py and
+macos_notifications.py). The KWin keys below are saved here before the first
 change; restore rewrites them or removes keys that were not set.
 """
 from __future__ import annotations
@@ -121,6 +123,10 @@ def main(argv: list[str]) -> int:
         # Without a running Plasma or an Orla top bar the clock is simply skipped.
         if _script("menu_bar_clock.py", "apply", allow_failure=True):
             print("macos_look: top bar clock left unchanged", file=sys.stderr)
+        # Banners need the Orla Notifications package; without it KDE's popups stay.
+        if (_script("macos_notifications.py", "install", allow_failure=True)
+                or _script("macos_notifications.py", "apply", allow_failure=True)):
+            print("macos_look: notifications left as KDE's", file=sys.stderr)
         return 0
     if state.exists():
         previous = json.loads(state.read_text(encoding="utf-8"))["previous"]
@@ -130,6 +136,7 @@ def main(argv: list[str]) -> int:
         _effects(previous)
         state.unlink()
     # Each part restores only what it changed; an already restored part is fine.
+    _script("macos_notifications.py", "restore", allow_failure=True)
     _script("menu_bar_clock.py", "restore", allow_failure=True)
     _script("window_decoration.py", "restore", allow_failure=True)
     _script("plasma_theme.py", "restore", allow_failure=True)
