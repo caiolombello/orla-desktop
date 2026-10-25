@@ -74,9 +74,10 @@ class AppearancePresetParserTests(unittest.TestCase):
             owner.deleteLater()
             component.deleteLater()
 
-    def test_builtin_catalog_payloads_match_the_four_reviewed_choices_and_roundtrip(self):
+    def test_builtin_catalog_payloads_match_the_reviewed_choices_and_roundtrip(self):
         entries = self.catalog('JSON.stringify(Catalog.entries())')
-        self.assertEqual([entry['id'] for entry in entries], ['essencial', 'mare', 'estudio', 'jogo'])
+        # ROADMAP C1 asks for an editable macOS-inspired composition alongside the four presets.
+        self.assertEqual([entry['id'] for entry in entries], ['essencial', 'mare', 'estudio', 'jogo', 'macos'])
         essentials = json.loads((ROOT / 'themes/examples/essential.json').read_text())['tokens']
         jogo = json.loads((ROOT / 'themes/examples/mare.json').read_text())['tokens']
         jogo['reducedMotion'] = False
@@ -86,7 +87,8 @@ class AppearancePresetParserTests(unittest.TestCase):
         expected = [('paper', essentials, ['clock', 'systemBattery', 'music', 'pomodoro'], 2),
                     ('glass', mare, ['clock', 'music', 'systemBattery', 'pomodoro'], 3),
                     ('midnight', dark, ['pomodoro', 'music', 'clock', 'systemBattery'], 4),
-                    ('midnight', jogo, ['music', 'clock', 'systemBattery', 'pomodoro'], 3)]
+                    ('midnight', jogo, ['music', 'clock', 'systemBattery', 'pomodoro'], 3),
+                    ('glass', dict(mare, spacing=4, iconSize=48), ['music', 'clock', 'systemBattery', 'pomodoro'], 0)]
         for entry, (base, tokens, order, visible) in zip(entries, expected):
             with self.subTest(id=entry['id']):
                 payload = {'formatVersion': '0.1-experimental', 'kind': 'orla-appearance-preset',

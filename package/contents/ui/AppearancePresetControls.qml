@@ -73,13 +73,15 @@ ColumnLayout {
         setPortableOpen(true);
     }
     function nameFor(id) {
-        return ({essencial:qsTr("Essencial"), mare:qsTr("Maré"), estudio:qsTr("Estúdio"), jogo:qsTr("Jogo")})[id] || "";
+        return ({essencial:qsTr("Essencial"), mare:qsTr("Maré"), estudio:qsTr("Estúdio"), jogo:qsTr("Jogo"),
+            macos:qsTr("macOS")})[id] || "";
     }
     function descriptionFor(id) {
         return ({essencial:qsTr("Claro e opaco; relógio e bateria. Movimento reduzido."),
             mare:qsTr("Vidro translúcido; relógio, música e bateria. Movimento normal."),
             estudio:qsTr("Escuro opaco; Pomodoro e mídia. Movimento reduzido."),
-            jogo:qsTr("Escuro opaco; música primeiro, relógio e bateria. Movimento normal.")})[id] || "";
+            jogo:qsTr("Escuro opaco; música primeiro, relógio e bateria. Movimento normal."),
+            macos:qsTr("Vidro translúcido, ícones maiores e só apps, como o Dock do macOS. Movimento normal.")})[id] || "";
     }
     function choose(id) {
         if (!preset.managed || !preset.editing || preset.busy) return false;
@@ -110,7 +112,7 @@ ColumnLayout {
     }
     Controls.Label {
         Layout.fillWidth: true
-        text: qsTr("Essencial · Maré · Estúdio · Jogo")
+        text: qsTr("Essencial · Maré · Estúdio · Jogo · macOS")
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         font.pixelSize: Style.type.caption

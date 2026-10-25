@@ -12,7 +12,10 @@ var definitions = [
         order:["pomodoro", "music", "clock", "systemBattery", "quota", "peripherals", "recording"], count:4},
     {id:"jogo", base:"midnight", reduced:false, radius:Style.radius.popup, spacing:5,
         colors:{border:"#7f91b0"}, // design-exempt: reviewed mare theme-example payload token
-        order:["music", "clock", "systemBattery", "pomodoro", "quota", "peripherals", "recording"], count:3}
+        order:["music", "clock", "systemBattery", "pomodoro", "quota", "peripherals", "recording"], count:3},
+    // Like the macOS Dock: frosted glass, larger icons close together, apps only.
+    {id:"macos", base:"glass", reduced:false, radius:Style.radius.popup, spacing:Style.space.xs, iconSize:48, colors:{},
+        order:["music", "clock", "systemBattery", "pomodoro", "quota", "peripherals", "recording"], count:0}
 ];
 
 function payload(id) {
@@ -22,7 +25,7 @@ function payload(id) {
     // The two palette overrides are the existing essential/mare theme examples.
     const tokens = Object.assign({foreground:theme.foreground, muted:theme.muted, accent:theme.accent,
         surface:theme.surface, border:theme.border, radius:entry.radius, spacing:entry.spacing,
-        opacity:theme.opacity, iconSize:42, reducedMotion:entry.reduced}, entry.colors);
+        opacity:theme.opacity, iconSize:entry.iconSize || 42, reducedMotion:entry.reduced}, entry.colors);
     return Preset.validate({formatVersion:Preset.formatVersion, kind:Preset.kind,
         appearance:{formatVersion:Preset.formatVersion, baseTheme:entry.base, tokens:tokens},
         widgets:entry.order.map((key, index) => ({id:key, visible:index < entry.count}))}).value || null;

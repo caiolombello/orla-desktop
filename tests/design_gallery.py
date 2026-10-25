@@ -567,7 +567,7 @@ class Gallery:
             assert outer.property("checked")
             choice = control("appearancePresetCatalog-essencial")
             focus(choice)
-            steps, name = (1, "mare") if host == "dark" else (3, "jogo")
+            steps, name = (4, "macos") if host == "dark" else (3, "jogo")
             for _ in range(steps):
                 QTest.keyClick(window, Qt.Key_Tab)
                 QTest.qWait(20)
