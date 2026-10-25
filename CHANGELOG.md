@@ -2,6 +2,52 @@
 
 User-visible changes are recorded here for each published release.
 
+## 0.2.11 — 2026-10-25 — Alpha prerelease
+
+This release collects the work merged since 0.2.10 (PRs 117–139). Most of it brings the desktop closer to macOS, and all of it is optional and reversible.
+
+- **macOS-like look in one step.** `scripts/macos_look.py apply` sets, and `restore` undoes:
+  - the Orla Plasma theme: frosted top bar, popups, notifications and tooltips with KWin blur. The dock, its popups and its labels use the theme's blur when the theme is active;
+  - the Orla window decoration: traffic lights on the left, centered title, rounded top corners;
+  - Alt+Tab with large icons and one entry per app, and the Magic Lamp minimize effect;
+  - macOS-style notifications (below) and a sparser tray, with brightness and clipboard moved to the overflow arrow;
+  - the date beside the time in an Orla top-bar clock. The top bar itself is still source-only.
+- **Notifications (experimental, opt-in).** The new Orla Notifications applet (`notifications/`, installed by `scripts/macos_notifications.py install`) shows Plasma's own notifications as macOS-style banners: top right, app icon on the left, newest on top, with close and actions on hover. Clicking its tray icon opens a Notification Center grouped by app, with Do Not Disturb.
+  - It replaces KDE's notification applet in the tray, so popups are never doubled. The server, history, actions and Do Not Disturb stay Plasma's.
+  - `restore` brings KDE's applet back. If the package is updated with `kpackagetool6`, run `macos_notifications.py install` or `apply` afterwards, because the tray drops an updated applet.
+  - Inline replies and file thumbnails are not supported yet.
+- **Control Center.**
+  - A macOS-style module grid.
+  - Power profile choice (CC2-A).
+  - Wi-Fi and Bluetooth radios (CC2-B, CC2-C).
+  - A Wi-Fi networks page to join (passwords through KDE's agent) and leave networks (CC2-D).
+  - A paired-devices page to connect and disconnect Bluetooth devices (CC2-E).
+- **Dock.**
+  - An optional Trash at the end of the dock.
+  - A Now Playing card: album cover, album, progress with elapsed and remaining time, and "Open <player>".
+  - Shared AI quota grouped like QuotaLantern's tray menu.
+  - Peripheral batteries hide disconnected devices and show device names when the exporter shares them.
+
+**Excluded from these assets.** These remain source-only:
+
+- the C++ launcher;
+- Menu Orla, with its recent apps and Force Quit, the managed top-bar layout and therefore the menu-bar clock target;
+- the Workspace composition window.
+
+The ZIP now bundles `notifications/`, which `scripts/macos_look.py` and `scripts/macos_notifications.py` install.
+
+**Validation.**
+- Portable CI passed on the source commit.
+- The macOS look, the notifications, the Control Center pages and Now Playing were exercised on one Plasma 6.7.5 Wayland session at scale 1.45, as recorded in their documents.
+- Not yet qualified:
+  - other distributions and multiple monitors;
+  - the light scheme;
+  - installing into a clean user account;
+  - a real Spotify session;
+  - joining networks or pairing devices beyond the recorded runs.
+
+  See the [release validation](docs/validation/release-0.2.11.md).
+
 ## 0.2.10 — 2026-10-22 — Alpha prerelease
 
 This release collects the dock work merged since 0.2.9 (PRs 23–114).
