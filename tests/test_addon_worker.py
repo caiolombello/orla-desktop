@@ -136,6 +136,14 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(fresh['schemaVersion'], 2)
         self.assertEqual(fresh['peripherals']['devices'][0]['percent'], 0)
         self.assertTrue(fresh['peripherals']['devices'][0]['estimated'])
+        self.assertNotIn('displayName', fresh['peripherals']['devices'][0])
+        # A shared name crosses the worker; a disconnected device does not.
+        away = dict(export['devices'][0], present=False)
+        export['devices'] = [dict(export['devices'][0], name='Mouse de teste'), away]
+        exported.write_text(json.dumps(export))
+        named = self.call('snapshot')['result']['peripherals']['devices']
+        self.assertEqual([(d['name'], d['displayName']) for d in named], [('mouse', 'Mouse de teste')])
+        export['devices'] = export['devices'][:1]
         export.update(generatedAtMs=now - 30001, expiresAtMs=now - 1)
         export['devices'][0]['observedAtMs'] = now - 30001
         exported.write_text(json.dumps(export))
@@ -243,6 +251,25 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.w.validate_response((json.dumps(response) + '\n').encode(), 0, 'snapshot', backend)
 
+
+    def test_projected_display_name_is_bounded_and_optional(self):
+        backend = self.w.load_backend(CODE)
+        device = dict(name='mouse', kind='mouse', percent=50, level=None, charging='unknown', estimated=False,
+                      stale=False, present=True, observedAt=1.0, observedAtMs=1000, components=[])
+        def response(**changes):
+            projection = dict(status='ready', generatedAt=1.0, source='addon', producerVersion='1',
+                              limited=False, devices=[dict(device, **changes)], generatedAtMs=1000,
+                              expiresAtMs=31000, leaseMs=30000,
+                              addon=dict(id='org.example.battery', sha256='a' * 64, enabled=True,
+                                         generation='b' * 32, producerNamespace='example', reason='ready',
+                                         errorCode=None))
+            return (json.dumps(dict(formatVersion='0.1-experimental', ok=True, result=dict(
+                schemaVersion=2, modules=['peripherals'], peripherals=projection))) + '\n').encode()
+        self.w.validate_response(response(), 0, 'snapshot', backend)
+        self.w.validate_response(response(displayName='Mouse de teste'), 0, 'snapshot', backend)
+        for bad in ('', ' Mouse', 'Mouse ', 'Mouse\n', 'M' * 65, 7, None):
+            with self.subTest(name=bad), self.assertRaises(Exception):
+                self.w.validate_response(response(displayName=bad), 0, 'snapshot', backend)
 
 if __name__ == '__main__':
     unittest.main()
