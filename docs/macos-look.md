@@ -96,8 +96,14 @@ central. `tests/test_macos_notifications.py` roda o script da bandeja num
 QJSEngine. Em Plasma 6.7.5/Wayland (uma tela, escala 1,45, esquema escuro) foram
 observados o banner, o empilhamento, a expiração, a ausência de popup duplicado
 e a inibição por app. A central aberta pela bandeja e as ações ao passar o
-mouse foram verificadas só fora da sessão. Respostas inline, miniaturas de
-arquivo e arrastar arquivos do banner ainda não existem.
+mouse foram verificadas só fora da sessão. Arrastar arquivos do banner ainda
+não existe.
+
+**Resposta e miniatura.** Quando o app oferece resposta (como o KDE Connect),
+"Responder" abre um campo no próprio banner. Enter envia o texto, Esc fecha sem
+enviar, e o banner fica enquanto você escreve. Só nesse momento a janela do
+banner aceita o teclado. Quando a notificação traz uma imagem local (por
+exemplo, uma captura do Spectacle), ela aparece como miniatura à direita.
 
 Os testes (`tests/test_macos_look.py`) rodam a ida e a volta completas com
 `kwriteconfig6`, `kreadconfig6`, `plasma-apply-desktoptheme` e `busctl` falsos,

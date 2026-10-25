@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import tempfile
 import time
 import unittest
 
@@ -8,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF, Qt, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QImage
 from PySide6.QtQml import QJSEngine, QQmlApplicationEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -20,7 +21,8 @@ VIEW = ROOT / "notifications/contents/code/NotificationView.js"
 def view_engine():
     engine = QJSEngine()
     source = VIEW.read_text(encoding="utf-8").replace(".pragma library", "")
-    names = ("limits", "plain", "plainBody", "iconSource", "effectiveTimeout", "age", "actions", "stack", "groups")
+    names = ("limits", "plain", "plainBody", "iconSource", "effectiveTimeout", "age", "actions", "stack", "groups",
+             "thumbnail", "reply")
     exports = ", ".join(f"{name}: {name}" for name in names)
     result = engine.evaluate(f"(function() {{\n{source}\nreturn {{{exports}}};\n}})()")
     assert not result.isError(), result.toString()
@@ -73,6 +75,16 @@ class NotificationViewTests(unittest.TestCase):
         self.assertEqual([p["visible"] for p in places], [True, True, False])
         self.assertTrue(self.js("View.stack({x: 0, y: 0, width: 10, height: 10}, [500], 12, 8, 0.8)")[0]["visible"])
 
+    def test_thumbnails_are_local_images_and_replies_are_bounded(self):
+        urls = ["https://example.invalid/a.png", "file:///tmp/notes.txt", "file:///tmp/a b.png",
+                "file:///tmp/Captura.PNG", "file:///tmp/second.jpg"]
+        self.assertEqual(self.js(f"View.thumbnail({json.dumps(urls)})"), "file:///tmp/Captura.PNG")
+        self.assertEqual(self.js("View.thumbnail([])"), "")
+        self.assertEqual(self.js("View.thumbnail(null)"), "")
+        self.assertIsNone(self.js("View.reply(false, 'Responder', '', '')"))
+        self.assertEqual(self.js("View.reply(true, ' Responder\\n', 'x'.repeat(200), '')"),
+                         {"label": "Responder", "placeholder": "x" * 80, "submit": ""})
+
     def test_history_groups_by_app_newest_first(self):
         items = [dict(id="1", appKey="a", appName="A", createdMs=10), dict(id="2", appKey="b", appName="B", createdMs=30),
                  dict(id="3", appKey="a", appName="A", createdMs=20)]
@@ -87,6 +99,8 @@ class NotificationSurfaceTests(unittest.TestCase):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
 
     def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
@@ -189,6 +203,58 @@ class NotificationSurfaceTests(unittest.TestCase):
         self.evaluate("timeout = 0", self.banner)
         QTest.qWait(80)
         self.assertEqual(self.events(), [])
+
+    def test_reply_opens_a_field_sends_trimmed_text_and_escape_cancels(self):
+        self.notify(reply=dict(label="Responder", placeholder="Escreva…", submit="Enviar"))
+        reply = self.item(self.banner, "notificationReply")
+        self.banner.forceActiveFocus(Qt.FocusReason.TabFocusReason)
+        QTest.qWait(10)
+        self.assertTrue(reply.property("visible"))
+        self.assertFalse(self.item(self.banner, "notificationReplyRow").property("visible"))
+        self.evaluate("clicked()", reply)
+        QTest.qWait(30)
+        self.assertTrue(self.banner.property("replying"))
+        self.assertTrue(self.item(self.banner, "notificationReplyRow").property("visible"))
+        field = self.item(self.banner, "notificationReplyField")
+        self.assertTrue(field.property("activeFocus"))
+        self.assertEqual(field.property("placeholderText"), "Escreva…")
+        # The banner stays while a reply is written, whatever the timeout.
+        self.evaluate("timeout = 30", self.banner)
+        QTest.qWait(90)
+        self.assertNotIn("expired", self.events())
+        field.setProperty("text", "   ")
+        QTest.keyClick(self.window, Qt.Key.Key_Return)
+        self.assertEqual([e for e in self.events() if e.startswith("reply")], [])
+        field.setProperty("text", "  oi, já vou  ")
+        QTest.keyClick(self.window, Qt.Key.Key_Return)
+        self.assertIn("reply:oi, já vou", self.events())
+        self.assertFalse(self.banner.property("replying"))
+        # Escape closes the field without sending.
+        self.evaluate("timeout = 0", self.banner)
+        self.window.setProperty("events", [])
+        self.evaluate("beginReply()", self.banner)
+        QTest.qWait(30)
+        field.setProperty("text", "rascunho")
+        QTest.keyClick(self.window, Qt.Key.Key_Escape)
+        self.assertFalse(self.banner.property("replying"))
+        self.assertEqual(self.events(), [])
+        # Without an offer there is no reply.
+        self.notify()
+        self.assertFalse(self.evaluate("beginReply()", self.banner))
+
+    def test_thumbnail_shows_a_local_image(self):
+        image = QImage(64, 48, QImage.Format.Format_RGB32)
+        image.fill(Qt.GlobalColor.darkCyan)
+        path = Path(self.tmp.name) / "captura.png"
+        image.save(str(path))
+        self.notify(thumbnail=path.as_uri())
+        thumb = self.item(self.banner, "notificationThumbnail")
+        deadline = time.monotonic() + 2
+        while not thumb.property("visible") and time.monotonic() < deadline:
+            QTest.qWait(10)
+        self.assertTrue(thumb.property("visible"), (self.evaluate("status", thumb), thumb.property("source"), thumb.width()))
+        self.notify(thumbnail="")
+        self.assertFalse(thumb.property("visible"))
 
     def test_job_banner_shows_progress_and_controls(self):
         self.notify(job=dict(state="running", percentage=42, suspendable=True, killable=True, error=""))

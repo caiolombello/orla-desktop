@@ -62,6 +62,23 @@ function actions(names, labels) {
     return result;
 }
 
+// The first local image among a notification's files, shown as a thumbnail.
+function thumbnail(urls) {
+    var count = Math.min(urls ? urls.length : 0, 16);
+    for (var i = 0; i < count; i++) {
+        var url = String(urls[i] || "");
+        if (/^file:\/\/\/[^\s]{1,1024}\.(png|jpe?g|webp|gif|bmp)$/i.test(url)) return url;
+    }
+    return "";
+}
+
+// An inline reply offered by the app, with bounded labels; null when there is none.
+function reply(hasReply, label, placeholder, submit) {
+    if (!hasReply) return null;
+    return {label: plain(label, limits.label) || "", placeholder: plain(placeholder, 80) || "",
+        submit: plain(submit, limits.label) || ""};
+}
+
 // Banners stack downward from the top edge with a gap; those that would go
 // past `maximumFill` of the area are hidden, but the first one always shows.
 function stack(area, heights, edge, gap, maximumFill) {
