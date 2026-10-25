@@ -70,7 +70,9 @@ class MacosLookTests(unittest.TestCase):
         tools.mkdir()
         for name, body in (("kwriteconfig6", FAKE_KWRITECONFIG), ("kreadconfig6", FAKE_KREADCONFIG),
                            ("plasma-apply-desktoptheme", FAKE_APPLY_THEME),
-                           ("busctl", "#!/bin/sh\necho \"$@\" >> \"$XDG_STATE_HOME/busctl.log\"\n")):
+                           ("busctl", "#!/bin/sh\necho \"$@\" >> \"$XDG_STATE_HOME/busctl.log\"\n"),
+                           # No package tool here: macos_look keeps KDE's notifications.
+                           ("kpackagetool6", "#!/bin/sh\nexit 1\n")):
             path = tools / name
             path.write_text(body, encoding="utf-8")
             path.chmod(path.stat().st_mode | stat.S_IXUSR)

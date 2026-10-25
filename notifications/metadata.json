@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Id": "org.orla.notifications",
+        "Name": "Orla Notifications (experimental)",
+        "Name[pt_BR]": "Notificações Orla (experimental)",
+        "Description": "macOS-style notification banners and Notification Center on Plasma's own notification service",
+        "Description[pt_BR]": "Banners e central de notificações no estilo macOS, sobre o serviço de notificações do próprio Plasma",
+        "Icon": "preferences-desktop-notification-bell",
+        "Category": "Tasks",
+        "Version": "0.1.0",
+        "License": "MIT",
+        "Authors": [{ "Name": "Caio Barbieri", "Website": "https://github.com/caiolombello" }],
+        "Website": "https://github.com/caiolombello/orla-desktop",
+        "BugReportUrl": "https://github.com/caiolombello/orla-desktop/issues",
+        "FormFactors": ["desktop"]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-API-Minimum-Version": "6.7",
+    "X-Plasma-NotificationAreaCategory": "SystemServices",
+    "X-Plasma-Provides": ["org.kde.plasma.notifications"]
+}
