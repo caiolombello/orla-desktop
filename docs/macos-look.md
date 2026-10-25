@@ -11,6 +11,7 @@ do macOS e os desfaz do mesmo jeito:
 | Minimizar | efeito "lâmpada mágica" em vez de "encolher" (parecido com o Gênio) | — |
 | Relógio da barra | data ao lado da hora, como na barra de menus ("dom. 25 out. 11:24") | abaixo |
 | Notificações | banners no estilo macOS no canto superior direito e central agrupada por app | abaixo |
+| Bandeja | brilho (já na Central de Controle) e área de transferência (Meta+V) passam para a seta | abaixo |
 
 ```sh
 python3 scripts/macos_look.py apply     # aplica tudo e guarda o estado anterior
@@ -101,3 +102,14 @@ arquivo e arrastar arquivos do banner ainda não existem.
 Os testes (`tests/test_macos_look.py`) rodam a ida e a volta completas com
 `kwriteconfig6`, `kreadconfig6`, `plasma-apply-desktoptheme` e `busctl` falsos,
 num diretório pessoal temporário.
+
+## Bandeja
+
+`scripts/menu_bar_tray.py apply|status|restore` deixa a bandeja da barra tão
+enxuta quanto a do macOS. O brilho, que já está na Central de Controle, e a
+área de transferência, que abre com Meta+V, passam para a seta da bandeja e
+continuam funcionando ali. Itens que você fixou como "sempre visíveis" não
+mudam. `restore` volta a mostrar só os itens que `apply` ocultou e preserva
+outras mudanças feitas depois. A lista anterior fica em
+`~/.local/state/orla/menu-bar-tray.json`; `tests/test_menu_bar_tray.py` cobre
+os casos.

@@ -5,8 +5,8 @@
                            decoration (traffic lights), an app switcher with large
                            icons and one entry per app (like Cmd+Tab), the
                            Magic Lamp minimize animation (like the Genie effect),
-                           the date beside the time in the Orla top bar and
-                           macOS-style notification banners
+                           the date beside the time in the Orla top bar,
+                           macOS-style notification banners and a sparse tray
   macos_look.py restore    undo all of it, back to the saved settings
   macos_look.py status     print what is active and what restore would bring back
 
@@ -127,6 +127,8 @@ def main(argv: list[str]) -> int:
         if (_script("macos_notifications.py", "install", allow_failure=True)
                 or _script("macos_notifications.py", "apply", allow_failure=True)):
             print("macos_look: notifications left as KDE's", file=sys.stderr)
+        if _script("menu_bar_tray.py", "apply", allow_failure=True):
+            print("macos_look: tray left unchanged", file=sys.stderr)
         return 0
     if state.exists():
         previous = json.loads(state.read_text(encoding="utf-8"))["previous"]
@@ -136,6 +138,7 @@ def main(argv: list[str]) -> int:
         _effects(previous)
         state.unlink()
     # Each part restores only what it changed; an already restored part is fine.
+    _script("menu_bar_tray.py", "restore", allow_failure=True)
     _script("macos_notifications.py", "restore", allow_failure=True)
     _script("menu_bar_clock.py", "restore", allow_failure=True)
     _script("window_decoration.py", "restore", allow_failure=True)
