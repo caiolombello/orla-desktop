@@ -1268,6 +1268,43 @@ class ContextsDockTests(unittest.TestCase):
         QTest.qWait(10)
         self.assertFalse(state.property("active"))
 
+    def test_control_center_switches_areas_through_the_same_state_while_open(self):
+        self.initialize_profiles()
+        self.config.setProperty("showControlCenter", True)
+        self.evaluate("contextSnapshot = ({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'ready',currentId:'one',ids:['one','two'],names:['Uma','Outra']}})", self.window)
+        state = self.window.findChild(QObject, "dockDesktopSwitchState")
+        backend = self.window.findChild(QObject, "desktopSwitchFixtureBackend")
+        popup = self.window.findChild(QObject, "controlCenterPopup")
+        popup.setProperty("popupType", 0)
+        self.assertFalse(state.property("active"))
+        before = self.evaluate("JSON.stringify([configuration.profilesJSON,configuration.contextsJSON,profiles.activeProfileId])")
+        self.evaluate("openFromDock(owner)", popup)
+        QTest.qWait(120)
+        self.assertTrue(popup.property("visible"))
+        self.assertTrue(state.property("active"))
+        tabs = self.window.findChild(QQuickItem, "controlCenterDesktopTabs")
+        self.assertTrue(tabs.isVisible())
+        self.assertEqual(tabs.property("currentIndex"), 0)
+        second = QQmlExpression(self.engine.rootContext(), tabs, "itemAt(1)").evaluate()[0]
+        second.forceActiveFocus(Qt.TabFocusReason)
+        # popupType 0 keeps the Control Center in the dock's own window.
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(20)
+        self.assertEqual(backend.property("calls"), 1)
+        self.assertTrue(state.property("pending"))
+        self.evaluate("setReplied(lastId,':1.44')", backend)
+        self.evaluate("contextSnapshot = ({outputName:'Fixture',activity:{status:'unavailable',currentId:'',ids:[],names:[]},desktop:{status:'ready',currentId:'two',ids:['one','two'],names:['Uma','Outra']}})", self.window)
+        self.evaluate("readback(lastId,'two',':1.44')", backend)
+        QTest.qWait(20)
+        self.assertEqual(state.property("status"), "observed")
+        self.assertEqual(tabs.property("currentIndex"), 1)
+        self.assertEqual(self.window.findChild(QQuickItem, "controlCenterDesktopStatus").property("text"), "Outra")
+        # Switching an area changes neither profiles nor context rules.
+        self.assertEqual(self.evaluate("JSON.stringify([configuration.profilesJSON,configuration.contextsJSON,profiles.activeProfileId])"), before)
+        self.evaluate("closeSession()", popup)
+        QTest.qWait(200)
+        self.assertFalse(state.property("active"))
+
     def test_desktop_switch_keyboard_selection_and_single_tab_request(self):
         for open_by_mouse in (False, True):
             with self.subTest(open_by_mouse=open_by_mouse):

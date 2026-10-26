@@ -65,6 +65,9 @@ Item {
     property var bluetoothBackendOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
+    // The area switcher lives in Settings › Contextos and in the Control Center.
+    readonly property bool desktopCommandsShown: (settings.visible && contextCommandsVisible && settingsContents.contextsTabActive)
+        || controlCenterPopup.visible
     readonly property bool nativeControlCenterBackendLoaded: nativeControlCenterBackend.item !== null
     readonly property bool nativeAudioBackendLoaded: nativeAudioBackend.item !== null
     readonly property var presentation: profileState.effective
@@ -231,7 +234,8 @@ Item {
         id: contextSourceLoader
         objectName: "contextSourceLoader"
         active: root.contextSnapshotOverride === null
-            && (autoContextState.observing || (settings.visible && settingsContents.contextsTabActive))
+            && (autoContextState.observing || (settings.visible && settingsContents.contextsTabActive)
+                || controlCenterPopup.visible)
         source: active ? Qt.resolvedUrl("KdeContextSource.qml") : ""
     }
     ContextState {
@@ -244,7 +248,7 @@ Item {
         id: desktopSwitchBackendLoader
         objectName: "desktopSwitchBackendLoader"
         active: root.desktopSwitchWriterQualified && root.desktopSwitchBackendOverride === null
-            && root.contextSnapshotOverride === null && settings.visible && root.contextCommandsVisible && settingsContents.contextsTabActive
+            && root.contextSnapshotOverride === null && root.desktopCommandsShown
         source: active ? Qt.resolvedUrl("KdeDesktopSwitchBackend.qml") : ""
         onLoaded: { item.contexts = contextState; item.active = true; }
     }
@@ -253,7 +257,7 @@ Item {
         objectName: "dockDesktopSwitchState"
         contexts: contextState
         backend: root.desktopSwitchBackendOverride !== null ? root.desktopSwitchBackendOverride : desktopSwitchBackendLoader.item
-        active: settings.visible && root.contextCommandsVisible && settingsContents.contextsTabActive
+        active: root.desktopCommandsShown
     }
     ContextBindingsState {
         id: contextBindingsState
@@ -1311,6 +1315,7 @@ Item {
         powerProfile: powerProfileState
         wifi: wifiState
         bluetooth: bluetoothState
+        desktopSwitch: desktopSwitchState
         backendLifetime: nativeAudioBackend.item
         validateClient: function(client) {
             return root.ready && client && client.available

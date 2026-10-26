@@ -148,9 +148,15 @@ class Gallery:
                 raise RuntimeError(f"popup scene {name} left no popup open")
             popup = visible[0]
             self.save(f"popup-{host}-{name}", window, self.scene_rect(popup))
-        # The lower Control Center cards (Energy and its power profile) sit below the fold.
+        # The lower Control Center cards (Areas, Energy and its power profile) sit below the fold.
+        # Three synthetic areas and two Activities show the area switcher and the Activity name.
         evaluate("closeContext(); settings.close()")
         QTest.qWait(60)
+        QQmlExpression(engine.rootContext(), window,
+                       "contextSnapshot = ({outputName: 'DP-1', activity: {status: 'ready', currentId: 'activity-work',"
+                       " ids: ['activity-work', 'activity-home'], names: ['Foco', 'Casa']}, desktop: {status: 'ready',"
+                       " currentId: 'desktop-1', ids: ['desktop-1', 'desktop-2', 'desktop-3'],"
+                       " names: ['Área 1', 'Área 2', 'Área 3']}})").evaluate()
         evaluate("controlCenterPopup.openAt(settingsButton)")
         QTest.qWait(100)
         flick = window.findChild(QQuickItem, "controlCenterScroll").property("contentItem")
