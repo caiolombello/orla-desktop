@@ -828,11 +828,15 @@ class Gallery:
                 QTest.qWait(10)
 
     def bar(self, host: str) -> None:
-        from test_bar import FixtureApplication, FixtureControlCenter, FixtureRecent, FixtureSession
+        from test_bar import FixtureApplication, FixtureControlCenter, FixtureRecent, FixtureSession, FixtureUpdates
         session, application, center = FixtureSession(), FixtureApplication(), FixtureControlCenter()
         recent = FixtureRecent()
+        # Discover reports updates and Steam is open: the badge and the Steam row show.
+        updates = FixtureUpdates()
+        updates.update(systemState="updates", steamRunning=True)
         engine = self.engine()
         engine.rootContext().setContextProperty("fixtureRecent", recent)
+        engine.rootContext().setContextProperty("fixtureUpdates", updates)
         engine.rootContext().setContextProperty("fixtureSession", session)
         engine.rootContext().setContextProperty("fixtureApplication", application)
         engine.rootContext().setContextProperty("fixtureControlCenter", center)
