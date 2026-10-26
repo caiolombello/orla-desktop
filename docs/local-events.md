@@ -41,9 +41,11 @@ barra de menus, não recebe foco nem cliques, some ao expirar e não reserva
 espaço no dock, então também funciona num dock estreito demais para a área do
 aviso. A cor é sempre preta, nos esquemas claro e escuro.
 
-A janela usa o tipo de exibição na tela do Plasma, que o KWin mantém acima dos
-painéis, posicionada na tela do dock. Ainda não há prova com dois monitores,
-escala fracionária, tela cheia ou sessão bloqueada (N2).
+A janela usa o tipo de notificação do Plasma, que o KWin mantém acima dos
+painéis e deixa na posição pedida, na tela do dock. O tipo de exibição na tela
+(OSD) foi descartado: o KWin o recoloca no centro, a dois terços da altura. Ainda
+não há prova com dois monitores, escala fracionária, tela cheia ou sessão
+bloqueada (N2).
 
 ## English
 
@@ -87,6 +89,7 @@ the menu bar, takes no focus or clicks, fades out when it expires and reserves
 no dock space, so it also works on a dock too narrow for the notice slot. It is
 always black, in light and dark schemes.
 
-The window uses Plasma's on-screen-display type, which KWin keeps above panels,
-placed on the dock's screen. Two monitors, fractional scaling, fullscreen and
-the locked session are not proven yet (N2).
+The window uses Plasma's notification type, which KWin keeps above panels and
+leaves where it is placed, on the dock's screen. The on-screen-display type was
+dropped: KWin moves it to the center, two thirds down the screen. Two monitors,
+fractional scaling, fullscreen and the locked session are not proven yet (N2).
