@@ -35,6 +35,10 @@ Window {
             if (target === failingTarget) throw new Error("private fixture failure");
             calls = calls.concat([target]);
         }
+        function showOverview() {
+            if (failingTarget === "overview") throw new Error("private fixture failure");
+            calls = calls.concat(["overview"]);
+        }
     }
     QtObject {
         id: fixtureBattery
@@ -49,6 +53,31 @@ Window {
         property string track: "Faixa sintética"
         property string artist: "Artista sintético"
         property string identity: "Player sintético"
+    }
+    property alias desktopSwitch: fixtureDesktopSwitch
+    // DesktopSwitchState's presentation contract; the switch protocol has its own tests.
+    QtObject {
+        id: fixtureDesktopSwitch
+        objectName: "controlCenterDesktopSwitch"
+        property bool sourceReady: true
+        property bool available: true
+        property bool pending: false
+        property string status: "idle"
+        property string error: ""
+        property string currentId: "one"
+        property var desktops: [{id: "one", name: "Área sintética 1"}, {id: "two", name: "Área sintética 2"},
+            {id: "three", name: "Área sintética 3"}]
+        readonly property string currentName: (desktops.find(item => item.id === currentId) || {name: ""}).name
+        property int desktopRevision: 4
+        property var contexts: ({snapshot: {activity: {status: "ready", id: "a1", name: "Atividade sintética"},
+            activities: [{id: "a1", name: "Atividade sintética"}]}})
+        property var calls: []
+        function selectDesktop(id) { calls = calls.concat(["select:" + id]); return desktops.some(item => item.id === id); }
+        function requestDesktopSwitch(id, revision) {
+            calls = calls.concat(["request:" + id + ":" + revision]);
+            pending = true;
+            return true;
+        }
     }
     property alias mediaState: fixtureMediaState
     QtObject {

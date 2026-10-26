@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QObject, QPointF, QUrl, Qt
 from PySide6.QtGui import QColor, QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlExpression, QQmlProperty
+from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlExpression, QQmlProperty
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QSignalSpy, QTest
 
@@ -817,6 +817,93 @@ class ControlCenterTests(unittest.TestCase):
         QTest.qWait(20)
         self.assertFalse(self.shown("controlCenterMediaProgress"))
         self.assertEqual(self.warnings, [])
+
+    def accessible_name(self, item):
+        # The item's own context imports QtQuick, where the Accessible attached type lives.
+        expression = QQmlExpression(QQmlEngine.contextForObject(item), item, "Accessible.name")
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value
+
+    def test_desktop_module_is_absent_without_a_desktop_state(self):
+        self.assertFalse(self.shown("controlCenterDesktopCard"))
+
+    def test_desktop_module_shows_the_area_switches_it_and_opens_the_overview(self):
+        fixture = self.window.findChild(QObject, "controlCenterDesktopSwitch")
+        def calls():
+            value = fixture.property("calls")
+            return list(value.toVariant() if hasattr(value, "toVariant") else value)
+        self.center.setProperty("desktopSwitch", fixture)
+        QTest.qWait(30)
+        self.assertTrue(self.shown("controlCenterDesktopCard"))
+        status = self.item("controlCenterDesktopStatus")
+        # One Activity: only the area's name.
+        self.assertEqual(status.property("text"), "Área sintética 1")
+        tabs = self.item("controlCenterDesktopTabs")
+        self.assertTrue(tabs.isVisible())
+        self.assertEqual(tabs.property("currentIndex"), 0)
+        # TabBar moves its tabs into its own list: reach them through itemAt().
+        first, second = (self.evaluate(f"itemAt({index})", tabs) for index in (0, 1))
+        self.assertEqual(second.objectName(), "controlCenterDesktop-1")
+        self.assertEqual(second.property("text"), "2")
+        self.assertEqual(self.accessible_name(first), "Área sintética 1, atual")
+        self.assertEqual(self.accessible_name(second), "Área sintética 2")
+
+        second.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(30)
+        self.assertEqual(calls(), ["select:two", "request:two:4"])
+        self.assertEqual(status.property("text"), "Trocando de área…")
+        # Until KDE reports the switch, the current area stays selected.
+        self.assertEqual(tabs.property("currentIndex"), 0)
+        self.assertFalse(tabs.isEnabled())
+        fixture.setProperty("currentId", "two")
+        fixture.setProperty("pending", False)
+        QTest.qWait(30)
+        self.assertEqual(tabs.property("currentIndex"), 1)
+        self.assertEqual(status.property("text"), "Área sintética 2")
+        # Choosing the current area again sends nothing.
+        second.forceActiveFocus(Qt.TabFocusReason)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        QTest.qWait(30)
+        self.assertEqual(calls(), ["select:two", "request:two:4"])
+
+        self.activate("controlCenterOverview")
+        self.assertEqual(self.calls(), ["overview"])
+        self.assertEqual(self.item("controlCenterDesktopError").property("text"), "")
+        self.backend.setProperty("failingTarget", "overview")
+        self.activate("controlCenterOverview")
+        self.assertNotEqual(self.item("controlCenterDesktopError").property("text"), "")
+        self.assertEqual(self.warnings, [])
+
+    def test_desktop_module_names_the_activity_only_when_there_are_several(self):
+        fixture = self.window.findChild(QObject, "controlCenterDesktopSwitch")
+        self.center.setProperty("desktopSwitch", fixture)
+        self.evaluate("contexts = ({snapshot: {activity: {status: 'ready', id: 'a1', name: '<b>Trabalho</b>'},"
+                      "activities: [{id: 'a1', name: 'Trabalho'}, {id: 'a2', name: 'Casa'}]}})", fixture)
+        QTest.qWait(20)
+        status = self.item("controlCenterDesktopStatus")
+        self.assertEqual(status.property("text"), "Área sintética 1 · <b>Trabalho</b>")
+        self.assertEqual(self.evaluate("textFormat", status), 0)  # Text.PlainText
+        self.evaluate("status = 'failed'; error = 'Não foi possível confirmar a troca da área.'", fixture)
+        QTest.qWait(20)
+        self.assertEqual(status.property("text"), "Não foi possível confirmar a troca da área.")
+        fixture.setProperty("sourceReady", False)
+        QTest.qWait(20)
+        self.assertEqual(status.property("text"), "Áreas de trabalho indisponíveis")
+        self.assertFalse(self.shown("controlCenterDesktopTabs"))
+
+    def test_desktop_switcher_hides_for_one_area_or_more_than_six(self):
+        fixture = self.window.findChild(QObject, "controlCenterDesktopSwitch")
+        self.center.setProperty("desktopSwitch", fixture)
+        for count, shown in ((1, False), (2, True), (6, True), (7, False)):
+            with self.subTest(count=count):
+                self.evaluate(f"desktops = Array.from({{length: {count}}}, (_, i) => ({{id: 'd' + i, name: 'Área ' + (i + 1)}}));"
+                              "currentId = 'd0'", fixture)
+                QTest.qWait(20)
+                self.assertEqual(self.shown("controlCenterDesktopTabs"), shown)
+                # The Overview stays available whatever the count.
+                self.assertTrue(self.shown("controlCenterOverview"))
 
     def test_a_cable_connection_is_shown_with_wifi_off_on_or_missing(self):
         status = self.item("controlCenterWifiStatus")

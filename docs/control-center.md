@@ -63,7 +63,8 @@ qualifica os serviços ou hardware nativos.
 A Central organiza os módulos como no macOS. Com largura para duas colunas
 (300 px ou mais), a primeira linha junta Wi-Fi e Bluetooth num módulo, ao lado
 de **Tocando agora**. A segunda traz **Não perturbe** e **Microfone** lado a
-lado. Abaixo ficam os módulos de largura total: **Tela**, **Som** e **Energia**,
+lado. Abaixo ficam os módulos de largura total: **Tela**, **Som**, **Área de
+trabalho** e **Energia**,
 e no fim **Ajustes do sistema…**. Em larguras menores, a mesma ordem vira uma
 coluna, com rolagem e foco visível no controle ativo.
 
@@ -349,3 +350,25 @@ O Bluetooth terminou ligado e sem bloqueio, como estava, e o journal não regist
 erro da dock. Aparelhos conectados, falta de adaptador e serviço parado só foram
 exercitados nos testes. **Abrir Bluetooth no KDE** foi testado só pelo despacho.
 Conectar e desconectar aparelhos fica para uma fatia seguinte.
+
+## Área de trabalho — W1
+
+O módulo **Área de trabalho** mostra a área virtual atual pelo nome. A Activity
+aparece ao lado só quando há mais de uma. Com duas a seis áreas, um controle
+segmentado numerado troca de área: cada segmento tem o nome completo como nome
+acessível, e a área atual é anunciada como "atual". A troca usa o mesmo estado
+da aba **Contextos** das Configurações (`DesktopSwitchState` e o adaptador do
+KWin). O segmento só muda quando o KDE confirma a nova área. Enquanto isso, o
+texto diz "Trocando de área…", e uma falta de confirmação mostra o erro. Trocar
+de área não muda perfis nem regras de contexto. A leitura e o adaptador só
+ficam ativos com a Central ou a aba Contextos abertas.
+
+O botão de grade à direita abre a **Visão geral** do KWin, a contraparte do
+Mission Control: a dock aciona o atalho `Overview` do próprio KWin pelo
+kglobalaccel, seja qual for a tecla configurada. Com uma área só, ou mais de
+seis, o módulo mostra o nome e a Visão geral, onde o KDE permite criar e trocar
+áreas.
+
+Os testes cobrem a apresentação com um estado sintético e a troca pela Central
+na dock com o adaptador simulado. A prova na sessão real fica no registro de
+validação da fatia.

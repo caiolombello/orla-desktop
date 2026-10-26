@@ -15,6 +15,16 @@ QtObject {
         return null;
     }
     function open(kind) {
+        // KWin's Overview, the counterpart of Mission Control.
+        if (kind === "overview") {
+            if (!backend || typeof backend.showOverview !== "function") return false;
+            try {
+                backend.showOverview();
+                return true;
+            } catch (_) {
+                return false;
+            }
+        }
         const destination = target(kind);
         if (destination === null || !backend || typeof backend.openSystemSettings !== "function") return false;
         try {

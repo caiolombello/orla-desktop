@@ -23,6 +23,11 @@ Controls.Control {
     property var wifi: null
     // Optional: hosts without a Bluetooth state show no Bluetooth card.
     property var bluetooth: null
+    // Optional DesktopSwitchState: hosts without it show no desktop module.
+    property var desktopSwitch: null
+    // The segmented switcher fits up to six areas; more go through the Overview.
+    readonly property var desktopChoices: desktopSwitch && desktopSwitch.sourceReady
+        && desktopSwitch.desktops.length >= 2 && desktopSwitch.desktops.length <= 6 ? desktopSwitch.desktops : []
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
@@ -35,6 +40,7 @@ Controls.Control {
     property string networkError: ""
     property string bluetoothError: ""
     property string allError: ""
+    property string desktopError: ""
     // "main" shows the modules; "wifi" the networks in range, as macOS does.
     property string page: "main"
     // Two columns of modules, as in macOS, once both fit their toggle and name.
@@ -65,7 +71,31 @@ Controls.Control {
         else if (kind === "network") networkError = message;
         else if (kind === "bluetooth") bluetoothError = message;
         else if (kind === "all") allError = message;
+        else if (kind === "overview") desktopError = message;
         return Boolean(dispatched);
+    }
+    function desktopText() {
+        const command = root.desktopSwitch;
+        if (!command || !command.sourceReady) return qsTr("Áreas de trabalho indisponíveis");
+        if (command.pending) return qsTr("Trocando de área…");
+        if (command.status === "failed") return command.error;
+        // The Activity only matters when there is more than one.
+        const snapshot = command.contexts ? command.contexts.snapshot : null;
+        const activity = snapshot && snapshot.activity && snapshot.activity.status === "ready"
+            && snapshot.activities && snapshot.activities.length > 1 ? snapshot.activity.name : "";
+        return activity.length > 0 ? qsTr("%1 · %2").arg(command.currentName).arg(activity) : command.currentName;
+    }
+    function switchDesktop(id) {
+        const command = root.desktopSwitch;
+        if (command && id !== command.currentId && command.selectDesktop(id))
+            command.requestDesktopSwitch(id, command.desktopRevision);
+        // A refused or pending switch must not leave another area selected.
+        Qt.callLater(root.syncDesktop);
+    }
+    function syncDesktop() {
+        if (!desktopTabs) return;
+        const id = root.desktopSwitch ? root.desktopSwitch.currentId : "";
+        desktopTabs.currentIndex = root.desktopChoices.findIndex(item => item.id === id);
     }
     function microphoneText() {
         const mic = root.microphone;
@@ -851,6 +881,97 @@ Controls.Control {
                             wrapMode: Text.WordWrap
                             color: root.foreground
                             Accessible.role: Accessible.AlertMessage
+                        }
+                    }
+                }
+
+                // Areas (virtual desktops): the current one, a switcher, and the
+                // Overview, KDE's counterpart of Mission Control.
+                Card {
+                    objectName: "controlCenterDesktopCard"
+                    visible: root.desktopSwitch !== null
+                    Layout.fillWidth: true
+                    Layout.columnSpan: tiles.columns
+                    radius: Style.radius.module
+                    padding: Style.space.sm
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: Style.space.sm
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.space.sm
+                            Rectangle {
+                                Layout.preferredWidth: Style.size.iconButton
+                                Layout.preferredHeight: Style.size.iconButton
+                                radius: width / 2
+                                color: Style.alpha(root.foreground, Style.state.selected)
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    width: Style.size.iconSm
+                                    height: width
+                                    source: "virtual-desktops-symbolic"
+                                    isMask: true
+                                    color: root.foreground
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                ModuleTitle { text: qsTr("Área de trabalho") }
+                                Controls.Label {
+                                    objectName: "controlCenterDesktopStatus"
+                                    Layout.fillWidth: true
+                                    text: root.desktopText()
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    color: root.muted
+                                    Accessible.role: root.desktopSwitch && root.desktopSwitch.status === "failed"
+                                        ? Accessible.AlertMessage : Accessible.StaticText
+                                }
+                            }
+                            OrlaIconButton {
+                                objectName: "controlCenterOverview"
+                                flat: true
+                                iconName: "view-grid-symbolic"
+                                text: qsTr("Mostrar a Visão geral")
+                                onClicked: root.request("overview")
+                            }
+                        }
+                        SegmentedTabs {
+                            id: desktopTabs
+                            objectName: "controlCenterDesktopTabs"
+                            visible: root.desktopChoices.length > 0
+                            Layout.fillWidth: true
+                            enabled: !!root.desktopSwitch && root.desktopSwitch.available && !root.desktopSwitch.pending
+                            Accessible.name: qsTr("Trocar de área de trabalho")
+                            Repeater {
+                                model: root.desktopChoices
+                                SegmentTab {
+                                    required property var modelData
+                                    required property int index
+                                    objectName: "controlCenterDesktop-" + index
+                                    // Numbers keep six areas legible; the full name is spoken.
+                                    text: String(index + 1)
+                                    Accessible.name: modelData.id === root.desktopSwitch.currentId
+                                        ? qsTr("%1, atual").arg(modelData.name) : modelData.name
+                                    onClicked: root.switchDesktop(modelData.id)
+                                }
+                            }
+                            Component.onCompleted: root.syncDesktop()
+                        }
+                        Connections {
+                            target: root.desktopSwitch
+                            ignoreUnknownSignals: true
+                            function onCurrentIdChanged() { root.syncDesktop(); }
+                            function onPendingChanged() { root.syncDesktop(); }
+                        }
+                        Connections {
+                            target: root
+                            function onDesktopChoicesChanged() { Qt.callLater(root.syncDesktop); }
+                        }
+                        ErrorLabel {
+                            objectName: "controlCenterDesktopError"
+                            text: root.desktopError
                         }
                     }
                 }

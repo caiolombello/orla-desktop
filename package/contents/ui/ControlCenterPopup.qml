@@ -16,6 +16,7 @@ DockPopup {
     property var powerProfile: null
     property var wifi: null
     property var bluetooth: null
+    property var desktopSwitch: null
     property QtObject backendLifetime: null
     property bool playing: false
     // The dock's MediaState: transport commands and progress for Now Playing.
@@ -81,6 +82,7 @@ DockPopup {
         powerProfile: rootPopup.powerProfile
         wifi: rootPopup.wifi
         bluetooth: rootPopup.bluetooth
+        desktopSwitch: rootPopup.desktopSwitch
         foreground: rootPopup.scheme.text
         muted: rootPopup.scheme.textMuted
     }
