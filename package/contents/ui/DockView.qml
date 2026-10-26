@@ -1133,8 +1133,10 @@ Item {
         id: calendarPopup
         objectName: "calendarPopup"
         dock: root
-        // Format strings in Qt.formatDate use the C locale; month names follow the user.
-        title: { const text = root.now.toLocaleDateString(Qt.locale(), "MMMM yyyy");
+        // Today's date, as the macOS Calendar widget shows it; the grid names the month.
+        // The user's long date format without the year ("domingo, 25 de outubro").
+        title: { const format = Qt.locale().dateFormat(Locale.LongFormat).replace(/,?\s*('[^']*'\s*)?y{2,4}\.?/, "");
+            const text = root.now.toLocaleDateString(Qt.locale(), format);
             return text.charAt(0).toLocaleUpperCase() + text.slice(1); }
         CalendarAgenda {
             objectName: "calendarAgenda"
