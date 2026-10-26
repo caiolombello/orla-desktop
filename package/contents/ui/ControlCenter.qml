@@ -382,93 +382,109 @@ Controls.Control {
                     Layout.fillHeight: true
                     Layout.preferredWidth: root.wide ? tiles.half : tiles.width
                     radius: Style.radius.module
-                    RowLayout {
+                    // Artwork and text on top, progress and transport below across the
+                    // whole module, as in macOS: a half-width module has no room for three
+                    // buttons beside the artwork.
+                    ColumnLayout {
                         anchors.fill: parent
-                        spacing: Style.space.sm
-                        LiveIcon {
-                            Layout.preferredWidth: Style.size.control
-                            Layout.preferredHeight: Style.size.control
-                            Layout.alignment: Qt.AlignTop
-                            kind: "music"
-                            live: Boolean(root.player)
-                            info: ({art: root.player ? root.player.artUrl || "" : "", active: root.playing})
-                            animationDuration: 0
-                        }
-                        ColumnLayout {
+                        spacing: Style.space.xs
+                        RowLayout {
                             Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignTop
-                            spacing: 0
-                            Controls.Label {
-                                objectName: "controlCenterMediaTitle"
-                                Layout.fillWidth: true
-                                text: root.player ? root.boundedText(root.player.track || root.player.identity, 256) || qsTr("Player sem título")
-                                                  : qsTr("Nada tocando")
-                                textFormat: Text.PlainText
-                                wrapMode: Text.WordWrap
-                                maximumLineCount: 2
-                                elide: Text.ElideRight
-                                font.weight: Style.weight.demiBold
-                                color: root.foreground
+                            spacing: Style.space.sm
+                            LiveIcon {
+                                Layout.preferredWidth: Style.size.control
+                                Layout.preferredHeight: Style.size.control
+                                Layout.alignment: Qt.AlignTop
+                                kind: "music"
+                                live: Boolean(root.player)
+                                info: ({art: root.player ? root.player.artUrl || "" : "", active: root.playing})
+                                animationDuration: 0
                             }
-                            Controls.Label {
-                                objectName: "controlCenterMediaDetail"
+                            ColumnLayout {
+                                objectName: "controlCenterMediaText"
                                 Layout.fillWidth: true
-                                text: root.player ? root.boundedText(root.player.artist || root.player.identity, 256)
-                                                  : qsTr("Nenhum player aberto")
-                                textFormat: Text.PlainText
-                                font.pixelSize: Style.type.caption
-                                wrapMode: Text.WordWrap
-                                maximumLineCount: 2
-                                elide: Text.ElideRight
-                                color: root.muted
-                            }
-                            // A thin read-only progress line, as in the macOS Now Playing module.
-                            Rectangle {
-                                objectName: "controlCenterMediaProgress"
-                                Layout.fillWidth: true
-                                Layout.topMargin: Style.space.xs
-                                Layout.preferredHeight: Style.space.xxs + 1
-                                visible: root.mediaProgressShown
-                                radius: height / 2
-                                color: Style.alpha(root.foreground, 0.16)
-                                Accessible.role: Accessible.ProgressBar
-                                Accessible.name: qsTr("Posição na faixa")
-                                Rectangle {
-                                    width: root.mediaProgressShown ? parent.width * root.mediaState.positionUs / root.mediaState.lengthUs : 0
-                                    height: parent.height
-                                    radius: height / 2
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 0
+                                Controls.Label {
+                                    objectName: "controlCenterMediaTitle"
+                                    Layout.fillWidth: true
+                                    text: root.player ? root.boundedText(root.player.track || root.player.identity, 256) || qsTr("Player sem título")
+                                                      : qsTr("Nada tocando")
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                    font.weight: Style.weight.demiBold
                                     color: root.foreground
                                 }
+                                Controls.Label {
+                                    objectName: "controlCenterMediaDetail"
+                                    Layout.fillWidth: true
+                                    text: root.player ? root.boundedText(root.player.artist || root.player.identity, 256)
+                                                      : qsTr("Nenhum player aberto")
+                                    textFormat: Text.PlainText
+                                    font.pixelSize: Style.type.caption
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                    color: root.muted
+                                }
                             }
-                            RowLayout {
-                                objectName: "controlCenterMediaControls"
-                                Layout.topMargin: Style.space.xs
-                                visible: !!root.mediaState && !!root.player
-                                spacing: Style.space.xs
-                                OrlaIconButton {
-                                    objectName: "controlCenterMediaPrevious"
-                                    flat: true
-                                    iconName: "media-skip-backward-symbolic"
-                                    text: qsTr("Anterior")
-                                    enabled: !!root.mediaState && root.mediaState.canPrevious
-                                    onClicked: root.mediaState.previous()
-                                }
-                                OrlaIconButton {
-                                    objectName: "controlCenterMediaPlayPause"
-                                    flat: true
-                                    iconName: root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
-                                    text: root.playing ? qsTr("Pausar") : qsTr("Reproduzir")
-                                    enabled: !!root.mediaState && root.mediaState.canPlayPause
-                                    onClicked: root.mediaState.playPause()
-                                }
-                                OrlaIconButton {
-                                    objectName: "controlCenterMediaNext"
-                                    flat: true
-                                    iconName: "media-skip-forward-symbolic"
-                                    text: qsTr("Próxima")
-                                    enabled: !!root.mediaState && root.mediaState.canNext
-                                    onClicked: root.mediaState.next()
-                                }
+                        }
+                        // A thin read-only progress line, as in the macOS Now Playing module.
+                        Rectangle {
+                            objectName: "controlCenterMediaProgress"
+                            Layout.fillWidth: true
+                            Layout.topMargin: Style.space.xxs
+                            Layout.preferredHeight: Style.space.xxs + 1
+                            visible: root.mediaProgressShown
+                            radius: height / 2
+                            color: Style.alpha(root.foreground, 0.16)
+                            Accessible.role: Accessible.ProgressBar
+                            Accessible.name: qsTr("Posição na faixa")
+                            Rectangle {
+                                width: root.mediaProgressShown ? parent.width * root.mediaState.positionUs / root.mediaState.lengthUs : 0
+                                height: parent.height
+                                radius: height / 2
+                                color: root.foreground
+                            }
+                        }
+                        // Play/pause leads; previous and next are smaller, so all three fit a
+                        // half-width module (28 + 36 + 28 plus gaps).
+                        RowLayout {
+                            objectName: "controlCenterMediaControls"
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: !!root.mediaState && !!root.player
+                            spacing: Style.space.sm
+                            OrlaIconButton {
+                                objectName: "controlCenterMediaPrevious"
+                                implicitWidth: Style.size.iconButton
+                                implicitHeight: Style.size.iconButton
+                                flat: true
+                                iconName: "media-skip-backward-symbolic"
+                                text: qsTr("Anterior")
+                                enabled: !!root.mediaState && root.mediaState.canPrevious
+                                onClicked: root.mediaState.previous()
+                            }
+                            OrlaIconButton {
+                                objectName: "controlCenterMediaPlayPause"
+                                implicitWidth: Style.size.control
+                                implicitHeight: Style.size.control
+                                flat: true
+                                iconName: root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
+                                text: root.playing ? qsTr("Pausar") : qsTr("Reproduzir")
+                                enabled: !!root.mediaState && root.mediaState.canPlayPause
+                                onClicked: root.mediaState.playPause()
+                            }
+                            OrlaIconButton {
+                                objectName: "controlCenterMediaNext"
+                                implicitWidth: Style.size.iconButton
+                                implicitHeight: Style.size.iconButton
+                                flat: true
+                                iconName: "media-skip-forward-symbolic"
+                                text: qsTr("Próxima")
+                                enabled: !!root.mediaState && root.mediaState.canNext
+                                onClicked: root.mediaState.next()
                             }
                         }
                     }

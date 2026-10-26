@@ -905,6 +905,32 @@ class ControlCenterTests(unittest.TestCase):
                 # The Overview stays available whatever the count.
                 self.assertTrue(self.shown("controlCenterOverview"))
 
+    def test_now_playing_fits_a_half_width_module(self):
+        # 300 px is the narrowest two-column Control Center; Next used to fall off the module.
+        self.center.setWidth(300)
+        self.evaluate("playing = true")
+        self.player.setProperty("track", "Faixa sintética com um título longo " * 4)
+        QTest.qWait(60)
+        self.assertTrue(self.center.property("wide"))
+        card = self.item("controlCenterMediaCard")
+        left = card.mapToScene(QPointF(card.property("leftPadding"), 0)).x()
+        right = card.mapToScene(QPointF(card.width() - card.property("rightPadding"), 0)).x()
+        for name in ("controlCenterMediaPrevious", "controlCenterMediaPlayPause", "controlCenterMediaNext"):
+            with self.subTest(name=name):
+                button = self.item(name)
+                start = button.mapToScene(QPointF(0, 0)).x()
+                self.assertTrue(button.isVisible())
+                self.assertGreaterEqual(start, left - 0.5)
+                self.assertLessEqual(start + button.width(), right + 0.5)
+        # Play/pause leads; it is larger than previous and next.
+        self.assertGreater(self.item("controlCenterMediaPlayPause").width(), self.item("controlCenterMediaNext").width())
+        title = self.item("controlCenterMediaTitle")
+        self.assertLessEqual(title.mapToScene(QPointF(title.width(), 0)).x(), right + 0.5)
+        self.assertTrue(title.property("truncated"))
+        progress = self.item("controlCenterMediaProgress")
+        self.assertAlmostEqual(progress.width(), right - left, delta=1)
+        self.assertEqual(self.warnings, [])
+
     def test_a_cable_connection_is_shown_with_wifi_off_on_or_missing(self):
         status = self.item("controlCenterWifiStatus")
         cable = '{connected: true, name: "<b>Conexão cabeada</b>\\n1"}'
