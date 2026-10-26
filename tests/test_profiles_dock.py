@@ -830,7 +830,9 @@ class ProfilesDockTests(unittest.TestCase):
                     continue
                 seen.add(identity)
                 visited += 1
-                self.assertLess(visited, 1024)
+                # A guard against cycles, not a budget: the whole Settings tree is
+                # walked, and in Fusion it outgrew 1024 nodes as options were added.
+                self.assertLess(visited, 4096)
                 if (item.role() == QAccessible.Role.ListItem
                         and item.text(QAccessible.Text.Name) == text
                         and not item.state().invisible and not item.state().offscreen

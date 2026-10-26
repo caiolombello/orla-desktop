@@ -271,6 +271,14 @@ ColumnLayout {
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
                 Controls.CheckBox {
+                    objectName: "eventIsland"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar esses avisos no topo da tela, como uma ilha (global)")
+                    checked: Boolean(settings.configuration.eventIsland)
+                    onToggled: settings.configuration.eventIsland = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.CheckBox {
                     objectName: "showControlCenter"
                     Layout.fillWidth: true
                     text: qsTr("Mostrar Central de Controle no dock (global)")

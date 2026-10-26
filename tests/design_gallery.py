@@ -858,6 +858,35 @@ class Gallery:
         window.close()
         engine.deleteLater()
 
+    def island(self, host: str) -> None:
+        """The event island over the host's bar color: Pomodoro completion and volume."""
+        engine = self.engine()
+        engine.load(QUrl.fromLocalFile(str(TESTS / "EventIslandHarness.qml")))
+        window = engine.rootObjects()[0]
+        island = window.findChild(QQuickItem, "eventIsland")
+        state = window.findChild(QObject, "islandEventState")
+
+        def run(target, source: str) -> None:
+            expression = QQmlExpression(engine.rootContext(), target, source)
+            expression.evaluate()
+            if expression.hasError():
+                raise RuntimeError(f"{source}: {expression.error().toString()}")
+
+        run(window, "color = palette.window")
+        scenes = (
+            ("completion", "submit({kind:'completion',key:'pomodoro:completion',scope:'global',"
+                           "title:'Foco concluído',detail:'Hora de uma pausa!'},Date.now())"),
+            ("volume", "clear(); submit({kind:'audio',action:'volume',targetId:'speakers',"
+                       "originScope:'profile:work',contextGeneration:2,value:65,"
+                       "title:'Volume · 65%',detail:'Alto-falantes'},Date.now())"),
+        )
+        for name, source in scenes:
+            run(state, source)
+            QTest.qWait(120)
+            self.save(f"island-{host}-{name}", window, self.scene_rect(island))
+        window.close()
+        engine.deleteLater()
+
     def bar_settings(self, host: str) -> None:
         """Configuration content only; Plasma owns the native dialog footer."""
         engine = self.engine()
@@ -1320,6 +1349,7 @@ def render(host: str, output: Path) -> int:
     gallery.appearance_advanced(host)
     gallery.widget_order(host)
     gallery.bar(host)
+    gallery.island(host)
     gallery.bar_settings(host)
     gallery.workspace(host)
     gallery.updates(host)

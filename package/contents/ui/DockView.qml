@@ -23,6 +23,9 @@ Item {
     // Space between the dock and the panel frame, {left, top, right, bottom},
     // as measured by the host; null assumes Breeze's 4 px panel margins.
     property var systemGlassMargins: null
+    // The dock's screen in global coordinates, set by the panel host; the
+    // event island centers on it.
+    property rect screenGeometry: Qt.rect(0, 0, -1, -1)
     readonly property var frameMargins: systemGlassMargins || ({left: 4, top: 4, right: 4, bottom: 4})
     readonly property rect glassFrame: Qt.rect(-frameMargins.left, -frameMargins.top,
         width + frameMargins.left + frameMargins.right, height + frameMargins.top + frameMargins.bottom)
@@ -98,8 +101,12 @@ Item {
         Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - minimumTaskWidth))
     readonly property bool localEventsProfileReady: profileState.writable
         && (profileState.initialized || profileState.savedJSON === "")
+    // Events go either to the island at the top of the screen or to a slot in the dock.
+    readonly property bool eventIslandActive: Boolean(configuration.eventIsland)
+        && localEventsRequested && localEventsProfileReady
     readonly property bool localEventsActive: localEventsRequested && localEventsProfileReady
-        && candidateEventSlotWidth >= 48
+        && !eventIslandActive && candidateEventSlotWidth >= 48
+    readonly property var eventIslandState: localEventState
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
     readonly property int centerViewportWidth: innerWidth
     // The legacy lane reserves 4 px after the content; the glass skips it. The
@@ -326,6 +333,12 @@ Item {
         property var labelOwner: root
         active: root.nativePopups
         source: active ? Qt.resolvedUrl("DockLabel.qml") : ""
+    }
+    Loader {
+        objectName: "eventIslandLoader"
+        property var islandOwner: root
+        active: root.nativePopups && root.eventIslandActive
+        source: active ? Qt.resolvedUrl("NativeEventIsland.qml") : ""
     }
     function widgetVisible(id) { const widget = displayWidgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
@@ -715,7 +728,7 @@ Item {
     }
     EventState {
         id: localEventState
-        enabled: root.localEventsProfileReady && root.candidateEventSlotWidth >= 48
+        enabled: root.localEventsProfileReady && (root.eventIslandActive || root.candidateEventSlotWidth >= 48)
         completionEnabled: enabled && Boolean(root.configuration.showLocalToasts)
         audioEnabled: enabled && Boolean(root.presentation.showAudioHud)
         activeScope: "profile:" + profileState.activeProfileId

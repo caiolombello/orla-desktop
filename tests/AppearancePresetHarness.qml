@@ -16,6 +16,7 @@ Controls.ApplicationWindow {
         property string autoContextDefaultProfile: ""
         property string autoContextPolicy: "activity-desktop"
         property bool showLocalToasts: false
+        property bool eventIsland: false
         property bool showControlCenter: false
         property var launchers: ["applications:org.kde.dolphin.desktop", "applications:org.kde.konsole.desktop"]
         property string theme: "glass"
