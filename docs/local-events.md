@@ -29,6 +29,22 @@ estão incluídos. A validação disponível usa fixtures offscreen e não quali
 painel Plasma, foco/grab, leitor de tela, escala, múltiplos monitores ou
 instalação. Consulte o [registro de validação](validation/local-events-0.2.7.md) e a [release publicada](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7).
 
+### Ilha no topo (Source)
+
+Depois da 0.2.11, os mesmos avisos (conclusão do Pomodoro e confirmações de
+áudio) podem aparecer numa cápsula preta no centro do topo da tela, como a ilha
+do iPhone, em vez de ocupar uma área do dock. Ative **Mostrar esses avisos no
+topo da tela, como uma ilha (global)** em **Widgets**; as duas opções acima
+continuam decidindo quais avisos aparecem. A ilha mostra um ícone, o título e
+um detalhe curto; o volume mostra uma barra de nível. Ela fica sobre o meio da
+barra de menus, não recebe foco nem cliques, some ao expirar e não reserva
+espaço no dock, então também funciona num dock estreito demais para a área do
+aviso. A cor é sempre preta, nos esquemas claro e escuro.
+
+A janela usa o tipo de exibição na tela do Plasma, que o KWin mantém acima dos
+painéis, posicionada na tela do dock. Ainda não há prova com dois monitores,
+escala fracionária, tela cheia ou sessão bloqueada (N2).
+
 ## English
 
 The published 0.2.7 alpha adds one local dock notice for completion of a
@@ -58,3 +74,19 @@ Center. Other events, HUD, island, history and per-profile behavior are not
 included. Available validation uses offscreen fixtures and does not qualify the
 Plasma panel, focus/grabs, screen reader, scaling, multi-monitor behavior or
 installation. See the [validation record](validation/local-events-0.2.7.md) and the [published release](https://github.com/caiolombello/orla-desktop/releases/tag/v0.2.7).
+
+### Top island (Source)
+
+After 0.2.11, the same notices (Pomodoro completion and audio confirmations)
+can appear in a black capsule at the top center of the screen, like the
+iPhone's island, instead of taking a slot in the dock. Enable **Mostrar esses
+avisos no topo da tela, como uma ilha (global)** under **Widgets**; the two
+options above still decide which notices appear. The island shows an icon, the
+title and a short detail; volume shows a level bar. It sits over the middle of
+the menu bar, takes no focus or clicks, fades out when it expires and reserves
+no dock space, so it also works on a dock too narrow for the notice slot. It is
+always black, in light and dark schemes.
+
+The window uses Plasma's on-screen-display type, which KWin keeps above panels,
+placed on the dock's screen. Two monitors, fractional scaling, fullscreen and
+the locked session are not proven yet (N2).

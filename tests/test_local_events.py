@@ -260,6 +260,68 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertEqual(self.config.property("timerDeadline"), deadline)
         self.assertTrue(self.evaluate("pomodoro.running"))
 
+    def test_island_kconfig_and_setting_are_global_and_default_off(self):
+        import xml.etree.ElementTree as ET
+        document = ET.parse(ROOT / "package/contents/config/main.xml")
+        entries = [entry for entry in document.iter() if entry.tag.endswith("entry")
+                   and entry.attrib.get("name") == "eventIsland"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].attrib.get("type"), "Bool")
+        self.assertEqual([child.text for child in entries[0] if child.tag.endswith("default")], ["false"])
+        checkbox = self.window.findChild(QQuickItem, "eventIsland")
+        self.assertIsNotNone(checkbox)
+        self.assertIn("(global)", checkbox.property("text"))
+        before = self.config.property("profilesJSON")
+        self.evaluate("click()", checkbox)
+        self.assertTrue(self.config.property("eventIsland"))
+        self.assertEqual(self.config.property("profilesJSON"), before)
+
+    def test_island_takes_events_out_of_the_dock_even_when_it_is_too_narrow_for_a_slot(self):
+        # 160 px leaves no room for a slot (under 48 px), which used to drop the event.
+        self.config.setProperty("showLocalToasts", True)
+        self.config.setProperty("eventIsland", True)
+        self.configure_dock(160, 102, 64)
+        self.assertLess(self.evaluate("candidateEventSlotWidth"), 48)
+        self.assertTrue(self.evaluate("eventIslandActive"))
+        self.assertFalse(self.evaluate("localEventsActive"))
+        self.assertEqual(self.evaluate("eventSlotWidth"), 0)
+        self.assertEqual(self.viewport.x(), 10)
+        self.assertEqual(self.viewport.width(), self.dock.width() - 20)
+        # The native window loads only in the panel; tests have no Plasma dialogs.
+        loader = self.window.findChild(QObject, "eventIslandLoader")
+        self.assertFalse(loader.property("active"))
+
+        state = self.event_state()
+        self.config.setProperty("completedFocus", 0)
+        self.config.setProperty("timerBreak", False)
+        self.config.setProperty("timerDeadline", 1000)
+        self.evaluate("pomodoro.poll(1001)")
+        self.settle()
+        current = state.property("current")
+        current = current.toVariant() if hasattr(current, "toVariant") else current
+        self.assertEqual(current["title"], "Foco concluído")
+        self.assertEqual(self.dock.property("notice"), "")
+        self.assertFalse(self.window.findChild(QQuickItem, "localEventSurface").isVisible())
+        self.assertEqual(self.viewport.width(), self.dock.width() - 20)
+
+        # Turning the island off hands events back to the dock slot rules.
+        self.config.setProperty("eventIsland", False)
+        self.settle()
+        self.assertFalse(self.evaluate("eventIslandActive"))
+        self.assertFalse(self.evaluate("localEventsActive"))
+        self.configure_dock(320, 102, 64)
+        self.assertTrue(self.evaluate("localEventsActive"))
+        self.assertTrue(self.evaluate("submit({kind:'completion',key:'pomodoro:completion',scope:'global',"
+                                      "title:'Pausa concluída',detail:'Pronto para focar?'},Date.now())", state))
+        self.settle()
+        self.assertTrue(self.window.findChild(QQuickItem, "localEventSurface").isVisible())
+
+    def test_island_needs_a_requested_event_kind(self):
+        self.config.setProperty("eventIsland", True)
+        self.settle()
+        self.assertFalse(self.evaluate("eventIslandActive"))
+        self.assertFalse(self.evaluate("localEventsActive"))
+
     def test_invalid_profiles_disable_and_clear_only_local_presentation(self):
         self.config.setProperty("showLocalToasts", True)
         self.configure_dock(240, 102, 64)
@@ -1081,6 +1143,109 @@ class LocalEventsProductTests(unittest.TestCase):
             path = output / f"product-{width}x{height}-icon{icon_size}.png"
             self.assertTrue(stable.save(str(path)))
             self.assertGreater(path.stat().st_size, 0)
+
+
+class EventIslandTests(unittest.TestCase):
+    """The island capsule drawn alone, as the panel's top-center window shows it."""
+
+    def setUp(self):
+        self.engine = QQmlApplicationEngine()
+        self.warnings = []
+        self.engine.warnings.connect(
+            lambda warnings: self.warnings.extend(warning.toString() for warning in warnings)
+        )
+        self.engine.load(QUrl.fromLocalFile(str(ROOT / "tests" / "EventIslandHarness.qml")))
+        self.assertTrue(self.engine.rootObjects(), self.warnings)
+        self.window = self.engine.rootObjects()[0]
+        self.island = self.window.findChild(QQuickItem, "eventIsland")
+        self.state = self.window.findChild(QObject, "islandEventState")
+        self.capsule = self.window.findChild(QQuickItem, "eventIslandCapsule")
+        QTest.qWait(30)
+
+    def tearDown(self):
+        self.window.close()
+        self.window.deleteLater()
+        QCoreApplication.sendPostedEvents(self.window, QEvent.DeferredDelete)
+        self.engine.deleteLater()
+        QCoreApplication.sendPostedEvents(self.engine, QEvent.DeferredDelete)
+        APP.processEvents()
+        self.assertEqual(self.warnings, [])
+
+    def evaluate(self, source, target):
+        expression = QQmlExpression(self.engine.rootContext(), target, source)
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value.toVariant() if hasattr(value, "toVariant") else value
+
+    def item(self, name):
+        return self.window.findChild(QQuickItem, name)
+
+    def submit(self, event):
+        import json
+        self.assertTrue(self.evaluate(f"submit({json.dumps(event)}, Date.now())", self.state))
+        QTest.qWait(60)
+
+    @staticmethod
+    def audio(action, value, title, detail="Alto-falantes sintéticos"):
+        return {"kind": "audio", "action": action, "targetId": "speakers", "originScope": "profile:work",
+                "contextGeneration": 2, "value": value, "title": title, "detail": detail}
+
+    def test_idle_island_is_hidden_and_keeps_a_fixed_width(self):
+        self.assertFalse(self.island.property("hasEvent"))
+        self.assertFalse(self.island.property("showing"))
+        self.assertEqual(self.capsule.property("opacity"), 0)
+        self.assertEqual(self.island.width(), 350)
+
+    def test_completion_shows_icon_title_and_detail_as_plain_text(self):
+        self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                     "title": "<b>Foco concluído</b>", "detail": "Hora de uma pausa!"})
+        self.assertTrue(self.island.property("showing"))
+        self.assertEqual(self.capsule.property("opacity"), 1)
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "chronometer-symbolic")
+        title = self.item("eventIslandTitle")
+        self.assertEqual(title.property("text"), "<b>Foco concluído</b>")
+        self.assertEqual(self.evaluate("textFormat", title), 0)  # Text.PlainText
+        self.assertTrue(self.item("eventIslandDetail").isVisible())
+        self.assertFalse(self.item("eventIslandLevel").isVisible())
+        self.assertEqual(self.island.width(), 350)
+        self.assertLessEqual(self.capsule.width(), self.island.width())
+        self.assertEqual(self.capsule.property("radius"), self.capsule.height() / 2)
+
+    def test_volume_shows_a_level_bar_and_the_level_icon(self):
+        self.submit(self.audio("volume", 40, "Volume · 40%"))
+        level = self.item("eventIslandLevel")
+        fill = self.item("eventIslandLevelFill")
+        self.assertTrue(level.isVisible())
+        self.assertAlmostEqual(fill.width(), level.width() * 0.4, places=3)
+        self.assertFalse(self.item("eventIslandDetail").isVisible())
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "audio-volume-medium-symbolic")
+        self.submit(self.audio("volume", 0, "Volume · 0%"))
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "audio-volume-muted-symbolic")
+        self.assertEqual(fill.width(), 0)
+
+    def test_mute_and_output_use_their_own_icons_without_a_level(self):
+        self.submit(self.audio("mute", True, "Som silenciado"))
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "audio-volume-muted-symbolic")
+        self.assertFalse(self.item("eventIslandLevel").isVisible())
+        self.evaluate("clear()", self.state)
+        self.submit(self.audio("default-output", "speakers", "Saída de áudio alterada"))
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "audio-speakers-symbolic")
+
+    def test_long_text_stays_inside_the_island(self):
+        self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                     "title": "Foco " * 19, "detail": "Pausa " * 26})
+        self.assertLessEqual(self.capsule.width(), self.island.width())
+        title = self.item("eventIslandTitle")
+        self.assertTrue(title.property("truncated"))
+
+    def test_dismissal_hides_the_island_and_keeps_the_last_text_while_fading(self):
+        self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                     "title": "Pausa concluída", "detail": "Pronto para focar?"})
+        self.assertTrue(self.evaluate("dismiss()", self.state))
+        QTest.qWait(60)
+        self.assertFalse(self.island.property("hasEvent"))
+        self.assertFalse(self.island.property("showing"))
+        self.assertEqual(self.item("eventIslandTitle").property("text"), "Pausa concluída")
 
 
 if __name__ == "__main__":

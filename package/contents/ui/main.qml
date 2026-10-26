@@ -106,6 +106,7 @@ PlasmoidItem {
         systemGlassMargins: applet.panelMargins
         systemPopupGlass: systemGlass.popupFrame
         nativePopups: true
+        screenGeometry: Plasmoid.containment ? Plasmoid.containment.screenGeometry : Qt.rect(0, 0, -1, -1)
         popAbove: Plasmoid.location === PlasmaCore.Types.BottomEdge
     }
 }
