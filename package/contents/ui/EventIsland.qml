@@ -6,8 +6,9 @@ import "../code/Style.js" as Style
 // Orla's own events in a black capsule at the top of the screen, like the
 // iPhone's Dynamic Island: an icon, the title and a short detail; volume
 // changes add a level bar. Presentation only: EventState owns the events.
-// The item keeps a fixed width so its window never resizes; the capsule grows
-// and shrinks inside it.
+// The item keeps a fixed size, room for a title and a detail line, so its
+// window never resizes: Plasma's Dialog keeps the size its main item had when
+// it was created. The capsule grows and shrinks inside it.
 Item {
     id: island
     objectName: "eventIsland"
@@ -27,7 +28,9 @@ Item {
     readonly property var scheme: Style.scheme("dark")
 
     implicitWidth: Style.size.popupWidth
-    implicitHeight: capsule.height
+    implicitHeight: Math.ceil(titleMetrics.height + detailMetrics.height) + Style.space.sm * 2
+    FontMetrics { id: titleMetrics; font.pixelSize: Style.type.body; font.weight: Style.weight.demiBold }
+    FontMetrics { id: detailMetrics; font.pixelSize: Style.type.caption }
     Accessible.role: Accessible.AlertMessage
     Accessible.name: hasEvent ? event.title + (event.detail ? ". " + event.detail : "") : ""
     Accessible.ignored: !hasEvent

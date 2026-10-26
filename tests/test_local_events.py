@@ -1190,11 +1190,23 @@ class EventIslandTests(unittest.TestCase):
         return {"kind": "audio", "action": action, "targetId": "speakers", "originScope": "profile:work",
                 "contextGeneration": 2, "value": value, "title": title, "detail": detail}
 
-    def test_idle_island_is_hidden_and_keeps_a_fixed_width(self):
+    def test_idle_island_is_hidden_and_keeps_a_fixed_size(self):
         self.assertFalse(self.island.property("hasEvent"))
         self.assertFalse(self.island.property("showing"))
         self.assertEqual(self.capsule.property("opacity"), 0)
         self.assertEqual(self.island.width(), 350)
+        # Plasma's Dialog keeps its main item's first size: an idle island must
+        # already be tall enough for a title and a detail line.
+        idle_height = self.island.property("implicitHeight")
+        self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                     "title": "Pausa concluída", "detail": "Pronto para focar?"})
+        self.assertEqual(self.island.property("implicitHeight"), idle_height)
+        self.assertLessEqual(self.capsule.height(), idle_height)
+        self.assertTrue(self.item("eventIslandDetail").isVisible())
+        self.evaluate("clear()", self.state)
+        self.submit(self.audio("volume", 40, "Volume · 40%"))
+        self.assertEqual(self.island.property("implicitHeight"), idle_height)
+        self.assertLessEqual(self.capsule.height(), idle_height)
 
     def test_completion_shows_icon_title_and_detail_as_plain_text(self):
         self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
