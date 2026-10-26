@@ -866,7 +866,10 @@ Item {
         self.assertEqual(audio_calls.toVariant() if hasattr(audio_calls, "toVariant") else audio_calls, [])
 
         sound_action = self.window.findChild(QQuickItem, "controlCenterSoundAction")
-        for _ in range(8):
+        # The dock reads the session's MPRIS players here: a playing player adds the
+        # three Now Playing buttons to the Tab chain, so allow more than the 8 stops
+        # an empty session needs.
+        for _ in range(16):
             if self.window.activeFocusItem() == sound_action:
                 break
             QTest.keyClick(self.window, Qt.Key_Tab)
