@@ -6,7 +6,7 @@ import "../code/Shapes.js" as Shapes
 // Widget artwork for the dock: a gradient squircle that shows live data the way
 // an app icon would. `info` is kind-specific and comes from WidgetStrip:
 //   value (short text), progress (0..1, <0 hides), ring (color), glyph (icon name),
-//   palette (iconTiles key), art (local image URL), active (bool), charging (bool).
+//   palette (iconTiles key), art (local or HTTPS image URL), active (bool), charging (bool).
 Item {
     id: icon
     property string kind: ""
@@ -153,8 +153,9 @@ Item {
         Item {
             Canvas {
                 id: cover
-                // Only local artwork: the dock never fetches remote URLs.
-                readonly property string art: icon.info.art && String(icon.info.art).startsWith("file:") ? String(icon.info.art) : ""
+                // The player's own cover: a local file or HTTPS (as Spotify gives it), like Now Playing.
+                readonly property string art: /^(https:\/\/|file:\/\/)\S{1,2040}$/.test(String(icon.info.art || ""))
+                    ? String(icon.info.art) : ""
                 property bool ready: false
                 anchors.fill: parent
                 visible: ready

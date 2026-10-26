@@ -789,6 +789,35 @@ class ControlCenterTests(unittest.TestCase):
         self.assertEqual(self.item("controlCenterWifiStatus").property("text"), "Ligado · sem conexão")
         self.assertEqual(self.warnings, [])
 
+    def test_now_playing_card_has_transport_and_progress(self):
+        state = self.window.findChild(QObject, "controlCenterMediaState")
+        def calls():
+            value = state.property("calls")
+            return list(value.toVariant() if hasattr(value, "toVariant") else value)
+        self.assertTrue(self.shown("controlCenterMediaControls"))
+        self.assertTrue(self.shown("controlCenterMediaProgress"))
+        previous, play, following = (self.item(name) for name in (
+            "controlCenterMediaPrevious", "controlCenterMediaPlayPause", "controlCenterMediaNext"))
+        self.assertTrue(previous.isEnabled())
+        self.assertTrue(play.isEnabled())
+        # A capability the player does not offer stays disabled.
+        self.assertFalse(following.isEnabled())
+        self.assertEqual(play.property("text"), "Reproduzir")
+        for button in (previous, play):
+            button.forceActiveFocus(Qt.TabFocusReason)
+            QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(calls(), ["previous", "playPause"])
+        # While playing, the position refreshes and the button offers pause.
+        self.evaluate("playing = true", self.item("controlCenterUnderTest"))
+        self.assertEqual(play.property("text"), "Pausar")
+        QTest.qWait(1100)
+        self.assertIn("refreshPosition", calls())
+        # No known length: no progress line.
+        state.setProperty("lengthUs", 0)
+        QTest.qWait(20)
+        self.assertFalse(self.shown("controlCenterMediaProgress"))
+        self.assertEqual(self.warnings, [])
+
     def test_a_cable_connection_is_shown_with_wifi_off_on_or_missing(self):
         status = self.item("controlCenterWifiStatus")
         cable = '{connected: true, name: "<b>Conexão cabeada</b>\\n1"}'
