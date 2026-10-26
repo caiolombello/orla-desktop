@@ -136,7 +136,8 @@ class CalendarTests(unittest.TestCase):
         # Flush the pending parent layout and view before inspecting a delegate.
         self.calendar.ensurePolished()
         agenda.ensurePolished()
-        expression = QQmlExpression(self.engine.rootContext(), agenda, "forceLayout(); itemAtIndex(0).children[0].textFormat")
+        # Rows start with the calendar color bar; the title is reached by name, not position.
+        expression = QQmlExpression(self.engine.rootContext(), agenda, "forceLayout(); itemAtIndex(0).titleItem.textFormat")
         value, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
         self.assertEqual(value, 0)
@@ -144,6 +145,22 @@ class CalendarTests(unittest.TestCase):
         value, _ = expression.evaluate()
         self.assertFalse(expression.hasError(), expression.error().toString())
         self.assertEqual(value, "<b>Sintético</b>. Dia inteiro")
+        # The calendar's color marks each event; anything else falls back to the accent.
+        self.assertEqual(self.evaluate("eventColor({eventColor: '#3d8ee6'})"), "#3d8ee6")
+        self.assertEqual(self.evaluate("eventColor({eventColor: 'red; x'}) === dock.accent"), True)
+        # With events on screen the long explanation steps aside.
+        self.assertFalse(self.window.findChild(QObject, "calendarProviderExplanation").property("visible"))
+        # Tomorrow, shown while today is selected.
+        self.evaluate("today(); fixtureTomorrowEvents = [{title: 'Consulta', isAllDay: true}]")
+        QTest.qWait(60)
+        self.assertTrue(self.evaluate("selectedIsToday"))
+        self.assertEqual(self.evaluate("tomorrowEvents.length"), 1)
+        self.assertTrue(self.window.findChild(QObject, "calendarTomorrowTitle").property("visible"))
+        # Another day selected: no "tomorrow" section.
+        self.evaluate("selectedDate = new Date(2020, 0, 15)")
+        QTest.qWait(60)
+        self.assertFalse(self.evaluate("selectedIsToday"))
+        self.assertEqual(self.evaluate("tomorrowEvents.length"), 0)
         self.assertEqual(self.warnings, [])
 
     def test_month_view_inherits_legible_dark_and_light_theme_colors(self):
@@ -186,7 +203,11 @@ class CalendarTests(unittest.TestCase):
                 elif class_name.startswith("Label_") and str(text).isdigit() and len(str(text)) <= 2:
                     numbers.append(item)
             self.assertEqual(len(header), 1)
-            self.assertGreaterEqual(len(tabs), 3)
+            # Days/Months/Years tabs are hidden, like the macOS calendar.
+            expression = QQmlExpression(self.engine.rootContext(), month, "viewHeader.tabBar.visible")
+            tabs_visible, _ = expression.evaluate()
+            self.assertFalse(expression.hasError(), expression.error().toString())
+            self.assertFalse(tabs_visible)
             self.assertGreaterEqual(len(weekdays), 7)
             self.assertGreaterEqual(len(numbers), 42)
             self.assertEqual(len(navigation_icons), 2)

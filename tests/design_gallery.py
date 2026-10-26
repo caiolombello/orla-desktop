@@ -41,7 +41,20 @@ POPUPS = (
     ("battery", "batteryPopup.openAt(settingsButton)"),
     ("music", "musicPopup.openAt(settingsButton)"),
     ("pin-app", "addDialog.openAt(settingsButton)"),
+    # Synthetic events: colored bars per calendar, today and tomorrow (filled in after opening).
+    # Not right after "calendar": the same popup may still be closing.
+    ("calendar-events", "calendarPopup.openAt(settingsButton)"),
 )
+# Set on an object found by name once its popup is open (popup content has its own context).
+POPUP_FIXTURES = {
+    "calendar-events": ("calendarAgenda",
+        "usePimEvents = true; "
+        "fixtureEvents = [{title: 'Reunião de equipe', isAllDay: false, eventColor: '#3d8ee6', "
+        "startDateTime: new Date(2026, 9, 25, 10, 0), endDateTime: new Date(2026, 9, 25, 11, 0)}, "
+        "{title: 'Aniversário sintético', isAllDay: true, eventColor: '#e0708a'}]; "
+        "fixtureTomorrowEvents = [{title: 'Consulta', isAllDay: false, eventColor: '#5bbf84', "
+        "startDateTime: new Date(2026, 9, 26, 14, 30), endDateTime: new Date(2026, 9, 26, 15, 0)}]"),
+}
 POPUP_IDS = ("settings", "addDialog", "calendarPopup", "integrationPopup", "controlCenterPopup",
              "pomodoroPopup", "musicPopup", "batteryPopup", "nativeTaskMenu")
 
@@ -120,8 +133,20 @@ class Gallery:
             evaluate("closeContext(); settings.close()")
             QTest.qWait(60)
             evaluate(source)
-            popup = next(popup for popup in (evaluate(identifier) for identifier in POPUP_IDS)
-                         if popup.property("visible"))
+            if name in POPUP_FIXTURES:
+                QTest.qWait(60)
+                target_name, fixture = POPUP_FIXTURES[name]
+                target = window.findChild(QObject, target_name)
+                expression = QQmlExpression(engine.rootContext(), target, fixture)
+                expression.evaluate()
+                if expression.hasError():
+                    raise RuntimeError(expression.error().toString())
+            # Let content set from the scene (such as synthetic events) lay out before capture.
+            QTest.qWait(120)
+            visible = [popup for popup in (evaluate(identifier) for identifier in POPUP_IDS) if popup.property("visible")]
+            if not visible:
+                raise RuntimeError(f"popup scene {name} left no popup open")
+            popup = visible[0]
             self.save(f"popup-{host}-{name}", window, self.scene_rect(popup))
         # The lower Control Center cards (Energy and its power profile) sit below the fold.
         evaluate("closeContext(); settings.close()")
@@ -797,9 +822,11 @@ class Gallery:
                 QTest.qWait(10)
 
     def bar(self, host: str) -> None:
-        from test_bar import FixtureApplication, FixtureControlCenter, FixtureSession
+        from test_bar import FixtureApplication, FixtureControlCenter, FixtureRecent, FixtureSession
         session, application, center = FixtureSession(), FixtureApplication(), FixtureControlCenter()
+        recent = FixtureRecent()
         engine = self.engine()
+        engine.rootContext().setContextProperty("fixtureRecent", recent)
         engine.rootContext().setContextProperty("fixtureSession", session)
         engine.rootContext().setContextProperty("fixtureApplication", application)
         engine.rootContext().setContextProperty("fixtureControlCenter", center)

@@ -11,6 +11,8 @@ ColumnLayout {
     required property var dock
     property bool active: false
     property var fixtureEvents: null
+    // Test-only: tomorrow's events when the selected date is today.
+    property var fixtureTomorrowEvents: null
     // Test-only nullable override. null always inspects the installed metadata model.
     property var pimPluginMetadataAvailableOverride: null
     property bool usePimEvents: dock.configuration && dock.configuration.calendarEvents !== undefined
@@ -22,6 +24,9 @@ ColumnLayout {
         : agendaEvents.length > 0 ? "events-present"
         : !pimPluginMetadataAvailable ? "plugin-metadata-missing" : "no-events-observed"
     property var agendaEvents: []
+    // Like the macOS Calendar widget: what comes tomorrow, shown while today is selected.
+    property var tomorrowEvents: []
+    readonly property bool selectedIsToday: sameDay(selectedDate, dock.now !== undefined ? dock.now : new Date())
     spacing: 8
     Kirigami.Theme.inherit: false
     Kirigami.Theme.colorSet: Kirigami.Theme.Window
@@ -39,10 +44,31 @@ ColumnLayout {
         }
         return false;
     }
+    function sameDay(a, b) {
+        return a instanceof Date && b instanceof Date && !isNaN(a.getTime()) && !isNaN(b.getTime())
+            && a.toDateString() === b.toDateString();
+    }
     function refreshAgenda() {
         if (!monthView) return;
         agendaEvents = fixtureEvents !== null ? fixtureEvents
             : active && usePimEvents ? monthView.daysModel.eventsForDate(monthView.currentDate) : [];
+        let tomorrow = [];
+        if (selectedIsToday) {
+            const next = new Date(monthView.currentDate);
+            next.setDate(next.getDate() + 1);
+            tomorrow = fixtureTomorrowEvents !== null ? fixtureTomorrowEvents
+                : active && usePimEvents ? monthView.daysModel.eventsForDate(next) : [];
+        }
+        tomorrowEvents = tomorrow;
+    }
+    // The calendar's own color, as macOS marks events; the accent when it has none.
+    function eventColor(event) {
+        const value = String(event && event.eventColor || "");
+        return /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value) ? value : root.dock.accent;
+    }
+    function dayTitle() {
+        if (selectedIsToday) return qsTr("Hoje");
+        return Qt.formatDate(root.selectedDate, Qt.DefaultLocaleLongDate);
     }
     function applyMonthLabelTheme(item) {
         // Plasma 6.7 DayDelegate switches disabled dates to the system palette;
@@ -57,6 +83,8 @@ ColumnLayout {
     }
     function applyMonthNavigationTheme() {
         const header = monthView.viewHeader;
+        // The macOS calendar has no Days/Months/Years tabs; the arrows and Today remain.
+        if (header.tabBar) header.tabBar.visible = false;
         for (let button of [header.previousButton, header.nextButton]) {
             if (!button) continue;
             button.Kirigami.Theme.inherit = false;
@@ -99,6 +127,8 @@ ColumnLayout {
         return Qt.formatTime(start, "HH:mm") + " – " + endLabel;
     }
     onFixtureEventsChanged: refreshAgenda()
+    onFixtureTomorrowEventsChanged: refreshAgenda()
+    onSelectedIsTodayChanged: refreshAgenda()
     onActiveChanged: refreshAgenda()
     onUsePimEventsChanged: refreshAgenda()
     Component.onCompleted: {
@@ -163,14 +193,56 @@ ColumnLayout {
         target: monthView.daysModel
         function onAgendaUpdated(updatedDate) { root.refreshAgenda(); }
     }
+    component EventRow: RowLayout {
+        id: row
+        required property var modelData
+        readonly property string accessibilityLabel: (modelData.title || qsTr("Sem título"))
+            + ". " + root.eventTime(modelData)
+        readonly property alias titleItem: eventTitle
+        spacing: Style.space.sm
+        Accessible.role: Accessible.ListItem
+        Accessible.name: accessibilityLabel
+        // A rounded bar in the calendar's color, as in the macOS Calendar widget.
+        Rectangle {
+            Layout.preferredWidth: Style.space.xxs + 1
+            Layout.fillHeight: true
+            radius: width / 2
+            color: root.eventColor(row.modelData)
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 0
+            Controls.Label {
+                id: eventTitle
+                objectName: "calendarEventTitle"
+                Layout.fillWidth: true
+                text: row.modelData.title || qsTr("Sem título")
+                textFormat: Text.PlainText
+                color: root.dock.foreground
+                font.weight: Style.weight.demiBold
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
+            Controls.Label {
+                Layout.fillWidth: true
+                text: root.eventTime(row.modelData)
+                textFormat: Text.PlainText
+                color: root.dock.muted
+                font.pixelSize: Style.type.caption
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
     Controls.Label {
+        objectName: "calendarDayTitle"
         Layout.fillWidth: true
         color: root.dock.foreground
-        text: Qt.formatDate(root.selectedDate, Qt.DefaultLocaleLongDate)
+        text: root.dayTitle()
         textFormat: Text.PlainText
-        Accessible.name: text
+        Accessible.name: root.selectedIsToday ? Qt.formatDate(root.selectedDate, Qt.DefaultLocaleLongDate) : text
         wrapMode: Text.WordWrap
-        font.bold: true
+        font.weight: Style.weight.bold
     }
     Controls.Label {
         objectName: "calendarEmptyState"
@@ -193,40 +265,39 @@ ColumnLayout {
         Layout.preferredHeight: Math.min(contentHeight, 170)
         visible: count > 0
         clip: true
-        spacing: 8
+        spacing: Style.space.sm
         boundsBehavior: Flickable.StopAtBounds
         model: root.agendaEvents
         Controls.ScrollBar.vertical: Controls.ScrollBar {}
-        delegate: ColumnLayout {
-            required property var modelData
-            readonly property string accessibilityLabel: (modelData.title || qsTr("Sem título"))
-                + ". " + root.eventTime(modelData)
-            width: agenda.width - 14
-            spacing: 2
-            Accessible.role: Accessible.ListItem
-            Accessible.name: accessibilityLabel
-            Controls.Label {
-                objectName: "calendarEventTitle"
-                Layout.fillWidth: true
-                text: modelData.title || qsTr("Sem título")
-                textFormat: Text.PlainText
-                color: root.dock.foreground
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-            }
-            Controls.Label {
-                Layout.fillWidth: true
-                text: root.eventTime(modelData)
-                textFormat: Text.PlainText
-                color: root.dock.muted
-                wrapMode: Text.WordWrap
-            }
-        }
+        delegate: EventRow { width: agenda.width - Style.space.md }
     }
+    Controls.Label {
+        objectName: "calendarTomorrowTitle"
+        Layout.fillWidth: true
+        Layout.topMargin: Style.space.xs
+        visible: root.tomorrowEvents.length > 0
+        text: qsTr("Amanhã")
+        textFormat: Text.PlainText
+        color: root.dock.foreground
+        font.weight: Style.weight.bold
+    }
+    ListView {
+        id: tomorrowAgenda
+        objectName: "calendarTomorrowList"
+        Layout.fillWidth: true
+        Layout.preferredHeight: Math.min(contentHeight, 110)
+        visible: count > 0
+        clip: true
+        spacing: Style.space.sm
+        boundsBehavior: Flickable.StopAtBounds
+        model: root.tomorrowEvents
+        delegate: EventRow { width: tomorrowAgenda.width - Style.space.md }
+    }
+    // Why a day may look empty; with events on screen it is not needed.
     Controls.Label {
         objectName: "calendarProviderExplanation"
         Layout.fillWidth: true
+        visible: root.agendaEvents.length === 0
         text: qsTr("O Orla usa, sem alterá-la, a seleção compartilhada com o relógio/calendário do KDE. Mudar essa seleção no KDE também muda o relógio. Contas e sincronização, inclusive Google, são configuradas no KOrganizer; atualidade e disponibilidade são geridas pelo KDE.")
         textFormat: Text.PlainText
         Accessible.name: text

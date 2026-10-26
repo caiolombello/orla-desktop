@@ -12,6 +12,18 @@ internos do `MonthView`, inclusive dias fora do mês que o componente KDE marca
 como desabilitados. Isso evita texto escuro sobre o fundo Midnight e acompanha
 as paletas clara e escura do Orla.
 
+## Aparência no estilo do macOS
+
+O popup segue o widget de calendário do macOS:
+- **título:** a data de hoje no formato longo do idioma, sem o ano
+  ("Domingo, 25 de outubro");
+- **grade:** mostra o mês com ‹ Hoje ›, sem as abas Dias/Meses/Anos;
+- **eventos:** cada um tem uma barra na cor do seu calendário, o título e o
+  horário, agrupados em "Hoje" e, com hoje selecionado, "Amanhã";
+- **sem eventos:** a explicação longa só aparece quando não há eventos na data.
+
+A galeria tem as cenas `popup-*-calendar-events`, com eventos sintéticos.
+
 ## Estados que o Orla consegue observar
 
 | Estado | Evidência disponível |

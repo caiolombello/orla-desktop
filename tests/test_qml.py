@@ -350,9 +350,10 @@ Item {
         moment = QDateTime(QDate(2026, 10, 21), QTime(12, 0))
         self.assertTrue(self.dock.setProperty("now", moment))
         title = self.window.findChild(QObject, "calendarPopup").property("title")
-        expected = QLocale("pt_BR").toString(moment.date(), "MMMM yyyy")
-        self.assertEqual(title, expected[:1].upper() + expected[1:])
+        # Today's date like the macOS Calendar widget: the long locale format without the year.
+        self.assertEqual(title, "Quarta-feira, 21 de outubro")
         self.assertNotIn("October", title)
+        self.assertNotIn("2026", title)
 
     def test_native_label_remaps_to_each_hovered_slot(self):
         # A visible Wayland popup keeps its first anchor; the label must re-map
