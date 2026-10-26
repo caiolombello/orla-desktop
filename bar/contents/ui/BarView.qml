@@ -12,6 +12,7 @@ Item {
     property var sessionBackend: null
     property var applicationBackend: null
     property var recentApplicationsBackend: null
+    property var softwareUpdatesBackend: null
     property var popupHost: null
     property var menuTooltipBackend: null
     property var controlCenterTooltipBackend: null
@@ -58,7 +59,7 @@ Item {
     readonly property bool nativeSessionLoaded: actions.nativeLoaded
     readonly property bool nativeApplicationLoaded: nativeApplication.item !== null
     readonly property string sessionStatus: actions.status
-    readonly property string actionError: actions.error || recent.error
+    readonly property string actionError: actions.error || recent.error || updates.error
     readonly property bool nativeRecentApplicationsLoaded: recent.nativeLoaded
     readonly property var application: applicationBackend !== null ? applicationBackend : nativeApplication.item
     property bool preserveApplication: false
@@ -85,6 +86,12 @@ Item {
     RecentApplications {
         id: recent
         backend: root.recentApplicationsBackend
+        hostVersion: root.hostVersion
+        wanted: root.showOrlaMenu
+    }
+    SoftwareUpdates {
+        id: updates
+        backend: root.softwareUpdatesBackend
         hostVersion: root.hostVersion
         wanted: root.showOrlaMenu
     }
@@ -158,6 +165,14 @@ Item {
         if (["system", "settings", "configure", "forceQuit"].indexOf(kind) < 0) return false;
         openRequested(kind);
         return true;
+    }
+    // Discover and Steam own their updates; the menu only hands the request over.
+    function openUpdates(kind) {
+        menu.restoreFocus = false;
+        menu.close();
+        const opened = kind === "steam" ? updates.openSteamDownloads() : updates.openSystemUpdates();
+        if (!opened) menuButton.forceActiveFocus(Qt.PopupFocusReason);
+        return opened;
     }
     // By ID, never by row: the list reorders as soon as another app starts.
     function launchRecent(slot) {
@@ -387,6 +402,8 @@ Item {
         id: entry
         // App icons keep their own colors; only a theme name is accepted.
         property string iconName: ""
+        // A short trailing badge, like the Apple menu's update count.
+        property string detail: ""
         implicitWidth: 248
         implicitHeight: Style.size.control - Style.space.sm - Style.space.xxs
         height: visible ? implicitHeight : 0
@@ -413,6 +430,22 @@ Item {
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillWidth: true
+            }
+            Rectangle {
+                visible: entry.detail !== ""
+                implicitWidth: badgeText.implicitWidth + Style.space.sm * 2
+                implicitHeight: badgeText.implicitHeight + Style.space.xxs * 2
+                radius: height / 2
+                color: entry.highlighted ? entry.palette.highlightedText : entry.palette.highlight
+                Text {
+                    id: badgeText
+                    anchors.centerIn: parent
+                    text: entry.detail
+                    textFormat: Text.PlainText
+                    font.pixelSize: Style.type.caption
+                    font.weight: Style.weight.demiBold
+                    color: entry.highlighted ? entry.palette.highlight : entry.palette.highlightedText
+                }
             }
         }
         background: Rectangle {
@@ -445,6 +478,7 @@ Item {
         property bool restoreFocus: true
         onAboutToShow: {
             root.preserveApplication = true;
+            updates.refresh();
             restoreFocus = true;
             if (root.popupHost) root.popupHost.showPopup(menu, menuButton);
         }
@@ -470,6 +504,21 @@ Item {
         OrlaMenuItem { objectName: "aboutOrla"; text: qsTr("Sobre Orla Desktop"); onTriggered: root.open("about") }
         OrlaMenuItem { objectName: "aboutSystem"; text: qsTr("Sobre o sistema"); onTriggered: root.open("system") }
         OrlaMenuItem { objectName: "systemSettings"; text: qsTr("Configurações do sistema"); onTriggered: root.open("settings") }
+        OrlaMenuItem {
+            objectName: "softwareUpdates"
+            // Short, so the badge fits beside it; the spoken name stays complete.
+            text: qsTr("Atualizações…")
+            detail: updates.badge
+            Accessible.name: updates.description ? qsTr("Atualizações de software, %1").arg(updates.description)
+                : qsTr("Atualizações de software")
+            onTriggered: root.openUpdates("system")
+        }
+        OrlaMenuItem {
+            objectName: "steamDownloads"
+            visible: updates.steamRunning
+            text: qsTr("Downloads do Steam…")
+            onTriggered: root.openUpdates("steam")
+        }
         OrlaMenuItem { objectName: "configureBar"; text: qsTr("Configurar barra…"); onTriggered: root.open("configure") }
         OrlaMenuSeparator { visible: recent.items.length > 0 }
         OrlaMenuItem { objectName: "recentHeader"; enabled: false; visible: recent.items.length > 0; text: qsTr("Recentes") }

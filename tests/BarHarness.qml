@@ -15,6 +15,7 @@ Window {
         sessionBackend: fixtureSession
         applicationBackend: fixtureApplication
         recentApplicationsBackend: fixtureRecent
+        softwareUpdatesBackend: fixtureUpdates
         hostVersion: "6.7.5"
         onOpenRequested: kind => fixtureSession.open(kind)
     }

@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Property, Signal, Slot, QUrl, Qt, QPointF
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlExpression
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 
@@ -92,6 +92,37 @@ class FixtureRecent(QObject):
         return self.result
 
 
+class FixtureUpdates(QObject):
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.values = dict(systemState="unknown", steamRunning=False)
+        self.calls = []
+        self.result = True
+
+    def update(self, **values):
+        self.values.update(values)
+        self.changed.emit()
+
+    systemState = Property(str, lambda self: self.values["systemState"], notify=changed)
+    steamRunning = Property(bool, lambda self: self.values["steamRunning"], notify=changed)
+
+    @Slot()
+    def refresh(self):
+        self.calls.append("refresh")
+
+    @Slot(result=bool)
+    def openSystemUpdates(self):
+        self.calls.append("system")
+        return self.result
+
+    @Slot(result=bool)
+    def openSteamDownloads(self):
+        self.calls.append("steam")
+        return self.result
+
+
 class FixtureControlCenter(QObject):
     changed = Signal()
 
@@ -134,6 +165,7 @@ class BarTests(unittest.TestCase):
         self.application = FixtureApplication()
         self.control_center = FixtureControlCenter()
         self.recent = FixtureRecent()
+        self.updates = FixtureUpdates()
         self.engine = QQmlApplicationEngine()
         self.warnings = []
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
@@ -141,6 +173,7 @@ class BarTests(unittest.TestCase):
         self.engine.rootContext().setContextProperty("fixtureApplication", self.application)
         self.engine.rootContext().setContextProperty("fixtureControlCenter", self.control_center)
         self.engine.rootContext().setContextProperty("fixtureRecent", self.recent)
+        self.engine.rootContext().setContextProperty("fixtureUpdates", self.updates)
         self.engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("BarHarness.qml").resolve())))
         self.assertTrue(self.engine.rootObjects(), self.warnings)
         self.window = self.engine.rootObjects()[0]
@@ -821,6 +854,74 @@ class BarTests(unittest.TestCase):
         self.assertEqual(shown[0].property("text"), "")
         self.assertFalse(self.evaluate("launchRecent(0)"))
         self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def accessible_name(self, item):
+        expression = QQmlExpression(QQmlEngine.contextForObject(item), item, "Accessible.name")
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value
+
+    def test_software_updates_show_discover_state_without_counting(self):
+        button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        QTest.qWait(20)
+        # Opening the menu asks the provider to read the state again.
+        self.assertEqual(self.updates.calls, ["refresh"])
+        entry = self.item("softwareUpdates")
+        self.assertTrue(entry.property("visible"))
+        # Nothing reported is not "up to date": no badge, no claim.
+        self.assertEqual(entry.property("detail"), "")
+        self.assertEqual(entry.property("text"), "Atualizações…")
+        self.assertEqual(self.accessible_name(entry), "Atualizações de software")
+        for state, badge, spoken in (
+                ("updates", "Disponíveis", "Atualizações disponíveis"),
+                ("security", "Segurança", "Atualizações de segurança disponíveis"),
+                ("reboot", "Reiniciar", "Reinicie para instalar as atualizações"),
+                ("busy", "Instalando…", "Instalando atualizações automáticas"),
+                ("offline", "Sem rede", "Sem rede para procurar atualizações"),
+                ("<b>new</b>", "", ""),
+                ("unknown", "", "")):
+            with self.subTest(state=state):
+                self.updates.update(systemState=state)
+                self.assertEqual(entry.property("detail"), badge)
+                self.assertEqual(self.accessible_name(entry),
+                                 "Atualizações de software, " + spoken if spoken else "Atualizações de software")
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.evaluate("triggered()", entry)
+        self.assertEqual(self.updates.calls[-1], "system")
+        self.assertEqual(self.bar.property("actionError"), "")
+        self.updates.result = False
+        self.evaluate("triggered()", entry)
+        self.assertEqual(self.bar.property("actionError"), "Não foi possível abrir as atualizações do sistema.")
+        self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def test_steam_downloads_only_while_steam_runs(self):
+        # Items of a closed menu always report invisible: open it first.
+        self.evaluate("forceActiveFocus()", self.item("orlaMenuButton"))
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        QTest.qWait(20)
+        steam = self.item("steamDownloads")
+        self.assertFalse(steam.property("visible"))
+        self.updates.update(steamRunning=True)
+        self.assertTrue(steam.property("visible"))
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.evaluate("triggered()", steam)
+        self.assertEqual(self.updates.calls[-1], "steam")
+        # Without Steam running, nothing is handed to it.
+        self.updates.update(steamRunning=False)
+        calls = len(self.updates.calls)
+        self.assertFalse(self.evaluate("openUpdates('steam')"))
+        self.assertEqual(len(self.updates.calls), calls)
+        self.evaluate("softwareUpdatesBackend = ({systemState: 'updates', steamRunning: true,"
+                      " openSteamDownloads: function() { throw new Error('private launcher details'); }})")
+        self.assertFalse(self.evaluate("openUpdates('steam')"))
+        self.assertEqual(self.bar.property("actionError"), "Não foi possível abrir os downloads do Steam.")
+        # A provider without the system action reports an error instead of failing silently.
+        self.assertFalse(self.evaluate("openUpdates('system')"))
+        self.assertEqual(self.bar.property("actionError"), "Não foi possível abrir as atualizações do sistema.")
         self.assertEqual(self.warnings, [])
 
     def test_force_quit_hands_off_to_the_host_only_when_chosen(self):
