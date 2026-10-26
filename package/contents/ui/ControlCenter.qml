@@ -26,6 +26,10 @@ Controls.Control {
     property color foreground: palette.windowText
     property color muted: palette.windowText
     property bool playing: false
+    // {canPrevious, canPlayPause, canNext, lengthUs, positionUs, playPause(), previous(), next(),
+    //  refreshPosition(), timeText(us)}; optional, without it the card only shows the track.
+    property var mediaState: null
+    readonly property bool mediaProgressShown: !!root.mediaState && !!root.player && root.mediaState.lengthUs > 0
     property string soundError: ""
     property string powerError: ""
     property string networkError: ""
@@ -388,7 +392,61 @@ Controls.Control {
                                 elide: Text.ElideRight
                                 color: root.muted
                             }
+                            // A thin read-only progress line, as in the macOS Now Playing module.
+                            Rectangle {
+                                objectName: "controlCenterMediaProgress"
+                                Layout.fillWidth: true
+                                Layout.topMargin: Style.space.xs
+                                Layout.preferredHeight: Style.space.xxs + 1
+                                visible: root.mediaProgressShown
+                                radius: height / 2
+                                color: Style.alpha(root.foreground, 0.16)
+                                Accessible.role: Accessible.ProgressBar
+                                Accessible.name: qsTr("Posição na faixa")
+                                Rectangle {
+                                    width: root.mediaProgressShown ? parent.width * root.mediaState.positionUs / root.mediaState.lengthUs : 0
+                                    height: parent.height
+                                    radius: height / 2
+                                    color: root.foreground
+                                }
+                            }
+                            RowLayout {
+                                objectName: "controlCenterMediaControls"
+                                Layout.topMargin: Style.space.xs
+                                visible: !!root.mediaState && !!root.player
+                                spacing: Style.space.xs
+                                OrlaIconButton {
+                                    objectName: "controlCenterMediaPrevious"
+                                    flat: true
+                                    iconName: "media-skip-backward-symbolic"
+                                    text: qsTr("Anterior")
+                                    enabled: !!root.mediaState && root.mediaState.canPrevious
+                                    onClicked: root.mediaState.previous()
+                                }
+                                OrlaIconButton {
+                                    objectName: "controlCenterMediaPlayPause"
+                                    flat: true
+                                    iconName: root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
+                                    text: root.playing ? qsTr("Pausar") : qsTr("Reproduzir")
+                                    enabled: !!root.mediaState && root.mediaState.canPlayPause
+                                    onClicked: root.mediaState.playPause()
+                                }
+                                OrlaIconButton {
+                                    objectName: "controlCenterMediaNext"
+                                    flat: true
+                                    iconName: "media-skip-forward-symbolic"
+                                    text: qsTr("Próxima")
+                                    enabled: !!root.mediaState && root.mediaState.canNext
+                                    onClicked: root.mediaState.next()
+                                }
+                            }
                         }
+                    }
+                    Timer {
+                        interval: 1000
+                        repeat: true
+                        running: root.visible && root.playing && !!root.mediaState
+                        onTriggered: root.mediaState.refreshPosition()
                     }
                 }
 

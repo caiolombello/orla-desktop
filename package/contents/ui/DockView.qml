@@ -1288,6 +1288,7 @@ Item {
         battery: ({status: power.status, summary: power.summary, subtitle: root.powerSubtitle,
             percent: power.percent, percentKnown: power.percentKnown, charging: power.charging === "charging"})
         playing: root.mediaPlaying
+        mediaState: musicControls.mediaState
         audio: audioControlState
         brightness: brightnessControlState
         doNotDisturb: doNotDisturbState

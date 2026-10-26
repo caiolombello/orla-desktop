@@ -50,6 +50,21 @@ Window {
         property string artist: "Artista sintético"
         property string identity: "Player sintético"
     }
+    property alias mediaState: fixtureMediaState
+    QtObject {
+        id: fixtureMediaState
+        objectName: "controlCenterMediaState"
+        property var calls: []
+        property bool canPrevious: true
+        property bool canPlayPause: true
+        property bool canNext: false
+        property real lengthUs: 200000000
+        property real positionUs: 50000000
+        function playPause() { calls = calls.concat(["playPause"]); return true; }
+        function previous() { calls = calls.concat(["previous"]); return true; }
+        function next() { calls = calls.concat(["next"]); return true; }
+        function refreshPosition() { calls = calls.concat(["refreshPosition"]); }
+    }
     QtObject {
         id: fixtureAudioBackend
         objectName: "controlCenterAudioBackend"
@@ -213,6 +228,7 @@ Window {
         height: window.height
         actions: actions
         player: fixturePlayer
+        mediaState: fixtureMediaState
         battery: fixtureBattery
         audio: fixtureAudio
         brightness: fixtureBrightness

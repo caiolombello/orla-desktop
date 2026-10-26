@@ -18,6 +18,8 @@ DockPopup {
     property var bluetooth: null
     property QtObject backendLifetime: null
     property bool playing: false
+    // The dock's MediaState: transport commands and progress for Now Playing.
+    property var mediaState: null
     property var validateClient: function(client) { return false; }
     readonly property alias host: session.host
     readonly property Item geometryHost: host || owner
@@ -71,6 +73,7 @@ DockPopup {
         player: rootPopup.player
         battery: rootPopup.battery
         playing: rootPopup.playing
+        mediaState: rootPopup.mediaState
         audio: rootPopup.audio
         brightness: rootPopup.brightness
         doNotDisturb: rootPopup.doNotDisturb
