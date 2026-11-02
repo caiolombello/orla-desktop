@@ -6,7 +6,7 @@
 
 O Orla Dock é um applet de código aberto para fixar aplicativos, alternar entre janelas abertas e manter algumas ferramentas por perto. Ainda está em alpha: o dock funciona hoje. O checkout de código também tem componentes experimentais para menu da barra, launcher e uma primeira fatia da Central de Controle; integração completa, apresentações de notificação e várias integrações continuam planejadas.
 
-> [Site do projeto](https://orla-desktop.sunlit-duck-7687.chatgpt.site) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
+> [Site do projeto](https://caiolombello.github.io/orla-desktop/) · [English](README.md) · [Roadmap](ROADMAP.md) · [Guia de identidade](docs/brand.md)
 
 O checkout inclui um [launcher independente experimental](launcher/README.md) para aplicativos e cálculos locais, compilado separadamente com C++/Qt/KF6. Uma verificação local atual em uma tela Plasma 6.7.5/Wayland comprovou ativação por Ctrl+Alt+Meta+O, busca, seleção com ↓ e Escape retornando o foco à mesma janela de teste. Execução de aplicativos, provedores reais de IA e vários monitores continuam sem qualificação. O Source inclui [atribuição reversível de Meta ao Orla Search](launcher/README.md), opt-in e com recuperação da configuração anterior; o baseline de foco mantém limites de prontidão registrados. O painel opcional de compatibilidade com IA não autentica nem gera respostas; o Source experimental posterior acrescenta um painel de texto Ollama opt-in, cujo comportamento com provedor real continua sem qualificação. Veja a [validação Source de IA](docs/validation/ai-provider-source.md).
 
