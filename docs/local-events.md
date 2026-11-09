@@ -54,6 +54,15 @@ Island do iPhone:
 - **Microfone ou câmera em uso:** ícone laranja (microfone) ou verde (câmera),
   como no macOS. Ocupa a ilha só quando nada mais está ativo; senão vira um
   ícone pequeno no fim da cápsula.
+- **Próxima reunião:** de 10 minutos antes até 5 minutos depois do início de um
+  evento com horário (eventos de dia inteiro não contam), vinda do mesmo plugin
+  da agenda do dock e só com os eventos da agenda ligados. Tem prioridade sobre
+  tudo. A cápsula compacta mostra só "Em 5 min"; o título aparece ao expandir,
+  para não ficar à mostra numa tela compartilhada.
+- **Avisos de bateria:** "Carregando" ao ligar o carregador e "Bateria fraca" ao
+  cair para 20% e para 10%, com a barra de nível em verde, âmbar ou vermelho
+  (UPower, em tempo real). Um celular pareado pelo KDE Connect avisa ao cair
+  para 20% e 10%.
 
 Um aviso (Pomodoro concluído, volume) toma a ilha enquanto dura e depois a
 devolve. Um clique na ilha expande a atividade: a música ganha capa, progresso
@@ -135,6 +144,15 @@ iPhone's Dynamic Island:
 - **Microphone or camera in use:** an orange (microphone) or green (camera)
   icon, as on macOS. It takes the island only when nothing else is live;
   otherwise it becomes a small icon at the capsule's end.
+- **Next meeting:** from 10 minutes before to 5 minutes after a timed event
+  starts (all-day events never count), read through the dock calendar's
+  plugin and only with calendar events on. It outranks everything. The compact
+  capsule shows only "Em 5 min"; the title appears when expanded, so it is not
+  on display on a shared screen.
+- **Battery notices:** "Carregando" when the charger is plugged in and "Bateria
+  fraca" when the level drops to 20% and to 10%, with the level bar in green,
+  amber or red (UPower, live). A phone paired through KDE Connect notifies at
+  20% and 10%.
 
 A notice (Pomodoro done, volume) takes the island over while it lasts, then
 gives it back. A click expands the activity: music gets cover, progress and

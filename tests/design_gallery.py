@@ -890,6 +890,10 @@ class Gallery:
             ("volume", "clear(); submit({kind:'audio',action:'volume',targetId:'speakers',"
                        "originScope:'profile:work',contextGeneration:2,value:65,"
                        "title:'Volume · 65%',detail:'Alto-falantes'},Date.now())"),
+            ("charging", "clear(); powerEnabled = true; submit({kind:'power',action:'charging',value:64,"
+                         "title:'Carregando',detail:'64% de bateria'},Date.now())"),
+            ("battery-low", "clear(); submit({kind:'power',action:'low',value:10,"
+                            "title:'Bateria fraca',detail:'10% restantes'},Date.now())"),
         )
         for name, source in scenes:
             run(state, source)
@@ -902,6 +906,9 @@ class Gallery:
             ("timer", "timerRunning = true; timerSecondsLeft = 754"),
             ("privacy", "timerRunning = false; mediaPlaying = false; cameraInUse = true"),
             ("music-expanded", "cameraInUse = false; microphoneInUse = false; mediaPlaying = true; expanded = true"),
+            ("meeting", "expanded = false; nowMs = Date.now(); calendarEvents = [{title: 'Reunião sintética',"
+                        " startMs: Date.now() + 270000, endMs: Date.now() + 2070000}]"),
+            ("meeting-expanded", "expanded = true"),
         )
         for name, source in live:
             run(rules, source)

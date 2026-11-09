@@ -20,6 +20,9 @@ QtObject {
     property string mediaArtUrl: ""
     property bool microphoneInUse: false
     property bool cameraInUse: false
+    // Today's timed calendar events, [{title, startMs, endMs, allDay}], and the clock.
+    property var calendarEvents: []
+    property double nowMs: Date.now()
     property bool expanded: false
     // Paused music stays in the island a moment, so the play button that
     // paused it is still there to resume it.
@@ -29,7 +32,9 @@ QtObject {
     readonly property bool hasEvent: Boolean(eventState && eventState.current)
     readonly property var privacy: Island.privacyState(activitiesEnabled
         ? {microphone: microphoneInUse, camera: cameraInUse} : null)
+    readonly property var meeting: activitiesEnabled ? Island.nextMeeting(calendarEvents, nowMs) : null
     readonly property var activities: activitiesEnabled ? Island.activities({
+        meeting: meeting ? {title: meeting.title, startMs: meeting.startMs, endMs: meeting.endMs, nowMs: nowMs} : null,
         timer: {running: timerRunning, secondsLeft: timerSecondsLeft, isBreak: timerBreak},
         media: {playing: mediaPlaying, held: mediaPaused && (mediaHeld || expanded),
             title: mediaTitle, artist: mediaArtist, artUrl: mediaArtUrl},

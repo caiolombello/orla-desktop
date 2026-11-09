@@ -306,12 +306,28 @@ class LocalEventsProductTests(unittest.TestCase):
         self.settle()
         self.assertEqual(self.evaluate("privacy", rules), {"microphone": True, "camera": False})
 
+        state = self.event_state()
+        self.assertTrue(state.property("powerEnabled"))
+        self.evaluate("islandSensorsOverride = {microphoneInUse: true, cameraInUse: false, power: {percent: 30, state: 2}}")
+        self.settle()
+        self.evaluate("islandSensorsOverride = {microphoneInUse: true, cameraInUse: false, power: {percent: 30, state: 1}}")
+        self.settle()
+        current = state.property("current")
+        current = current.toVariant() if hasattr(current, "toVariant") else current
+        self.assertEqual((current["kind"], current["action"]), ("power", "charging"))
+        self.evaluate("dismiss()", state)
+        self.evaluate("islandSensorsOverride = {calendarEvents: [{title: 'Reunião sintética', startMs: Date.now() + 120000,"
+                      " endMs: Date.now() + 900000, allDay: false}]}")
+        self.settle(1100)
+        self.assertEqual(self.evaluate("primary.kind", rules), "meeting")
+
         # Turning activities off leaves only notices, and none are requested.
         self.config.setProperty("islandActivities", False)
         self.settle()
         self.assertFalse(self.evaluate("eventIslandActive"))
         self.assertEqual(rules.property("mode"), "idle")
         self.assertEqual(self.evaluate("privacy", rules), {"microphone": False, "camera": False})
+        self.assertFalse(state.property("powerEnabled"))
         self.config.setProperty("timerDeadline", 0)
 
     def test_island_kconfig_and_setting_are_global_and_default_off(self):
@@ -1459,6 +1475,66 @@ class EventIslandTests(unittest.TestCase):
         self.assertEqual(self.rules.property("mode"), "compact")
         self.assertTrue(self.item("islandCompact").isVisible())
 
+    def test_battery_notices_show_a_tinted_level_and_their_icon(self):
+        self.state.setProperty("powerEnabled", True)
+        self.submit({"kind": "power", "action": "charging", "value": 64, "title": "Carregando",
+                     "detail": "64% de bateria"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "battery-060-charging-symbolic")
+        self.assertTrue(self.item("eventIslandLevel").isVisible())
+        self.assertTrue(self.item("eventIslandDetail").isVisible())
+        self.assertAlmostEqual(self.item("eventIslandLevelFill").width(), self.item("eventIslandLevel").width() * 0.64, places=3)
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#69d7c2")
+        self.evaluate("clear()", self.state)
+        self.submit({"kind": "power", "action": "low", "value": 10, "title": "Bateria fraca", "detail": "10% restantes"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "battery-caution-symbolic")
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#ff8a7a")
+        self.evaluate("clear()", self.state)
+        self.submit({"kind": "power", "action": "phone-low", "value": 20, "title": "Celular com bateria fraca",
+                     "detail": "Celular sintético · 20%"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "phone-battery-symbolic")
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#f2b866")
+
+    def test_meeting_keeps_its_title_for_the_expanded_view(self):
+        import time
+        now = int(time.time() * 1000)
+        self.live(nowMs=now, calendarEvents=[{"title": "Reunião sintética", "startMs": now + 4 * 60_000 + 500,
+                                              "endMs": now + 34 * 60_000}],
+                  mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "meeting")
+        self.assertEqual(self.item("islandCompactText").property("text"), "Em 5 min")
+        self.assertEqual(self.item("islandCompactIcon").property("name"), "appointment-soon-symbolic")
+        self.assertIn("Reunião sintética", self.evaluate("summary()", self.island))
+        self.click("islandTapArea")
+        self.assertEqual(self.item("islandMeetingTitle").property("text"), "Reunião sintética")
+        self.assertIn("Em 5 min", self.item("islandMeetingTime").property("text"))
+        self.assertIn(" – ", self.item("islandMeetingTime").property("text"))
+        self.live(nowMs=now + 5 * 60_000)
+        self.assertEqual(self.item("islandMeetingTime").property("text").split(" · ")[1], "Agora")
+        # Past the tail, the music comes back and the expanded view stays on it.
+        self.live(nowMs=now + 11 * 60_000)
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "media")
+
+    def test_notices_compare_each_battery_reading_with_the_last(self):
+        notices = self.window.findChild(QObject, "islandNotices")
+        self.state.setProperty("powerEnabled", True)
+        notices.setProperty("enabled", True)
+        self.evaluate("power = {percent: 40, state: 2}", notices)
+        self.assertIsNone(self.state.property("current"))
+        self.evaluate("power = {percent: 40, state: 1}", notices)
+        QTest.qWait(30)
+        current = self.evaluate("current", self.state)
+        self.assertEqual((current["action"], current["title"], current["detail"]), ("charging", "Carregando", "40% de bateria"))
+        self.evaluate("clear()", self.state)
+        self.evaluate("phones = [{id: 'phone-a', name: 'Celular sintético', charge: 21, charging: false}]", notices)
+        self.evaluate("phones = [{id: 'phone-a', name: 'Celular sintético', charge: 20, charging: false}]", notices)
+        current = self.evaluate("current", self.state)
+        self.assertEqual((current["action"], current["detail"]), ("phone-low", "Celular sintético · 20%"))
+        # Off forgets the last readings: turning on again raises nothing by itself.
+        self.evaluate("clear()", self.state)
+        notices.setProperty("enabled", False)
+        notices.setProperty("enabled", True)
+        self.assertIsNone(self.state.property("current"))
+
     def test_dialog_fallback_shows_activities_but_never_expands_or_takes_clicks(self):
         self.island.setProperty("fixedSize", True)
         self.island.setProperty("interactive", False)
@@ -1514,6 +1590,42 @@ class IslandLogicTests(unittest.TestCase):
         self.assertEqual(self.call("activities", {"timer": {"running": True, "secondsLeft": "x"}}), [])
         self.assertEqual(self.call("activities", None), [])
         self.assertEqual(self.call("activities", {"privacy": {"camera": True}})[0]["kind"], "privacy")
+
+    def test_next_meeting_window_skips_all_day_and_picks_the_earliest(self):
+        now = 1_000_000_000
+        minute = 60_000
+        events = [{"title": "Dia inteiro", "startMs": now - minute, "endMs": now + 60 * minute, "allDay": True},
+                  {"title": "Mais tarde", "startMs": now + 9 * minute, "endMs": now + 30 * minute},
+                  {"title": "Logo", "startMs": now + 4 * minute, "endMs": now + 34 * minute},
+                  {"title": "Longe", "startMs": now + 11 * minute}]
+        self.assertEqual(self.call("nextMeeting", events, now)["title"], "Logo")
+        self.assertIsNone(self.call("nextMeeting", [events[3]], now))
+        self.assertEqual(self.call("nextMeeting", [{"title": "Começou", "startMs": now - 4 * minute}], now)["title"], "Começou")
+        self.assertIsNone(self.call("nextMeeting", [{"title": "Antiga", "startMs": now - 6 * minute}], now))
+        self.assertIsNone(self.call("nextMeeting", None, now))
+        meeting = self.call("activities", {"meeting": {"title": "Logo", "startMs": now + 4 * minute + 1, "nowMs": now},
+                                           "timer": {"running": True, "secondsLeft": 60}})
+        self.assertEqual([entry["kind"] for entry in meeting], ["meeting", "timer"])
+        self.assertEqual(meeting[0]["minutes"], 5)
+
+    def test_power_notices_fire_on_plug_in_and_each_low_level_once(self):
+        self.assertIsNone(self.call("powerNotice", None, {"percent": 50, "state": 1}))
+        self.assertIsNone(self.call("powerNotice", {"percent": 50, "state": 0}, {"percent": 50, "state": 1}))
+        self.assertEqual(self.call("powerNotice", {"percent": 50, "state": 2}, {"percent": 50.4, "state": 1}),
+                         {"action": "charging", "value": 50})
+        self.assertEqual(self.call("powerNotice", {"percent": 50, "state": 2}, {"percent": 50, "state": 5})["action"], "charging")
+        self.assertIsNone(self.call("powerNotice", {"percent": 50, "state": 1}, {"percent": 51, "state": 4}))
+        self.assertEqual(self.call("powerNotice", {"percent": 21, "state": 2}, {"percent": 20, "state": 2}),
+                         {"action": "low", "value": 20})
+        self.assertIsNone(self.call("powerNotice", {"percent": 20, "state": 2}, {"percent": 19, "state": 2}))
+        self.assertEqual(self.call("powerNotice", {"percent": 11, "state": 2}, {"percent": 10, "state": 2})["value"], 10)
+        self.assertIsNone(self.call("powerNotice", {"percent": 30, "state": 2}, {"percent": 130, "state": 2}))
+        self.assertEqual(self.call("phoneNotice", {"charge": 16, "charging": False}, {"charge": 15, "charging": False}),
+                         None)
+        self.assertEqual(self.call("phoneNotice", {"charge": 21, "charging": False}, {"charge": 20, "charging": False}),
+                         {"action": "phone-low", "value": 20})
+        self.assertIsNone(self.call("phoneNotice", {"charge": 21, "charging": False}, {"charge": 20, "charging": True}))
+        self.assertIsNone(self.call("phoneNotice", None, {"charge": 5, "charging": False}))
 
     def test_mode(self):
         live = [{"kind": "media"}]

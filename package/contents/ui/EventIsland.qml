@@ -49,7 +49,11 @@ Item {
     readonly property bool showing: mode !== "idle" || capsule.opacity > 0
     readonly property string kind: shownActivity ? shownActivity.kind : ""
     readonly property bool volume: shown !== null && shown.kind === "audio" && shown.action === "volume"
-    readonly property int level: volume ? Math.max(0, Math.min(100, Number(shown.value) || 0)) : 0
+    readonly property bool power: shown !== null && shown.kind === "power"
+    readonly property int level: volume || power ? Math.max(0, Math.min(100, Number(shown.value) || 0)) : 0
+    // Battery bars as the levels elsewhere: green while charging, amber or red when low.
+    readonly property color levelColor: !power ? scheme.text : shown.action === "charging" ? Style.levels.good
+        : level <= 10 ? Style.levels.critical : Style.levels.low
     readonly property var scheme: Style.scheme("dark")
     readonly property color timerTint: Style.iconTiles.coral.top
 
@@ -99,11 +103,21 @@ Item {
 
     function summary() {
         if (!activity) return "";
+        if (activity.kind === "meeting") return activity.title + ". " + meetingWhen(activity);
         if (activity.kind === "timer")
             return (activity.isBreak ? qsTr("Pausa") : qsTr("Foco")) + ". " + qsTr("%1 restantes").arg(Island.clock(activity.secondsLeft));
         if (activity.kind === "media")
             return (activity.playing ? qsTr("Tocando") : qsTr("Pausado")) + ". " + activity.title;
         return privacyText(activity);
+    }
+    function meetingWhen(value) {
+        return value && value.minutes > 0 ? qsTr("Em %1 min").arg(value.minutes) : qsTr("Agora");
+    }
+    function meetingSpan(value) {
+        if (!value) return "";
+        const start = Qt.formatTime(new Date(value.startMs), Qt.locale().timeFormat(Locale.ShortFormat));
+        const end = Qt.formatTime(new Date(value.endMs), Qt.locale().timeFormat(Locale.ShortFormat));
+        return value.endMs > value.startMs ? start + " – " + end : start;
     }
     function privacyText(value) {
         if (!value) return "";
@@ -113,6 +127,12 @@ Item {
     function iconName() {
         if (shown === null) return "";
         if (shown.kind === "completion") return "chronometer-symbolic";
+        if (shown.kind === "power") {
+            if (shown.action === "phone-low") return "phone-battery-symbolic";
+            if (shown.action === "low") return "battery-caution-symbolic";
+            const tens = Math.round(level / 10) * 10;
+            return "battery-" + (tens < 10 ? "00" : tens < 100 ? "0" : "") + tens + "-charging-symbolic";
+        }
         if (shown.action === "mute") return shown.value ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
         if (shown.action === "default-output") return "audio-speakers-symbolic";
         return level === 0 ? "audio-volume-muted-symbolic" : level < 34 ? "audio-volume-low-symbolic"
@@ -231,23 +251,24 @@ Item {
                     color: island.scheme.textMuted
                 }
             }
-            // The volume as a white capsule bar, as the iPhone shows it.
+            // The volume as a white capsule bar, as the iPhone shows it; battery tinted.
             Rectangle {
                 objectName: "eventIslandLevel"
-                visible: island.volume
+                visible: island.volume || island.power
                 Layout.preferredWidth: Style.space.xxxl * 2
                 Layout.preferredHeight: Style.space.xs
                 Layout.alignment: Qt.AlignVCenter
                 radius: height / 2
                 color: Style.alpha(island.scheme.text, Style.state.selected)
                 Accessible.role: Accessible.ProgressBar
-                Accessible.name: island.volume ? qsTr("Volume %1%").arg(island.level) : ""
+                Accessible.name: island.volume ? qsTr("Volume %1%").arg(island.level)
+                    : island.power ? qsTr("Bateria %1%").arg(island.level) : ""
                 Rectangle {
                     objectName: "eventIslandLevelFill"
                     width: parent.width * island.level / 100
                     height: parent.height
                     radius: height / 2
-                    color: island.scheme.text
+                    color: island.levelColor
                 }
             }
         }
@@ -277,11 +298,13 @@ Item {
                     objectName: "islandCompactIcon"
                     anchors.fill: parent
                     visible: !compactCover.visible
-                    name: island.kind === "timer" ? "chronometer-symbolic"
+                    name: island.kind === "meeting" ? "appointment-soon-symbolic"
+                        : island.kind === "timer" ? "chronometer-symbolic"
                         : island.kind === "media" ? "audio-x-generic-symbolic"
                         : island.kind === "privacy" && island.shownActivity.microphone ? "audio-input-microphone-symbolic"
                         : island.kind === "privacy" ? "camera-web-symbolic" : ""
-                    color: island.kind === "timer" ? island.timerTint
+                    color: island.kind === "meeting" ? island.scheme.accent
+                        : island.kind === "timer" ? island.timerTint
                         : island.kind === "privacy" && island.shownActivity.microphone ? Style.privacy.microphone
                         : island.kind === "privacy" ? Style.privacy.camera : island.scheme.text
                     sourceSize.width: Style.size.iconSm
@@ -293,7 +316,9 @@ Item {
                 Layout.maximumWidth: Style.size.popupWidth / 2
                 Layout.alignment: Qt.AlignVCenter
                 visible: text.length > 0
+                // The meeting's title waits for the expanded view, off a shared screen.
                 text: island.kind === "media" ? island.shownActivity.title
+                    : island.kind === "meeting" ? island.meetingWhen(island.shownActivity)
                     : island.kind === "privacy" ? island.privacyText(island.shownActivity)
                     : island.kind === "timer" ? (island.shownActivity.isBreak ? qsTr("Pausa") : qsTr("Foco")) : ""
                 textFormat: Text.PlainText
@@ -562,6 +587,46 @@ Item {
                     text: qsTr("Reiniciar o Pomodoro")
                     enabled: island.interactive && Boolean(island.timerController)
                     onClicked: island.timerController.reset()
+                }
+            }
+
+            // Meeting: title, time and how soon it starts.
+            RowLayout {
+                visible: island.kind === "meeting"
+                Layout.fillWidth: true
+                spacing: Style.space.md
+                ControlsImpl.IconImage {
+                    name: "appointment-soon-symbolic"
+                    color: island.scheme.accent
+                    sourceSize.width: Style.size.iconLg
+                    sourceSize.height: Style.size.iconLg
+                    Layout.alignment: Qt.AlignTop
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space.xxs
+                    Text {
+                        objectName: "islandMeetingTitle"
+                        Layout.fillWidth: true
+                        text: island.kind === "meeting" ? island.shownActivity.title || qsTr("Sem título") : ""
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Style.type.body
+                        font.weight: Style.weight.demiBold
+                        color: island.scheme.text
+                    }
+                    Text {
+                        objectName: "islandMeetingTime"
+                        Layout.fillWidth: true
+                        text: island.kind === "meeting"
+                            ? island.meetingSpan(island.shownActivity) + " · " + island.meetingWhen(island.shownActivity) : ""
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font.pixelSize: Style.type.caption
+                        color: island.scheme.textMuted
+                    }
                 }
             }
 
