@@ -21,6 +21,7 @@
 #include "OrlaCommandController.h"
 #include "BusChecks.h"
 #include <QDBusConnection>
+#include <QDBusMetaType>
 
 namespace {
 // The second exact favorite-file read is the Store's own reload, after the
@@ -81,6 +82,69 @@ public Q_SLOTS:
     void promptLogout() { calls.append(QStringLiteral("promptLogout")); }
     void promptShutDown() { calls.append(QStringLiteral("promptShutDown")); }
     void promptReboot() { calls.append(QStringLiteral("promptReboot")); }
+};
+// org.kde.krunner1 wire types: Match -> a(sssida{sv}), Actions -> a(sss).
+struct FakeRemoteMatch {
+    QString id, text, iconName;
+    int categoryRelevance = 0;
+    double relevance = 0;
+    QVariantMap properties;
+};
+struct FakeRemoteAction { QString id, text, iconName; };
+Q_DECLARE_METATYPE(FakeRemoteMatch)
+Q_DECLARE_METATYPE(FakeRemoteAction)
+QDBusArgument &operator<<(QDBusArgument &argument, const FakeRemoteMatch &match)
+{
+    argument.beginStructure();
+    argument << match.id << match.text << match.iconName << match.categoryRelevance << match.relevance << match.properties;
+    argument.endStructure();
+    return argument;
+}
+const QDBusArgument &operator>>(const QDBusArgument &argument, FakeRemoteMatch &match)
+{
+    argument.beginStructure();
+    argument >> match.id >> match.text >> match.iconName >> match.categoryRelevance >> match.relevance >> match.properties;
+    argument.endStructure();
+    return argument;
+}
+QDBusArgument &operator<<(QDBusArgument &argument, const FakeRemoteAction &action)
+{
+    argument.beginStructure();
+    argument << action.id << action.text << action.iconName;
+    argument.endStructure();
+    return argument;
+}
+const QDBusArgument &operator>>(const QDBusArgument &argument, FakeRemoteAction &action)
+{
+    argument.beginStructure();
+    argument >> action.id >> action.text >> action.iconName;
+    argument.endStructure();
+    return argument;
+}
+// A file search like Baloo's: many categories, each more relevant than apps.
+class FakeFileSearchRunner final : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.krunner1")
+public:
+    int matchCalls = 0;
+public Q_SLOTS:
+    QList<FakeRemoteAction> Actions() { return {}; }
+    QList<FakeRemoteMatch> Match(const QString &query)
+    {
+        ++matchCalls;
+        QList<FakeRemoteMatch> matches;
+        for (int category = 0; category < 10; ++category) {
+            for (int item = 0; item < 4; ++item) {
+                const QString name = QStringLiteral("%1 arquivo %2-%3").arg(query).arg(category).arg(item);
+                matches.append({QStringLiteral("file-%1-%2").arg(category).arg(item), name, QStringLiteral("text-plain"), 100, 1.0,
+                    {{QStringLiteral("category"), QStringLiteral("Categoria sintética %1").arg(category)},
+                     {QStringLiteral("urls"), QStringList{QStringLiteral("file:///orla-fixture/%1-%2.txt").arg(category).arg(item)}}}});
+            }
+        }
+        return matches;
+    }
+    void Run(const QString &, const QString &) {}
 };
 // The unconfirmed ksmserver path; the launcher must never reach it.
 class FakeShutdown final : public QObject
@@ -1010,6 +1074,87 @@ private Q_SLOTS:
             for (const auto &runner : owner.observedRunners()) QVERIFY(runner->id() != QStringLiteral("baloosearch"));
         }
         QVERIFY(QFile::remove(krunnerrc));
+    }
+    void busySourcesNeverShrinkTheApplicationBudget()
+    {
+        const QString data = qEnvironmentVariable("XDG_DATA_HOME");
+        const QString applications = data + QStringLiteral("/applications");
+        const QString plugins = data + QStringLiteral("/krunner/dbusplugins");
+        const QString metadata = plugins + QStringLiteral("/plasma-runner-baloosearch.desktop");
+        const QString service = QStringLiteral("org.orla.test.FileSearch");
+        QVERIFY(QDir().mkpath(applications) && QDir().mkpath(plugins));
+        QStringList fixtureApps;
+        FakeFileSearchRunner files;
+        auto bus = QDBusConnection::sessionBus();
+        auto rebuildSycoca = [] {
+            QProcess cache;
+            cache.start(QStringLiteral("/usr/bin/kbuildsycoca6"), {QStringLiteral("--noincremental")});
+            return cache.waitForFinished(5000) && cache.exitStatus() == QProcess::NormalExit && cache.exitCode() == 0;
+        };
+        const auto cleanup = qScopeGuard([&] {
+            bus.unregisterService(service);
+            bus.unregisterObject(QStringLiteral("/runner"));
+            QFile::remove(metadata);
+            for (const auto &path : std::as_const(fixtureApps)) QFile::remove(path);
+            rebuildSycoca();
+        });
+        // More matching apps than the app budget, all sharing one synthetic token.
+        // The services runner folds equal Exec lines, so each one is distinct.
+        for (int index = 0; index < 40; ++index) {
+            QFile desktop(applications + QStringLiteral("/org.orla.BudgetFixture%1.desktop").arg(index, 2, 10, QLatin1Char('0')));
+            QVERIFY(desktop.open(QIODevice::WriteOnly));
+            fixtureApps.append(desktop.fileName());
+            desktop.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=OrlaBudgetFixture %1\nExec=\"%2\" -c pass %1\nTerminal=false\n")
+                .arg(index).arg(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE)).toUtf8());
+        }
+        QVERIFY(rebuildSycoca());
+        QTRY_VERIFY_WITH_TIMEOUT((KSycoca::self()->ensureCacheValid(),
+            KService::serviceByStorageId(QStringLiteral("org.orla.BudgetFixture39.desktop"))), 3000);
+        const QString query = QStringLiteral("OrlaBudgetFixture");
+        auto count = [](const LauncherController &launcher, const QString &category) {
+            int rows = 0;
+            for (const auto &row : launcher.rows()) rows += row.toMap().value(QStringLiteral("category")).toString() == category;
+            return rows;
+        };
+        int baseline = 0;
+        {
+            LauncherControllerTestOwner owner;
+            auto &launcher = owner.controller();
+            launcher.setQuery(query);
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+            QTest::qWait(100);
+            baseline = count(launcher, QStringLiteral("applications"));
+            QCOMPARE(count(launcher, QStringLiteral("files")), 0);
+        }
+        QCOMPARE(baseline, 32); // The app budget, as with apps and calculator alone.
+
+        // Baloo's allowlisted plugin id, served by this process: ten categories of
+        // file matches that outrank apps, like a busy session index.
+        QFile plugin(metadata);
+        QVERIFY(plugin.open(QIODevice::WriteOnly));
+        plugin.write(("[Desktop Entry]\nName=Synthetic file search\nType=Service\nX-KDE-ServiceTypes=Plasma/Runner\n"
+            "X-KDE-PluginInfo-Name=baloosearch\nX-KDE-PluginInfo-EnabledByDefault=true\nX-Plasma-API=DBus\n"
+            "X-Plasma-DBusRunner-Service=" + service + "\nX-Plasma-DBusRunner-Path=/runner\n").toUtf8());
+        plugin.close();
+        qDBusRegisterMetaType<FakeRemoteMatch>();
+        qDBusRegisterMetaType<QList<FakeRemoteMatch>>();
+        qDBusRegisterMetaType<FakeRemoteAction>();
+        qDBusRegisterMetaType<QList<FakeRemoteAction>>();
+        QVERIFY(bus.registerObject(QStringLiteral("/runner"), &files, QDBusConnection::ExportAllSlots));
+        QVERIFY(bus.registerService(service));
+        {
+            LauncherControllerTestOwner owner;
+            auto &launcher = owner.controller();
+            QVERIFY(launcher.runnerIds().contains(QStringLiteral("baloosearch")));
+            launcher.setQuery(query);
+            QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready") && count(launcher, QStringLiteral("files")) > 0, 5000);
+            QTest::qWait(100);
+            QVERIFY(files.matchCalls > 0);
+            QCOMPARE(count(launcher, QStringLiteral("applications")), baseline);
+            QCOMPARE(count(launcher, QStringLiteral("files")), 6);
+            for (int row = 0; row < baseline; ++row) // Apps lead; the busy source follows in one short section.
+                QCOMPARE(launcher.rows()[row].toMap().value(QStringLiteral("category")).toString(), QStringLiteral("applications"));
+        }
     }
     void extraSourcesAreLabelledLocalAndNeverOnTheEmptySurface()
     {

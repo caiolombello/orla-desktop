@@ -44,6 +44,9 @@ const QString servicesRunner = QStringLiteral("krunner_services");
 const QString calculatorRunner = QStringLiteral("calculator");
 const QString sessionsRunner = QStringLiteral("krunner_sessions");
 const QString logoutPromptService = QStringLiteral("org.kde.LogoutPrompt");
+// Rows per section: apps keep the old 32-row model limit; other sources stay short.
+constexpr int applicationBudget = 32;
+constexpr int sourceBudget = 6;
 // krunner_sessions match data: 1 logout, 2 shutdown, 3 reboot, 4 lock, 5 save session.
 // Its own run() honors the user's "confirm logout" setting, so the launcher asks
 // the native prompt instead, like the bar's ForcePrompt. Lock/save run directly.
@@ -112,7 +115,11 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
     m_runnerIds = selectRunners(installed, krunnerConfig.group(QStringLiteral("Plugins")));
     // An empty KRunner allowlist means "every runner"; never let it fall open.
     m_model.runnerManager()->setAllowedRunners(m_runnerIds.isEmpty() ? QStringList{QStringLiteral("orla_no_local_runner")} : m_runnerIds);
-    m_model.setLimit(32);
+    // KRunner's limit is split between categories, so busy sources (Baloo alone has
+    // several) would drop app rows before refresh() sees them. Keep every row, apps
+    // first; refresh() applies the per-source budgets.
+    m_model.setLimit(0);
+    m_model.setFavoriteIds({servicesRunner});
     connect(&m_model, &QAbstractItemModel::rowsInserted, this, &LauncherController::refresh);
     connect(&m_model, &QAbstractItemModel::rowsRemoved, this, &LauncherController::refresh);
     connect(&m_model, &QAbstractItemModel::modelReset, this, &LauncherController::refresh);
@@ -227,16 +234,32 @@ void LauncherController::refresh()
         QStringLiteral("documents"), QStringLiteral("files")};
     QHash<QString, QVariantList> extraRows;
     QHash<QString, QList<int>> extraBackends;
+    // Each source keeps its own budget: apps as before, other sources short.
+    QHash<QString, QString> runnerCategory;
+    QHash<QString, int> budget;
+    int remaining = 0;
+    for (const QString &id : std::as_const(m_runnerIds)) {
+        const QString category = presentationFor(id).value(QStringLiteral("category")).toString();
+        runnerCategory.insert(id, category);
+        if (budget.contains(category)) continue;
+        const int rows = category == QStringLiteral("applications") ? applicationBudget : sourceBudget;
+        budget.insert(category, rows);
+        remaining += rows;
+    }
     bool promptChecked = false, promptAvailable = false;
-    for (int row = 0; row < m_model.rowCount() && row < 40; ++row) {
+    // The model is unlimited; stop early only once every loaded source is full.
+    for (int row = 0; row < m_model.rowCount() && remaining > 0; ++row) {
         const auto index = m_model.index(row, 0);
         const auto match = m_model.getQueryMatch(index);
-        if (!match.runner() || !m_runnerIds.contains(match.runner()->id()) || !localTargets(match)) continue;
+        if (!match.runner()) continue;
         const QString runnerId = match.runner()->id();
+        // A runner outside the allowlist has no budget; a full source is skipped cheaply.
+        const auto left = budget.find(runnerCategory.value(runnerId));
+        if (left == budget.end() || *left <= 0 || !localTargets(match)) continue;
+        --*left;
+        --remaining;
         const auto presentation = presentationFor(runnerId);
         const QString category = presentation.value(QStringLiteral("category")).toString();
-        // Other sources stay short so apps keep the top of the list.
-        if (category != QStringLiteral("applications") && extraRows.value(category).size() >= 6) continue;
         QVariantList actions;
         const QString prompt = confirmationMethod(match);
         if (prompt.isEmpty()) {

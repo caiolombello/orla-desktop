@@ -24,8 +24,10 @@ Os IDs foram conferidos no Fedora 44/Plasma 6.8 (`/usr/lib64/qt6/plugins/kf6/kru
 e `/usr/share/krunner/dbusplugins`). Runner não instalado fica de fora sem erro; o
 aviso de runners indisponíveis só aparece se nenhum carregar. Um runner desligado
 pelo usuário nas configurações do KRunner (`krunnerrc`, lido sem gravar) também
-fica de fora, exceto aplicativos e calculadora. Fontes além de aplicativos mostram
-até seis resultados cada.
+fica de fora, exceto aplicativos e calculadora. Aplicativos mostram até 32
+resultados e vêm primeiro; as outras fontes mostram até seis cada. O modelo do
+KRunner fica sem limite próprio, porque esse limite é dividido entre categorias e
+fontes com muitas categorias (como o Baloo) tirariam linhas dos aplicativos.
 
 - **Fora da lista:** `unitconverter` (no primeiro uso baixa cotações de moedas do
   BCE, mesmo sem consulta de moeda — verificado com interceptação de DNS), atalhos
