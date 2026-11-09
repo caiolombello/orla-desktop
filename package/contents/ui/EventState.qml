@@ -7,6 +7,8 @@ QtObject {
     property bool enabled: true
     property bool completionEnabled: enabled
     property bool audioEnabled: enabled
+    // Battery notices exist only for the island; the dock slot never shows them.
+    property bool powerEnabled: false
     property string activeScope: ""
     property int activeContextGeneration: -1
     property var nowProvider: function() { return Date.now(); }
@@ -17,8 +19,10 @@ QtObject {
     readonly property int maximumTransients: 8
     readonly property int completionDuration: 8000
     readonly property int audioDuration: 1800
+    readonly property int powerDuration: 4000
     readonly property int completionPriority: 10
     readonly property int audioPriority: 20
+    readonly property int powerPriority: 15
     readonly property int audioQuietDelay: 200
     readonly property int audioMaximumDelay: 1000
 
@@ -64,11 +68,25 @@ QtObject {
         if (event.action === "mute") return typeof event.value === "boolean";
         return typeof event.value === "string" && event.value === event.targetId;
     }
+    // Laptop charging or low, and a paired phone running low (KDE Connect).
+    function validPower(event) {
+        return exactKeys(event, ["action", "detail", "kind", "title", "value"])
+            && event.kind === "power" && ["charging", "low", "phone-low"].indexOf(event.action) >= 0
+            && Number.isInteger(event.value) && event.value >= 0 && event.value <= 100
+            && cleanText(event.title, 96) !== null && cleanText(event.detail, 160) !== null;
+    }
     function identity(event) {
+        if (event.kind === "power") return "power\u0000" + event.action;
         return event.kind === "completion" ? "completion\u0000global\u0000pomodoro:completion"
             : ["audio", event.originScope, event.contextGeneration, event.action, event.targetId].join("\u0000");
     }
     function normalize(event, timestamp, assignedSequence) {
+        if (event.kind === "power") return {
+            kind: "power", action: event.action, value: event.value,
+            title: cleanText(event.title, 96), detail: cleanText(event.detail, 160),
+            identity: identity(event), priority: powerPriority, sequence: assignedSequence,
+            deadline: timestamp + powerDuration, announced: false
+        };
         if (event.kind === "completion") return {
             kind: "completion", key: "pomodoro:completion", scope: "global",
             title: cleanText(event.title, 96), detail: cleanText(event.detail, 160),
@@ -121,7 +139,7 @@ QtObject {
         schedule(timestamp);
         if (!current) { cancelAudioAnnouncement(); return; }
         const same = previous && previous.identity === current.identity && previous.sequence === current.sequence;
-        if (current.kind === "completion") {
+        if (current.kind === "completion" || current.kind === "power") {
             cancelAudioAnnouncement();
             if (!current.announced) {
                 const next = Object.assign({}, current, {announced: true});
@@ -158,6 +176,7 @@ QtObject {
     }
     function admitted(event) {
         if (event.kind === "completion") return completionEnabled && validCompletion(event);
+        if (event.kind === "power") return powerEnabled && validPower(event);
         return audioEnabled && validAudio(event)
             && event.originScope === activeScope
             && event.contextGeneration === activeContextGeneration;
@@ -169,7 +188,7 @@ QtObject {
         const incomingIdentity = identity(event);
         if (current && current.identity === incomingIdentity) {
             const next = normalize(event, timestamp, current.sequence);
-            if (current.kind === "completion") next.announced = current.announced;
+            if (current.kind !== "audio") next.announced = current.announced;
             current = next;
             presentCurrent(current, timestamp, true);
             return true;
@@ -178,7 +197,7 @@ QtObject {
             if (pending[index].identity !== incomingIdentity) continue;
             const nextPending = pending.slice();
             const next = normalize(event, timestamp, nextPending[index].sequence);
-            if (next.kind === "completion") next.announced = nextPending[index].announced;
+            if (next.kind !== "audio") next.announced = nextPending[index].announced;
             nextPending[index] = next;
             pending = nextPending.sort(compare);
             return true;
@@ -235,6 +254,7 @@ QtObject {
     onEnabledChanged: if (!enabled) clear()
     onCompletionEnabledChanged: if (!completionEnabled) removeKind("completion")
     onAudioEnabledChanged: if (!audioEnabled) removeKind("audio")
+    onPowerEnabledChanged: if (!powerEnabled) removeKind("power")
     onActiveScopeChanged: removeKind("audio")
     onActiveContextGenerationChanged: removeKind("audio")
 

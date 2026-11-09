@@ -21,6 +21,10 @@ Window {
         eventState: state
     }
 
+    DockUI.IslandNotices {
+        eventState: state
+    }
+
     // Stands in for MediaState: counts the commands it receives.
     QtObject {
         id: media

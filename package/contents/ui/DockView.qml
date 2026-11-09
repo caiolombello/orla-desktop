@@ -63,7 +63,8 @@ Item {
     property var powerProfileBackendOverride: null
     property var wifiBackendOverride: null
     property var bluetoothBackendOverride: null
-    // {microphoneInUse, cameraInUse} for tests; the panel reads Plasma-PA and V4L2.
+    // {microphoneInUse, cameraInUse, power, phones, calendarEvents} for tests; the
+    // panel reads Plasma-PA, V4L2, UPower, KDE Connect and the PIM calendar.
     property var islandSensorsOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
@@ -358,6 +359,7 @@ Item {
     Loader {
         id: islandSensorsLoader
         objectName: "islandSensorsLoader"
+        property var sensorsOwner: root
         active: root.nativePopups && root.islandActivitiesActive && root.islandSensorsOverride === null
         source: active ? Qt.resolvedUrl("NativeIslandSensors.qml") : ""
     }
@@ -752,6 +754,7 @@ Item {
         enabled: root.localEventsProfileReady && (root.eventIslandActive || root.candidateEventSlotWidth >= 48)
         completionEnabled: enabled && Boolean(root.configuration.showLocalToasts)
         audioEnabled: enabled && Boolean(root.presentation.showAudioHud)
+        powerEnabled: enabled && root.islandActivitiesActive
         activeScope: "profile:" + profileState.activeProfileId
         activeContextGeneration: profileState.revision
     }
@@ -769,6 +772,14 @@ Item {
         mediaArtUrl: musicControls.mediaState.artUrl
         microphoneInUse: Boolean(root.islandSensors && root.islandSensors.microphoneInUse)
         cameraInUse: Boolean(root.islandSensors && root.islandSensors.cameraInUse)
+        calendarEvents: root.islandSensors && root.islandSensors.calendarEvents ? root.islandSensors.calendarEvents : []
+        nowMs: root.now.getTime()
+    }
+    IslandNotices {
+        eventState: localEventState
+        enabled: root.islandActivitiesActive
+        power: root.islandSensors && root.islandSensors.power ? root.islandSensors.power : null
+        phones: root.islandSensors && root.islandSensors.phones ? root.islandSensors.phones : []
     }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
