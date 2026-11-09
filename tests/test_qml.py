@@ -222,6 +222,96 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertFalse(run("profiles.commitPresentation({doNotDisturb: 'maybe'}, profiles.activeProfileId, profiles.revision)"))
         self.assertEqual(self.warnings, [], "\n".join(self.warnings))
 
+    def test_downloads_stack_lists_newest_finished_files_and_opens_them(self):
+        import time
+        from PySide6.QtGui import QImage
+        self.assertIsNone(self.window.findChild(QQuickItem, "downloadsTile"))
+        width = self.dock.width()
+        self.config.setProperty("showDownloads", True)
+        QTest.qWait(50)
+        tile = self.window.findChild(QQuickItem, "downloadsTile")
+        self.assertIsNotNone(tile)
+        self.assertTrue(self.window.findChild(QQuickItem, "trashDivider").isVisible())
+        self.assertGreater(self.dock.width(), width)
+        with tempfile.TemporaryDirectory() as folder:
+            base = time.time() - 1000
+            names = [f"arquivo-{index:02d}.txt" for index in range(13)]
+            for index, name in enumerate(names):
+                Path(folder, name).write_text("x", encoding="utf-8")
+                os.utime(Path(folder, name), (base + index, base + index))
+            image = QImage(8, 8, QImage.Format_ARGB32)
+            image.fill(Qt.red)
+            image.save(str(Path(folder, "imagem.png")))
+            os.utime(Path(folder, "imagem.png"), (base + 50, base + 50))
+            # Running downloads and hidden files stay out, even when newest.
+            for name in ("filme.mkv.part", "pacote.crdownload", ".oculto"):
+                Path(folder, name).write_text("x", encoding="utf-8")
+            tile.setProperty("folder", QUrl.fromLocalFile(folder))
+            for _ in range(40):
+                if tile.property("count") == 12:
+                    break
+                QTest.qWait(50)
+            entries = QQmlExpression(self.engine.rootContext(), tile, "entries").evaluate()[0]
+            entries = entries.toVariant() if hasattr(entries, "toVariant") else entries
+            self.assertEqual([entry["name"] for entry in entries][:3], ["imagem.png", "arquivo-12.txt", "arquivo-11.txt"])
+            self.assertEqual(len(entries), 12)
+            self.assertTrue(entries[0]["thumbnail"])
+            self.assertEqual(entries[1]["icon"], "text-x-generic")
+            self.assertEqual(tile.property("tooltip"), "Downloads · 12 itens recentes")
+
+            expression = QQmlExpression(self.engine.rootContext(), self.dock, "openDownload = url => { notice = String(url); }")
+            expression.evaluate()
+            # An in-scene popup, so synthetic clicks reach its cells.
+            popup = self.window.findChild(QQuickItem, "downloadsPopup")
+            self.assertTrue(popup.setProperty("popupType", 0))
+            center = tile.mapToScene(QPointF(tile.width() / 2, tile.height() / 2))
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, center.toPoint())
+            QTest.qWait(100)
+            self.assertTrue(popup.property("visible"))
+            grid = self.window.findChild(QQuickItem, "downloadsGrid")
+            cells = [child for child in grid.childItems() if child.objectName() == "downloadsCell"]
+            self.assertEqual(len(cells), 12)
+            self.assertFalse(self.window.findChild(QQuickItem, "downloadsEmpty").isVisible())
+            first = cells[0]
+            point = first.mapToScene(QPointF(first.width() / 2, first.height() / 2))
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+            QTest.qWait(50)
+            self.assertTrue(self.dock.property("notice").endswith("/imagem.png"))
+            # The KDE style animates the close.
+            for _ in range(40):
+                if not popup.property("visible"):
+                    break
+                QTest.qWait(50)
+            self.assertFalse(popup.property("visible"))
+            # The folder button opens the folder itself.
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, center.toPoint())
+            QTest.qWait(100)
+            button = self.window.findChild(QQuickItem, "downloadsOpenFolder")
+            point = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+            QTest.qWait(50)
+            self.assertEqual(QUrl(self.dock.property("notice")).toLocalFile().rstrip("/"), folder.rstrip("/"))
+        self.config.setProperty("showDownloads", False)
+        QTest.qWait(50)
+        self.assertIsNone(self.window.findChild(QQuickItem, "downloadsTile"))
+        self.assertEqual(self.dock.width(), width)
+        self.assertEqual(self.warnings, [])
+
+    def test_downloads_logic_skips_partial_and_hidden_files(self):
+        from PySide6.QtQml import QJSEngine
+        import json
+        engine = QJSEngine()
+        source = (Path(__file__).resolve().parents[1] / "package/contents/code/Downloads.js").read_text()
+        self.assertFalse(engine.evaluate(source.replace(".pragma library", "")).isError())
+        rows = [{"name": "a.pdf", "url": "file:///d/a.pdf"}, {"name": "b.zip.part", "url": "file:///d/b"},
+                {"name": ".x", "url": "file:///d/.x"}, {"name": "Pasta", "url": "file:///d/Pasta", "isDir": True},
+                {"name": "foto.JPG", "url": "file:///d/foto.JPG"}, {"name": "semextensao", "url": "file:///d/s"}]
+        result = json.loads(engine.evaluate(f"JSON.stringify(entries({json.dumps(rows)}, 3))").toString())
+        self.assertEqual([(entry["name"], entry["icon"], entry["thumbnail"]) for entry in result],
+                         [("a.pdf", "application-pdf", False), ("Pasta", "folder", False),
+                          ("foto.JPG", "image-x-generic", True)])
+        self.assertEqual(json.loads(engine.evaluate("JSON.stringify(entries(null))").toString()), [])
+
     def test_settings_popup_opens_from_button(self):
         button = self.window.findChild(QQuickItem, "settingsButton")
         popup = self.window.findChild(QObject, "settingsPopup")

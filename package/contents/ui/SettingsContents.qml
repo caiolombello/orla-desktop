@@ -313,6 +313,15 @@ ColumnLayout {
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
                 Controls.CheckBox {
+                    objectName: "islandActivities"
+                    Layout.fillWidth: true
+                    enabled: Boolean(settings.configuration.eventIsland)
+                    text: qsTr("Mostrar na ilha a música, o Pomodoro e o microfone ou a câmera em uso (global)")
+                    checked: Boolean(settings.configuration.islandActivities)
+                    onToggled: settings.configuration.islandActivities = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.CheckBox {
                     objectName: "showControlCenter"
                     Layout.fillWidth: true
                     text: qsTr("Mostrar Central de Controle no dock (global)")
@@ -326,6 +335,14 @@ ColumnLayout {
                     text: qsTr("Mostrar a Lixeira no fim do dock (global)")
                     checked: Boolean(settings.configuration.showTrash)
                     onToggled: settings.configuration.showTrash = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.CheckBox {
+                    objectName: "showDownloads"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar os Downloads ao lado da Lixeira (global)")
+                    checked: Boolean(settings.configuration.showDownloads)
+                    onToggled: settings.configuration.showDownloads = checked
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
                 Controls.Label {
