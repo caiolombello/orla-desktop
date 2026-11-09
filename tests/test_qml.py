@@ -168,6 +168,60 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(self.dock.width(), width)
         self.assertEqual(self.warnings, [])
 
+    def test_focus_mode_switches_do_not_disturb_with_the_profile(self):
+        import json
+        backend = self.window.findChild(QObject, "dockDoNotDisturbBackend")
+        focus = self.window.findChild(QObject, "focusMode")
+        def calls():
+            value = backend.property("calls")
+            return value.toVariant() if hasattr(value, "toVariant") else value
+        def run(source):
+            value = self.evaluate(source)
+            return value.toVariant() if hasattr(value, "toVariant") else value
+        def command(name, *args):
+            return run(f"profiles.{name}({','.join(json.dumps(a) for a in args)}"
+                       f"{',' if args else ''}profiles.activeProfileId,profiles.revision)")
+        combo = self.window.findChild(QQuickItem, "profileDoNotDisturb")
+        self.assertIsNotNone(combo)
+        # The flat legacy preferences have no profile to switch to.
+        self.assertFalse(combo.property("enabled"))
+        self.assertTrue(command("initializeDefaults"))
+        self.assertTrue(command("select", "work"))
+        QTest.qWait(30)
+        self.assertEqual(calls(), [])
+        self.assertTrue(combo.property("enabled"))
+        self.assertTrue(run("profiles.commitPresentation({doNotDisturb: 'on'}, profiles.activeProfileId, profiles.revision)"))
+        self.assertEqual(combo.property("currentIndex"), 1)
+        self.assertTrue(command("select", "personal"))
+        QTest.qWait(30)
+        self.assertTrue(run("profiles.commitPresentation({doNotDisturb: 'off'}, profiles.activeProfileId, profiles.revision)"))
+        QTest.qWait(150)
+        # Editing the active profile's choice does not act; switching does.
+        self.assertEqual(calls(), [])
+        self.assertTrue(command("select", "work"))
+        QTest.qWait(150)
+        self.assertEqual(calls(), [True])
+        last = focus.property("last")
+        self.assertEqual(last.toVariant() if hasattr(last, "toVariant") else last, {"profileId": "work", "mode": "on", "accepted": True})
+        # The backend stays loaded until the server confirms the mode.
+        self.assertTrue(focus.property("waiting"))
+        expression = QQmlExpression(self.engine.rootContext(), backend,
+                                    "snapshot = ({status: 'ready', inhibited: true, until: 0, byApplication: false, applications: []})")
+        expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        QTest.qWait(50)
+        self.assertFalse(focus.property("waiting"))
+        # Turning it off again on the personal profile.
+        self.assertTrue(command("select", "personal"))
+        QTest.qWait(150)
+        self.assertEqual(calls(), [True, False])
+        # "keep" leaves the mode alone, and so does an invalid stored value.
+        self.assertTrue(command("select", "games"))
+        QTest.qWait(150)
+        self.assertEqual(calls(), [True, False])
+        self.assertFalse(run("profiles.commitPresentation({doNotDisturb: 'maybe'}, profiles.activeProfileId, profiles.revision)"))
+        self.assertEqual(self.warnings, [], "\n".join(self.warnings))
+
     def test_downloads_stack_lists_newest_finished_files_and_opens_them(self):
         import time
         from PySide6.QtGui import QImage

@@ -245,6 +245,40 @@ ColumnLayout {
                 spacing: Style.space.sm
                 Controls.Label { Layout.fillWidth: true; text: qsTr("Widgets e filtro de janelas são salvos imediatamente. Cancelar aparência não desfaz estas opções."); wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                 Controls.CheckBox { objectName: "filterDesktop"; enabled: settings.profiles.writable && !settings.importing; text: qsTr("Janelas apenas da área de trabalho atual"); checked: settings.profiles.effective.currentDesktopOnly; onToggled: settings.setPreference("currentDesktopOnly", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
+                // Focus mode, as on macOS: the profile switches Plasma's Do Not Disturb.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space.sm
+                    Controls.Label {
+                        text: qsTr("Não perturbe ao usar este perfil")
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                    Controls.ComboBox {
+                        id: focusChoice
+                        objectName: "profileDoNotDisturb"
+                        implicitContentWidthPolicy: Controls.ComboBox.WidestText
+                        enabled: settings.profiles.writable && !settings.importing && settings.profiles.activeProfileId !== "legacy"
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{value: "keep", text: qsTr("Manter como está")}, {value: "on", text: qsTr("Ligar")},
+                            {value: "off", text: qsTr("Desligar")}]
+                        currentIndex: Math.max(0, ["keep", "on", "off"].indexOf(String(settings.profiles.effective.doNotDisturb || "keep")))
+                        Accessible.name: qsTr("Não perturbe ao usar este perfil")
+                        onActivated: settings.setPreference("doNotDisturb", currentValue)
+                        onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                    }
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: settings.profiles.activeProfileId === "legacy"
+                        ? qsTr("Crie ou escolha um perfil para ligar o Não perturbe junto com ele.")
+                        : qsTr("Vale ao trocar para este perfil, também pelos contextos automáticos.")
+                    wrapMode: Text.WordWrap
+                    textFormat: Text.PlainText
+                    opacity: 0.65
+                }
                 Controls.CheckBox { objectName: "calendarEvents"; enabled: settings.profiles.writable && !settings.importing; text: qsTr("Eventos sincronizados pelo KDE"); checked: settings.profiles.effective.calendarEvents; onToggled: settings.setPreference("calendarEvents", checked); onActiveFocusChanged: if (activeFocus) settings.reveal(this) }
                 Controls.CheckBox {
                     objectName: "showLocalToasts"
