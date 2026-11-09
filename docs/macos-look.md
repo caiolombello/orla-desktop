@@ -44,6 +44,21 @@ trocado. O estado original salvo não muda, então `restore` volta aos valores d
 antes do primeiro `apply`. Quando a lâmpada voltar a carregar, um novo `apply`
 a liga de novo.
 
+### Alvo da lâmpada mágica
+
+O KWin só leva a janela até o ícone quando o gerenciador de tarefas publica onde
+ele está. Cada app da dock com janela publica o quadro de repouso da arte do
+ícone (`TasksModel.requestPublishDelegateGeometry`, como o applet de tarefas do
+Plasma): sem o levantar do hover nem o salto, para o alvo não mexer. Ele é
+republicado no máximo a cada 250 ms quando o ícone muda de lugar ou de tamanho,
+a lista rola, a dock ou a tela mudam ou uma janela entra no app. Um ícone fora
+da faixa visível mira a borda mais próxima da dock. No Wayland o KWin lê o item
+publicado (`MinimizeTarget.qml`); no X11, o retângulo global. A conta fica em
+`MinimizeTarget.js` e os testes (`tests/test_minimize_target.py`) usam um
+gravador no lugar do modelo; a animação no KWin real não foi observada por eles.
+Se o gerenciador de tarefas do Plasma também estiver em um painel, o último a
+publicar define o alvo.
+
 ## Busca (Spotlight provisório)
 
 Enquanto o Orla não tem a própria busca no lugar do Spotlight, `apply` deixa o

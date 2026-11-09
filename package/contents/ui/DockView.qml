@@ -76,6 +76,14 @@ Item {
     readonly property bool nativeAppActionsBackendLoaded: nativeAppActionsBackend.item !== null
     readonly property var appMenu: menuData.window && appMenuArmed
         ? appActions.summary(menuData.appId, menuData.winIds) : appActions.emptySummary
+    // Receives the minimize targets (KWin's magic lamp); tests inject a recorder.
+    property var minimizePublisherOverride: null
+    readonly property var minimizePublisher: minimizePublisherOverride || tasks
+    // Bumped when something above the task tiles moves them on screen.
+    property int minimizeTargetEpoch: 0
+    onXChanged: minimizeTargetEpoch++
+    onYChanged: minimizeTargetEpoch++
+    onScreenGeometryChanged: minimizeTargetEpoch++
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     // The area switcher lives in Settings › Contextos and in the Control Center.
@@ -674,6 +682,8 @@ Item {
         function onActiveChanged() { if (!target.active && taskDragState.pressed) taskDragState.cancel(); }
         function onVisibleChanged() { if (!target.visible && taskDragState.pressed) taskDragState.cancel(); }
         function onClosing() { if (taskDragState.pressed) taskDragState.cancel(); }
+        function onXChanged() { root.minimizeTargetEpoch++; }
+        function onYChanged() { root.minimizeTargetEpoch++; }
         function onActiveFocusItemChanged() {
             root.taskFocusEpoch++;
             const control = root.Window.window.activeFocusItem;
@@ -894,9 +904,9 @@ Item {
         contentWidth: content.width + (localEventSurface.visible ? root.eventSlotWidth : 0)
         onWidthChanged: { root.checkTaskDragGeometry(); root.revealAfterGeometryChange(); }
         onHeightChanged: root.checkTaskDragGeometry()
-        onXChanged: root.checkTaskDragGeometry()
-        onYChanged: root.checkTaskDragGeometry()
-        onContentXChanged: root.checkTaskDragGeometry()
+        onXChanged: { root.checkTaskDragGeometry(); root.minimizeTargetEpoch++; }
+        onYChanged: { root.checkTaskDragGeometry(); root.minimizeTargetEpoch++; }
+        onContentXChanged: { root.checkTaskDragGeometry(); root.minimizeTargetEpoch++; }
         contentHeight: height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -953,6 +963,17 @@ Item {
                         }
                     }
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: root.showTaskMenuAt(taskTile.index, taskTile.model, taskTile) }
+                    MinimizeTarget {
+                        objectName: "minimizeTarget" + taskTile.index
+                        publisher: root.minimizePublisher
+                        row: taskTile.index
+                        active: Boolean(taskTile.model.IsWindow)
+                        windows: Array.from(taskTile.model.WinIdList || []).map(String).join(",")
+                        // The resting artwork, so the lamp never chases hover lift or bounce.
+                        artwork: taskTile.artwork
+                        bounds: viewport
+                        epoch: root.minimizeTargetEpoch
+                    }
                     DragHandler {
                         id: taskPointer
                         objectName: "taskDragHandler" + taskTile.index
