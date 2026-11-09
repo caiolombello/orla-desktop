@@ -4,6 +4,8 @@
 #include <QLockFile>
 #include <KService>
 #include <KSycoca>
+#include <KConfig>
+#include <KConfigGroup>
 #include <QJsonDocument>
 #include <QSemaphore>
 #include <QThread>
@@ -68,7 +70,37 @@ public:
 public Q_SLOTS:
     QString SnapshotFor(const QStringList &modules) { requests.append(modules); return reply; }
 };
+// Native logout/shutdown/reboot prompt on the private bus; it only records requests.
+class FakeLogoutPrompt final : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.LogoutPrompt")
+public:
+    QStringList calls;
+public Q_SLOTS:
+    void promptLogout() { calls.append(QStringLiteral("promptLogout")); }
+    void promptShutDown() { calls.append(QStringLiteral("promptShutDown")); }
+    void promptReboot() { calls.append(QStringLiteral("promptReboot")); }
+};
+// The unconfirmed ksmserver path; the launcher must never reach it.
+class FakeShutdown final : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.Shutdown")
+public:
+    QStringList calls;
+public Q_SLOTS:
+    void logout() { calls.append(QStringLiteral("logout")); }
+    void logoutAndShutdown() { calls.append(QStringLiteral("logoutAndShutdown")); }
+    void logoutAndReboot() { calls.append(QStringLiteral("logoutAndReboot")); }
+};
 namespace {
+int rowFrom(const LauncherController &launcher, const QString &runnerId)
+{
+    for (int row = 0; row < launcher.rows().size(); ++row)
+        if (launcher.rows()[row].toMap().value(QStringLiteral("runnerId")).toString() == runnerId) return row;
+    return -1;
+}
 int commandRow(const LauncherController &launcher)
 {
     for (int row = 0; row < launcher.rows().size(); ++row)
@@ -110,14 +142,20 @@ private Q_SLOTS:
         auto owner = std::make_unique<LauncherControllerTestOwner>();
         const auto runners = owner->observedRunners();
         QVERIFY(!runners.isEmpty());
+        // D-Bus runners (windows, baloosearch) live on this thread and are deleted by its
+        // event loop; the boundary covers the owned worker threads only.
+        QList<QPointer<KRunner::AbstractRunner>> threaded;
         for (const auto &ownedRunner : runners)
+            if (ownedRunner && ownedRunner->thread() != QThread::currentThread()) threaded.append(ownedRunner);
+        QVERIFY(!threaded.isEmpty());
+        for (const auto &ownedRunner : threaded)
             connect(ownedRunner, &QObject::destroyed, this, [&] { runnersDestroyed.release(); }, Qt::DirectConnection);
-        connect(&owner->controller(), &QObject::destroyed, this, [&, runnerCount = runners.size()] {
+        connect(&owner->controller(), &QObject::destroyed, this, [&, runnerCount = threaded.size()] {
             const QDeadlineTimer boundaryDeadline(400, Qt::PreciseTimer);
             teardownBoundaryReached = runnersDestroyed.tryAcquire(runnerCount, boundaryDeadline)
                 && entered.tryAcquire(1, boundaryDeadline);
         }, Qt::DirectConnection);
-        auto *runner = runners.first().data();
+        auto *runner = threaded.first().data();
         QVERIFY(runner);
         QVERIFY(runner->thread() != QThread::currentThread());
         const QPointer<QThread> workerThread = runner->thread();
@@ -921,6 +959,140 @@ private Q_SLOTS:
         QCOMPARE(commands.errorCode(), QStringLiteral("invalid_response"));
         QVERIFY(commands.requestClose());
         QCOMPARE(commands.status(), QStringLiteral("idle"));
+    }
+    void runnerAllowlistIsLocalAndSkipsMissingOrDisabledRunners()
+    {
+        const QStringList expected{QStringLiteral("krunner_services"), QStringLiteral("calculator"),
+            QStringLiteral("org.kde.datetime"), QStringLiteral("krunner_systemsettings"), QStringLiteral("krunner_sessions"),
+            QStringLiteral("krunner_powerdevil"), QStringLiteral("windows"), QStringLiteral("locations"),
+            QStringLiteral("krunner_recentdocuments"), QStringLiteral("baloosearch")};
+        QCOMPARE(LauncherController::runnerAllowlist(), expected);
+        // Network, account or arbitrary-execution runners stay out (unitconverter fetches currency rates).
+        for (const auto &forbidden : {"unitconverter", "krunner_webshortcuts", "krunner_bookmarksrunner", "krunner_dictionary",
+                                      "krunner_shell", "krunner_kill", "krunner_appstream", "browserhistory", "browsertabs",
+                                      "krunner_pimcontacts", "krunner_spellcheck", "org.kde.neochat"})
+            QVERIFY2(!expected.contains(QString::fromLatin1(forbidden)), forbidden);
+        KConfig empty(QString(), KConfig::SimpleConfig);
+        const QStringList partial{QStringLiteral("windows"), QStringLiteral("calculator"), QStringLiteral("krunner_services"),
+                                  QStringLiteral("unitconverter"), QStringLiteral("krunner_webshortcuts")};
+        QCOMPARE(LauncherController::selectRunners(partial, empty.group(QStringLiteral("Plugins"))),
+                 (QStringList{QStringLiteral("krunner_services"), QStringLiteral("calculator"), QStringLiteral("windows")}));
+        QVERIFY(LauncherController::selectRunners({}, empty.group(QStringLiteral("Plugins"))).isEmpty());
+        KConfig toggles(QString(), KConfig::SimpleConfig);
+        auto plugins = toggles.group(QStringLiteral("Plugins"));
+        plugins.writeEntry("windowsEnabled", false);
+        plugins.writeEntry("krunner_servicesEnabled", false);
+        QCOMPARE(LauncherController::selectRunners(partial, plugins),
+                 (QStringList{QStringLiteral("krunner_services"), QStringLiteral("calculator")}));
+
+        // The real manager loads only installed allowlisted runners; absent D-Bus services are not errors.
+        const QString krunnerrc = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/krunnerrc");
+        {
+            LauncherControllerTestOwner owner;
+            auto &launcher = owner.controller();
+            QVERIFY(launcher.runnerIds().contains(QStringLiteral("krunner_services")));
+            QVERIFY(launcher.runnerIds().contains(QStringLiteral("calculator")));
+            for (const auto &id : launcher.runnerIds()) QVERIFY2(expected.contains(id), qPrintable(id));
+            for (const auto &runner : owner.observedRunners()) QVERIFY2(launcher.runnerIds().contains(runner->id()), qPrintable(runner->id()));
+            launcher.setQuery(QStringLiteral("2+2"));
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+            QVERIFY(launcher.error().isEmpty());
+        }
+        QVERIFY(!QFile::exists(krunnerrc)); // Read-only: KRunner's own file is never created.
+        {
+            KConfig user(krunnerrc, KConfig::SimpleConfig);
+            user.group(QStringLiteral("Plugins")).writeEntry("baloosearchEnabled", false);
+            QVERIFY(user.sync());
+        }
+        {
+            LauncherControllerTestOwner owner;
+            QVERIFY(!owner.controller().runnerIds().contains(QStringLiteral("baloosearch")));
+            for (const auto &runner : owner.observedRunners()) QVERIFY(runner->id() != QStringLiteral("baloosearch"));
+        }
+        QVERIFY(QFile::remove(krunnerrc));
+    }
+    void extraSourcesAreLabelledLocalAndNeverOnTheEmptySurface()
+    {
+        LauncherControllerTestOwner owner;
+        auto &launcher = owner.controller();
+        launcher.setQuery(QString());
+        QCOMPARE(launcher.status(), QStringLiteral("idle"));
+        QVERIFY(launcher.rows().isEmpty());
+        if (!launcher.runnerIds().contains(QStringLiteral("locations"))) QSKIP("Locations runner is not installed");
+        launcher.setQuery(QStringLiteral("/"));
+        QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready") && rowFrom(launcher, QStringLiteral("locations")) >= 0, 5000);
+        const auto location = launcher.rows()[rowFrom(launcher, QStringLiteral("locations"))].toMap();
+        QCOMPARE(location.value(QStringLiteral("kind")).toString(), QStringLiteral("location"));
+        QCOMPARE(location.value(QStringLiteral("category")).toString(), QStringLiteral("locations"));
+        QCOMPARE(location.value(QStringLiteral("categoryLabel")).toString(), QStringLiteral("LOCAIS"));
+        QCOMPARE(location.value(QStringLiteral("source")).toString(), QStringLiteral("KRunner · Locais"));
+        QVERIFY(!location.value(QStringLiteral("iconName")).toString().isEmpty());
+        QVERIFY(!location.value(QStringLiteral("aliasEligible")).toBool());
+        // Remote URLs would make KIO probe the network on open; they are not offered.
+        for (const auto &remote : {"https://example.invalid/", "smb://orla-test.invalid/share", "sftp://orla-test.invalid"}) {
+            launcher.setQuery(QString::fromLatin1(remote));
+            QTRY_COMPARE_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready") || launcher.status() == QStringLiteral("empty"), true, 5000);
+            QTest::qWait(150);
+            QCOMPARE(rowFrom(launcher, QStringLiteral("locations")), -1);
+        }
+        launcher.setQuery(QString());
+        QVERIFY(launcher.rows().isEmpty());
+        QCOMPARE(launcher.status(), QStringLiteral("idle"));
+    }
+    void sessionEndingRowsOnlyAskTheNativeConfirmationPrompt()
+    {
+        LauncherControllerTestOwner owner;
+        auto &launcher = owner.controller();
+        if (!launcher.runnerIds().contains(QStringLiteral("krunner_sessions"))) QSKIP("Session runner is not installed");
+        auto sessionRow = [&] {
+            for (int row = 0; row < launcher.rows().size(); ++row) {
+                // krunner_sessions identifies logout by its action data (1).
+                if (launcher.rows()[row].toMap().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("krunner_sessions:krunner_sessions_1")) return row;
+            }
+            return -1;
+        };
+        // The runner's keywords follow the test locale.
+        QString query;
+        for (const auto &candidate : {"logout", "sair"}) {
+            launcher.setQuery(QString::fromLatin1(candidate));
+            QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready") || launcher.status() == QStringLiteral("empty"), 5000);
+            QTest::qWait(150);
+            if (sessionRow() >= 0) { query = QString::fromLatin1(candidate); break; }
+        }
+        if (query.isEmpty()) QSKIP("The session runner offered no logout in this environment");
+        auto bus = QDBusConnection::sessionBus();
+        FakeLogoutPrompt prompt;
+        FakeShutdown shutdown;
+        QVERIFY(bus.registerObject(QStringLiteral("/Shutdown"), &shutdown, QDBusConnection::ExportAllSlots));
+        QVERIFY(bus.registerService(QStringLiteral("org.kde.Shutdown")));
+        // Without the prompt service the row is visible but can never run unconfirmed.
+        auto row = launcher.rows()[sessionRow()].toMap();
+        QVERIFY(row.value(QStringLiteral("confirmation")).toBool());
+        QVERIFY(!row.value(QStringLiteral("enabled")).toBool());
+        QCOMPARE(row.value(QStringLiteral("categoryLabel")).toString(), QStringLiteral("SESSÃO E ENERGIA"));
+        QVERIFY(row.value(QStringLiteral("actions")).toList().isEmpty());
+        QVERIFY(!launcher.execute(sessionRow(), launcher.generation(), row.value(QStringLiteral("id")).toString()));
+        QVERIFY(bus.registerObject(QStringLiteral("/LogoutPrompt"), &prompt, QDBusConnection::ExportAllSlots));
+        QVERIFY(bus.registerService(QStringLiteral("org.kde.LogoutPrompt")));
+        launcher.setQuery(QString());
+        launcher.setQuery(query);
+        QTRY_VERIFY_WITH_TIMEOUT(launcher.status() == QStringLiteral("ready") && sessionRow() >= 0, 5000);
+        row = launcher.rows()[sessionRow()].toMap();
+        QVERIFY(row.value(QStringLiteral("enabled")).toBool());
+        QVERIFY(prompt.calls.isEmpty()); // Typing alone never asks.
+        QSignalSpy closed(&launcher, &LauncherController::closeRequested);
+        launcher.select(sessionRow());
+        QVERIFY(launcher.executeSelected());
+        QTRY_COMPARE_WITH_TIMEOUT(prompt.calls, QStringList{QStringLiteral("promptLogout")}, 3000);
+        QCOMPARE(closed.count(), 1);
+        QTest::qWait(150);
+        QVERIFY(shutdown.calls.isEmpty());
+        QCOMPARE(prompt.calls.size(), 1);
+        QVERIFY(bus.unregisterService(QStringLiteral("org.kde.LogoutPrompt")));
+        QVERIFY(bus.unregisterService(QStringLiteral("org.kde.Shutdown")));
+        bus.unregisterObject(QStringLiteral("/LogoutPrompt"));
+        bus.unregisterObject(QStringLiteral("/Shutdown"));
     }
     void orlaCommandRealTransportCallsTheAddonHostSignature()
     {

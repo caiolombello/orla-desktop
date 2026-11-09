@@ -497,7 +497,7 @@ Window {
                     // Leave the scrollbar its own lane.
                     width: results.width - (results.ScrollBar.vertical.visible ? results.ScrollBar.vertical.width + Style.space.xs : 0)
                     readonly property bool selected: launcher.selectedIndex === result.index
-                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink"
+                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" || rowData.kind === "datetime" ? "slate" : rowData.kind === "steam" ? "ink"
                         : rowData.kind === "command" ? Style.widgetTiles.peripherals : "sea"]
                     height: Style.size.target + Style.space.md
                     enabled: rowData.enabled && !window.executionBlocked && !aliasPreferences.visible
@@ -599,7 +599,8 @@ Window {
             Button {
                 objectName: "executeButton"
                 property var executionTicket: null
-                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias" || window.selectedRow.kind === "favorite") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                // Things that open (apps, settings, places, documents, files) say "Abrir"; answers and actions say "Usar".
+                text: window.selectedRow && ["app", "steam", "alias", "favorite", "setting", "location", "document", "file"].indexOf(window.selectedRow.kind) >= 0 ? qsTr("Abrir ↵") : qsTr("Usar ↵")
                 enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
                     && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null

@@ -2546,6 +2546,12 @@ QtObject {
         evaluate(QStringLiteral("launcher.rows=[{id:'alias:arquivos',kind:'alias',title:'Dolphin',description:'',source:'Alias salvo por você',categoryLabel:'ALIASES',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()"));
         QVERIFY(item("executeButton") && item("executeButton")->isEnabled());
         QCOMPARE(item("executeButton")->property("text").toString(), QStringLiteral("Abrir ↵"));
+        // Extra KRunner sources: things that open say "Abrir", answers say "Usar".
+        for (const auto &[kind, verb] : {std::pair{"setting", "Abrir ↵"}, std::pair{"file", "Abrir ↵"},
+                                          std::pair{"datetime", "Usar ↵"}, std::pair{"system", "Usar ↵"}}) {
+            evaluate(QStringLiteral("launcher.rows=[{id:'extra:%1',kind:'%1',title:'Resultado sintético',description:'',source:'KRunner',categoryLabel:'EXTRA',generation:launcher.generation,enabled:true,actions:[]}];launcher.selectedIndex=0;launcher.status='ready';launcher.changed()").arg(QLatin1String(kind)));
+            QCOMPARE(item("executeButton")->property("text").toString(), QString::fromUtf8(verb));
+        }
         QCOMPARE(evaluate(QStringLiteral("launcher.executed.length")).toInt(), 0);
 
         // Favorites use their own revision and never execute or dismiss on mutation.

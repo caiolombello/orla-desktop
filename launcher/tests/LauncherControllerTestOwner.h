@@ -55,8 +55,7 @@ public:
             if (!runner) { ++missingMetadata; continue; }
             auto *thread = runner->thread();
             const QString id = runner->id();
-            const QString alias = id == QStringLiteral("krunner_services") || id == QStringLiteral("calculator")
-                ? id : QStringLiteral("unknown_runner");
+            const QString alias = LauncherController::runnerAllowlist().contains(id) ? id : QStringLiteral("unknown_runner");
             auto trace = std::make_shared<RunnerTrace>(index, alias,
                 reinterpret_cast<quintptr>(runner.data()), reinterpret_cast<quintptr>(runner->parent()),
                 reinterpret_cast<quintptr>(thread),

@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <KConfig>
+#include <KConfigGroup>
 #include "AliasStore.h"
 #include "FavoritesStore.h"
 #include <KRunner/ResultsModel>
@@ -62,6 +63,10 @@ public:
     Q_INVOKABLE bool execute(int row, quint64 generation, const QString &id, const QString &actionId = QString());
     bool executeSelected();
     Q_INVOKABLE void dismiss();
+    // Fixed local KRunner allowlist; the effective list drops missing and user-disabled runners.
+    static QStringList runnerAllowlist();
+    static QStringList selectRunners(const QStringList &installed, const KConfigGroup &userPlugins);
+    QStringList runnerIds() const { return m_runnerIds; }
 Q_SIGNALS:
     void changed();
     void closeRequested();
@@ -73,6 +78,8 @@ private:
     void savedAppsChanged();
     bool refreshSavedPresentation();
     QString resultId(const QModelIndex &index) const;
+    QVariantMap presentationFor(const QString &runnerId) const;
+    bool logoutPromptAvailable() const;
     KConfig m_config;
     KConfig m_state;
     KRunner::ResultsModel m_model;
@@ -88,6 +95,7 @@ private:
     bool m_collectingSavedPresentation = false;
     bool m_savedRefreshPending = false;
     QList<int> m_backendRows;
+    QStringList m_runnerIds;
     SteamProviderController *m_steam;
     OrlaCommandController *m_commands = nullptr;
     quint64 m_generation = 0;
