@@ -63,6 +63,9 @@ Item {
     property var powerProfileBackendOverride: null
     property var wifiBackendOverride: null
     property var bluetoothBackendOverride: null
+    // {microphoneInUse, cameraInUse, power, phones, calendarEvents} for tests; the
+    // panel reads Plasma-PA, V4L2, UPower, KDE Connect and the PIM calendar.
+    property var islandSensorsOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     // The area switcher lives in Settings › Contextos and in the Control Center.
@@ -104,12 +107,19 @@ Item {
         Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - minimumTaskWidth))
     readonly property bool localEventsProfileReady: profileState.writable
         && (profileState.initialized || profileState.savedJSON === "")
+    // Live activities (music, Pomodoro, microphone and camera) keep the island
+    // up even when no notice kind is requested.
+    readonly property bool islandActivitiesActive: Boolean(configuration.eventIsland)
+        && Boolean(configuration.islandActivities)
     // Events go either to the island at the top of the screen or to a slot in the dock.
     readonly property bool eventIslandActive: Boolean(configuration.eventIsland)
-        && localEventsRequested && localEventsProfileReady
+        && ((localEventsRequested && localEventsProfileReady) || islandActivitiesActive)
     readonly property bool localEventsActive: localEventsRequested && localEventsProfileReady
         && !eventIslandActive && candidateEventSlotWidth >= 48
     readonly property var eventIslandState: localEventState
+    readonly property var islandModel: islandState
+    readonly property var islandMedia: musicControls.mediaState
+    readonly property var islandSensors: islandSensorsOverride !== null ? islandSensorsOverride : islandSensorsLoader.item
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
     readonly property int centerViewportWidth: innerWidth
     // The legacy lane reserves 4 px after the content; the glass skips it. The
@@ -315,7 +325,7 @@ Item {
     property Item labelTarget: null
     readonly property bool popupOpen: settings.visible || addDialog.visible || calendarPopup.visible
         || integrationPopup.visible || controlCenterPopup.visible || pomodoroPopup.visible
-        || musicPopup.visible || batteryPopup.visible || nativeTaskMenu.visible || taskMenu.visible
+        || musicPopup.visible || batteryPopup.visible || downloadsPopup.visible || nativeTaskMenu.visible || taskMenu.visible
     readonly property bool autoContextInteractionBusy: !ready || popupOpen
         || appearanceState.editing || appearanceState.dirty
         || appearancePresetState.dirty || appearancePresetState.busy
@@ -326,7 +336,7 @@ Item {
         || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending || wifiState.pending || bluetoothState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
-        || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
+        || musicPopup.interactionBusy || batteryPopup.interactionBusy || downloadsPopup.interactionBusy || nativeTaskMenu.interactionBusy
         || controlCenterPopup.contextSwitchBusy || taskMenu.contextSwitchBusy
     function hoverTile(tile, hovered) {
         if (hovered && !taskDragState.active) labelTarget = tile;
@@ -342,7 +352,16 @@ Item {
         objectName: "eventIslandLoader"
         property var islandOwner: root
         active: root.nativePopups && root.eventIslandActive
-        source: active ? Qt.resolvedUrl("NativeEventIsland.qml") : ""
+        // Layer-shell needs Wayland; elsewhere a Plasma dialog shows the island without input.
+        source: active ? Qt.resolvedUrl(Qt.platform.pluginName === "wayland"
+            ? "NativeIslandWindow.qml" : "NativeEventIsland.qml") : ""
+    }
+    Loader {
+        id: islandSensorsLoader
+        objectName: "islandSensorsLoader"
+        property var sensorsOwner: root
+        active: root.nativePopups && root.islandActivitiesActive && root.islandSensorsOverride === null
+        source: active ? Qt.resolvedUrl("NativeIslandSensors.qml") : ""
     }
     function widgetVisible(id) { const widget = displayWidgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
@@ -357,7 +376,7 @@ Item {
     }
     function closeContext() {
         taskMenu.close(); nativeTaskMenu.close(); addDialog.close();
-        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
+        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); downloadsPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
         menuRow = -1; menuData = {}; appInput.clear();
     }
     Connections {
@@ -735,8 +754,32 @@ Item {
         enabled: root.localEventsProfileReady && (root.eventIslandActive || root.candidateEventSlotWidth >= 48)
         completionEnabled: enabled && Boolean(root.configuration.showLocalToasts)
         audioEnabled: enabled && Boolean(root.presentation.showAudioHud)
+        powerEnabled: enabled && root.islandActivitiesActive
         activeScope: "profile:" + profileState.activeProfileId
         activeContextGeneration: profileState.revision
+    }
+    IslandState {
+        id: islandState
+        eventState: localEventState
+        activitiesEnabled: root.islandActivitiesActive
+        timerRunning: focusTimer.running
+        timerSecondsLeft: focusTimer.secondsLeft
+        timerBreak: Boolean(root.configuration.timerBreak)
+        mediaPlaying: musicControls.mediaState.playing
+        mediaPaused: musicControls.mediaState.paused
+        mediaTitle: root.player ? root.mediaText(root.player.track, 256) : ""
+        mediaArtist: root.player ? root.mediaText(root.player.artist || root.player.identity, 256) : ""
+        mediaArtUrl: musicControls.mediaState.artUrl
+        microphoneInUse: Boolean(root.islandSensors && root.islandSensors.microphoneInUse)
+        cameraInUse: Boolean(root.islandSensors && root.islandSensors.cameraInUse)
+        calendarEvents: root.islandSensors && root.islandSensors.calendarEvents ? root.islandSensors.calendarEvents : []
+        nowMs: root.now.getTime()
+    }
+    IslandNotices {
+        eventState: localEventState
+        enabled: root.islandActivitiesActive
+        power: root.islandSensors && root.islandSensors.power ? root.islandSensors.power : null
+        phones: root.islandSensors && root.islandSensors.phones ? root.islandSensors.phones : []
     }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }
@@ -955,8 +998,25 @@ Item {
             }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
-            // The Trash closes the dock after its own divider, as in macOS (optional, global).
-            Rectangle { objectName: "trashDivider"; anchors.verticalCenter: parent.verticalCenter; visible: trashLoader.active; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
+            // Downloads and the Trash close the dock after their own divider, as in macOS (optional, global).
+            Rectangle { objectName: "trashDivider"; anchors.verticalCenter: parent.verticalCenter; visible: trashLoader.active || downloadsLoader.active; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
+            Loader {
+                id: downloadsLoader
+                anchors.verticalCenter: parent.verticalCenter
+                active: Boolean(root.configuration.showDownloads)
+                visible: active
+                onActiveChanged: if (!active) downloadsPopup.close()
+                sourceComponent: DownloadsTile {
+                    objectName: "downloadsTile"
+                    iconSize: root.tileSize
+                    foreground: root.foreground; muted: root.muted; accent: root.accent
+                    animationDuration: root.motion
+                    nativeLabel: root.nativePopups
+                    onHoveredChanged: root.hoverTile(this, hovered)
+                    onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
+                    onClicked: downloadsPopup.visible ? downloadsPopup.close() : downloadsPopup.openAt(this)
+                }
+            }
             Loader {
                 id: trashLoader
                 anchors.verticalCenter: parent.verticalCenter
@@ -1217,14 +1277,21 @@ Item {
         id: nativeDoNotDisturbBackend
         objectName: "controlCenterDoNotDisturbNativeLoader"
         // Plasma's notification manager is only meaningful inside plasmashell.
-        active: controlCenterPopup.visible && root.doNotDisturbBackendOverride === null && root.nativePopups
+        // A profile's Focus mode also needs it, until its request is sent.
+        active: (controlCenterPopup.visible || focusMode.waiting) && root.doNotDisturbBackendOverride === null && root.nativePopups
         source: active ? Qt.resolvedUrl("NativeDoNotDisturb.qml") : ""
     }
     DoNotDisturbState {
         id: doNotDisturbState
         objectName: "doNotDisturbState"
-        active: controlCenterPopup.visible
+        active: controlCenterPopup.visible || focusMode.waiting
         backend: root.doNotDisturbBackendOverride !== null ? root.doNotDisturbBackendOverride : nativeDoNotDisturbBackend.item
+    }
+    FocusMode {
+        id: focusMode
+        doNotDisturb: doNotDisturbState
+        profileId: profileState.activeProfileId
+        mode: String(root.presentation.doNotDisturb || "keep")
     }
     Loader {
         id: nativeMicrophoneBackend
@@ -1397,6 +1464,24 @@ Item {
             muted: root.popupScheme.textMuted
         }
     }
+    DockPopup {
+        id: downloadsPopup
+        objectName: "downloadsPopup"
+        dock: root
+        title: qsTr("Downloads")
+        DownloadsStack {
+            objectName: "downloadsStack"
+            Layout.fillWidth: true
+            entries: downloadsLoader.item ? downloadsLoader.item.entries : []
+            folder: downloadsLoader.item ? downloadsLoader.item.folder : ""
+            opener: url => { downloadsPopup.close(); root.openDownload(url); }
+            foreground: root.popupScheme.text
+            muted: root.popupScheme.textMuted
+            accent: root.popupScheme.accent
+        }
+    }
+    // Tests replace this to record what would open.
+    property var openDownload: url => Qt.openUrlExternally(url)
     DockPopup {
         id: batteryPopup
         objectName: "batteryPopup"

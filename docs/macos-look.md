@@ -9,6 +9,7 @@ do macOS e os desfaz do mesmo jeito:
 | Decoração Orla | semáforos à esquerda, título central, cantos e sombra | [window-decoration.md](window-decoration.md) |
 | Alternador de janelas | Alt+Tab com ícones grandes e um item por aplicativo, sem escurecer as outras janelas (como o Cmd+Tab) | — |
 | Minimizar | efeito "lâmpada mágica" em vez de "encolher" (parecido com o Gênio) | — |
+| Cantos ativos | canto superior esquerdo abre a Visão Geral (como o Mission Control); canto inferior direito mostra a área de trabalho. O superior direito fica livre para a Central de Controle e o relógio da barra | — |
 | Relógio da barra | data ao lado da hora, como na barra de menus ("dom. 25 out. 11:24") | abaixo |
 | Notificações | banners no estilo macOS no canto superior direito e central agrupada por app | abaixo |
 | Bandeja | brilho (já na Central de Controle) e área de transferência (Meta+V) passam para a seta | abaixo |
@@ -19,9 +20,10 @@ python3 scripts/macos_look.py status
 python3 scripts/macos_look.py restore   # volta a cada configuração anterior
 ```
 
-O tema e a decoração guardam o próprio estado. As cinco chaves do KWin
+O tema e a decoração guardam o próprio estado. As sete chaves do KWin
 (`[TabBox] LayoutName`, `ApplicationsMode` e `HighlightWindows`; `[Plugins]
-magiclampEnabled` e `squashEnabled`) ficam salvas em
+magiclampEnabled` e `squashEnabled`; `[Effect-overview] BorderActivate=7` e
+`[ElectricBorders] BottomRight=ShowDesktop`) ficam salvas em
 `~/.local/state/orla/macos-look.json` antes da primeira mudança. `restore`
 regrava cada uma ou apaga as que não existiam, e os efeitos de minimizar trocam
 na hora (`loadEffect`/`unloadEffect`). Aplicar de novo mantém o
@@ -119,3 +121,15 @@ mudam. `restore` volta a mostrar só os itens que `apply` ocultou e preserva
 outras mudanças feitas depois. A lista anterior fica em
 `~/.local/state/orla/menu-bar-tray.json`; `tests/test_menu_bar_tray.py` cobre
 os casos.
+
+## Pilha de Downloads
+
+Opcional e global, em **Widgets › Mostrar os Downloads ao lado da Lixeira**.
+Como no Dock do macOS, um ícone de pasta fica antes da Lixeira, depois do mesmo
+divisor. Um clique abre um popup com até 12 itens mais recentes da pasta
+Downloads (do mais novo para o mais antigo), com miniatura para imagens e ícone
+por tipo para o resto. Downloads em andamento (`.part`, `.crdownload` e afins)
+e arquivos ocultos não aparecem. Um clique num item o abre no aplicativo
+padrão; **Abrir a pasta Downloads** abre a pasta. Tab e as setas passam pelos
+itens, com o anel de foco visível. A pilha só lê a pasta: não move, apaga nem
+renomeia nada.

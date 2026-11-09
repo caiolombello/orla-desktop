@@ -260,6 +260,76 @@ class LocalEventsProductTests(unittest.TestCase):
         self.assertEqual(self.config.property("timerDeadline"), deadline)
         self.assertTrue(self.evaluate("pomodoro.running"))
 
+    def test_island_activities_setting_is_global_default_off_and_needs_the_island(self):
+        import xml.etree.ElementTree as ET
+        document = ET.parse(ROOT / "package/contents/config/main.xml")
+        entries = [entry for entry in document.iter() if entry.tag.endswith("entry")
+                   and entry.attrib.get("name") == "islandActivities"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].attrib.get("type"), "Bool")
+        self.assertEqual([child.text for child in entries[0] if child.tag.endswith("default")], ["false"])
+        checkbox = self.window.findChild(QQuickItem, "islandActivities")
+        self.assertIsNotNone(checkbox)
+        self.assertIn("(global)", checkbox.property("text"))
+        self.assertFalse(checkbox.property("enabled"))
+        self.config.setProperty("eventIsland", True)
+        self.settle()
+        self.assertTrue(checkbox.property("enabled"))
+        before = self.config.property("profilesJSON")
+        self.evaluate("click()", checkbox)
+        self.assertTrue(self.config.property("islandActivities"))
+        self.assertEqual(self.config.property("profilesJSON"), before)
+
+    def test_live_activities_keep_the_island_up_without_notice_kinds(self):
+        rules = self.window.findChild(QObject, "islandState")
+        self.config.setProperty("eventIsland", True)
+        self.settle()
+        self.assertFalse(self.evaluate("eventIslandActive"))
+        self.config.setProperty("islandActivities", True)
+        self.settle()
+        self.assertTrue(self.evaluate("islandActivitiesActive"))
+        self.assertTrue(self.evaluate("eventIslandActive"))
+        self.assertFalse(self.evaluate("localEventsActive"))
+        # Tests have no Plasma windows and no Plasma-PA: neither loader runs.
+        self.assertFalse(self.window.findChild(QObject, "eventIslandLoader").property("active"))
+        self.assertFalse(self.window.findChild(QObject, "islandSensorsLoader").property("active"))
+        self.assertEqual(rules.property("mode"), "idle")
+
+        self.config.setProperty("timerBreak", False)
+        self.config.setProperty("timerDeadline", self.evaluate("Date.now() + 600000"))
+        self.settle(600)
+        self.assertEqual(rules.property("mode"), "compact")
+        self.assertEqual(self.evaluate("primary.kind", rules), "timer")
+        self.assertGreater(self.evaluate("primary.secondsLeft", rules), 0)
+
+        self.evaluate("islandSensorsOverride = {microphoneInUse: true, cameraInUse: false}")
+        self.settle()
+        self.assertEqual(self.evaluate("privacy", rules), {"microphone": True, "camera": False})
+
+        state = self.event_state()
+        self.assertTrue(state.property("powerEnabled"))
+        self.evaluate("islandSensorsOverride = {microphoneInUse: true, cameraInUse: false, power: {percent: 30, state: 2}}")
+        self.settle()
+        self.evaluate("islandSensorsOverride = {microphoneInUse: true, cameraInUse: false, power: {percent: 30, state: 1}}")
+        self.settle()
+        current = state.property("current")
+        current = current.toVariant() if hasattr(current, "toVariant") else current
+        self.assertEqual((current["kind"], current["action"]), ("power", "charging"))
+        self.evaluate("dismiss()", state)
+        self.evaluate("islandSensorsOverride = {calendarEvents: [{title: 'Reunião sintética', startMs: Date.now() + 120000,"
+                      " endMs: Date.now() + 900000, allDay: false}]}")
+        self.settle(1100)
+        self.assertEqual(self.evaluate("primary.kind", rules), "meeting")
+
+        # Turning activities off leaves only notices, and none are requested.
+        self.config.setProperty("islandActivities", False)
+        self.settle()
+        self.assertFalse(self.evaluate("eventIslandActive"))
+        self.assertEqual(rules.property("mode"), "idle")
+        self.assertEqual(self.evaluate("privacy", rules), {"microphone": False, "camera": False})
+        self.assertFalse(state.property("powerEnabled"))
+        self.config.setProperty("timerDeadline", 0)
+
     def test_island_kconfig_and_setting_are_global_and_default_off(self):
         import xml.etree.ElementTree as ET
         document = ET.parse(ROOT / "package/contents/config/main.xml")
@@ -1159,6 +1229,9 @@ class EventIslandTests(unittest.TestCase):
         self.window = self.engine.rootObjects()[0]
         self.island = self.window.findChild(QQuickItem, "eventIsland")
         self.state = self.window.findChild(QObject, "islandEventState")
+        self.rules = self.window.findChild(QObject, "islandState")
+        self.media = self.window.findChild(QObject, "islandMediaFixture")
+        self.timer = self.window.findChild(QObject, "islandTimerFixture")
         self.capsule = self.window.findChild(QQuickItem, "eventIslandCapsule")
         QTest.qWait(30)
 
@@ -1190,7 +1263,10 @@ class EventIslandTests(unittest.TestCase):
         return {"kind": "audio", "action": action, "targetId": "speakers", "originScope": "profile:work",
                 "contextGeneration": 2, "value": value, "title": title, "detail": detail}
 
-    def test_idle_island_is_hidden_and_keeps_a_fixed_size(self):
+    def test_idle_island_is_hidden_and_keeps_a_fixed_size_in_the_dialog_fallback(self):
+        # Outside Wayland, Plasma's Dialog keeps its first size.
+        self.island.setProperty("fixedSize", True)
+        QTest.qWait(30)
         self.assertFalse(self.island.property("hasEvent"))
         self.assertFalse(self.island.property("showing"))
         self.assertEqual(self.capsule.property("opacity"), 0)
@@ -1219,8 +1295,9 @@ class EventIslandTests(unittest.TestCase):
         self.assertEqual(self.evaluate("textFormat", title), 0)  # Text.PlainText
         self.assertTrue(self.item("eventIslandDetail").isVisible())
         self.assertFalse(self.item("eventIslandLevel").isVisible())
-        self.assertEqual(self.island.width(), 350)
-        self.assertLessEqual(self.capsule.width(), self.island.width())
+        # In the layer-shell window the item is only as large as the capsule.
+        self.assertEqual(self.island.width(), self.capsule.width())
+        self.assertLessEqual(self.capsule.width(), 350)
         self.assertEqual(self.capsule.property("radius"), self.capsule.height() / 2)
 
     def test_volume_shows_a_level_bar_and_the_level_icon(self):
@@ -1258,6 +1335,304 @@ class EventIslandTests(unittest.TestCase):
         self.assertFalse(self.island.property("hasEvent"))
         self.assertFalse(self.island.property("showing"))
         self.assertEqual(self.item("eventIslandTitle").property("text"), "Pausa concluída")
+
+    def live(self, **values):
+        values.setdefault("activitiesEnabled", True)
+        for key, value in values.items():
+            self.rules.setProperty(key, value)
+        QTest.qWait(60)
+
+    def click(self, name, x=None, y=None):
+        item = self.item(name)
+        point = item.mapToScene(QPointF(item.width() / 2 if x is None else x,
+                                        item.height() / 2 if y is None else y))
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        QTest.qWait(60)
+
+    def test_live_activities_stay_off_until_enabled(self):
+        self.live(activitiesEnabled=False, mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.assertEqual(self.rules.property("mode"), "idle")
+        self.assertFalse(self.island.property("showing"))
+        self.live(activitiesEnabled=True)
+        self.assertEqual(self.rules.property("mode"), "compact")
+        self.assertTrue(self.island.property("showing"))
+        self.assertTrue(self.item("islandCompact").isVisible())
+        self.assertEqual(self.item("islandCompactText").property("text"), "Faixa sintética")
+        self.assertTrue(self.item("islandBars").isVisible())
+        self.assertFalse(self.item("islandPausedMark").isVisible())
+        # Compact fits inside the menu bar and the window is just the capsule.
+        self.assertEqual(self.capsule.height(), self.island.property("compactHeight"))
+        self.assertEqual(self.island.height(), self.capsule.height())
+        self.assertEqual(self.island.width(), self.capsule.width())
+        self.assertLess(self.capsule.width(), 350)
+        self.assertEqual(self.capsule.property("radius"), self.capsule.height() / 2)
+
+    def test_timer_outranks_music_and_shows_the_time_left(self):
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética", timerRunning=True, timerSecondsLeft=754)
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "timer")
+        self.assertEqual(self.item("islandCompactText").property("text"), "Foco")
+        self.assertEqual(self.item("islandClock").property("text"), "12:34")
+        self.assertFalse(self.item("islandBars").isVisible())
+        self.assertIn("12:34 restantes", self.evaluate("summary()", self.island))
+        self.live(timerBreak=True, timerSecondsLeft=3605)
+        self.assertEqual(self.item("islandCompactText").property("text"), "Pausa")
+        self.assertEqual(self.item("islandClock").property("text"), "1:00:05")
+
+    def test_privacy_takes_the_capsule_only_when_nothing_else_is_live(self):
+        self.live(microphoneInUse=True)
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "privacy")
+        self.assertEqual(self.item("islandCompactText").property("text"), "Microfone em uso")
+        self.assertEqual(self.item("islandCompactIcon").property("name"), "audio-input-microphone-symbolic")
+        self.assertFalse(self.item("islandPrivacyMicrophone").isVisible())
+        self.live(cameraInUse=True)
+        self.assertEqual(self.item("islandCompactText").property("text"), "Microfone e câmera em uso")
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "media")
+        self.assertEqual(self.item("islandCompactText").property("text"), "Faixa sintética")
+        self.assertTrue(self.item("islandPrivacyMicrophone").isVisible())
+        self.assertTrue(self.item("islandPrivacyCamera").isVisible())
+
+    def test_click_expands_music_and_its_controls_reach_the_player(self):
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética", mediaArtist="Artista sintético")
+        compact_width = self.capsule.width()
+        self.click("islandTapArea")
+        self.assertEqual(self.rules.property("mode"), "expanded")
+        self.assertTrue(self.item("islandExpanded").isVisible())
+        self.assertFalse(self.item("islandCompact").isVisible())
+        self.assertEqual(self.capsule.width(), 350)
+        self.assertGreater(self.capsule.height(), self.island.property("compactHeight") * 3)
+        self.assertEqual(self.island.width(), self.capsule.width())
+        self.assertEqual(self.item("islandMediaTitle").property("text"), "Faixa sintética")
+        self.assertEqual(self.item("islandMediaArtist").property("text"), "Artista sintético")
+        self.assertTrue(self.item("islandMediaProgress").isVisible())
+        self.assertGreaterEqual(self.media.property("refreshCount"), 1)
+        self.assertEqual(self.item("islandPlayPause").property("text"), "Pausar")
+        for name, counter in (("islandPrevious", "previousCount"), ("islandPlayPause", "playPauseCount"),
+                              ("islandNext", "nextCount"), ("islandRaisePlayer", "raiseCount")):
+            self.click(name)
+            self.assertEqual(self.media.property(counter), 1, name)
+            self.assertEqual(self.rules.property("mode"), "expanded", name)
+        # The island never takes keyboard focus.
+        self.assertEqual(self.evaluate("focusPolicy", self.item("islandPlayPause")), 0)
+        # A click on the capsule's background folds it back; the window follows.
+        self.click("islandTapArea", x=self.capsule.width() - 12, y=12)
+        self.assertEqual(self.rules.property("mode"), "compact")
+        QTest.qWait(60)
+        self.assertEqual(self.capsule.width(), compact_width)
+        self.assertEqual(self.island.width(), compact_width)
+
+    def test_paused_music_stays_while_expanded_and_for_a_grace_period(self):
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.click("islandTapArea")
+        self.live(mediaPlaying=False, mediaPaused=True)
+        self.assertEqual(self.rules.property("mode"), "expanded")
+        self.assertEqual(self.item("islandPlayPause").property("iconName"), "media-playback-start-symbolic")
+        self.evaluate("collapse()", self.rules)
+        QTest.qWait(60)
+        self.assertEqual(self.rules.property("mode"), "compact")
+        self.assertTrue(self.item("islandPausedMark").isVisible())
+        self.assertFalse(self.item("islandBars").isVisible())
+        self.evaluate("heldTimer.triggered()", self.rules)
+        QTest.qWait(60)
+        self.assertEqual(self.rules.property("mode"), "idle")
+        # A stopped player (neither playing nor paused) leaves at once.
+        self.live(mediaPaused=False, mediaPlaying=True)
+        self.live(mediaPlaying=False)
+        self.assertEqual(self.rules.property("mode"), "idle")
+
+    def test_expanded_timer_pauses_and_resets_the_pomodoro(self):
+        self.live(timerRunning=True, timerSecondsLeft=90)
+        self.click("islandTapArea")
+        self.assertEqual(self.item("islandTimerClock").property("text"), "1:30")
+        self.assertEqual(self.item("islandTimerPhase").property("text"), "Foco")
+        self.click("islandTimerToggle")
+        self.click("islandTimerReset")
+        self.assertEqual(self.timer.property("toggleCount"), 1)
+        self.assertEqual(self.timer.property("resetCount"), 1)
+        # Once the timer stops, nothing is live and the island folds away.
+        self.live(timerRunning=False)
+        self.assertEqual(self.rules.property("mode"), "idle")
+        self.assertFalse(self.rules.property("expanded"))
+
+    def test_expanded_privacy_lists_each_device_in_use(self):
+        self.live(microphoneInUse=True, cameraInUse=True)
+        self.click("islandTapArea")
+        self.assertEqual(self.evaluate("children.filter(child => child.objectName === 'islandPrivacyRow'"
+                                       " && child.visible).length", self.item("islandExpanded")), 2)
+
+    def test_a_notice_takes_over_and_gives_the_capsule_back(self):
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.click("islandTapArea")
+        self.submit({"kind": "completion", "key": "pomodoro:completion", "scope": "global",
+                     "title": "Pausa concluída", "detail": "Pronto para focar?"})
+        self.assertEqual(self.rules.property("mode"), "transient")
+        self.assertFalse(self.rules.property("expanded"))
+        self.assertTrue(self.item("islandNotice").isVisible())
+        self.assertFalse(self.item("islandCompact").isVisible())
+        # A click on a notice dismisses it.
+        self.click("islandTapArea")
+        self.assertIsNone(self.state.property("current"))
+        self.assertEqual(self.rules.property("mode"), "compact")
+        self.assertTrue(self.item("islandCompact").isVisible())
+
+    def test_battery_notices_show_a_tinted_level_and_their_icon(self):
+        self.state.setProperty("powerEnabled", True)
+        self.submit({"kind": "power", "action": "charging", "value": 64, "title": "Carregando",
+                     "detail": "64% de bateria"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "battery-060-charging-symbolic")
+        self.assertTrue(self.item("eventIslandLevel").isVisible())
+        self.assertTrue(self.item("eventIslandDetail").isVisible())
+        self.assertAlmostEqual(self.item("eventIslandLevelFill").width(), self.item("eventIslandLevel").width() * 0.64, places=3)
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#69d7c2")
+        self.evaluate("clear()", self.state)
+        self.submit({"kind": "power", "action": "low", "value": 10, "title": "Bateria fraca", "detail": "10% restantes"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "battery-caution-symbolic")
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#ff8a7a")
+        self.evaluate("clear()", self.state)
+        self.submit({"kind": "power", "action": "phone-low", "value": 20, "title": "Celular com bateria fraca",
+                     "detail": "Celular sintético · 20%"})
+        self.assertEqual(self.item("eventIslandIcon").property("name"), "phone-battery-symbolic")
+        self.assertEqual(self.item("eventIslandLevelFill").property("color").name(), "#f2b866")
+
+    def test_meeting_keeps_its_title_for_the_expanded_view(self):
+        import time
+        now = int(time.time() * 1000)
+        self.live(nowMs=now, calendarEvents=[{"title": "Reunião sintética", "startMs": now + 4 * 60_000 + 500,
+                                              "endMs": now + 34 * 60_000}],
+                  mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "meeting")
+        self.assertEqual(self.item("islandCompactText").property("text"), "Em 5 min")
+        self.assertEqual(self.item("islandCompactIcon").property("name"), "appointment-soon-symbolic")
+        self.assertIn("Reunião sintética", self.evaluate("summary()", self.island))
+        self.click("islandTapArea")
+        self.assertEqual(self.item("islandMeetingTitle").property("text"), "Reunião sintética")
+        self.assertIn("Em 5 min", self.item("islandMeetingTime").property("text"))
+        self.assertIn(" – ", self.item("islandMeetingTime").property("text"))
+        self.live(nowMs=now + 5 * 60_000)
+        self.assertEqual(self.item("islandMeetingTime").property("text").split(" · ")[1], "Agora")
+        # Past the tail, the music comes back and the expanded view stays on it.
+        self.live(nowMs=now + 11 * 60_000)
+        self.assertEqual(self.evaluate("primary.kind", self.rules), "media")
+
+    def test_notices_compare_each_battery_reading_with_the_last(self):
+        notices = self.window.findChild(QObject, "islandNotices")
+        self.state.setProperty("powerEnabled", True)
+        notices.setProperty("enabled", True)
+        self.evaluate("power = {percent: 40, state: 2}", notices)
+        self.assertIsNone(self.state.property("current"))
+        self.evaluate("power = {percent: 40, state: 1}", notices)
+        QTest.qWait(30)
+        current = self.evaluate("current", self.state)
+        self.assertEqual((current["action"], current["title"], current["detail"]), ("charging", "Carregando", "40% de bateria"))
+        self.evaluate("clear()", self.state)
+        self.evaluate("phones = [{id: 'phone-a', name: 'Celular sintético', charge: 21, charging: false}]", notices)
+        self.evaluate("phones = [{id: 'phone-a', name: 'Celular sintético', charge: 20, charging: false}]", notices)
+        current = self.evaluate("current", self.state)
+        self.assertEqual((current["action"], current["detail"]), ("phone-low", "Celular sintético · 20%"))
+        # Off forgets the last readings: turning on again raises nothing by itself.
+        self.evaluate("clear()", self.state)
+        notices.setProperty("enabled", False)
+        notices.setProperty("enabled", True)
+        self.assertIsNone(self.state.property("current"))
+
+    def test_dialog_fallback_shows_activities_but_never_expands_or_takes_clicks(self):
+        self.island.setProperty("fixedSize", True)
+        self.island.setProperty("interactive", False)
+        self.live(mediaPlaying=True, mediaTitle="Faixa sintética")
+        self.assertFalse(self.item("islandTapArea").property("enabled"))
+        self.assertTrue(self.evaluate("toggle()", self.rules))
+        QTest.qWait(60)
+        self.assertEqual(self.island.property("look"), "compact")
+        self.assertFalse(self.item("islandExpanded").isVisible())
+        self.assertEqual(self.island.width(), 350)
+        self.assertLessEqual(self.capsule.height(), self.island.height())
+
+
+class IslandLogicTests(unittest.TestCase):
+    """Island.js on its own, as a plain script."""
+
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtQml import QJSEngine
+        cls.js = QJSEngine()
+        source = (ROOT / "package/contents/code/Island.js").read_text().replace(".pragma library", "")
+        result = cls.js.evaluate(source)
+        assert not result.isError(), result.toString()
+
+    def call(self, name, *arguments):
+        import json
+        value = self.js.evaluate(f"JSON.stringify({name}({', '.join(json.dumps(a) for a in arguments)}))")
+        self.assertFalse(value.isError(), value.toString())
+        return json.loads(value.toString())
+
+    def test_clock(self):
+        self.assertEqual(self.call("clock", 0), "0:00")
+        self.assertEqual(self.call("clock", 59.9), "0:59")
+        self.assertEqual(self.call("clock", 754), "12:34")
+        self.assertEqual(self.call("clock", 3605), "1:00:05")
+        self.assertEqual(self.call("clock", -3), "0:00")
+
+    def test_activities_are_ranked_and_bounded(self):
+        activities = self.call("activities", {
+            "timer": {"running": True, "secondsLeft": 61.7, "isBreak": False},
+            "media": {"playing": True, "title": "  Faixa\n   sintética ", "artist": "A" * 400,
+                      "artUrl": "javascript:alert(1)"},
+            "privacy": {"microphone": True, "camera": False}})
+        self.assertEqual([entry["kind"] for entry in activities], ["timer", "media"])
+        self.assertEqual(activities[0]["secondsLeft"], 61)
+        self.assertEqual(activities[1]["title"], "Faixa sintética")
+        self.assertEqual(len(activities[1]["artist"]), 256)
+        self.assertEqual(activities[1]["artUrl"], "")
+        media = self.call("activities", {"media": {"held": True, "artUrl": "https://example.invalid/c.png"}})
+        self.assertEqual(media, [{"kind": "media", "priority": 20, "playing": False, "title": "", "artist": "",
+                                  "artUrl": "https://example.invalid/c.png"}])
+        self.assertEqual(self.call("activities", {"media": {"artUrl": "http://example.invalid/c.png", "playing": True}})[0]["artUrl"], "")
+        self.assertEqual(self.call("activities", {"timer": {"running": True, "secondsLeft": "x"}}), [])
+        self.assertEqual(self.call("activities", None), [])
+        self.assertEqual(self.call("activities", {"privacy": {"camera": True}})[0]["kind"], "privacy")
+
+    def test_next_meeting_window_skips_all_day_and_picks_the_earliest(self):
+        now = 1_000_000_000
+        minute = 60_000
+        events = [{"title": "Dia inteiro", "startMs": now - minute, "endMs": now + 60 * minute, "allDay": True},
+                  {"title": "Mais tarde", "startMs": now + 9 * minute, "endMs": now + 30 * minute},
+                  {"title": "Logo", "startMs": now + 4 * minute, "endMs": now + 34 * minute},
+                  {"title": "Longe", "startMs": now + 11 * minute}]
+        self.assertEqual(self.call("nextMeeting", events, now)["title"], "Logo")
+        self.assertIsNone(self.call("nextMeeting", [events[3]], now))
+        self.assertEqual(self.call("nextMeeting", [{"title": "Começou", "startMs": now - 4 * minute}], now)["title"], "Começou")
+        self.assertIsNone(self.call("nextMeeting", [{"title": "Antiga", "startMs": now - 6 * minute}], now))
+        self.assertIsNone(self.call("nextMeeting", None, now))
+        meeting = self.call("activities", {"meeting": {"title": "Logo", "startMs": now + 4 * minute + 1, "nowMs": now},
+                                           "timer": {"running": True, "secondsLeft": 60}})
+        self.assertEqual([entry["kind"] for entry in meeting], ["meeting", "timer"])
+        self.assertEqual(meeting[0]["minutes"], 5)
+
+    def test_power_notices_fire_on_plug_in_and_each_low_level_once(self):
+        self.assertIsNone(self.call("powerNotice", None, {"percent": 50, "state": 1}))
+        self.assertIsNone(self.call("powerNotice", {"percent": 50, "state": 0}, {"percent": 50, "state": 1}))
+        self.assertEqual(self.call("powerNotice", {"percent": 50, "state": 2}, {"percent": 50.4, "state": 1}),
+                         {"action": "charging", "value": 50})
+        self.assertEqual(self.call("powerNotice", {"percent": 50, "state": 2}, {"percent": 50, "state": 5})["action"], "charging")
+        self.assertIsNone(self.call("powerNotice", {"percent": 50, "state": 1}, {"percent": 51, "state": 4}))
+        self.assertEqual(self.call("powerNotice", {"percent": 21, "state": 2}, {"percent": 20, "state": 2}),
+                         {"action": "low", "value": 20})
+        self.assertIsNone(self.call("powerNotice", {"percent": 20, "state": 2}, {"percent": 19, "state": 2}))
+        self.assertEqual(self.call("powerNotice", {"percent": 11, "state": 2}, {"percent": 10, "state": 2})["value"], 10)
+        self.assertIsNone(self.call("powerNotice", {"percent": 30, "state": 2}, {"percent": 130, "state": 2}))
+        self.assertEqual(self.call("phoneNotice", {"charge": 16, "charging": False}, {"charge": 15, "charging": False}),
+                         None)
+        self.assertEqual(self.call("phoneNotice", {"charge": 21, "charging": False}, {"charge": 20, "charging": False}),
+                         {"action": "phone-low", "value": 20})
+        self.assertIsNone(self.call("phoneNotice", {"charge": 21, "charging": False}, {"charge": 20, "charging": True}))
+        self.assertIsNone(self.call("phoneNotice", None, {"charge": 5, "charging": False}))
+
+    def test_mode(self):
+        live = [{"kind": "media"}]
+        self.assertEqual(self.call("mode", True, live, True), "transient")
+        self.assertEqual(self.call("mode", False, live, True), "expanded")
+        self.assertEqual(self.call("mode", False, live, False), "compact")
+        self.assertEqual(self.call("mode", False, [], True), "idle")
 
 
 if __name__ == "__main__":
