@@ -24,7 +24,9 @@ Os IDs foram conferidos no Fedora 44/Plasma 6.8 (`/usr/lib64/qt6/plugins/kf6/kru
 e `/usr/share/krunner/dbusplugins`). Runner não instalado fica de fora sem erro; o
 aviso de runners indisponíveis só aparece se nenhum carregar. Um runner desligado
 pelo usuário nas configurações do KRunner (`krunnerrc`, lido sem gravar) também
-fica de fora, exceto aplicativos e calculadora. Aplicativos mostram até 32
+fica de fora, exceto aplicativos e calculadora. Essa leitura acontece quando o
+launcher inicia; como ele fica residente, a mudança vale depois de reiniciá-lo.
+Aplicativos mostram até 32
 resultados e vêm primeiro; as outras fontes mostram até seis cada. O modelo do
 KRunner fica sem limite próprio, porque esse limite é dividido entre categorias e
 fontes com muitas categorias (como o Baloo) tirariam linhas dos aplicativos.
@@ -40,7 +42,8 @@ fontes com muitas categorias (como o Baloo) tirariam linhas dos aplicativos.
   a preferência "confirmar ao sair" do usuário); o launcher só chama o prompt
   nativo `org.kde.LogoutPrompt`, como o `ForcePrompt` da barra. Sem esse serviço
   a linha aparece desativada. Bloquear, suspender e brilho seguem direto, como na
-  barra.
+  barra. Hibernar e as ações que o runner de janelas só oferece por palavra-chave
+  (fechar, minimizar, manter acima) também seguem direto, sem confirmação.
 - **Privacidade:** a superfície vazia mostra só favoritos; documentos, arquivos e
   janelas só aparecem enquanto há consulta.
 
