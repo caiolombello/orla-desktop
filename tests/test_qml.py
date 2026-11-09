@@ -806,7 +806,9 @@ Item {
         self.assertLessEqual(dialog.y() + dialog.height() - menu.property("shadowMargin"), glass_top - 10 + 1)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Nova janela")
         QTest.keyClick(dialog, Qt.Key_Down)
-        self.assertEqual(dialog.activeFocusItem().property("text"), "Minimizar / restaurar")
+        # Row 0 can move right only where both harness launchers are installed.
+        following = "Mover para a direita" if self.evaluate("tasksModel.count") > 1 else "Minimizar / restaurar"
+        self.assertEqual(dialog.activeFocusItem().property("text"), following)
         QTest.keyClick(dialog, Qt.Key_Up)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Nova janela")
         closed = QSignalSpy(menu.closed)
