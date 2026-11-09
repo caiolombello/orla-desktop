@@ -1217,14 +1217,21 @@ Item {
         id: nativeDoNotDisturbBackend
         objectName: "controlCenterDoNotDisturbNativeLoader"
         // Plasma's notification manager is only meaningful inside plasmashell.
-        active: controlCenterPopup.visible && root.doNotDisturbBackendOverride === null && root.nativePopups
+        // A profile's Focus mode also needs it, until its request is sent.
+        active: (controlCenterPopup.visible || focusMode.waiting) && root.doNotDisturbBackendOverride === null && root.nativePopups
         source: active ? Qt.resolvedUrl("NativeDoNotDisturb.qml") : ""
     }
     DoNotDisturbState {
         id: doNotDisturbState
         objectName: "doNotDisturbState"
-        active: controlCenterPopup.visible
+        active: controlCenterPopup.visible || focusMode.waiting
         backend: root.doNotDisturbBackendOverride !== null ? root.doNotDisturbBackendOverride : nativeDoNotDisturbBackend.item
+    }
+    FocusMode {
+        id: focusMode
+        doNotDisturb: doNotDisturbState
+        profileId: profileState.activeProfileId
+        mode: String(root.presentation.doNotDisturb || "keep")
     }
     Loader {
         id: nativeMicrophoneBackend

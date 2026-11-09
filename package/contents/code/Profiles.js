@@ -5,7 +5,12 @@ var formatVersion = "0.2-experimental";
 var widgetIds = ["clock", "pomodoro", "music", "systemBattery", "quota", "peripherals", "recording"];
 var widgetKeys = ["showClock", "showPomodoro", "showMusic", "showSystemBattery", "showQuota", "showPeripherals", "showRecording"];
 var legacyPresentationKeys = ["launchers", "appearance", "widgets", "calendarEvents", "currentDesktopOnly"];
-var presentationKeys = legacyPresentationKeys.concat(["showAudioHud"]);
+// Keys added after the first format: optional when read, filled with these defaults.
+// doNotDisturb is the profile's Focus mode: "on" or "off" switches Plasma's Do Not
+// Disturb when the profile becomes active; "keep" leaves it as it is.
+var optionalPresentation = {showAudioHud: false, doNotDisturb: "keep"};
+var focusModes = ["keep", "on", "off"];
+var presentationKeys = legacyPresentationKeys.concat(Object.keys(optionalPresentation));
 var appearanceKeys = ["theme", "iconSize", "animations", "appearanceJSON"];
 var controls = /[\u0000-\u001f\u007f-\u009f]/;
 
@@ -23,7 +28,19 @@ function flat(configuration) {
         animations: configuration.animations, appearanceJSON: configuration.appearanceJSON
     }, widgets: widgetIds.map((id, index) => ({id: id, visible: configuration[widgetKeys[index]]})),
         calendarEvents: configuration.calendarEvents, currentDesktopOnly: configuration.currentDesktopOnly,
-        showAudioHud: Boolean(configuration.showAudioHud)};
+        showAudioHud: Boolean(configuration.showAudioHud), doNotDisturb: "keep"};
+}
+// The keys of the first format, plus any of the optional ones (and `extra`).
+function knownShape(value, extra) {
+    const required = legacyPresentationKeys.concat(extra || []);
+    const allowed = presentationKeys.concat(extra || []);
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+        && required.every(key => key in value) && Object.keys(value).every(key => allowed.indexOf(key) !== -1);
+}
+function withDefaults(value) {
+    const next = copy(value);
+    Object.keys(optionalPresentation).forEach(key => { if (!(key in next)) next[key] = optionalPresentation[key]; });
+    return next;
 }
 function capture(value) {
     const next = copy(value);
@@ -72,6 +89,8 @@ function fieldError(key, value) {
             return "Organização inválida. Use cada widget conhecido uma vez.";
     } else if (key === "calendarEvents" || key === "currentDesktopOnly" || key === "showAudioHud") {
         if (typeof value !== "boolean") return "Preferência inválida. Escolha ativado ou desativado.";
+    } else if (key === "doNotDisturb") {
+        if (focusModes.indexOf(value) === -1) return "Modo de foco inválido. Escolha manter, ligar ou desligar.";
     } else if (key === "theme") {
         if (["glass", "midnight", "paper"].indexOf(value) === -1) return "Tema inválido.";
     } else if (key === "iconSize") {
@@ -101,12 +120,9 @@ function validatePatch(patch) {
     return {value: copy(patch), error: ""};
 }
 function validatePresentation(value) {
-    if ((!Appearance.exactKeys(value, presentationKeys) && !Appearance.exactKeys(value, legacyPresentationKeys))
-            || !Appearance.exactKeys(value.appearance, appearanceKeys))
+    if (!knownShape(value) || !Appearance.exactKeys(value.appearance, appearanceKeys))
         return {error: "Configuração de perfil inválida."};
-    const normalized = copy(value);
-    if (!("showAudioHud" in normalized)) normalized.showAudioHud = false;
-    return validatePatch(normalized);
+    return validatePatch(withDefaults(value));
 }
 function presentation(profile) {
     const value = {};
@@ -130,13 +146,11 @@ function validate(value) {
     const ids = new Set();
     const names = new Set();
     for (const profile of value.profiles) {
-        if ((!Appearance.exactKeys(profile, presentationKeys.concat(["id", "name"]))
-                && !Appearance.exactKeys(profile, legacyPresentationKeys.concat(["id", "name"])))
-                || typeof profile.id !== "string" || profile.id.length > 48
+        if (!knownShape(profile, ["id", "name"]) || typeof profile.id !== "string" || profile.id.length > 48
                 || !/^[a-z0-9][a-z0-9_-]*$/.test(profile.id) || profile.id === "legacy"
                 || !validName(profile.name) || ids.has(profile.id) || names.has(profile.name))
             return {error: "Nome ou identificador de perfil inválido ou repetido."};
-        const result = validatePresentation(presentation(profile));
+        const result = validatePresentation(presentation(withDefaults(profile)));
         if (result.error) return result;
         ids.add(profile.id);
         names.add(profile.name);
@@ -144,11 +158,7 @@ function validate(value) {
     if (value.activeProfileId !== "legacy" && !ids.has(value.activeProfileId))
         return {error: "O perfil selecionado não existe."};
     const normalized = copy(value);
-    normalized.profiles = value.profiles.map(profile => {
-        const next = copy(profile);
-        if (!("showAudioHud" in next)) next.showAudioHud = false;
-        return next;
-    });
+    normalized.profiles = value.profiles.map(withDefaults);
     return {value: normalized, error: ""};
 }
 function parse(raw) {
