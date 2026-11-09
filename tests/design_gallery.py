@@ -56,7 +56,7 @@ POPUP_FIXTURES = {
         "startDateTime: new Date(2026, 9, 26, 14, 30), endDateTime: new Date(2026, 9, 26, 15, 0)}]"),
 }
 POPUP_IDS = ("settings", "addDialog", "calendarPopup", "integrationPopup", "controlCenterPopup",
-             "pomodoroPopup", "musicPopup", "batteryPopup", "nativeTaskMenu")
+             "pomodoroPopup", "musicPopup", "batteryPopup", "downloadsPopup", "nativeTaskMenu")
 
 
 class Gallery:
@@ -148,6 +148,27 @@ class Gallery:
                 raise RuntimeError(f"popup scene {name} left no popup open")
             popup = visible[0]
             self.save(f"popup-{host}-{name}", window, self.scene_rect(popup))
+        # The Downloads stack over a private folder of synthetic files, never the user's own.
+        evaluate("closeContext(); settings.close()")
+        config.setProperty("showDownloads", True)
+        QTest.qWait(100)
+        downloads = tempfile.mkdtemp(prefix="orla-gallery-downloads-")
+        image = QImage(64, 48, QImage.Format_ARGB32)
+        image.fill(QColor("#3a97a6"))
+        image.save(str(Path(downloads, "captura-sintetica.png")))
+        for index, name in enumerate(("relatorio-sintetico.pdf", "pacote-sintetico.zip", "planilha.ods",
+                                      "notas.txt", "video-sintetico.mp4", "imagem-de-disco.iso")):
+            Path(downloads, name).write_text("x", encoding="utf-8")
+            os.utime(Path(downloads, name), (1_700_000_000 - index, 1_700_000_000 - index))
+        tile = window.findChild(QQuickItem, "downloadsTile")
+        tile.setProperty("folder", QUrl.fromLocalFile(downloads))
+        QTest.qWait(400)
+        evaluate("downloadsPopup.openAt(settingsButton)")
+        QTest.qWait(200)
+        self.save(f"popup-{host}-downloads", window, self.scene_rect(evaluate("downloadsPopup")))
+        evaluate("downloadsPopup.close()")
+        config.setProperty("showDownloads", False)
+        shutil.rmtree(downloads, ignore_errors=True)
         # The lower Control Center cards (Areas, Energy and its power profile) sit below the fold.
         # Three synthetic areas and two Activities show the area switcher and the Activity name.
         evaluate("closeContext(); settings.close()")
