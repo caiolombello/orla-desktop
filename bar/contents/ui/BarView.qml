@@ -26,6 +26,10 @@ Item {
     property Item controlCenterHost: null
     property string controlCenterLoadError: ""
     property bool reducedMotion: false
+    // The host sets this when the Orla Plasma theme's dialog frame (blurred by
+    // KWin) is the popup host's background. Only a hosted popup sits on it.
+    property bool systemGlass: false
+    readonly property bool popupGlassClear: systemGlass && popupHost !== null
     property QtObject leasedControlCenterClient: null
     property int controlCenterGeneration: 0
     property bool controlCenterDispatchActive: false
@@ -452,6 +456,50 @@ Item {
             radius: Style.radius.sm
             color: entry.palette.highlight
             visible: entry.enabled && (entry.highlighted || entry.down)
+            // Keyboard focus also gets a 2 px ring, in the text color of the fill.
+            border.width: entry.visualFocus ? Style.space.xxs : 0
+            border.color: entry.palette.highlightedText
+        }
+    }
+    // The dock's drawn glass (DockPopup + GlassRim) in the Plasma palette: a soft
+    // top sheen, a specular rim brighter at the top and a hairline. The fill stays
+    // opaque because applets cannot blur; on the Orla Plasma theme the host dialog
+    // is already KWin-blurred glass, so the surface clears and lets it through.
+    component BarGlass: Rectangle {
+        id: glass
+        // Any control or popup; its palette colors the glass.
+        required property var owner
+        readonly property bool clear: root.popupGlassClear
+        readonly property bool light: Style.luminance(owner.palette.window) > 0.4
+        color: clear ? "transparent" : owner.palette.window
+        border.width: clear ? 0 : Style.size.divider
+        border.color: Style.alpha(owner.palette.windowText, 0.14)
+        Rectangle {
+            objectName: "barGlassRim"
+            visible: !glass.clear
+            anchors.fill: parent
+            anchors.margins: Style.size.divider
+            radius: Math.max(0, glass.radius - Style.size.divider)
+            gradient: Gradient {
+                GradientStop { position: 0; color: Style.alpha(Style.glass.highlight, glass.light ? Style.glass.rimTopLight : Style.glass.rimTopDark) }
+                GradientStop { position: 0.5; color: Style.alpha(Style.glass.highlight, glass.light ? Style.glass.rimBottomLight : Style.glass.rimBottomDark) }
+                GradientStop { position: 1; color: Style.alpha(Style.glass.highlight, glass.light ? Style.glass.rimBottomLight : Style.glass.rimBottomDark) }
+            }
+            // Covers the rim gradient except for its 1 px edge.
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: Style.size.divider
+                radius: Math.max(0, parent.radius - Style.size.divider)
+                color: glass.owner.palette.window
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: Style.alpha(Style.glass.highlight, glass.light ? Style.glass.sheenLight : Style.glass.sheenDark) }
+                        GradientStop { position: 0.55; color: Style.alpha(Style.glass.highlight, 0) }
+                    }
+                }
+            }
         }
     }
     component OrlaMenuSeparator: Templates.MenuSeparator {
@@ -495,11 +543,10 @@ Item {
         spacing: 0
         focus: true
         closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
-        background: Rectangle {
+        background: BarGlass {
+            objectName: "orlaMenuBackground"
+            owner: menuButton
             radius: Style.radius.card
-            color: menuButton.palette.window
-            border.width: 1
-            border.color: Style.alpha(menuButton.palette.windowText, 0.14)
         }
         OrlaMenuItem { objectName: "aboutOrla"; text: qsTr("Sobre Orla Desktop"); onTriggered: root.open("about") }
         OrlaMenuItem { objectName: "aboutSystem"; text: qsTr("Sobre o sistema"); onTriggered: root.open("system") }
@@ -560,11 +607,10 @@ Item {
         padding: Style.space.xl
         modal: false
         focus: true
-        background: Rectangle {
+        background: BarGlass {
+            objectName: "aboutOrlaBackground"
+            owner: about
             radius: Style.radius.popup
-            color: about.palette.window
-            border.width: 1
-            border.color: Style.alpha(about.palette.windowText, 0.14)
         }
         contentItem: ColumnLayout {
             spacing: Style.space.md
