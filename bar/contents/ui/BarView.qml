@@ -29,7 +29,10 @@ Item {
     // The host sets this when the Orla Plasma theme's dialog frame (blurred by
     // KWin) is the popup host's background. Only a hosted popup sits on it.
     property bool systemGlass: false
-    readonly property bool popupGlassClear: systemGlass && popupHost !== null
+    // Same test as the hosting below: only a hosted popup sits on that frame.
+    readonly property bool popupGlassClear: systemGlass && Boolean(popupHost)
+    // The theme's dialog frame already insets a clear popup (as DockPopup subtracts it).
+    readonly property int popupFrameMargin: popupGlassClear ? Style.glass.frameMargin : 0
     property QtObject leasedControlCenterClient: null
     property int controlCenterGeneration: 0
     property bool controlCenterDispatchActive: false
@@ -539,7 +542,7 @@ Item {
         y: root.popupHost ? 0 : menuButton.height + 2
         margins: -1
         width: 248
-        padding: Style.space.xs + 1
+        padding: Math.max(0, Style.space.xs + 1 - root.popupFrameMargin)
         spacing: 0
         focus: true
         closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
@@ -604,7 +607,7 @@ Item {
         y: root.popupHost ? 0 : menuButton.height + 2
         width: 360
         margins: -1
-        padding: Style.space.xl
+        padding: Style.space.xl - root.popupFrameMargin
         modal: false
         focus: true
         background: BarGlass {

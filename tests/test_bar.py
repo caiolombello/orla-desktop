@@ -969,6 +969,8 @@ class BarTests(unittest.TestCase):
             self.assertTrue(self.evaluate("color === owner.palette.window", background))
             self.assertEqual(self.evaluate("border.width", background), 1)
             self.assertFalse(background.property("clear"))
+        paddings = (menu.property("padding"), about.property("padding"))
+        self.assertEqual(paddings, (5, 20))
         # The rim holds an opaque palette.window cover, so clearing the outer
         # fill alone would still paint over the blurred frame.
         rims = [next(child for child in background.childItems() if child.objectName() == "barGlassRim")
@@ -995,6 +997,8 @@ class BarTests(unittest.TestCase):
         try:
             self.bar.setProperty("popupHost", host)
             self.assertTrue(self.bar.property("popupGlassClear"))
+            # The theme's 10 px dialog frame already insets a clear popup.
+            self.assertEqual((menu.property("padding"), about.property("padding")), (0, 10))
             for background in backgrounds:
                 self.assertEqual(self.evaluate("color.a", background), 0)
                 self.assertEqual(self.evaluate("border.width", background), 0)
@@ -1026,6 +1030,7 @@ class BarTests(unittest.TestCase):
             host.deleteLater()
             QCoreApplication.sendPostedEvents(host, QEvent.DeferredDelete)
         self.evaluate("systemGlass = false")
+        self.assertEqual((menu.property("padding"), about.property("padding")), paddings)
         self.assertFalse(menu.property("visible"))
         self.assertEqual(self.session.calls, [])
 
