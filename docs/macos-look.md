@@ -8,8 +8,9 @@ do macOS e os desfaz do mesmo jeito:
 | Tema Plasma Orla | barra, popups, notificações e dicas em vidro com desfoque; dock e popups do Orla foscos | [plasma-theme.md](plasma-theme.md) |
 | Decoração Orla | semáforos à esquerda, título central, cantos e sombra | [window-decoration.md](window-decoration.md) |
 | Alternador de janelas | Alt+Tab com ícones grandes e um item por aplicativo, sem escurecer as outras janelas (como o Cmd+Tab) | — |
-| Minimizar | efeito "lâmpada mágica" em vez de "encolher" (parecido com o Gênio) | — |
+| Minimizar | efeito "lâmpada mágica" em vez de "encolher" (parecido com o Gênio); se o KWin não carregar a lâmpada, fica "encolher" | abaixo |
 | Cantos ativos | canto superior esquerdo abre a Visão Geral (como o Mission Control); canto inferior direito mostra a área de trabalho. O superior direito fica livre para a Central de Controle e o relógio da barra | — |
+| Busca (Spotlight provisório) | KRunner flutuante no alto, ao centro, como o Spotlight | abaixo |
 | Relógio da barra | data ao lado da hora, como na barra de menus ("dom. 25 out. 11:24") | abaixo |
 | Notificações | banners no estilo macOS no canto superior direito e central agrupada por app | abaixo |
 | Bandeja | brilho (já na Central de Controle) e área de transferência (Meta+V) passam para a seta | abaixo |
@@ -23,12 +24,45 @@ python3 scripts/macos_look.py restore   # volta a cada configuração anterior
 O tema e a decoração guardam o próprio estado. As sete chaves do KWin
 (`[TabBox] LayoutName`, `ApplicationsMode` e `HighlightWindows`; `[Plugins]
 magiclampEnabled` e `squashEnabled`; `[Effect-overview] BorderActivate=7` e
-`[ElectricBorders] BottomRight=ShowDesktop`) ficam salvas em
-`~/.local/state/orla/macos-look.json` antes da primeira mudança. `restore`
-regrava cada uma ou apaga as que não existiam, e os efeitos de minimizar trocam
-na hora (`loadEffect`/`unloadEffect`). Aplicar de novo mantém o
-primeiro estado salvo, e restaurar de novo não muda nada. `plasma_theme.py
+`[ElectricBorders] BottomRight=ShowDesktop`) e a do KRunner (`krunnerrc
+[General] FreeFloating`) ficam salvas em `~/.local/state/orla/macos-look.json`
+antes da primeira mudança. `restore` regrava cada uma ou apaga as que não
+existiam, e os efeitos de minimizar trocam na hora (`loadEffect`/`unloadEffect`).
+Aplicar de novo mantém o primeiro estado salvo, e restaurar de novo não muda
+nada. Um estado salvo antes de o KRunner fazer parte do visual ganha a chave
+dele no próximo `apply`; sem ela, `restore` não toca no `krunnerrc`. `plasma_theme.py
 restore` sem estado salvo agora recusa, em vez de trocar para o tema padrão.
+
+## Minimizar
+
+Depois de ligar a lâmpada mágica, `apply` pergunta ao KWin se ela carregou
+(`isEffectLoaded` em `org.kde.KWin /Effects`). Se o KWin responder que não (uma
+versão sem o efeito ou uma GPU sem suporte), `apply` volta para "encolher",
+avisa no terminal e grava `"minimize": "squash"` no estado; `status` mostra o
+mesmo campo. `"unverified"` indica que o KWin não respondeu, e então nada é
+trocado. O estado original salvo não muda, então `restore` volta aos valores de
+antes do primeiro `apply`. Quando a lâmpada voltar a carregar, um novo `apply`
+a liga de novo.
+
+## Busca (Spotlight provisório)
+
+Enquanto o Orla não tem a própria busca no lugar do Spotlight, `apply` deixa o
+KRunner do KDE flutuante (`FreeFloating=true`): ele abre no alto, ao centro da
+tela, em vez de descer da borda. O histórico e a busca anterior já vêm ligados
+no KDE; quem os desligou continua com essa escolha, porque `apply` não mexe
+neles.
+
+A chave é gravada com `kwriteconfig6 --notify`, que avisa os programas que
+observam o `krunnerrc`. Pelo código do KDE, um KRunner em execução relê o grupo
+`[General]` ao receber esse aviso, sem reiniciar; se não reler, a posição nova
+vale na próxima vez que ele abrir. Isso não foi observado numa sessão real, só
+nos testes com ferramentas falsas.
+
+Os atalhos globais não mudam. No KDE, Alt+Espaço (e Alt+F2) abre o KRunner; a
+tecla Meta sozinha abre o lançador do painel, que busca com os mesmos módulos
+do KRunner, mas não nessa janela flutuante. Meta+Espaço, o mais parecido com o
+Cmd+Espaço, pode conflitar com a troca de layout de teclado do IBus; se for
+usá-lo, ajuste em Configurações do sistema → Atalhos.
 
 ## Relógio da barra
 
@@ -109,7 +143,8 @@ exemplo, uma captura do Spectacle), ela aparece como miniatura à direita.
 
 Os testes (`tests/test_macos_look.py`) rodam a ida e a volta completas com
 `kwriteconfig6`, `kreadconfig6`, `plasma-apply-desktoptheme` e `busctl` falsos,
-num diretório pessoal temporário.
+num diretório pessoal temporário, incluindo o KRunner (com e sem valores
+anteriores), aplicar duas vezes e a volta para "encolher".
 
 ## Bandeja
 
