@@ -63,6 +63,8 @@ Item {
     property var powerProfileBackendOverride: null
     property var wifiBackendOverride: null
     property var bluetoothBackendOverride: null
+    // {microphoneInUse, cameraInUse} for tests; the panel reads Plasma-PA and V4L2.
+    property var islandSensorsOverride: null
     property var lastStableDockControl: null
     readonly property bool nativeContextSourceLoaded: contextSourceLoader.item !== null
     // The area switcher lives in Settings › Contextos and in the Control Center.
@@ -104,12 +106,19 @@ Item {
         Math.max(0, innerWidth - settingsLaneWidth - laneGap * 2 - minimumTaskWidth))
     readonly property bool localEventsProfileReady: profileState.writable
         && (profileState.initialized || profileState.savedJSON === "")
+    // Live activities (music, Pomodoro, microphone and camera) keep the island
+    // up even when no notice kind is requested.
+    readonly property bool islandActivitiesActive: Boolean(configuration.eventIsland)
+        && Boolean(configuration.islandActivities)
     // Events go either to the island at the top of the screen or to a slot in the dock.
     readonly property bool eventIslandActive: Boolean(configuration.eventIsland)
-        && localEventsRequested && localEventsProfileReady
+        && ((localEventsRequested && localEventsProfileReady) || islandActivitiesActive)
     readonly property bool localEventsActive: localEventsRequested && localEventsProfileReady
         && !eventIslandActive && candidateEventSlotWidth >= 48
     readonly property var eventIslandState: localEventState
+    readonly property var islandModel: islandState
+    readonly property var islandMedia: musicControls.mediaState
+    readonly property var islandSensors: islandSensorsOverride !== null ? islandSensorsOverride : islandSensorsLoader.item
     readonly property int eventSlotWidth: localEventsActive ? candidateEventSlotWidth : 0
     readonly property int centerViewportWidth: innerWidth
     // The legacy lane reserves 4 px after the content; the glass skips it. The
@@ -342,7 +351,15 @@ Item {
         objectName: "eventIslandLoader"
         property var islandOwner: root
         active: root.nativePopups && root.eventIslandActive
-        source: active ? Qt.resolvedUrl("NativeEventIsland.qml") : ""
+        // Layer-shell needs Wayland; elsewhere a Plasma dialog shows the island without input.
+        source: active ? Qt.resolvedUrl(Qt.platform.pluginName === "wayland"
+            ? "NativeIslandWindow.qml" : "NativeEventIsland.qml") : ""
+    }
+    Loader {
+        id: islandSensorsLoader
+        objectName: "islandSensorsLoader"
+        active: root.nativePopups && root.islandActivitiesActive && root.islandSensorsOverride === null
+        source: active ? Qt.resolvedUrl("NativeIslandSensors.qml") : ""
     }
     function widgetVisible(id) { const widget = displayWidgets.find(entry => entry.id === id); return Boolean(widget && widget.visible); }
     function mediaText(value, limit) { return musicControls.mediaState.boundedText(value, limit); }
@@ -737,6 +754,21 @@ Item {
         audioEnabled: enabled && Boolean(root.presentation.showAudioHud)
         activeScope: "profile:" + profileState.activeProfileId
         activeContextGeneration: profileState.revision
+    }
+    IslandState {
+        id: islandState
+        eventState: localEventState
+        activitiesEnabled: root.islandActivitiesActive
+        timerRunning: focusTimer.running
+        timerSecondsLeft: focusTimer.secondsLeft
+        timerBreak: Boolean(root.configuration.timerBreak)
+        mediaPlaying: musicControls.mediaState.playing
+        mediaPaused: musicControls.mediaState.paused
+        mediaTitle: root.player ? root.mediaText(root.player.track, 256) : ""
+        mediaArtist: root.player ? root.mediaText(root.player.artist || root.player.identity, 256) : ""
+        mediaArtUrl: musicControls.mediaState.artUrl
+        microphoneInUse: Boolean(root.islandSensors && root.islandSensors.microphoneInUse)
+        cameraInUse: Boolean(root.islandSensors && root.islandSensors.cameraInUse)
     }
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     Timer { interval: 8000; running: root.notice.length > 0; onTriggered: root.notice = "" }

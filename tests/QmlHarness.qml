@@ -49,6 +49,7 @@ Window {
         property bool showRecording: false
         property bool showLocalToasts: false
         property bool eventIsland: false
+        property bool islandActivities: false
         property bool showAudioHud: false
         property bool showControlCenter: false
         property bool showTrash: false
