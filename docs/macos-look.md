@@ -9,6 +9,7 @@ do macOS e os desfaz do mesmo jeito:
 | Decoração Orla | semáforos à esquerda, título central, cantos e sombra | [window-decoration.md](window-decoration.md) |
 | Alternador de janelas | Alt+Tab com ícones grandes e um item por aplicativo, sem escurecer as outras janelas (como o Cmd+Tab) | — |
 | Minimizar | efeito "lâmpada mágica" em vez de "encolher" (parecido com o Gênio) | — |
+| Cantos ativos | canto superior esquerdo abre a Visão Geral (como o Mission Control); canto inferior direito mostra a área de trabalho. O superior direito fica livre para a Central de Controle e o relógio da barra | — |
 | Relógio da barra | data ao lado da hora, como na barra de menus ("dom. 25 out. 11:24") | abaixo |
 | Notificações | banners no estilo macOS no canto superior direito e central agrupada por app | abaixo |
 | Bandeja | brilho (já na Central de Controle) e área de transferência (Meta+V) passam para a seta | abaixo |
@@ -19,9 +20,10 @@ python3 scripts/macos_look.py status
 python3 scripts/macos_look.py restore   # volta a cada configuração anterior
 ```
 
-O tema e a decoração guardam o próprio estado. As cinco chaves do KWin
+O tema e a decoração guardam o próprio estado. As sete chaves do KWin
 (`[TabBox] LayoutName`, `ApplicationsMode` e `HighlightWindows`; `[Plugins]
-magiclampEnabled` e `squashEnabled`) ficam salvas em
+magiclampEnabled` e `squashEnabled`; `[Effect-overview] BorderActivate=7` e
+`[ElectricBorders] BottomRight=ShowDesktop`) ficam salvas em
 `~/.local/state/orla/macos-look.json` antes da primeira mudança. `restore`
 regrava cada uma ou apaga as que não existiam, e os efeitos de minimizar trocam
 na hora (`loadEffect`/`unloadEffect`). Aplicar de novo mantém o

@@ -6,7 +6,9 @@
                            icons and one entry per app (like Cmd+Tab), the
                            Magic Lamp minimize animation (like the Genie effect),
                            the date beside the time in the Orla top bar,
-                           macOS-style notification banners and a sparse tray
+                           macOS-style notification banners, a sparse tray and
+                           hot corners (top left: Overview, like Mission
+                           Control; bottom right: show the desktop)
   macos_look.py restore    undo all of it, back to the saved settings
   macos_look.py status     print what is active and what restore would bring back
 
@@ -33,6 +35,10 @@ KWIN = {
     # Minimize into the dock like the Genie effect.
     ("Plugins", "magiclampEnabled"): "true",
     ("Plugins", "squashEnabled"): "false",
+    # Hot corners, as macOS users set them. 7 is KWin's TopLeft edge. The top
+    # right stays free: the top bar's Control Center and clock live there.
+    ("Effect-overview", "BorderActivate"): "7",
+    ("ElectricBorders", "BottomRight"): "ShowDesktop",
 }
 
 
