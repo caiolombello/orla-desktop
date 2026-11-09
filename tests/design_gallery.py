@@ -74,7 +74,7 @@ POPUP_FIXTURES = {
         "startDateTime: new Date(2026, 9, 26, 14, 30), endDateTime: new Date(2026, 9, 26, 15, 0)}]"),
 }
 POPUP_IDS = ("settings", "addDialog", "calendarPopup", "integrationPopup", "controlCenterPopup",
-             "pomodoroPopup", "musicPopup", "batteryPopup", "nativeTaskMenu")
+             "pomodoroPopup", "musicPopup", "batteryPopup", "downloadsPopup", "nativeTaskMenu")
 
 
 class Gallery:
@@ -166,6 +166,27 @@ class Gallery:
                 raise RuntimeError(f"popup scene {name} left no popup open")
             popup = visible[0]
             self.save(f"popup-{host}-{name}", window, self.scene_rect(popup))
+        # The Downloads stack over a private folder of synthetic files, never the user's own.
+        evaluate("closeContext(); settings.close()")
+        config.setProperty("showDownloads", True)
+        QTest.qWait(100)
+        downloads = tempfile.mkdtemp(prefix="orla-gallery-downloads-")
+        image = QImage(64, 48, QImage.Format_ARGB32)
+        image.fill(QColor("#3a97a6"))
+        image.save(str(Path(downloads, "captura-sintetica.png")))
+        for index, name in enumerate(("relatorio-sintetico.pdf", "pacote-sintetico.zip", "planilha.ods",
+                                      "notas.txt", "video-sintetico.mp4", "imagem-de-disco.iso")):
+            Path(downloads, name).write_text("x", encoding="utf-8")
+            os.utime(Path(downloads, name), (1_700_000_000 - index, 1_700_000_000 - index))
+        tile = window.findChild(QQuickItem, "downloadsTile")
+        tile.setProperty("folder", QUrl.fromLocalFile(downloads))
+        QTest.qWait(400)
+        evaluate("downloadsPopup.openAt(settingsButton)")
+        QTest.qWait(200)
+        self.save(f"popup-{host}-downloads", window, self.scene_rect(evaluate("downloadsPopup")))
+        evaluate("downloadsPopup.close()")
+        config.setProperty("showDownloads", False)
+        shutil.rmtree(downloads, ignore_errors=True)
         # The lower Control Center cards (Areas, Energy and its power profile) sit below the fold.
         # Three synthetic areas and two Activities show the area switcher and the Activity name.
         evaluate("closeContext(); settings.close()")
@@ -887,12 +908,13 @@ class Gallery:
         engine.deleteLater()
 
     def island(self, host: str) -> None:
-        """The event island over the host's bar color: Pomodoro completion and volume."""
+        """The island over the host's bar color: notices, compact activities and expanded music."""
         engine = self.engine()
         engine.load(QUrl.fromLocalFile(str(TESTS / "EventIslandHarness.qml")))
         window = engine.rootObjects()[0]
         island = window.findChild(QQuickItem, "eventIsland")
         state = window.findChild(QObject, "islandEventState")
+        rules = window.findChild(QObject, "islandState")
 
         def run(target, source: str) -> None:
             expression = QQmlExpression(engine.rootContext(), target, source)
@@ -907,11 +929,30 @@ class Gallery:
             ("volume", "clear(); submit({kind:'audio',action:'volume',targetId:'speakers',"
                        "originScope:'profile:work',contextGeneration:2,value:65,"
                        "title:'Volume · 65%',detail:'Alto-falantes'},Date.now())"),
+            ("charging", "clear(); powerEnabled = true; submit({kind:'power',action:'charging',value:64,"
+                         "title:'Carregando',detail:'64% de bateria'},Date.now())"),
+            ("battery-low", "clear(); submit({kind:'power',action:'low',value:10,"
+                            "title:'Bateria fraca',detail:'10% restantes'},Date.now())"),
         )
         for name, source in scenes:
             run(state, source)
             QTest.qWait(120)
-            self.save(f"island-{host}-{name}", window, self.scene_rect(island))
+            self.save(f"island-{host}-{name}", window, self.scene_rect(island).adjusted(-16, -4, 16, 12))
+        run(state, "clear()")
+        live = (
+            ("music", "activitiesEnabled = true; mediaPlaying = true; mediaTitle = 'Faixa sintética';"
+                      "mediaArtist = 'Artista sintético'; microphoneInUse = true"),
+            ("timer", "timerRunning = true; timerSecondsLeft = 754"),
+            ("privacy", "timerRunning = false; mediaPlaying = false; cameraInUse = true"),
+            ("music-expanded", "cameraInUse = false; microphoneInUse = false; mediaPlaying = true; expanded = true"),
+            ("meeting", "expanded = false; nowMs = Date.now(); calendarEvents = [{title: 'Reunião sintética',"
+                        " startMs: Date.now() + 270000, endMs: Date.now() + 2070000}]"),
+            ("meeting-expanded", "expanded = true"),
+        )
+        for name, source in live:
+            run(rules, source)
+            QTest.qWait(160)
+            self.save(f"island-{host}-{name}", window, self.scene_rect(island).adjusted(-16, -4, 16, 12))
         window.close()
         engine.deleteLater()
 

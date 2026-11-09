@@ -2,9 +2,10 @@ import QtQuick
 import org.kde.plasma.core as PlasmaCore
 import "../code/Style.js" as Style
 
-// The event island's window: centered at the top of the dock's screen, over the
-// empty middle of the menu bar, like the iPhone's Dynamic Island. It never takes
-// focus or input. Loaded only by the production panel backend.
+// The island's window outside Wayland, where layer-shell is unavailable:
+// centered at the top of the dock's screen, over the empty middle of the menu
+// bar. It never takes focus or input, so it shows notices and compact
+// activities but never expands. Loaded only by the production panel backend.
 PlasmaCore.Dialog {
     id: window
     readonly property var owner: islandOwner
@@ -24,7 +25,8 @@ PlasmaCore.Dialog {
 
     mainItem: EventIsland {
         id: island
-        eventState: window.owner.eventIslandState
+        islandState: window.owner.islandModel
+        fixedSize: true
         reducedMotion: window.owner.motion <= 0
     }
 }

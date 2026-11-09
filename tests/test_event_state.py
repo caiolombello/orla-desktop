@@ -97,6 +97,36 @@ class EventStatePortableTests(unittest.TestCase):
                 self.assertFalse(self.submit(event, 1100))
                 self.assertEqual(self.snapshot(), before)
 
+    @staticmethod
+    def power(action="charging", value=80):
+        return {"kind": "power", "action": action, "value": value, "title": "Carregando", "detail": f"{value}%"}
+
+    def test_power_notices_need_their_own_switch_and_a_closed_shape(self):
+        self.assertFalse(self.submit(self.power(), 1000))
+        self.assertIsNone(self.snapshot()["current"])
+        self.state.setProperty("powerEnabled", True)
+        for event in ({**self.power(), "extra": 1}, self.power(action="full"), self.power(value=101),
+                      self.power(value=5.5), {**self.power(), "title": "x" * 97}):
+            with self.subTest(event=event):
+                self.assertFalse(self.submit(event, 1000))
+        self.assertTrue(self.submit(self.power(), 1000))
+        current = self.snapshot()["current"]
+        self.assertEqual((current["kind"], current["action"], current["priority"], current["deadline"]),
+                         ("power", "charging", 15, 5000))
+        # Announced once, like a completion; a newer reading replaces it in place.
+        self.assertEqual(len(self.announcements()), 1)
+        self.assertTrue(self.submit(self.power(value=81), 1500))
+        self.assertEqual(self.snapshot()["current"]["sequence"], current["sequence"])
+        self.assertEqual(len(self.announcements()), 1)
+        # Audio outranks it; the low and phone notices are separate entries.
+        self.assertTrue(self.submit(self.power(action="low", value=20), 1600))
+        self.assertTrue(self.submit(self.audio(), 1700))
+        self.assertEqual(self.snapshot()["current"]["kind"], "audio")
+        self.assertEqual(self.snapshot()["count"], 3)
+        self.state.setProperty("powerEnabled", False)
+        self.assertEqual([entry["kind"] for entry in [self.snapshot()["current"]] + self.snapshot()["pending"]],
+                         ["audio"])
+
     def test_coalescence_priority_and_exact_expiry_promote_live_completion(self):
         self.assertTrue(self.submit(self.completion(), 1000))
         self.assertTrue(self.submit(self.audio(value=20), 1100))

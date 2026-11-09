@@ -399,11 +399,20 @@ class NativeAdapterSourceTests(unittest.TestCase):
         for forbidden in ("SinkModel", "SinkInputModel", "SourceOutputModel", "GlobalService", "switchStreams"):
             self.assertNotIn(forbidden, microphone)
 
+        # The island's privacy sensor only reads recording streams: no default
+        # devices, no writes, no stream moves.
+        sensors = (root / "package/contents/ui/NativeIslandSensors.qml").read_text()
+        self.assertIn("import org.kde.plasma.private.volume as PlasmaPA", sensors)
+        self.assertEqual(sensors.count("PlasmaPA.SourceOutputModel"), 1)
+        self.assertEqual(sensors.count("PlasmaPA."), 1)
+        for forbidden in ("SinkModel", "SinkInputModel", "GlobalService", "switchStreams", "muted =", "volume ="):
+            self.assertNotIn(forbidden, sensors)
+
         importers = []
         for path in (root / "package/contents/ui").glob("*.qml"):
             if "org.kde.plasma.private.volume" in path.read_text():
                 importers.append(path.name)
-        self.assertEqual(sorted(importers), ["NativeMicrophone.qml", "NativePulseAudio.qml"])
+        self.assertEqual(sorted(importers), ["NativeIslandSensors.qml", "NativeMicrophone.qml", "NativePulseAudio.qml"])
 
 
 if __name__ == "__main__":

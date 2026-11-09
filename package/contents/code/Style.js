@@ -124,6 +124,9 @@ var widgetTiles = {clock: "ink", pomodoro: "coral", music: "sea", systemBattery:
     quota: "slate", peripherals: "deepSea", recording: "ink", controlCenter: "slate"};
 // Battery and quota rings change color as levels get critical.
 var levels = {good: "#69d7c2", low: "#f2b866", critical: "#ff8a7a"};
+// Privacy indicators, as macOS draws them: orange while the microphone records,
+// green while the camera does. Always tint an icon with them, never a bare dot.
+var privacy = {microphone: "#ff9f0a", camera: "#30d158"};
 function iconTile(kind) { return iconTiles[widgetTiles[kind] || "slate"]; }
 
 // Type roles in logical pixels. Body copy keeps the system font size; set a
