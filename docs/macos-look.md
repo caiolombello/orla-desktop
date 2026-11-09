@@ -156,3 +156,15 @@ mudam. `restore` volta a mostrar só os itens que `apply` ocultou e preserva
 outras mudanças feitas depois. A lista anterior fica em
 `~/.local/state/orla/menu-bar-tray.json`; `tests/test_menu_bar_tray.py` cobre
 os casos.
+
+## Pilha de Downloads
+
+Opcional e global, em **Widgets › Mostrar os Downloads ao lado da Lixeira**.
+Como no Dock do macOS, um ícone de pasta fica antes da Lixeira, depois do mesmo
+divisor. Um clique abre um popup com até 12 itens mais recentes da pasta
+Downloads (do mais novo para o mais antigo), com miniatura para imagens e ícone
+por tipo para o resto. Downloads em andamento (`.part`, `.crdownload` e afins)
+e arquivos ocultos não aparecem. Um clique num item o abre no aplicativo
+padrão; **Abrir a pasta Downloads** abre a pasta. Tab e as setas passam pelos
+itens, com o anel de foco visível. A pilha só lê a pasta: não move, apaga nem
+renomeia nada.
