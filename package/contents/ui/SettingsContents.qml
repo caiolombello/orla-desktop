@@ -303,6 +303,14 @@ ColumnLayout {
                     onToggled: settings.configuration.showTrash = checked
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
+                Controls.CheckBox {
+                    objectName: "showDownloads"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar os Downloads ao lado da Lixeira (global)")
+                    checked: Boolean(settings.configuration.showDownloads)
+                    onToggled: settings.configuration.showDownloads = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
                 Controls.Label {
                     Layout.fillWidth: true
                     text: qsTr("Preferência global salva imediatamente. Não muda com o perfil e pode ser desativada aqui.")

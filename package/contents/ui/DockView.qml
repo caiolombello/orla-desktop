@@ -325,7 +325,7 @@ Item {
     property Item labelTarget: null
     readonly property bool popupOpen: settings.visible || addDialog.visible || calendarPopup.visible
         || integrationPopup.visible || controlCenterPopup.visible || pomodoroPopup.visible
-        || musicPopup.visible || batteryPopup.visible || nativeTaskMenu.visible || taskMenu.visible
+        || musicPopup.visible || batteryPopup.visible || downloadsPopup.visible || nativeTaskMenu.visible || taskMenu.visible
     readonly property bool autoContextInteractionBusy: !ready || popupOpen
         || appearanceState.editing || appearanceState.dirty
         || appearancePresetState.dirty || appearancePresetState.busy
@@ -336,7 +336,7 @@ Item {
         || brightnessControlState.pendingAny || doNotDisturbState.pending || microphoneState.pending || powerProfileState.pending || wifiState.pending || bluetoothState.pending
         || settings.interactionBusy || addDialog.interactionBusy || calendarPopup.interactionBusy
         || integrationPopup.interactionBusy || pomodoroPopup.interactionBusy
-        || musicPopup.interactionBusy || batteryPopup.interactionBusy || nativeTaskMenu.interactionBusy
+        || musicPopup.interactionBusy || batteryPopup.interactionBusy || downloadsPopup.interactionBusy || nativeTaskMenu.interactionBusy
         || controlCenterPopup.contextSwitchBusy || taskMenu.contextSwitchBusy
     function hoverTile(tile, hovered) {
         if (hovered && !taskDragState.active) labelTarget = tile;
@@ -376,7 +376,7 @@ Item {
     }
     function closeContext() {
         taskMenu.close(); nativeTaskMenu.close(); addDialog.close();
-        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
+        calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); downloadsPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
         menuRow = -1; menuData = {}; appInput.clear();
     }
     Connections {
@@ -998,8 +998,25 @@ Item {
             }
             Rectangle { objectName: "widgetDivider"; anchors.verticalCenter: parent.verticalCenter; visible: widgetStrip.visible; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
             WidgetStrip { id: widgetStrip; objectName: "widgetStrip"; dock: root; height: parent.height }
-            // The Trash closes the dock after its own divider, as in macOS (optional, global).
-            Rectangle { objectName: "trashDivider"; anchors.verticalCenter: parent.verticalCenter; visible: trashLoader.active; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
+            // Downloads and the Trash close the dock after their own divider, as in macOS (optional, global).
+            Rectangle { objectName: "trashDivider"; anchors.verticalCenter: parent.verticalCenter; visible: trashLoader.active || downloadsLoader.active; width: Style.size.divider; height: Math.round(root.tileSize * 0.72); radius: width / 2; color: Style.alpha(root.foreground, 0.2) }
+            Loader {
+                id: downloadsLoader
+                anchors.verticalCenter: parent.verticalCenter
+                active: Boolean(root.configuration.showDownloads)
+                visible: active
+                onActiveChanged: if (!active) downloadsPopup.close()
+                sourceComponent: DownloadsTile {
+                    objectName: "downloadsTile"
+                    iconSize: root.tileSize
+                    foreground: root.foreground; muted: root.muted; accent: root.accent
+                    animationDuration: root.motion
+                    nativeLabel: root.nativePopups
+                    onHoveredChanged: root.hoverTile(this, hovered)
+                    onActiveFocusChanged: if (activeFocus) root.revealInViewport(this)
+                    onClicked: downloadsPopup.visible ? downloadsPopup.close() : downloadsPopup.openAt(this)
+                }
+            }
             Loader {
                 id: trashLoader
                 anchors.verticalCenter: parent.verticalCenter
@@ -1440,6 +1457,24 @@ Item {
             muted: root.popupScheme.textMuted
         }
     }
+    DockPopup {
+        id: downloadsPopup
+        objectName: "downloadsPopup"
+        dock: root
+        title: qsTr("Downloads")
+        DownloadsStack {
+            objectName: "downloadsStack"
+            Layout.fillWidth: true
+            entries: downloadsLoader.item ? downloadsLoader.item.entries : []
+            folder: downloadsLoader.item ? downloadsLoader.item.folder : ""
+            opener: url => { downloadsPopup.close(); root.openDownload(url); }
+            foreground: root.popupScheme.text
+            muted: root.popupScheme.textMuted
+            accent: root.popupScheme.accent
+        }
+    }
+    // Tests replace this to record what would open.
+    property var openDownload: url => Qt.openUrlExternally(url)
     DockPopup {
         id: batteryPopup
         objectName: "batteryPopup"
