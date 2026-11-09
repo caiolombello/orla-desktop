@@ -1,11 +1,12 @@
 import QtQuick
+import "../code/Host.js" as Host
 
 // Internal alpha contract. Injecting a backend prevents loading native code.
 Item {
     id: root
     property var backend: null
     property string hostVersion: Application.version
-    readonly property bool supportedHost: /^6\.7\.[0-9]+(?:[-+].*)?$/.test(hostVersion)
+    readonly property bool supportedHost: Host.supported(hostVersion)
     readonly property var provider: backend !== null ? backend : native.item
     readonly property string status: provider ? provider.status : native.status === Loader.Loading ? "loading" : "unavailable"
     readonly property bool nativeLoaded: native.item !== null

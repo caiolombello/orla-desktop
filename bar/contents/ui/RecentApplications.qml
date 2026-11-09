@@ -1,4 +1,5 @@
 import QtQuick
+import "../code/Host.js" as Host
 
 // Recently used applications for the Orla Menu, as in the Apple menu's
 // "Recent Items". Injecting a backend prevents loading the native model.
@@ -10,7 +11,7 @@ Item {
     // The native model only loads while the menu is offered.
     property bool wanted: true
     readonly property int limit: 5
-    readonly property bool supportedHost: /^6\.7\.[0-9]+(?:[-+].*)?$/.test(hostVersion)
+    readonly property bool supportedHost: Host.supported(hostVersion)
     readonly property var provider: backend !== null ? backend : native.item
     readonly property bool nativeLoaded: native.item !== null
     readonly property var items: bounded(provider && provider.status === "ready" ? provider.items : [])

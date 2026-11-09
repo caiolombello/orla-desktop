@@ -1,4 +1,5 @@
 import QtQuick
+import "../code/Host.js" as Host
 
 // Software updates for the Orla Menu, as the Apple menu flags them beside
 // System Settings. The system state is the one KDE's Discover notifier reports;
@@ -10,7 +11,7 @@ Item {
     property string hostVersion: Application.version
     // The native reader only loads while the menu is offered.
     property bool wanted: true
-    readonly property bool supportedHost: /^6\.7\.[0-9]+(?:[-+].*)?$/.test(hostVersion)
+    readonly property bool supportedHost: Host.supported(hostVersion)
     readonly property var provider: backend !== null ? backend : native.item
     readonly property bool nativeLoaded: native.item !== null
     // "unknown" also covers "nothing reported": Discover shows no tray item when
