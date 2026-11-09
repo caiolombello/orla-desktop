@@ -869,12 +869,13 @@ class Gallery:
         engine.deleteLater()
 
     def island(self, host: str) -> None:
-        """The event island over the host's bar color: Pomodoro completion and volume."""
+        """The island over the host's bar color: notices, compact activities and expanded music."""
         engine = self.engine()
         engine.load(QUrl.fromLocalFile(str(TESTS / "EventIslandHarness.qml")))
         window = engine.rootObjects()[0]
         island = window.findChild(QQuickItem, "eventIsland")
         state = window.findChild(QObject, "islandEventState")
+        rules = window.findChild(QObject, "islandState")
 
         def run(target, source: str) -> None:
             expression = QQmlExpression(engine.rootContext(), target, source)
@@ -893,7 +894,19 @@ class Gallery:
         for name, source in scenes:
             run(state, source)
             QTest.qWait(120)
-            self.save(f"island-{host}-{name}", window, self.scene_rect(island))
+            self.save(f"island-{host}-{name}", window, self.scene_rect(island).adjusted(-16, -4, 16, 12))
+        run(state, "clear()")
+        live = (
+            ("music", "activitiesEnabled = true; mediaPlaying = true; mediaTitle = 'Faixa sintética';"
+                      "mediaArtist = 'Artista sintético'; microphoneInUse = true"),
+            ("timer", "timerRunning = true; timerSecondsLeft = 754"),
+            ("privacy", "timerRunning = false; mediaPlaying = false; cameraInUse = true"),
+            ("music-expanded", "cameraInUse = false; microphoneInUse = false; mediaPlaying = true; expanded = true"),
+        )
+        for name, source in live:
+            run(rules, source)
+            QTest.qWait(160)
+            self.save(f"island-{host}-{name}", window, self.scene_rect(island).adjusted(-16, -4, 16, 12))
         window.close()
         engine.deleteLater()
 

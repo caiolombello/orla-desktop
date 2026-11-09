@@ -279,6 +279,15 @@ ColumnLayout {
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
                 Controls.CheckBox {
+                    objectName: "islandActivities"
+                    Layout.fillWidth: true
+                    enabled: Boolean(settings.configuration.eventIsland)
+                    text: qsTr("Mostrar na ilha a música, o Pomodoro e o microfone ou a câmera em uso (global)")
+                    checked: Boolean(settings.configuration.islandActivities)
+                    onToggled: settings.configuration.islandActivities = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
+                Controls.CheckBox {
                     objectName: "showControlCenter"
                     Layout.fillWidth: true
                     text: qsTr("Mostrar Central de Controle no dock (global)")

@@ -123,41 +123,12 @@ Controls.Control {
                             color: root.muted
                         }
                     }
-                    // Natural size of the cover, for the center crop below.
-                    Image {
-                        id: artSource
-                        visible: false
-                        source: root.mediaState.artUrl
-                        asynchronous: true
-                    }
-                    // Rounded corners without a shader, so software rendering shows the cover too.
-                    Canvas {
+                    CoverArt {
                         id: art
                         objectName: "mediaArt"
                         anchors.fill: parent
-                        readonly property string url: root.mediaState.artUrl
-                        property string loadedUrl: ""
-                        visible: url.length > 0 && loadedUrl === url && artSource.status === Image.Ready
-                        onUrlChanged: if (url.length > 0) loadImage(url)
-                        onImageLoaded: {
-                            if (isImageLoaded(url)) loadedUrl = url;
-                            requestPaint();
-                        }
-                        onVisibleChanged: requestPaint()
-                        onWidthChanged: requestPaint()
-                        onPaint: {
-                            const context = getContext("2d");
-                            context.reset();
-                            const naturalWidth = artSource.implicitWidth, naturalHeight = artSource.implicitHeight;
-                            if (!visible || naturalWidth <= 0 || naturalHeight <= 0) return;
-                            // Crop the center square, like PreserveAspectCrop.
-                            const side = Math.min(naturalWidth, naturalHeight);
-                            context.beginPath();
-                            context.roundedRect(0, 0, width, height, Style.radius.control, Style.radius.control);
-                            context.clip();
-                            context.drawImage(url, (naturalWidth - side) / 2, (naturalHeight - side) / 2, side, side,
-                                0, 0, width, height);
-                        }
+                        url: root.mediaState.artUrl
+                        cornerRadius: Style.radius.control
                     }
                 }
                 ColumnLayout {
