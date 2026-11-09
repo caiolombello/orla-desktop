@@ -418,14 +418,14 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: Style.size.target + Style.space.lg
             color: ui.text
-            placeholderText: qsTr("Buscar aplicativo, jogo ou calcular…")
+            placeholderText: qsTr("Buscar apps, arquivos ou calcular…")
             placeholderTextColor: ui.textMuted
             font.pixelSize: Style.type.headline
             leftPadding: Style.size.target + Style.space.sm
             rightPadding: Style.space.lg
             selectByMouse: true
             maximumLength: 512
-            Accessible.name: qsTr("Buscar aplicativos, jogos ou calcular")
+            Accessible.name: qsTr("Buscar aplicativos, arquivos, ajustes, jogos ou calcular")
             visible: window.activePanel === "search"
             background: Rectangle {
                 radius: height / 2
@@ -465,8 +465,8 @@ Window {
         RowLayout {
             visible: window.activePanel === "search"
             Layout.fillWidth: true
-            Text { text: window.commands ? qsTr("APLICATIVOS · CALCULADORA · STEAM · ORLA") : qsTr("APLICATIVOS · CALCULADORA · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
-            Item { Layout.fillWidth: true }
+            // A summary of the main sources; each result names its own section.
+            Text { Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 1; text: window.commands ? qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM · ORLA") : qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
             Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: ui.accent; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
         }
         Item {
