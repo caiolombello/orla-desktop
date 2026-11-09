@@ -960,6 +960,7 @@ class BarTests(unittest.TestCase):
 
     def test_menu_and_about_use_drawn_glass_and_clear_only_on_hosted_theme_glass(self):
         menu = self.window.findChild(QObject, "orlaMenu")
+        about = self.window.findChild(QObject, "aboutOrlaPopup")
         backgrounds = [self.window.findChild(QObject, name) for name in ("orlaMenuBackground", "aboutOrlaBackground")]
         for background in backgrounds:
             self.assertIsNotNone(background)
@@ -968,14 +969,22 @@ class BarTests(unittest.TestCase):
             self.assertTrue(self.evaluate("color === owner.palette.window", background))
             self.assertEqual(self.evaluate("border.width", background), 1)
             self.assertFalse(background.property("clear"))
+        # The rim holds an opaque palette.window cover, so clearing the outer
+        # fill alone would still paint over the blurred frame.
+        rims = [next(child for child in background.childItems() if child.objectName() == "barGlassRim")
+                for background in backgrounds]
         # Effective visibility needs a shown popup.
         self.evaluate("forceActiveFocus()", self.item("orlaMenuButton"))
         QTest.keyClick(self.key_window(), Qt.Key_Space)
         self.wait_property(menu, "opened", True)
-        rim = next(child for child in backgrounds[0].childItems() if child.objectName() == "barGlassRim")
-        self.assertTrue(rim.property("visible"))
+        self.assertTrue(rims[0].property("visible"))
         QTest.keyClick(self.key_window(), Qt.Key_Escape)
         self.wait_property(menu, "visible", False)
+        self.assertTrue(self.evaluate("open('about')"))
+        self.wait_property(about, "opened", True)
+        self.assertTrue(rims[1].property("visible"))
+        self.evaluate("close()", about)
+        self.wait_property(about, "visible", False)
         # The theme flag alone cannot clear a popup that has no blurred host behind it.
         self.evaluate("systemGlass = true")
         for background in backgrounds:
@@ -990,7 +999,28 @@ class BarTests(unittest.TestCase):
                 self.assertEqual(self.evaluate("color.a", background), 0)
                 self.assertEqual(self.evaluate("border.width", background), 0)
                 self.assertTrue(background.property("clear"))
+            self.evaluate("open()", menu)
+            self.wait_property(menu, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertFalse(rims[0].property("visible"))
+            # Control: the same hosted, shown menu draws the rim once the theme
+            # flag drops, so the hidden rim above comes from clear and not the host.
+            self.evaluate("systemGlass = false")
+            self.assertTrue(rims[0].property("visible"))
+            self.evaluate("systemGlass = true")
+            self.assertFalse(rims[0].property("visible"))
+            self.evaluate("close()", menu)
+            self.wait_property(menu, "visible", False)
+            self.assertTrue(self.evaluate("open('about')"))
+            self.wait_property(about, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertFalse(rims[1].property("visible"))
+            self.evaluate("close()", about)
+            self.wait_property(about, "visible", False)
+            self.assertFalse(host.isVisible())
         finally:
+            self.evaluate("close()", menu)
+            self.evaluate("close()", about)
             self.bar.setProperty("popupHost", None)
             host.close()
             host.deleteLater()
