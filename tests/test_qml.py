@@ -60,6 +60,22 @@ class DockInterfaceTests(unittest.TestCase):
         self.assertEqual(self.evaluate("tasksModel.count"), 2)
         self.assertEqual(self.warnings, [])
 
+    def test_minimize_targets_go_to_the_tasks_model_or_an_injected_publisher(self):
+        # The delegate math and throttle are covered by test_minimize_target.
+        self.assertTrue(self.evaluate("minimizePublisher === tasksModel"))
+        self.evaluate("minimizePublisherOverride = ({makeModelIndex: row => row, requestPublishDelegateGeometry: () => {}})")
+        self.assertTrue(self.evaluate("minimizePublisher === minimizePublisherOverride"))
+        epoch = self.evaluate("minimizeTargetEpoch")
+        self.evaluate("screenGeometry = Qt.rect(0, 0, 1920, 1080)")
+        self.assertGreater(self.evaluate("minimizeTargetEpoch"), epoch)
+        if self.app.platformName() != "offscreen":
+            target = self.window.findChild(QQuickItem, "minimizeTarget0")
+            self.assertIsNotNone(target)
+            self.assertTrue(target.property("publisher") is not None)
+            # Pinned launchers own no window, so nothing is published for them.
+            self.assertFalse(target.property("active"))
+        self.assertEqual(self.warnings, [])
+
     def test_pinning_and_reordering_persist_in_configuration(self):
         if self.app.platformName() == "offscreen":
             self.skipTest("TaskManager needs a Wayland or X11 connection")
