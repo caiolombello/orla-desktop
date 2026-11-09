@@ -96,6 +96,17 @@ Window {
         property bool canGoPrevious: false
         property bool canGoNext: false
     }
+    // Inert KWin side for the app-wide menu actions; offscreen, the native
+    // VirtualDesktopInfo has no window system to talk to.
+    QtObject {
+        id: appActionsBackend
+        objectName: "dockAppActionsBackend"
+        property var desktopIds: []
+        property var desktopNames: []
+        property bool windowViewAvailable: false
+        property var calls: []
+        function showWindowView(handles) { calls = calls.concat([handles]); }
+    }
     QtObject {
         id: controlCenterBackend
         objectName: "dockControlCenterBackend"
@@ -200,6 +211,7 @@ Window {
         desktopSwitchBackendOverride: desktopSwitchBackend
         contextSnapshotOverride: contextSnapshot
         controlCenterBackendOverride: controlCenterBackend
+        appActionsBackendOverride: appActionsBackend
         audioBackendOverride: audioBackend
         brightnessBackendOverride: brightnessBackend
         doNotDisturbBackendOverride: doNotDisturbBackend
