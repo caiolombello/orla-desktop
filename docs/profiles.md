@@ -40,6 +40,30 @@ Limites: até 16 perfis nomeados, além de Preferências anteriores; nomes únic
 
 `profilesJSON` vazio usa as preferências flat, sem migração implícita. JSON inválido, grande demais ou de formato futuro é preservado e bloqueia gravações da apresentação. Na inicialização, o dock usa flat; substituição inválida durante execução mantém a última apresentação validada. Relate o erro em vez de editar KConfig com o Plasma aberto. Se a aparência personalizada salva for inválida ao copiar, o novo perfil usa as preferências anteriores de tema/ícones/movimento e mostra um aviso; o valor flat original é preservado.
 
+## Focus modes / Modos de foco
+
+**Português:** como os Modos de Foco do macOS, cada perfil pode ligar ou
+desligar o Não perturbe do Plasma ao ser ativado. Em **Widgets**, escolha
+**Não perturbe ao usar este perfil**: *Manter como está* (padrão), *Ligar* ou
+*Desligar*. Vale ao trocar de perfil, inclusive pelos contextos automáticos;
+abrir o dock, recarregar a configuração ou editar o perfil ativo não muda nada.
+O pedido passa pelo mesmo estado da Central de Controle e só termina quando o
+servidor de notificações do Plasma confirma; o Plasma pode manter o modo ligado
+por regras próprias (tela cheia, telas espelhadas). As preferências planas
+anteriores aos perfis não têm essa opção. Perfis salvos antes dela continuam
+válidos e leem *Manter como está*.
+
+**English:** like macOS Focus modes, each profile can turn Plasma's Do Not
+Disturb on or off when it becomes active. Under **Widgets**, choose **Não
+perturbe ao usar este perfil**: *Manter como está* (default), *Ligar* or
+*Desligar*. It applies on a profile switch, automatic contexts included;
+opening the dock, reloading the configuration or editing the active profile
+changes nothing. The request goes through the same state as the Control Center
+and completes only when Plasma's notification server confirms it; Plasma may
+keep the mode on by its own rules (fullscreen, mirrored screens). The flat
+preferences from before profiles do not have this option. Profiles saved
+before it stay valid and read *Manter como está*.
+
 ## Remove the active profile / Remover o perfil ativo
 
 In **Perfil ativo**, open **Remover…**, choose another profile or **Preferências anteriores** explicitly, then confirm **Remover perfil**. This deletes the saved active profile, including its presentation; there is no Undo. The pending profile selector does not change the target. Opening, choosing a destination and cancelling do not save. Rename and removal are separate edits: finish or cancel one before opening the other. Escape cancels the inline confirmation, tabs retain it, and closing settings discards it. A changed owner, revision, appearance preview or reference impact blocks the old confirmation; cancel and reopen it.

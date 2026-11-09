@@ -41,11 +41,54 @@ barra de menus, não recebe foco nem cliques, some ao expirar e não reserva
 espaço no dock, então também funciona num dock estreito demais para a área do
 aviso. A cor é sempre preta, nos esquemas claro e escuro.
 
-A janela usa o tipo de notificação do Plasma, que o KWin mantém acima dos
-painéis e deixa na posição pedida, na tela do dock. O tipo de exibição na tela
-(OSD) foi descartado: o KWin o recoloca no centro, a dois terços da altura. Ainda
-não há prova com dois monitores, escala fracionária, tela cheia ou sessão
-bloqueada (N2).
+#### Atividades ao vivo (Source)
+
+Com **Mostrar na ilha a música, o Pomodoro e o microfone ou a câmera em uso
+(global)**, a ilha também mostra o que está acontecendo agora, como a Dynamic
+Island do iPhone:
+
+- **Pomodoro em andamento:** fase e tempo restante. Tem prioridade sobre a
+  música.
+- **Música tocando:** capa, título e barras animadas. Ao pausar, a música fica
+  mais 15 segundos para dar tempo de retomar.
+- **Microfone ou câmera em uso:** ícone laranja (microfone) ou verde (câmera),
+  como no macOS. Ocupa a ilha só quando nada mais está ativo; senão vira um
+  ícone pequeno no fim da cápsula.
+- **Próxima reunião:** de 10 minutos antes até 5 minutos depois do início de um
+  evento com horário (eventos de dia inteiro não contam), vinda do mesmo plugin
+  da agenda do dock e só com os eventos da agenda ligados. Tem prioridade sobre
+  tudo. A cápsula compacta mostra só "Em 5 min"; o título aparece ao expandir,
+  para não ficar à mostra numa tela compartilhada.
+- **Avisos de bateria:** "Carregando" ao ligar o carregador e "Bateria fraca" ao
+  cair para 20% e para 10%, com a barra de nível em verde, âmbar ou vermelho
+  (UPower, em tempo real). Um celular pareado pelo KDE Connect avisa ao cair
+  para 20% e 10%.
+
+Um aviso (Pomodoro concluído, volume) toma a ilha enquanto dura e depois a
+devolve. Um clique na ilha expande a atividade: a música ganha capa, progresso
+e anterior/tocar/próxima (clicar na capa abre o player); o Pomodoro ganha pausar
+e reiniciar; a privacidade lista o que está em uso. Um clique no fundo ou tirar
+o ponteiro de cima recolhe. Um clique num aviso o dispensa. A ilha nunca recebe
+o foco do teclado; os mesmos controles continuam acessíveis pelo teclado nos
+popups do dock.
+
+O microfone conta quando há uma gravação ativa no Plasma-PA que não seja um
+medidor de nível ou mixer. A câmera não tem API de sessão: conta quando um
+processo do usuário mantém um dispositivo V4L2 aberto (verificado com `fuser` a
+cada 4 segundos, só com a opção ligada). Apps que usam a câmera pelo PipeWire
+aparecem como o PipeWire segurando o dispositivo.
+
+#### Janela
+
+Na sessão Wayland, a ilha é uma superfície layer-shell (LayerShellQt) na camada
+superior, ancorada no topo, que o KWin centraliza. A superfície tem o tamanho
+da cápsula: só a cápsula recebe cliques, o resto da tela continua normal. Ela
+cresce na hora e encolhe depois da animação. Janelas em tela cheia a cobrem,
+como o macOS esconde a barra de menus. Fora do Wayland, a ilha usa a janela de
+notificação do Plasma, sem receber entrada: mostra avisos e atividades
+compactas, mas não expande. O tipo de exibição na tela (OSD) foi descartado: o
+KWin o recoloca no centro, a dois terços da altura. Ainda não há prova com dois
+monitores, escala fracionária, troca de tela ou sessão bloqueada (N2).
 
 ## English
 
@@ -89,7 +132,50 @@ the menu bar, takes no focus or clicks, fades out when it expires and reserves
 no dock space, so it also works on a dock too narrow for the notice slot. It is
 always black, in light and dark schemes.
 
-The window uses Plasma's notification type, which KWin keeps above panels and
-leaves where it is placed, on the dock's screen. The on-screen-display type was
-dropped: KWin moves it to the center, two thirds down the screen. Two monitors,
-fractional scaling, fullscreen and the locked session are not proven yet (N2).
+#### Live activities (Source)
+
+With **Mostrar na ilha a música, o Pomodoro e o microfone ou a câmera em uso
+(global)**, the island also shows what is happening right now, like the
+iPhone's Dynamic Island:
+
+- **Running Pomodoro:** phase and time left. It outranks music.
+- **Playing music:** cover, title and animated bars. A paused track stays for
+  15 more seconds so it can be resumed.
+- **Microphone or camera in use:** an orange (microphone) or green (camera)
+  icon, as on macOS. It takes the island only when nothing else is live;
+  otherwise it becomes a small icon at the capsule's end.
+- **Next meeting:** from 10 minutes before to 5 minutes after a timed event
+  starts (all-day events never count), read through the dock calendar's
+  plugin and only with calendar events on. It outranks everything. The compact
+  capsule shows only "Em 5 min"; the title appears when expanded, so it is not
+  on display on a shared screen.
+- **Battery notices:** "Carregando" when the charger is plugged in and "Bateria
+  fraca" when the level drops to 20% and to 10%, with the level bar in green,
+  amber or red (UPower, live). A phone paired through KDE Connect notifies at
+  20% and 10%.
+
+A notice (Pomodoro done, volume) takes the island over while it lasts, then
+gives it back. A click expands the activity: music gets cover, progress and
+previous/play/next (clicking the cover raises the player); the Pomodoro gets
+pause and reset; privacy lists what is in use. A click on the background or
+moving the pointer away folds it back. A click on a notice dismisses it. The
+island never takes keyboard focus; the same controls stay keyboard-reachable
+in the dock popups.
+
+The microphone counts when Plasma-PA has an active recording stream that is
+not a level meter or mixer. The camera has no session API: it counts when a
+process of the user holds a V4L2 device open (checked with `fuser` every 4
+seconds, only with the option on). Apps using the camera through PipeWire show
+up as PipeWire holding the device.
+
+#### Window
+
+In a Wayland session the island is a layer-shell surface (LayerShellQt) on the
+top layer, anchored to the top edge, which KWin centers. The surface is the
+capsule's size: only the capsule takes clicks and the rest of the screen is
+untouched. It grows at once and shrinks after the animation. Fullscreen
+windows cover it, as macOS hides its menu bar. Outside Wayland the island uses
+Plasma's notification window without input: it shows notices and compact
+activities but does not expand. The on-screen-display type was dropped: KWin
+moves it to the center, two thirds down the screen. Two monitors, fractional
+scaling, screen changes and the locked session are not proven yet (N2).
