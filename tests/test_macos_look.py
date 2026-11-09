@@ -108,6 +108,8 @@ class MacosLookTests(unittest.TestCase):
         kwin = self.ini("kwinrc")
         self.assertEqual(kwin["TabBox"], {"LayoutName": "big_icons", "ApplicationsMode": "1", "HighlightWindows": "false"})
         self.assertEqual(kwin["Plugins"], {"magiclampEnabled": "true", "squashEnabled": "false"})
+        self.assertEqual(kwin["Effect-overview"], {"BorderActivate": "7"})
+        self.assertEqual(kwin["ElectricBorders"], {"BottomRight": "ShowDesktop"})
         self.assertEqual(kwin["org.kde.kdecoration2"]["ButtonsOnLeft"], "XIA")
         self.assertTrue(kwin["org.kde.kdecoration2"]["theme"].startswith("kwin4_decoration_qml_orla_"))
         self.assertEqual(self.ini("plasmarc")["Theme"]["name"], "orla")
