@@ -195,6 +195,14 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   tile's existing focus only if the same window still owns it and no newer focus
   occurred. Keep the menu actions as the keyboard alternative; preserve all dock
   and event-lane geometry budgets.
+- **App actions.** For a tile with windows, the context menu ends like the macOS
+  dock: "Opções" (only with more than one desktop; a submenu in the generic menu,
+  an in-place disclosure in the native popover), "Mostrar todas as janelas"
+  (KWin's WindowView with the app's window handles, as Plasma's task manager does),
+  "Ocultar" and "Encerrar" last. They act on every window with the same AppId,
+  through `DockAppActions` and an injected backend. "Encerrar" asks each window to
+  close through the TasksModel; it never kills processes. Disable an action when
+  no window can take it; hide them all for launchers without windows.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the

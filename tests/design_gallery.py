@@ -44,6 +44,24 @@ POPUPS = (
     # Synthetic events: colored bars per calendar, today and tomorrow (filled in after opening).
     # Not right after "calendar": the same popup may still be closing.
     ("calendar-events", "calendarPopup.openAt(settingsButton)"),
+    # App-wide actions for a synthetic app with two windows on two desktops, "Opções" open.
+    ("task-menu",
+        "appActionsBackendOverride = Qt.createQmlObject('import QtQuick; QtObject { property var desktopIds: [\"d1\", \"d2\"];"
+        " property var desktopNames: [\"Um\", \"Dois\"]; property bool windowViewAvailable: true;"
+        " function showWindowView(handles) {} }', root); "
+        "appActionsModelOverride = Qt.createQmlObject('import QtQuick; QtObject { property var roles: ({});"
+        " property var rows: []; readonly property int count: rows.length; function makeModelIndex(row) { return {row: row}; }"
+        " function data(index, role) { for (const name in roles) if (roles[name] === role) return rows[index.row][name]; }"
+        " function requestToggleMinimized(index) {} function requestClose(index) {}"
+        " function requestVirtualDesktops(index, desktops) {} }', root); "
+        "appActionsModelOverride.roles = appActions.roles; "
+        "appActionsModelOverride.rows = [{appId: 'org.example.Editor', isWindow: true, minimizable: true, closable: true,"
+        " winIds: ['w1'], desktops: ['d1']}, {appId: 'org.example.Editor', isWindow: true, minimizable: true,"
+        " closable: true, winIds: ['w2'], desktops: ['d2']}]; "
+        "captureTaskMenu(0, {AppName: 'Editor', IsWindow: true, AppId: 'org.example.Editor', WinIdList: ['w1'],"
+        " HasLauncher: true, LauncherUrlWithoutIcon: 'applications:org.example.Editor.desktop',"
+        " CanLaunchNewInstance: true, IsMinimizable: true, IsClosable: true}, settingsButton); "
+        "nativeTaskMenu.openAt(settingsButton); nativeAppOptions.expanded = true"),
 )
 # Set on an object found by name once its popup is open (popup content has its own context).
 POPUP_FIXTURES = {

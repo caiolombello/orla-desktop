@@ -822,7 +822,9 @@ Item {
         self.assertLessEqual(dialog.y() + dialog.height() - menu.property("shadowMargin"), glass_top - 10 + 1)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Nova janela")
         QTest.keyClick(dialog, Qt.Key_Down)
-        self.assertEqual(dialog.activeFocusItem().property("text"), "Minimizar / restaurar")
+        # Row 0 can move right only where both harness launchers are installed.
+        following = "Mover para a direita" if self.evaluate("tasksModel.count") > 1 else "Minimizar / restaurar"
+        self.assertEqual(dialog.activeFocusItem().property("text"), following)
         QTest.keyClick(dialog, Qt.Key_Up)
         self.assertEqual(dialog.activeFocusItem().property("text"), "Nova janela")
         closed = QSignalSpy(menu.closed)
@@ -894,6 +896,199 @@ Item {
                 self.assertTrue(closed.wait(1000))
             self.assertFalse(menu.property("visible"))
             self.assertEqual(self.window.activeFocusItem(), task_button)
+        self.assertEqual(self.warnings, [])
+
+    APP_TASKS_FIXTURE = """import QtQuick
+QtObject {
+    property var roles: ({})
+    property var calls: []
+    property var rows: []
+    readonly property int count: rows.length
+    function makeModelIndex(row) { return {row: row}; }
+    function data(index, role) {
+        for (const name in roles) if (roles[name] === role) return rows[index.row][name];
+        return undefined;
+    }
+    function requestToggleMinimized(index) { calls = calls.concat(["minimize:" + rows[index.row].winIds[0]]); }
+    function requestClose(index) { calls = calls.concat(["close:" + rows[index.row].winIds[0]]); }
+    function requestVirtualDesktops(index, desktops) {
+        calls = calls.concat(["desktops:" + rows[index.row].winIds[0] + ">" + desktops.join(",")]);
+    }
+}"""
+    APP_KWIN_FIXTURE = """import QtQuick
+QtObject {
+    property var calls: []
+    property var desktopIds: ["d1", "d2"]
+    property var desktopNames: ["Um", "Dois"]
+    property bool windowViewAvailable: true
+    function showWindowView(handles) { calls = calls.concat(["windowview:" + handles.join(",")]); }
+}"""
+    APP_MENU_DATA = ("{AppName:'Editor', IsWindow:true, AppId:'org.example.Editor', WinIdList:['w1'],"
+                     " IsMinimizable:true, IsClosable:true}")
+
+    def install_app_action_fixtures(self):
+        actions = self.window.findChild(QObject, "dockAppActions")
+        self.assertIsNotNone(actions)
+        self.engine.rootContext().setContextProperty("ownedAppActions", actions)
+        self.engine.rootContext().setContextProperty("ownedAppFixtureParent", self.dock)
+        tasks = self.evaluate(f"Qt.createQmlObject({self.APP_TASKS_FIXTURE!r}, ownedAppFixtureParent)")
+        kwin = self.evaluate(f"Qt.createQmlObject({self.APP_KWIN_FIXTURE!r}, ownedAppFixtureParent)")
+        self.engine.rootContext().setContextProperty("ownedAppTasks", tasks)
+        self.evaluate("ownedAppTasks.roles = ownedAppActions.roles;"
+                      " ownedAppTasks.rows = ["
+                      "{appId:'org.example.Editor', isWindow:true, minimized:false, minimizable:true, closable:true,"
+                      " winIds:['w1'], desktops:['d1'], allDesktops:false, desktopsChangeable:true},"
+                      "{appId:'org.example.Editor', isWindow:true, minimized:true, minimizable:true, closable:true,"
+                      " winIds:['w2'], desktops:['d2'], allDesktops:false, desktopsChangeable:true},"
+                      "{appId:'org.example.Viewer', isWindow:true, minimized:false, minimizable:true, closable:true,"
+                      " winIds:['w3'], desktops:['d1'], allDesktops:false, desktopsChangeable:true}]")
+        self.dock.setProperty("appActionsModelOverride", tasks)
+        self.dock.setProperty("appActionsBackendOverride", kwin)
+        return tasks, kwin
+
+    def item_value(self, item, source):
+        expression = QQmlExpression(self.engine.rootContext(), item, source)
+        value, _ = expression.evaluate()
+        self.assertFalse(expression.hasError(), expression.error().toString())
+        return value
+
+    def calls_of(self, fixture):
+        value = fixture.property("calls")
+        return list(value.toVariant() if hasattr(value, "toVariant") else value)
+
+    def test_task_menu_routes_app_actions_to_every_window_of_the_app(self):
+        tasks, kwin = self.install_app_action_fixtures()
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        menu.setProperty("popupType", 0)
+        self.assertFalse(self.dock.property("nativeAppActionsBackendLoaded"))
+
+        def open_menu():
+            self.evaluate(f"showTaskMenu(0, {self.APP_MENU_DATA})")
+            QTest.qWait(30)
+            self.assertTrue(menu.property("visible"))
+            texts = self.item_value(menu, "Array.from({length: count}, (_, i) => itemAt(i))"
+                                          ".filter(item => item.visible).map(item => item.text).join('|')")
+            return texts.split("|")
+
+        def trigger(source):
+            closed = QSignalSpy(menu.closed)
+            self.item_value(menu, source)
+            if menu.property("visible") and not closed.count():
+                menu.close()
+                self.assertTrue(closed.wait(1000))
+            QTest.qWait(20)
+
+        texts = open_menu()
+        # macOS order: Opções, then Mostrar todas as janelas, Ocultar and Encerrar last.
+        self.assertEqual(texts[-4:], ["Opções", "Mostrar todas as janelas", "Ocultar", "Encerrar"])
+        find = "Array.from({length: count}, (_, i) => itemAt(i)).find(item => item.objectName === '%s')"
+        for name in ("appShowWindowsMenuItem", "appHideMenuItem", "appQuitMenuItem"):
+            self.assertTrue(self.item_value(menu, f"({find % name}).enabled"), name)
+        options = "Array.from({length: count}, (_, i) => itemAt(i)).find(item => item.subMenu).subMenu"
+        self.assertEqual(self.item_value(menu, f"{options}.itemAt(1).text"), "Mover para a área de trabalho 2")
+        trigger(f"({find % 'appHideMenuItem'}).triggered()")
+        self.assertEqual(self.calls_of(tasks), ["minimize:w1"])
+        open_menu()
+        trigger(f"({find % 'appShowWindowsMenuItem'}).triggered()")
+        self.assertEqual(self.calls_of(kwin), ["windowview:w1,w2"])
+        open_menu()
+        trigger(f"{options}.itemAt(1).triggered()")
+        self.assertEqual(self.calls_of(tasks)[1:], ["desktops:w1>d2"])
+        open_menu()
+        trigger(f"({find % 'appQuitMenuItem'}).triggered()")
+        # Encerrar closes the Editor's windows through the model, never the Viewer.
+        self.assertEqual(self.calls_of(tasks)[2:], ["close:w1", "close:w2"])
+        self.assertFalse(self.dock.property("appMenuArmed"))
+        self.assertFalse(self.dock.property("nativeAppActionsBackendLoaded"))
+        self.assertEqual(self.warnings, [])
+
+    def test_task_menu_disables_app_actions_without_windows_and_hides_single_desktop_options(self):
+        tasks, kwin = self.install_app_action_fixtures()
+        kwin.setProperty("desktopIds", ["d1"])
+        kwin.setProperty("windowViewAvailable", False)
+        menu = self.window.findChild(QObject, "taskContextMenu")
+        menu.setProperty("popupType", 0)
+        self.evaluate(f"showTaskMenu(0, {self.APP_MENU_DATA})")
+        QTest.qWait(30)
+        items = "Array.from({length: count}, (_, i) => itemAt(i))"
+        self.assertFalse(self.item_value(menu, f"{items}.some(item => item.subMenu)"))
+        self.assertFalse(self.item_value(menu, f"{items}.find(item => item.objectName === 'appShowWindowsMenuItem').enabled"))
+        self.assertTrue(self.item_value(menu, f"{items}.find(item => item.objectName === 'appQuitMenuItem').enabled"))
+        menu.close()
+        QTest.qWait(30)
+        self.evaluate("ownedAppTasks.rows = []")
+        self.evaluate(f"showTaskMenu(0, {self.APP_MENU_DATA})")
+        QTest.qWait(30)
+        for name in ("appShowWindowsMenuItem", "appHideMenuItem", "appQuitMenuItem"):
+            self.assertFalse(self.item_value(menu, f"{items}.find(item => item.objectName === '{name}').enabled"), name)
+        menu.close()
+        QTest.qWait(30)
+        # A pinned launcher without windows shows no app-wide actions at all.
+        self.evaluate("showTaskMenu(0, {AppName:'Launcher', IsWindow:false, AppId:'org.example.Editor'})")
+        QTest.qWait(30)
+        self.assertFalse(self.item_value(menu, f"{items}.find(item => item.objectName === 'appQuitMenuItem').visible"))
+        self.assertEqual(self.item_value(menu, f"{items}.filter(item => item.subMenu).length"), 0)
+        menu.close()
+        QTest.qWait(30)
+        self.assertEqual(self.calls_of(tasks), [])
+        self.assertEqual(self.warnings, [])
+
+    def test_native_task_menu_discloses_options_and_routes_app_actions(self):
+        tasks, kwin = self.install_app_action_fixtures()
+        self.dock.setProperty("nativePopups", True)
+        popup = self.window.findChild(QObject, "nativeTaskContextMenu")
+
+        def control(name):
+            # Repeater rows are not QObject children of the popup; search the
+            # action column the disclosure lives in.
+            dialog = popup.property("nativeDialog")
+            anchor = None
+            for owner in (self.window, dialog):
+                anchor = owner.findChild(QQuickItem, "nativeAppOptionsMenuItem") if owner is not None else None
+                if anchor is not None:
+                    break
+            self.assertIsNotNone(anchor)
+            found = self.item_value(anchor, f"parent.children.find(item => item.objectName === '{name}') || null")
+            self.assertIsNotNone(found, name)
+            return found
+
+        def open_menu():
+            self.evaluate(f"showTaskMenu(0, {self.APP_MENU_DATA})")
+            QTest.qWait(40)
+            self.assertTrue(popup.property("visible"))
+
+        def trigger(item):
+            self.item_value(item, "triggered()")
+            # The KWin backend Loader stays armed through the item's handler.
+            self.assertTrue(self.dock.property("appMenuArmed"))
+            QTest.qWait(40)
+            self.assertFalse(popup.property("visible"))
+            self.assertFalse(self.dock.property("appMenuArmed"))
+
+        open_menu()
+        options = control("nativeAppOptionsMenuItem")
+        self.assertTrue(options.property("visible"))
+        self.assertFalse(options.property("expanded"))
+        self.item_value(options, "triggered()")
+        QTest.qWait(20)
+        self.assertTrue(options.property("expanded"))
+        self.assertTrue(popup.property("visible"))
+        desktop = control("nativeAppDesktopMenuItem2")
+        self.assertEqual(desktop.property("text"), "Mover para a área de trabalho 2")
+        # Desktop 1 holds only w1; w2 still needs moving, so it stays enabled.
+        self.assertTrue(control("nativeAppDesktopMenuItem1").property("enabled"))
+        trigger(desktop)
+        self.assertEqual(self.calls_of(tasks), ["desktops:w1>d2"])
+        open_menu()
+        # Disclosure resets on each opening.
+        self.assertFalse(control("nativeAppOptionsMenuItem").property("expanded"))
+        trigger(control("nativeAppHideMenuItem"))
+        open_menu()
+        trigger(control("nativeAppShowWindowsMenuItem"))
+        open_menu()
+        trigger(control("nativeAppQuitMenuItem"))
+        self.assertEqual(self.calls_of(tasks), ["desktops:w1>d2", "minimize:w1", "close:w1", "close:w2"])
+        self.assertEqual(self.calls_of(kwin), ["windowview:w1,w2"])
         self.assertEqual(self.warnings, [])
 
     def test_integrations_render_real_percentages_and_neutral_stale_data(self):

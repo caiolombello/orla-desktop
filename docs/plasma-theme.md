@@ -44,6 +44,12 @@ Com o tema ativo, a Orla Dock detecta os marcadores do tema
   usam a moldura de diálogo do tema, com desfoque e sombra do KWin; os módulos
   internos viram véus translúcidos, como no macOS.
 - **etiqueta do app**: usa a moldura de dica do tema.
+- **Menu Orla e “Sobre Orla Desktop”** (barra superior): o fundo desenhado
+  some e o menu fica sobre a moldura de diálogo desfocada, como um popover do
+  macOS. Sem o tema, o menu usa o vidro desenhado (brilho no topo, borda
+  especular e linha fina) sobre a cor opaca `palette.window`, porque um applet
+  não pede desfoque ao KWin. Não há opção própria de “reduzir transparência”:
+  sem desfoque, o Plasma já troca para as variantes quase opacas do tema.
 
 Sem o tema, ou com a dock fora da borda inferior ou dividindo o painel com
 outros widgets, nada muda.

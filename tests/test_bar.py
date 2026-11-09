@@ -958,6 +958,99 @@ class BarTests(unittest.TestCase):
         self.assertEqual(self.bar.property("actionError"), "")
         self.assertEqual(self.warnings, [])
 
+    def test_menu_and_about_use_drawn_glass_and_clear_only_on_hosted_theme_glass(self):
+        menu = self.window.findChild(QObject, "orlaMenu")
+        about = self.window.findChild(QObject, "aboutOrlaPopup")
+        backgrounds = [self.window.findChild(QObject, name) for name in ("orlaMenuBackground", "aboutOrlaBackground")]
+        for background in backgrounds:
+            self.assertIsNotNone(background)
+            # Without blur behind, the Plasma window color stays opaque under the text.
+            self.assertEqual(self.evaluate("color.a", background), 1)
+            self.assertTrue(self.evaluate("color === owner.palette.window", background))
+            self.assertEqual(self.evaluate("border.width", background), 1)
+            self.assertFalse(background.property("clear"))
+        paddings = (menu.property("padding"), about.property("padding"))
+        self.assertEqual(paddings, (5, 20))
+        # The rim holds an opaque palette.window cover, so clearing the outer
+        # fill alone would still paint over the blurred frame.
+        rims = [next(child for child in background.childItems() if child.objectName() == "barGlassRim")
+                for background in backgrounds]
+        # Effective visibility needs a shown popup.
+        self.evaluate("forceActiveFocus()", self.item("orlaMenuButton"))
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        self.wait_property(menu, "opened", True)
+        self.assertTrue(rims[0].property("visible"))
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.assertTrue(self.evaluate("open('about')"))
+        self.wait_property(about, "opened", True)
+        self.assertTrue(rims[1].property("visible"))
+        self.evaluate("close()", about)
+        self.wait_property(about, "visible", False)
+        # The theme flag alone cannot clear a popup that has no blurred host behind it.
+        self.evaluate("systemGlass = true")
+        for background in backgrounds:
+            self.assertEqual(self.evaluate("color.a", background), 1)
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(Path(__file__).with_name("PopupHostHarness.qml"))))
+        host = component.create()
+        self.assertIsNotNone(host, [error.toString() for error in component.errors()])
+        try:
+            self.bar.setProperty("popupHost", host)
+            self.assertTrue(self.bar.property("popupGlassClear"))
+            # The theme's 10 px dialog frame already insets a clear popup.
+            self.assertEqual((menu.property("padding"), about.property("padding")), (0, 10))
+            for background in backgrounds:
+                self.assertEqual(self.evaluate("color.a", background), 0)
+                self.assertEqual(self.evaluate("border.width", background), 0)
+                self.assertTrue(background.property("clear"))
+            self.evaluate("open()", menu)
+            self.wait_property(menu, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertFalse(rims[0].property("visible"))
+            # Control: the same hosted, shown menu draws the rim once the theme
+            # flag drops, so the hidden rim above comes from clear and not the host.
+            self.evaluate("systemGlass = false")
+            self.assertTrue(rims[0].property("visible"))
+            self.evaluate("systemGlass = true")
+            self.assertFalse(rims[0].property("visible"))
+            self.evaluate("close()", menu)
+            self.wait_property(menu, "visible", False)
+            self.assertTrue(self.evaluate("open('about')"))
+            self.wait_property(about, "opened", True)
+            self.assertTrue(host.isVisible())
+            self.assertFalse(rims[1].property("visible"))
+            self.evaluate("close()", about)
+            self.wait_property(about, "visible", False)
+            self.assertFalse(host.isVisible())
+        finally:
+            self.evaluate("close()", menu)
+            self.evaluate("close()", about)
+            self.bar.setProperty("popupHost", None)
+            host.close()
+            host.deleteLater()
+            QCoreApplication.sendPostedEvents(host, QEvent.DeferredDelete)
+        self.evaluate("systemGlass = false")
+        self.assertEqual((menu.property("padding"), about.property("padding")), paddings)
+        self.assertFalse(menu.property("visible"))
+        self.assertEqual(self.session.calls, [])
+
+    def test_keyboard_menu_row_has_two_pixel_focus_ring_on_its_highlight(self):
+        button = self.item("orlaMenuButton")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        menu = self.window.findChild(QObject, "orlaMenu")
+        self.wait_property(menu, "opened", True)
+        QTest.keyClick(self.key_window(), Qt.Key_Down)
+        row = self.item("aboutOrla")
+        self.wait_property(row, "highlighted", True)
+        self.assertTrue(row.property("visualFocus"))
+        self.assertTrue(self.evaluate("background.visible", row))
+        self.assertEqual(self.evaluate("background.border.width", row), 2)
+        self.assertTrue(self.evaluate("background.border.color === palette.highlightedText", row))
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        self.assertEqual(self.session.calls, [])
+
     def test_escape_closes_the_menu_without_dispatch_and_returns_to_button(self):
         button = self.item("orlaMenuButton")
         self.evaluate("forceActiveFocus()", button)

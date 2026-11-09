@@ -66,6 +66,16 @@ Item {
     // {microphoneInUse, cameraInUse, power, phones, calendarEvents} for tests; the
     // panel reads Plasma-PA, V4L2, UPower, KDE Connect and the PIM calendar.
     property var islandSensorsOverride: null
+    // Test seams for the app-wide menu actions: a TasksModel-like object and a
+    // {desktopIds, desktopNames, windowViewAvailable, showWindowView} backend.
+    property var appActionsModelOverride: null
+    property var appActionsBackendOverride: null
+    // True while a window's menu is captured or open; loads the KWin backend
+    // before the menu sizes itself.
+    property bool appMenuArmed: false
+    readonly property bool nativeAppActionsBackendLoaded: nativeAppActionsBackend.item !== null
+    readonly property var appMenu: menuData.window && appMenuArmed
+        ? appActions.summary(menuData.appId, menuData.winIds) : appActions.emptySummary
     // Receives the minimize targets (KWin's magic lamp); tests inject a recorder.
     property var minimizePublisherOverride: null
     readonly property var minimizePublisher: minimizePublisherOverride || tasks
@@ -385,7 +395,7 @@ Item {
     function closeContext() {
         taskMenu.close(); nativeTaskMenu.close(); addDialog.close();
         calendarPopup.close(); pomodoroPopup.close(); musicPopup.close(); batteryPopup.close(); downloadsPopup.close(); integrationPopup.close(); controlCenterPopup.closeSession();
-        menuRow = -1; menuData = {}; appInput.clear();
+        menuRow = -1; menuData = {}; appMenuArmed = false; appInput.clear();
     }
     Connections {
         target: profileState
@@ -581,7 +591,9 @@ Item {
             scope: profileState.activeProfileId, revision: profileState.revision,
             window: Boolean(data.IsWindow), pinned: Boolean(data.HasLauncher || data.IsLauncher),
             ids: JSON.stringify(data.WinIdList || []), minimizable: Boolean(data.IsMinimizable),
-            closable: Boolean(data.IsClosable), canLaunch: Boolean(data.CanLaunchNewInstance) };
+            closable: Boolean(data.IsClosable), canLaunch: Boolean(data.CanLaunchNewInstance),
+            appId: String(data.AppId || ""), winIds: Array.from(data.WinIdList || []).map(String) };
+        appMenuArmed = Boolean(data.IsWindow);
         if (sourceItem) menuAnchorX = sourceItem.mapToItem(root, sourceItem.width / 2, 0).x;
         else menuAnchorX = (row + 1) * (root.tileSize + 16);
         return menuAnchorX;
@@ -600,6 +612,25 @@ Item {
             } else if (String(tasks.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon)) === menuData.url) return index;
         }
         return null;
+    }
+    // App-wide actions act on every window of the captured app, re-read at
+    // trigger time; a stale profile scope does nothing, like menuIndex().
+    function runAppAction(kind, desktopId) {
+        if (!menuData.window || menuData.scope !== profileState.activeProfileId
+            || menuData.revision !== profileState.revision) return false;
+        if (kind === "hide") return appActions.hide(menuData.appId, menuData.winIds) > 0;
+        if (kind === "quit") return appActions.quit(menuData.appId, menuData.winIds) > 0;
+        if (kind === "windows") return appActions.showAllWindows(menuData.appId, menuData.winIds);
+        if (kind === "desktop") return appActions.moveToDesktop(menuData.appId, menuData.winIds, desktopId) > 0;
+        return false;
+    }
+    // Items close their menu before acting; keep the KWin backend loaded until
+    // the triggered handler has run.
+    function disarmAppMenu() {
+        Qt.callLater(() => { if (!taskMenu.visible && !nativeTaskMenu.visible) root.appMenuArmed = false; });
+    }
+    function desktopLabel(choice) {
+        return qsTr("Mover para a área de trabalho %1").arg(choice.number);
     }
     function moveMenuTask(delta) {
         const index = menuIndex();
@@ -1109,6 +1140,7 @@ Item {
         onAboutToShow: { interactionEpoch++; interactionActive = true; }
         onAboutToHide: { interactionEpoch++; interactionActive = true; }
         onClosed: {
+            root.disarmAppMenu();
             const epoch = interactionEpoch;
             const menu = taskMenu;
             Qt.callLater(() => {
@@ -1134,6 +1166,39 @@ Item {
         Controls.MenuSeparator { visible: Boolean(root.menuData.window) }
         Controls.MenuItem { text: qsTr("Minimizar / restaurar"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.minimizable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestToggleMinimized(index); } }
         Controls.MenuItem { text: qsTr("Fechar janela"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.closable); onTriggered: { const index = root.menuIndex(); if (index) tasks.requestClose(index); } }
+        // App-wide actions, as in the macOS dock: every window of this app.
+        Controls.MenuSeparator { visible: Boolean(root.menuData.window) }
+        Controls.MenuItem { objectName: "appShowWindowsMenuItem"; text: qsTr("Mostrar todas as janelas"); visible: Boolean(root.menuData.window); enabled: root.appMenu.handles > 0 && appActions.windowViewAvailable; onTriggered: root.runAppAction("windows") }
+        Controls.MenuItem { objectName: "appHideMenuItem"; text: qsTr("Ocultar"); visible: Boolean(root.menuData.window); enabled: root.appMenu.hideable > 0; onTriggered: root.runAppAction("hide") }
+        Controls.MenuItem { objectName: "appQuitMenuItem"; text: qsTr("Encerrar"); visible: Boolean(root.menuData.window); enabled: root.appMenu.closable > 0; onTriggered: root.runAppAction("quit") }
+        // A Menu child cannot hide itself, so "Opções" only exists while there
+        // is more than one desktop to offer; it goes right before "Mostrar".
+        property Instantiator optionsInstantiator: Instantiator {
+            model: root.appMenu.desktops.length ? 1 : 0
+            delegate: Controls.Menu {
+                id: optionsMenu
+                objectName: "appOptionsMenu"
+                title: qsTr("Opções")
+                property Instantiator desktopItems: Instantiator {
+                    model: root.appMenu.desktops
+                    delegate: Controls.MenuItem {
+                        required property var modelData
+                        objectName: "appDesktopMenuItem" + modelData.number
+                        text: root.desktopLabel(modelData)
+                        enabled: !modelData.current
+                        onTriggered: root.runAppAction("desktop", modelData.id)
+                    }
+                    onObjectAdded: (index, item) => optionsMenu.insertItem(index, item)
+                    onObjectRemoved: (index, item) => optionsMenu.removeItem(item)
+                }
+            }
+            onObjectAdded: (index, menu) => {
+                let position = 0;
+                while (position < taskMenu.count && taskMenu.itemAt(position).objectName !== "appShowWindowsMenuItem") position++;
+                taskMenu.insertMenu(position, menu);
+            }
+            onObjectRemoved: (index, menu) => taskMenu.removeMenu(menu)
+        }
     }
     DockPopup {
         id: nativeTaskMenu
@@ -1166,8 +1231,35 @@ Item {
             Controls.MenuSeparator { Layout.fillWidth: true; visible: Boolean(root.menuData.window) }
             Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Minimizar / restaurar"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.minimizable); onTriggered: { nativeTaskMenu.close(); const index = root.menuIndex(); if (index) tasks.requestToggleMinimized(index); } }
             Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Fechar janela"); visible: Boolean(root.menuData.window); enabled: Boolean(root.menuData.closable); onTriggered: { nativeTaskMenu.close(); const index = root.menuIndex(); if (index) tasks.requestClose(index); } }
+            // App-wide actions, as in the macOS dock: every window of this app.
+            Controls.MenuSeparator { Layout.fillWidth: true; visible: Boolean(root.menuData.window) }
+            // The popup has no submenus; "Opções" discloses its choices in place.
+            Controls.MenuItem { id: nativeAppOptions; objectName: "nativeAppOptionsMenuItem"; Layout.fillWidth: true; focusPolicy: Qt.StrongFocus
+                property bool expanded: false
+                text: qsTr("Opções"); visible: Boolean(root.menuData.window) && root.appMenu.desktops.length > 0
+                icon.name: expanded ? "go-down-symbolic" : "go-next-symbolic"
+                Accessible.description: expanded ? qsTr("Recolher") : qsTr("Expandir")
+                onTriggered: expanded = !expanded
+            }
+            Repeater {
+                model: nativeAppOptions.visible && nativeAppOptions.expanded ? root.appMenu.desktops : []
+                Controls.MenuItem { Layout.fillWidth: true; focusPolicy: Qt.StrongFocus
+                    required property var modelData
+                    objectName: "nativeAppDesktopMenuItem" + modelData.number
+                    leftPadding: Style.space.xxl
+                    text: root.desktopLabel(modelData)
+                    enabled: !modelData.current
+                    // Closing empties this Repeater, so act while the row still exists.
+                    onTriggered: { root.runAppAction("desktop", modelData.id); nativeTaskMenu.close(); }
+                }
+            }
+            Controls.MenuItem { objectName: "nativeAppShowWindowsMenuItem"; Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Mostrar todas as janelas"); visible: Boolean(root.menuData.window); enabled: root.appMenu.handles > 0 && appActions.windowViewAvailable; onTriggered: { nativeTaskMenu.close(); root.runAppAction("windows"); } }
+            Controls.MenuItem { objectName: "nativeAppHideMenuItem"; Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Ocultar"); visible: Boolean(root.menuData.window); enabled: root.appMenu.hideable > 0; onTriggered: { nativeTaskMenu.close(); root.runAppAction("hide"); } }
+            Controls.MenuItem { objectName: "nativeAppQuitMenuItem"; Layout.fillWidth: true; focusPolicy: Qt.StrongFocus; text: qsTr("Encerrar"); visible: Boolean(root.menuData.window); enabled: root.appMenu.closable > 0; onTriggered: { nativeTaskMenu.close(); root.runAppAction("quit"); } }
         }
+        onAboutToShow: nativeAppOptions.expanded = false
         onOpened: nativeTaskActions.advanceFocus(1)
+        onClosed: root.disarmAppMenu()
     }
 
     // Keep the editor legible even when the draft uses low-contrast dock colors.
@@ -1268,6 +1360,26 @@ Item {
         objectName: "controlCenterNativeLoader"
         active: controlCenterPopup.visible && root.controlCenterBackendOverride === null
         source: active ? Qt.resolvedUrl("NativeKdeControlActions.qml") : ""
+    }
+    Loader {
+        id: nativeAppActionsBackend
+        objectName: "dockAppActionsNativeLoader"
+        // VirtualDesktopInfo needs a real window system; offscreen it crashes.
+        active: root.appMenuArmed && root.appActionsBackendOverride === null
+            && /^(wayland|xcb)/.test(Qt.platform.pluginName)
+        source: active ? Qt.resolvedUrl("NativeDockAppActions.qml") : ""
+    }
+    DockAppActions {
+        id: appActions
+        objectName: "dockAppActions"
+        model: root.appActionsModelOverride !== null ? root.appActionsModelOverride : tasks
+        roles: ({appId: TaskManager.AbstractTasksModel.AppId, isWindow: TaskManager.AbstractTasksModel.IsWindow,
+            minimized: TaskManager.AbstractTasksModel.IsMinimized, minimizable: TaskManager.AbstractTasksModel.IsMinimizable,
+            closable: TaskManager.AbstractTasksModel.IsClosable, winIds: TaskManager.AbstractTasksModel.WinIdList,
+            desktops: TaskManager.AbstractTasksModel.VirtualDesktops,
+            allDesktops: TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops,
+            desktopsChangeable: TaskManager.AbstractTasksModel.IsVirtualDesktopsChangeable})
+        backend: root.appActionsBackendOverride !== null ? root.appActionsBackendOverride : nativeAppActionsBackend.item
     }
     KdeControlActions {
         id: kdeControlActions
