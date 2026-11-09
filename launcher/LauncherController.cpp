@@ -4,6 +4,9 @@
 #include <KConfigGroup>
 #include <KRunner/AbstractRunner>
 #include <KService>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
 #include <QFileInfo>
 #include <QScopedValueRollback>
 #include <KSycoca>
@@ -36,6 +39,66 @@ QString appForMatch(const KRunner::QueryMatch &match)
     if (data.scheme() != QStringLiteral("applications") || !data.authority().isEmpty() || data.hasQuery() || data.hasFragment()) return {};
     return aliasService(data.path()) ? data.path() : QString();
 }
+
+const QString servicesRunner = QStringLiteral("krunner_services");
+const QString calculatorRunner = QStringLiteral("calculator");
+const QString sessionsRunner = QStringLiteral("krunner_sessions");
+const QString logoutPromptService = QStringLiteral("org.kde.LogoutPrompt");
+// Rows per section: apps keep the old 32-row model limit; other sources stay short.
+constexpr int applicationBudget = 32;
+constexpr int sourceBudget = 6;
+// krunner_sessions match data: 1 logout, 2 shutdown, 3 reboot, 4 lock, 5 save session.
+// Its own run() honors the user's "confirm logout" setting, so the launcher asks
+// the native prompt instead, like the bar's ForcePrompt. Lock/save run directly.
+QString confirmationMethod(const KRunner::QueryMatch &match)
+{
+    if (!match.runner() || match.runner()->id() != sessionsRunner || match.data().typeId() != QMetaType::Int) return {};
+    switch (match.data().toInt()) {
+    case 1: return QStringLiteral("promptLogout");
+    case 2: return QStringLiteral("promptShutDown");
+    case 3: return QStringLiteral("promptReboot");
+    default: return {};
+    }
+}
+// Opening a remote URL makes KIO probe the network from this process. Only
+// local targets are shown; applications: URLs belong to the services runner.
+bool localTargets(const KRunner::QueryMatch &match)
+{
+    if (!match.runner()) return false;
+    const QString runner = match.runner()->id();
+    if (runner == servicesRunner) return true;
+    if (runner == sessionsRunner && match.data().typeId() == QMetaType::Int) {
+        const int action = match.data().toInt();
+        if (action < 1 || action > 5) return false; // Unknown session side effect.
+    }
+    QList<QUrl> urls = match.urls();
+    if (match.data().typeId() == QMetaType::QUrl) urls.append(match.data().toUrl());
+    for (const QUrl &url : urls) if (!url.isLocalFile()) return false;
+    return true;
+}
+}
+
+QStringList LauncherController::runnerAllowlist()
+{
+    // Local runners only. unitconverter is out: it fetches ECB currency rates on
+    // its first query. webshortcuts, bookmarks, dictionary and shell stay out too.
+    return {servicesRunner, calculatorRunner, QStringLiteral("org.kde.datetime"),
+            QStringLiteral("krunner_systemsettings"), sessionsRunner, QStringLiteral("krunner_powerdevil"),
+            QStringLiteral("windows"), QStringLiteral("locations"),
+            QStringLiteral("krunner_recentdocuments"), QStringLiteral("baloosearch")};
+}
+
+QStringList LauncherController::selectRunners(const QStringList &installed, const KConfigGroup &userPlugins)
+{
+    QStringList selected;
+    for (const QString &id : runnerAllowlist()) {
+        if (!installed.contains(id)) continue; // A missing runner is simply absent.
+        // Respect a runner the user turned off in KRunner; apps/calculator stay the launcher's core.
+        const bool core = id == servicesRunner || id == calculatorRunner;
+        if (!core && !userPlugins.readEntry(id + QStringLiteral("Enabled"), true)) continue;
+        selected.append(id);
+    }
+    return selected;
 }
 
 
@@ -45,8 +108,18 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
 {
     // Supply anonymous groups to ResultsModel as well: its default constructor opens KRunner's user state.
     m_model.runnerManager()->setHistoryEnabled(false);
-    m_model.runnerManager()->setAllowedRunners({QStringLiteral("krunner_services"), QStringLiteral("calculator")});
-    m_model.setLimit(32);
+    QStringList installed;
+    for (const auto &metadata : KRunner::RunnerManager::runnerMetaDataList()) installed.append(metadata.pluginId());
+    // Read-only: the launcher never writes KRunner's own configuration.
+    const KConfig krunnerConfig(QStringLiteral("krunnerrc"), KConfig::NoGlobals);
+    m_runnerIds = selectRunners(installed, krunnerConfig.group(QStringLiteral("Plugins")));
+    // An empty KRunner allowlist means "every runner"; never let it fall open.
+    m_model.runnerManager()->setAllowedRunners(m_runnerIds.isEmpty() ? QStringList{QStringLiteral("orla_no_local_runner")} : m_runnerIds);
+    // KRunner's limit is split between categories, so busy sources (Baloo alone has
+    // several) would drop app rows before refresh() sees them. Keep every row, apps
+    // first; refresh() applies the per-source budgets.
+    m_model.setLimit(0);
+    m_model.setFavoriteIds({servicesRunner});
     connect(&m_model, &QAbstractItemModel::rowsInserted, this, &LauncherController::refresh);
     connect(&m_model, &QAbstractItemModel::rowsRemoved, this, &LauncherController::refresh);
     connect(&m_model, &QAbstractItemModel::modelReset, this, &LauncherController::refresh);
@@ -138,8 +211,6 @@ void LauncherController::refresh()
     }
     QVariantList applicationRows;
     QList<int> applicationBackends;
-    QVariantList calculatorRows;
-    QList<int> calculatorBackends;
     for (const auto &entry : m_aliases.entries()) {
         const auto alias = entry.toMap();
         if (AliasStore::key(alias.value("alias").toString()) != AliasStore::key(m_query)) continue;
@@ -157,33 +228,71 @@ void LauncherController::refresh()
             {"aliasRevision", m_aliases.revision()}, {"actions", QVariantList{}}});
         applicationBackends.append(-1);
     }
-    for (int row = 0; row < m_model.rowCount() && row < 40; ++row) {
+    // Spotlight-like grouping: one contiguous section per source, in this order.
+    const QStringList extraOrder{QStringLiteral("calculator"), QStringLiteral("datetime"), QStringLiteral("settings"),
+        QStringLiteral("system"), QStringLiteral("windows"), QStringLiteral("locations"),
+        QStringLiteral("documents"), QStringLiteral("files")};
+    QHash<QString, QVariantList> extraRows;
+    QHash<QString, QList<int>> extraBackends;
+    // Each source keeps its own budget: apps as before, other sources short.
+    QHash<QString, QString> runnerCategory;
+    QHash<QString, int> budget;
+    int remaining = 0;
+    for (const QString &id : std::as_const(m_runnerIds)) {
+        const QString category = presentationFor(id).value(QStringLiteral("category")).toString();
+        runnerCategory.insert(id, category);
+        if (budget.contains(category)) continue;
+        const int rows = category == QStringLiteral("applications") ? applicationBudget : sourceBudget;
+        budget.insert(category, rows);
+        remaining += rows;
+    }
+    bool promptChecked = false, promptAvailable = false;
+    // The model is unlimited; stop early only once every loaded source is full.
+    for (int row = 0; row < m_model.rowCount() && remaining > 0; ++row) {
         const auto index = m_model.index(row, 0);
         const auto match = m_model.getQueryMatch(index);
+        if (!match.runner()) continue;
+        const QString runnerId = match.runner()->id();
+        // A runner outside the allowlist has no budget; a full source is skipped cheaply.
+        const auto left = budget.find(runnerCategory.value(runnerId));
+        if (left == budget.end() || *left <= 0 || !localTargets(match)) continue;
+        --*left;
+        --remaining;
+        const auto presentation = presentationFor(runnerId);
+        const QString category = presentation.value(QStringLiteral("category")).toString();
         QVariantList actions;
-        for (const auto &action : match.actions()) {
-            actions.append(QVariantMap{{"id", action.id()}, {"text", action.text()},
-                                      {"resultId", resultId(index)}, {"generation", m_generation}, {"row", row}});
+        const QString prompt = confirmationMethod(match);
+        if (prompt.isEmpty()) {
+            for (const auto &action : match.actions()) {
+                actions.append(QVariantMap{{"id", action.id()}, {"text", action.text()},
+                                          {"resultId", resultId(index)}, {"generation", m_generation}, {"row", row}});
+            }
+        }
+        bool enabled = m_model.data(index, KRunner::ResultsModel::EnabledRole).toBool();
+        QVariant description = m_model.data(index, KRunner::ResultsModel::SubtextRole);
+        if (!prompt.isEmpty()) {
+            if (!promptChecked) { promptAvailable = logoutPromptAvailable(); promptChecked = true; }
+            enabled = enabled && promptAvailable;
+            description = promptAvailable ? tr("O KDE pede confirmação antes de continuar.")
+                                          : tr("A confirmação do KDE está indisponível nesta sessão.");
         }
         const QString appId = appForMatch(match);
-        const bool calculator = match.runner() && match.runner()->id() == QStringLiteral("calculator");
+        const QString iconName = match.iconName().isEmpty() ? match.runner()->metadata().iconName() : match.iconName();
         QVariantMap result{{"id", resultId(index)}, {"generation", m_generation},
-            {"title", m_model.data(index, Qt::DisplayRole)},
-            {"description", m_model.data(index, KRunner::ResultsModel::SubtextRole)},
-            {"iconName", match.iconName()},
-            {"enabled", m_model.data(index, KRunner::ResultsModel::EnabledRole)},
-            {"kind", calculator ? QStringLiteral("calculator") : QStringLiteral("app")},
-            {"category", calculator ? QStringLiteral("calculator") : QStringLiteral("applications")},
-            {"categoryLabel", calculator ? tr("CALCULADORA") : tr("APLICATIVOS")},
-            {"source", calculator ? tr("KRunner · Calculadora") : tr("KRunner · Aplicativos")},
-            {"actions", actions}, {"appId", appId}, {"aliasEligible", !appId.isEmpty()}};
-        if (calculator) { calculatorRows.append(result); calculatorBackends.append(row); }
-        else { applicationRows.append(result); applicationBackends.append(row); }
+            {"title", m_model.data(index, Qt::DisplayRole)}, {"description", description},
+            {"iconName", iconName}, {"enabled", enabled}, {"runnerId", runnerId},
+            {"confirmation", !prompt.isEmpty()}, {"actions", actions}, {"appId", appId},
+            {"aliasEligible", !appId.isEmpty()}};
+        result.insert(presentation);
+        if (category == QStringLiteral("applications")) { applicationRows.append(result); applicationBackends.append(row); }
+        else { extraRows[category].append(result); extraBackends[category].append(row); }
     }
     m_rows = applicationRows;
     m_backendRows = applicationBackends;
-    m_rows.append(calculatorRows);
-    m_backendRows.append(calculatorBackends);
+    for (const QString &category : extraOrder) {
+        m_rows.append(extraRows.value(category));
+        m_backendRows.append(extraBackends.value(category));
+    }
     if (m_commands) {
         // Matching lists only; the provider is not called until Enter/click on this row.
         const QVariantList commands = m_commands->matches(m_query);
@@ -237,6 +346,36 @@ void LauncherController::refresh()
     }
     restoreSelection();
     emit changed();
+}
+
+QVariantMap LauncherController::presentationFor(const QString &runnerId) const
+{
+    // kind drives the QML tile/verb, category keeps sections contiguous, source names the origin.
+    const auto row = [](const char *kind, const char *category, const QString &label, const QString &source) {
+        return QVariantMap{{"kind", QString::fromLatin1(kind)}, {"category", QString::fromLatin1(category)},
+                           {"categoryLabel", label}, {"source", source}};
+    };
+    if (runnerId == calculatorRunner) return row("calculator", "calculator", tr("CALCULADORA"), tr("KRunner · Calculadora"));
+    if (runnerId == QStringLiteral("org.kde.datetime")) return row("datetime", "datetime", tr("DATA E HORA"), tr("KRunner · Data e hora"));
+    if (runnerId == QStringLiteral("krunner_systemsettings"))
+        return row("setting", "settings", tr("AJUSTES DO SISTEMA"), tr("KRunner · Ajustes do Sistema"));
+    if (runnerId == sessionsRunner) return row("system", "system", tr("SESSÃO E ENERGIA"), tr("KRunner · Sessão"));
+    if (runnerId == QStringLiteral("krunner_powerdevil")) return row("system", "system", tr("SESSÃO E ENERGIA"), tr("KRunner · Energia"));
+    if (runnerId == QStringLiteral("windows")) return row("window", "windows", tr("JANELAS"), tr("KWin · Janelas abertas"));
+    if (runnerId == QStringLiteral("locations")) return row("location", "locations", tr("LOCAIS"), tr("KRunner · Locais"));
+    if (runnerId == QStringLiteral("krunner_recentdocuments"))
+        return row("document", "documents", tr("DOCUMENTOS RECENTES"), tr("KRunner · Documentos recentes"));
+    if (runnerId == QStringLiteral("baloosearch")) return row("file", "files", tr("ARQUIVOS"), tr("Baloo · Arquivos"));
+    return row("app", "applications", tr("APLICATIVOS"), tr("KRunner · Aplicativos"));
+}
+
+bool LauncherController::logoutPromptAvailable() const
+{
+    // The prompt is D-Bus activatable; a missing service must never fall back to an unconfirmed action.
+    const auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected() || !bus.interface()) return false;
+    if (bus.interface()->isServiceRegistered(logoutPromptService).value()) return true;
+    return bus.interface()->activatableServiceNames().value().contains(logoutPromptService);
 }
 
 void LauncherController::restoreSelection()
@@ -492,8 +631,17 @@ bool LauncherController::execute(int row, quint64 generation, const QString &id,
     const auto index = m_model.index(m_backendRows[row], 0);
     if (!index.isValid() || resultId(index) != id || !m_model.data(index, KRunner::ResultsModel::EnabledRole).toBool()) return false;
     const auto match = m_model.getQueryMatch(index);
-    if (!match.runner() || (match.runner()->id() != QStringLiteral("krunner_services")
-                           && match.runner()->id() != QStringLiteral("calculator"))) return false;
+    if (!match.runner() || !m_runnerIds.contains(match.runner()->id()) || !localTargets(match)) return false;
+    const QString prompt = confirmationMethod(match);
+    if (!prompt.isEmpty()) {
+        // Only the native prompt is contacted; logout/shutdown/reboot wait for the user there.
+        if (!actionId.isEmpty() || !logoutPromptAvailable()) return false;
+        const auto message = QDBusMessage::createMethodCall(logoutPromptService, QStringLiteral("/LogoutPrompt"),
+                                                            logoutPromptService, prompt);
+        if (!QDBusConnection::sessionBus().send(message)) return false;
+        if (generation == m_generation) dismiss();
+        return true;
+    }
     int actionIndex = -1;
     if (!actionId.isEmpty()) {
         const auto actions = match.actions();

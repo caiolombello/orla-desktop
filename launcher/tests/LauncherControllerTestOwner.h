@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QPointer>
+#include <QSemaphore>
 #include <QThread>
 #include <QtTest>
 #include <memory>
@@ -55,8 +56,7 @@ public:
             if (!runner) { ++missingMetadata; continue; }
             auto *thread = runner->thread();
             const QString id = runner->id();
-            const QString alias = id == QStringLiteral("krunner_services") || id == QStringLiteral("calculator")
-                ? id : QStringLiteral("unknown_runner");
+            const QString alias = LauncherController::runnerAllowlist().contains(id) ? id : QStringLiteral("unknown_runner");
             auto trace = std::make_shared<RunnerTrace>(index, alias,
                 reinterpret_cast<quintptr>(runner.data()), reinterpret_cast<quintptr>(runner->parent()),
                 reinterpret_cast<quintptr>(thread),
@@ -139,9 +139,32 @@ public:
                     << "joins=" << joinCount - joins.size() << "records=" << omittedRecords
                     << "observer_failures=" << observersExpected - observersInstalled;
         };
+        // KRunner 6.30/6.31 quits each runner thread before it connects the
+        // thread's finished signal to the deletions (deleteRunners in
+        // runnermanager.cpp). A thread that finishes in between leaks its runner
+        // and QThread, and this owner would report them. Park the idle threads
+        // until the manager is gone, so that wiring exists first; a thread still
+        // busy in a match is not waited for beyond a short share of the deadline.
+        const auto gate = std::make_shared<QSemaphore>();
+        const auto parked = std::make_shared<QSemaphore>();
+        int parking = 0;
+        for (const auto &runner : m_runners) {
+            if (!runner || runner->thread() == QThread::currentThread()) continue;
+            parking += QMetaObject::invokeMethod(runner.data(), [gate, parked] {
+                parked->release();
+                gate->acquire();
+            }, Qt::QueuedConnection);
+        }
+        const bool allParked = parked->tryAcquire(parking, 100);
+        // Released as the manager dies, before the controller's own destroyed
+        // signal: tests wait for the runners' deletion from that signal.
+        QObject::connect(m_controller->m_model.runnerManager(), &QObject::destroyed,
+                         [gate, parking] { gate->release(parking); });
         resetEnterNs = monotonicNs();
         m_controller.reset();
         resetReturnNs = monotonicNs();
+        // Spare permits are harmless; no parked thread may outlive the reset.
+        gate->release(parking);
         // finished/runner deletion precede TLS cleanup. Join before pumping
         // DeferredDelete, which can otherwise destroy the QThread QObject.
         for (const auto &thread : threads) {
@@ -168,7 +191,8 @@ public:
         auditReturnNs = monotonicNs();
         auditBudgetAfterMs = deadline.remainingTime();
         qInfo() << "ORLA_TEST_RUNNER_TEARDOWN" << "captured=" << m_runners.size()
-                << "destroyed=" << destroyed << "elapsed_ms=" << elapsed.elapsed();
+                << "destroyed=" << destroyed << "elapsed_ms=" << elapsed.elapsed()
+                << "parked=" << allParked;
         if (!destroyed) {
             s_teardownFailed = true;
             reportFailure();

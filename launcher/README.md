@@ -1,6 +1,51 @@
 # Orla Launcher — componente opcional experimental
 
-Janela Qt Quick própria para aplicativos e calculadora locais, usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
+Janela Qt Quick própria para aplicativos, calculadora e outras fontes locais do KRunner (veja [Fontes de busca](#fontes-de-busca--experimental)), usando as APIs públicas de KRunner, e inventário Steam local explícito. Digitar consulta; Enter ou clique executa a seleção. ↑/↓ navegam, Tab alcança o botão **Ações**; ele e Ctrl+K abrem a lista completa de ações do resultado selecionado, com sua origem. ↑/↓ navegam nessa lista e Enter/clique executam somente a ação escolhida. Esc ou Ctrl+K fecham primeiro essa lista e devolvem foco à busca, preservando consulta e seleção; outro Esc mantém o fechamento normal do launcher. Calculadora oferece a ação explícita de copiar; digitar não altera o clipboard. O core usa KConfig anônimo e desliga o histórico do runner. O núcleo de busca não mantém histórico de consultas do Orla nem usa contexto automático, runner de shell, integrações de conta ou rede.
+
+## Fontes de busca — experimental
+
+O launcher consulta só runners locais do KRunner, numa allowlist fixa
+(`LauncherController::runnerAllowlist()`), e mostra cada fonte numa seção própria,
+com rótulo em português e o ícone do resultado (ou da fonte):
+
+| Runner (ID) | Seção |
+| --- | --- |
+| `krunner_services` | APLICATIVOS (aliases e favoritos continuam só para eles) |
+| `calculator` | CALCULADORA |
+| `org.kde.datetime` | DATA E HORA |
+| `krunner_systemsettings` | AJUSTES DO SISTEMA |
+| `krunner_sessions`, `krunner_powerdevil` | SESSÃO E ENERGIA |
+| `windows` (D-Bus do KWin) | JANELAS |
+| `locations` | LOCAIS |
+| `krunner_recentdocuments` | DOCUMENTOS RECENTES |
+| `baloosearch` (D-Bus do Baloo) | ARQUIVOS |
+
+Os IDs foram conferidos no Fedora 44/Plasma 6.8 (`/usr/lib64/qt6/plugins/kf6/krunner`
+e `/usr/share/krunner/dbusplugins`). Runner não instalado fica de fora sem erro; o
+aviso de runners indisponíveis só aparece se nenhum carregar. Um runner desligado
+pelo usuário nas configurações do KRunner (`krunnerrc`, lido sem gravar) também
+fica de fora, exceto aplicativos e calculadora. Essa leitura acontece quando o
+launcher inicia; como ele fica residente, a mudança vale depois de reiniciá-lo.
+Aplicativos mostram até 32
+resultados e vêm primeiro; as outras fontes mostram até seis cada. O modelo do
+KRunner fica sem limite próprio, porque esse limite é dividido entre categorias e
+fontes com muitas categorias (como o Baloo) tirariam linhas dos aplicativos.
+
+- **Fora da lista:** `unitconverter` (no primeiro uso baixa cotações de moedas do
+  BCE, mesmo sem consulta de moeda — verificado com interceptação de DNS), atalhos
+  web, favoritos/histórico/abas do navegador, dicionário, linha de comando,
+  encerrar aplicativos, Central de Programas, contatos e corretor.
+- **Sem rede:** `locations` só oferece destinos locais (`file:`); URLs remotas
+  (`https:`, `smb:`, `sftp:`…) são descartadas, porque abri-las faria o KIO
+  consultar a rede. A mesma regra vale para documentos recentes e arquivos.
+- **Confirmação:** sair, desligar e reiniciar não usam o próprio runner (que segue
+  a preferência "confirmar ao sair" do usuário); o launcher só chama o prompt
+  nativo `org.kde.LogoutPrompt`, como o `ForcePrompt` da barra. Sem esse serviço
+  a linha aparece desativada. Bloquear, suspender e brilho seguem direto, como na
+  barra. Hibernar e as ações que o runner de janelas só oferece por palavra-chave
+  (fechar, minimizar, manter acima) também seguem direto, sem confirmação.
+- **Privacidade:** a superfície vazia mostra só favoritos; documentos, arquivos e
+  janelas só aparecem enquanto há consulta.
 
 ## Favoritos de aplicativos — experimental
 
@@ -875,7 +920,7 @@ python3 -B -m unittest discover -s launcher/tests -p 'test_artifact*.py' -v
 
 ## Compilar e testar
 
-Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma. Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
+Requer compilador C++17, CMake ≥3.24, Qt ≥6.11.2 (Core, Gui, Widgets, Qml e Quick; Network, Test e DBus para os testes), KF6 ≥6.30 (Runner, Config, Service, GlobalAccel, WindowSystem) e runners `krunner_services` e `calculator` do Plasma (as demais fontes da allowlist são opcionais). Ambiente validado: Fedora 44, Qt 6.11.2, KF6 6.30.0, Plasma 6.7.5. O Qt Quick Controls também deve estar disponível em runtime. Os testes exigem Python 3, `dbus-daemon` e `gdbus`. No Fedora, os headers vêm de `qt6-qtbase-devel`, `qt6-qtdeclarative-devel`, `kf6-krunner-devel`, `kf6-kconfig-devel`, `kf6-kservice-devel`, `kf6-kglobalaccel-devel` e `kf6-kwindowsystem-devel`; os runners instalados foram fornecidos por `plasma-workspace-libs`.
 
 ```sh
 cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON

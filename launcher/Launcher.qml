@@ -418,14 +418,14 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: Style.size.target + Style.space.lg
             color: ui.text
-            placeholderText: qsTr("Buscar aplicativo, jogo ou calcular…")
+            placeholderText: qsTr("Buscar apps, arquivos ou calcular…")
             placeholderTextColor: ui.textMuted
             font.pixelSize: Style.type.headline
             leftPadding: Style.size.target + Style.space.sm
             rightPadding: Style.space.lg
             selectByMouse: true
             maximumLength: 512
-            Accessible.name: qsTr("Buscar aplicativos, jogos ou calcular")
+            Accessible.name: qsTr("Buscar aplicativos, arquivos, ajustes, jogos ou calcular")
             visible: window.activePanel === "search"
             background: Rectangle {
                 radius: height / 2
@@ -465,8 +465,8 @@ Window {
         RowLayout {
             visible: window.activePanel === "search"
             Layout.fillWidth: true
-            Text { text: window.commands ? qsTr("APLICATIVOS · CALCULADORA · STEAM · ORLA") : qsTr("APLICATIVOS · CALCULADORA · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
-            Item { Layout.fillWidth: true }
+            // A summary of the main sources; each result names its own section.
+            Text { Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 1; text: window.commands ? qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM · ORLA") : qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
             Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: ui.accent; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
         }
         Item {
@@ -497,7 +497,7 @@ Window {
                     // Leave the scrollbar its own lane.
                     width: results.width - (results.ScrollBar.vertical.visible ? results.ScrollBar.vertical.width + Style.space.xs : 0)
                     readonly property bool selected: launcher.selectedIndex === result.index
-                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" ? "slate" : rowData.kind === "steam" ? "ink"
+                    readonly property var tile: Style.iconTiles[rowData.kind === "calculator" || rowData.kind === "datetime" ? "slate" : rowData.kind === "steam" ? "ink"
                         : rowData.kind === "command" ? Style.widgetTiles.peripherals : "sea"]
                     height: Style.size.target + Style.space.md
                     enabled: rowData.enabled && !window.executionBlocked && !aliasPreferences.visible
@@ -599,7 +599,8 @@ Window {
             Button {
                 objectName: "executeButton"
                 property var executionTicket: null
-                text: window.selectedRow && (window.selectedRow.kind === "app" || window.selectedRow.kind === "steam" || window.selectedRow.kind === "alias" || window.selectedRow.kind === "favorite") ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                // Things that open (apps, settings, places, documents, files) say "Abrir"; answers and actions say "Usar".
+                text: window.selectedRow && ["app", "steam", "alias", "favorite", "setting", "location", "document", "file"].indexOf(window.selectedRow.kind) >= 0 ? qsTr("Abrir ↵") : qsTr("Usar ↵")
                 enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
                     && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
                 onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
