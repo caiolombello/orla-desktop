@@ -61,6 +61,7 @@ PlasmoidItem {
         controlCenterClient: controlCenterEntry.item
         controlCenterHost: nativeControlCenterHost
         reducedMotion: Kirigami.Units.shortDuration <= 0
+        systemGlass: root.themeGlass
         controlCenterLoadError: controlCenterEntry.status === Loader.Error
             ? qsTr("Não foi possível carregar a Central de Controle da Orla Dock.")
             : controlCenterEntry.status === Loader.Loading ? qsTr("Carregando a Central de Controle…")
