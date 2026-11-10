@@ -802,6 +802,20 @@ Item {
         finally:
             popup.closed.disconnect(choose_newer_control)
 
+    def test_native_popup_floats_on_theme_glass_so_its_frame_keeps_four_sides(self):
+        self.dock.setProperty("nativePopups", True)
+        menu = self.window.findChild(QObject, "nativeTaskContextMenu")
+        dialog = menu.property("nativeDialog")
+        self.assertIsNotNone(dialog)
+        # Drawn glass has no theme frame to cut.
+        self.assertEqual(dialog.property("floating"), 0)
+        self.dock.setProperty("systemPopupGlass", True)
+        self.assertEqual(dialog.property("floating"), menu.property("edgeGap"))
+        self.assertGreater(dialog.property("floating"), 0)
+        self.dock.setProperty("systemPopupGlass", False)
+        self.assertEqual(dialog.property("floating"), 0)
+        self.assertEqual(self.warnings, [])
+
     def test_native_task_menu_routes_only_to_owned_dialog_and_preserves_keyboard_close(self):
         self.place_dock_inside_available_screen()
         self.dock.setProperty("nativePopups", True)

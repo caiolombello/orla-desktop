@@ -18,6 +18,10 @@ PlasmaCore.Dialog {
     }
     visualParent: anchorProxy
     location: owner.dock.popAbove ? PlasmaCore.Types.BottomEdge : PlasmaCore.Types.TopEdge
+    // For a panel edge Plasma drops the frame's border on that side, and the
+    // theme glass would end in a straight cut above the dock. A positive value
+    // keeps all four sides, and this distance from the screen edges.
+    floating: owner.systemGlass ? owner.edgeGap : 0
     // AppletPopup deliberately snaps near-center controls to screen center.
     type: PlasmaCore.Dialog.PopupMenu
     flags: Qt.Window | Qt.FramelessWindowHint
