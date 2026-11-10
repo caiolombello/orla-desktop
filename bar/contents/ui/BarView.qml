@@ -19,6 +19,8 @@ Item {
     readonly property alias controlCenterControl: controlCenterButton
     readonly property alias menuControl: menuButton
     readonly property bool menuIsOpen: menu.visible
+    readonly property alias applicationControl: applicationButton
+    readonly property bool applicationMenuIsOpen: appMenu.visible
     property string hostVersion: Application.version
     property bool showOrlaMenu: true
     property bool showControlCenter: false
@@ -53,6 +55,10 @@ Item {
         menu.close();
         about.close();
     }
+    onShowApplicationNameChanged: if (!showApplicationName) {
+        appMenu.restoreFocus = false;
+        appMenu.close();
+    }
     onShowControlCenterChanged: releaseControlCenter()
     onControlCenterClientChanged: releaseControlCenter()
     onControlCenterAvailableChanged: if (!controlCenterAvailable) releaseControlCenter()
@@ -66,10 +72,13 @@ Item {
     readonly property bool nativeSessionLoaded: actions.nativeLoaded
     readonly property bool nativeApplicationLoaded: nativeApplication.item !== null
     readonly property string sessionStatus: actions.status
-    readonly property string actionError: actions.error || recent.error || updates.error
+    readonly property string actionError: actions.error || recent.error || updates.error || appActions.error
     readonly property bool nativeRecentApplicationsLoaded: recent.nativeLoaded
     readonly property var application: applicationBackend !== null ? applicationBackend : nativeApplication.item
-    property bool preserveApplication: false
+    // Either menu's window takes the focus from the app the bar is naming.
+    property bool menuHoldsApplication: false
+    property bool applicationMenuHoldsApplication: false
+    readonly property bool preserveApplication: menuHoldsApplication || applicationMenuHoldsApplication
     readonly property var nextApplication: ({active: Boolean(application && application.hasActiveApplication),
         name: application ? boundedText(application.appName, 160) : ""})
     property var displayedApplication: ({active: false, name: ""})
@@ -101,6 +110,10 @@ Item {
         backend: root.softwareUpdatesBackend
         hostVersion: root.hostVersion
         wanted: root.showOrlaMenu
+    }
+    ApplicationActions {
+        id: appActions
+        provider: root.application
     }
     Loader {
         id: nativeApplication
@@ -163,6 +176,14 @@ Item {
         menu.close();
         const dispatched = actions.request(action);
         if (!dispatched) menuButton.forceActiveFocus(Qt.PopupFocusReason);
+        return dispatched;
+    }
+    function requestApplication(action) {
+        if (!appActions.can(action)) return false;
+        appMenu.restoreFocus = false;
+        appMenu.close();
+        const dispatched = appActions.request(action);
+        if (!dispatched) applicationButton.forceActiveFocus(Qt.PopupFocusReason);
         return dispatched;
     }
     function open(kind) {
@@ -390,18 +411,55 @@ Item {
             Controls.ToolTip.text: root.actionError
             onClicked: menu.open()
         }
-        Text {
-            objectName: "activeApplicationName"
+        // The bold name opens the application menu, as in the macOS menu bar.
+        // A backend without actions leaves it as plain text.
+        Templates.ToolButton {
+            id: applicationButton
+            objectName: "activeApplicationButton"
             visible: root.showApplicationName
+            enabled: appActions.available
             text: root.applicationName
-            textFormat: Text.PlainText
-            elide: Text.ElideRight
-            font.weight: Font.Bold
-            color: menuButton.palette.windowText
+            palette: menuButton.palette
+            padding: 0
+            focusPolicy: Qt.StrongFocus
+            hoverEnabled: true
+            implicitWidth: Math.ceil(applicationLabel.implicitWidth)
+            implicitHeight: root.implicitHeight
             Layout.fillWidth: true
             Layout.minimumWidth: 0
             Layout.maximumWidth: 240
+            Layout.preferredHeight: root.controlHeight
+            Layout.maximumHeight: root.controlHeight
+            Layout.alignment: Qt.AlignVCenter
             Accessible.name: text
+            Accessible.role: enabled ? Accessible.ButtonMenu : Accessible.StaticText
+            onClicked: appMenu.visible ? appMenu.close() : appMenu.open()
+            contentItem: Text {
+                id: applicationLabel
+                objectName: "activeApplicationName"
+                text: applicationButton.text
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                font.weight: Font.Bold
+                color: menuButton.palette.windowText
+                verticalAlignment: Text.AlignVCenter
+            }
+            // The pill hugs the name and reaches outside the cell, so the name
+            // keeps the position it had as plain text.
+            readonly property real pillMargin: Style.space.xs + Style.space.xxs
+            leftInset: -pillMargin
+            rightInset: Math.max(0, width - Math.ceil(applicationLabel.implicitWidth)) - pillMargin
+            background: Rectangle {
+                objectName: "activeApplicationPill"
+                radius: Style.radius.control
+                color: Style.alpha(applicationButton.palette.windowText, applicationButton.down || root.applicationMenuIsOpen
+                    ? Style.state.pressed : applicationButton.hovered ? Style.state.hover : 0)
+                border.width: applicationButton.visualFocus ? Style.space.xxs : 0
+                border.color: applicationButton.palette.highlight
+                visible: applicationButton.enabled && (applicationButton.down || applicationButton.hovered
+                    || applicationButton.visualFocus || root.applicationMenuIsOpen)
+                Behavior on color { ColorAnimation { duration: Style.duration(Style.motion.fast, root.reducedMotion) } }
+            }
         }
     }
     // Use the controls' keyboard semantics with our own compact presentation.
@@ -528,7 +586,7 @@ Item {
         id: menu
         property bool restoreFocus: true
         onAboutToShow: {
-            root.preserveApplication = true;
+            root.menuHoldsApplication = true;
             updates.refresh();
             restoreFocus = true;
             if (root.popupHost) root.popupHost.showPopup(menu, menuButton);
@@ -595,8 +653,58 @@ Item {
         OrlaMenuItem { enabled: false; visible: actions.error !== ""; text: actions.error }
         onClosed: {
             if (root.popupHost) root.popupHost.hidePopup(menu);
-            root.preserveApplication = false;
+            root.menuHoldsApplication = false;
             if (restoreFocus) menuButton.forceActiveFocus(Qt.PopupFocusReason);
+        }
+    }
+    Controls.Menu {
+        id: appMenu
+        objectName: "applicationMenu"
+        property bool restoreFocus: true
+        // Short, so the action stays readable beside a long application name.
+        readonly property string appName: root.displayedApplication.active
+            ? root.boundedText(root.displayedApplication.name, 40) : ""
+        onAboutToShow: {
+            root.applicationMenuHoldsApplication = true;
+            // Before the menu's window takes the focus from the application.
+            appActions.capture();
+            restoreFocus = true;
+            if (root.popupHost) root.popupHost.showPopup(appMenu, applicationButton);
+        }
+        parent: root.popupHost ? root.popupHost.hostItem : applicationButton
+        popupType: root.popupHost ? Controls.Popup.Item : Controls.Popup.Window
+        x: 0
+        y: root.popupHost ? 0 : applicationButton.height + 2
+        margins: -1
+        width: 248
+        padding: Math.max(0, Style.space.xs + 1 - root.popupFrameMargin)
+        spacing: 0
+        focus: true
+        closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
+        background: BarGlass {
+            objectName: "applicationMenuBackground"
+            owner: applicationButton
+            radius: Style.radius.card
+        }
+        OrlaMenuItem {
+            objectName: "applicationHide"
+            text: appMenu.appName ? qsTr("Ocultar %1").arg(appMenu.appName) : qsTr("Ocultar")
+            enabled: appActions.can("hide")
+            onTriggered: root.requestApplication("hide")
+        }
+        OrlaMenuItem { objectName: "applicationHideOthers"; text: qsTr("Ocultar outros"); enabled: appActions.can("hideOthers"); onTriggered: root.requestApplication("hideOthers") }
+        OrlaMenuItem { objectName: "applicationShowAll"; text: qsTr("Mostrar tudo"); enabled: appActions.can("showAll"); onTriggered: root.requestApplication("showAll") }
+        OrlaMenuSeparator {}
+        OrlaMenuItem {
+            objectName: "applicationQuit"
+            text: appMenu.appName ? qsTr("Encerrar %1").arg(appMenu.appName) : qsTr("Encerrar")
+            enabled: appActions.can("quit")
+            onTriggered: root.requestApplication("quit")
+        }
+        onClosed: {
+            if (root.popupHost) root.popupHost.hidePopup(appMenu);
+            root.applicationMenuHoldsApplication = false;
+            if (restoreFocus) applicationButton.forceActiveFocus(Qt.PopupFocusReason);
         }
     }
     Controls.Popup {

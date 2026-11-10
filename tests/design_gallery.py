@@ -867,8 +867,10 @@ class Gallery:
                 QTest.qWait(10)
 
     def bar(self, host: str) -> None:
-        from test_bar import FixtureApplication, FixtureControlCenter, FixtureRecent, FixtureSession, FixtureUpdates
+        from test_bar import (FixtureApplication, FixtureApplicationActions, FixtureControlCenter, FixtureRecent,
+                              FixtureSession, FixtureUpdates)
         session, application, center = FixtureSession(), FixtureApplication(), FixtureControlCenter()
+        application_actions = FixtureApplicationActions()
         recent = FixtureRecent()
         # Discover reports updates and Steam is open: the badge and the Steam row show.
         updates = FixtureUpdates()
@@ -878,6 +880,7 @@ class Gallery:
         engine.rootContext().setContextProperty("fixtureUpdates", updates)
         engine.rootContext().setContextProperty("fixtureSession", session)
         engine.rootContext().setContextProperty("fixtureApplication", application)
+        engine.rootContext().setContextProperty("fixtureApplicationActions", application_actions)
         engine.rootContext().setContextProperty("fixtureControlCenter", center)
         engine.load(QUrl.fromLocalFile(str(TESTS / "BarHarness.qml")))
         window = engine.rootObjects()[0]
@@ -904,6 +907,13 @@ class Gallery:
         QTest.qWait(200)
         self.save(f"bar-{host}-menu", window, QRectF(0, 0, menu.property("width") + 8,
                                                      bar.height() + menu.property("height") + 8))
+        # The application menu under the bold name; one action has nothing to reach.
+        application_actions.summary = dict(hide=2, hideOthers=3, showAll=0, quit=2)
+        QQmlExpression(context, bar, "menu.close(); applicationBackend = fixtureApplicationActions;"
+                                     "appMenu.popupType = 0; appMenu.open()").evaluate()
+        QTest.qWait(200)
+        app_menu = window.findChild(QObject, "applicationMenu")
+        self.save(f"bar-{host}-app-menu", window, QRectF(0, 0, 420, bar.height() + app_menu.property("height") + 8))
         window.close()
         engine.deleteLater()
 

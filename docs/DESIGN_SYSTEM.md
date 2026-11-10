@@ -205,6 +205,9 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
   no window can take it; hide them all for launchers without windows.
 - **Bar.** Menu-bar style: a monochrome Orla mark in the text color, the bold app
   name, compact menus (rows `Style.size.control − 10`, radius `Style.radius.sm`).
+  The bold name is the application menu's button: its hover pill hugs the name
+  and reaches outside the layout cell, so the name stays where plain text sat.
+  Name the app in "Ocultar" and "Encerrar"; disable an action that reaches no window.
   Panel margins can leave a 24 px applet viewport inside a 32 px panel. Fit the
   buttons, glyphs and focus rings to the allocated height; keep the preferred
   28/32 px sizes and the 20 px menu mark. Adapt vertical padding within the panel
