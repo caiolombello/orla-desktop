@@ -487,6 +487,21 @@ class AppearancePresetTests(unittest.TestCase):
         self.assertEqual(json.loads(self.config.property('profilesJSON')), original)
         self.assertEqual(self.flat(), flat)
 
+    def test_automatic_preset_from_the_other_scheme_previews_and_applies(self):
+        self.initialize()
+        self.evaluate("appearance.begin()")
+        # Exported in dark: the tokens carry Glass colors.
+        data = self.candidate()
+        data['appearance']['baseTheme'] = 'auto'
+        self.evaluate("appearance.systemLight = true")
+        self.preview(data)
+        self.assertEqual(self.evaluate('appearance.effective.tokens.surface'), '#eef1f6')
+        self.assertTrue(self.evaluate('appearancePreset.canApply'))
+        self.assertTrue(self.evaluate('appearancePreset.apply()'))
+        work = next(p for p in json.loads(self.config.property('profilesJSON'))['profiles'] if p['id'] == 'work')
+        self.assertEqual(json.loads(work['appearance']['appearanceJSON'])['baseTheme'], 'auto')
+        self.assertEqual(self.warnings, [])
+
     def test_keyboard_import_apply_and_escape_cancel_fit_420_pixels(self):
         self.initialize()
         self.popup.setProperty('heightBudget', 420)

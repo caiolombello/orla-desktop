@@ -202,7 +202,7 @@ class AppearancePresetParserTests(unittest.TestCase):
         self.assertEqual(properties["kind"]["const"], "orla-appearance-preset")
         appearance = properties["appearance"]
         self.assertEqual(appearance["properties"]["formatVersion"]["const"], "0.1-experimental")
-        self.assertEqual(appearance["properties"]["baseTheme"]["enum"], ["glass", "midnight", "paper"])
+        self.assertEqual(appearance["properties"]["baseTheme"]["enum"], ["glass", "midnight", "paper", "frost", "auto"])
         tokens = appearance["properties"]["tokens"]
         widgets = properties["widgets"]
         item = widgets["items"]
