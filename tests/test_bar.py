@@ -934,7 +934,8 @@ class BarTests(unittest.TestCase):
         self.assertFalse(self.bar.property("nativeApplicationLoaded"))
         self.assertFalse(self.bar.property("nativeRecentApplicationsLoaded"))
         self.assertEqual(self.bar.property("sessionStatus"), "ready")
-        self.evaluate("hostVersion = '6.8.0'; sessionBackend = null; applicationBackend = null; recentApplicationsBackend = null")
+        # A Plasma series nobody checked keeps every native adapter unloaded.
+        self.evaluate("hostVersion = '6.9.0'; sessionBackend = null; applicationBackend = null; recentApplicationsBackend = null")
         self.assertEqual(self.bar.property("sessionStatus"), "unavailable")
         self.assertFalse(self.bar.property("nativeSessionLoaded"))
         self.assertFalse(self.bar.property("nativeApplicationLoaded"))
@@ -942,6 +943,16 @@ class BarTests(unittest.TestCase):
         self.assertFalse(self.evaluate("requestSession('shutdown')"))
         self.assertEqual(self.session.calls, [])
         self.assertEqual(self.warnings, [])
+
+    def test_native_adapters_are_offered_only_to_checked_plasma_series(self):
+        from PySide6.QtQml import QJSEngine
+        engine = QJSEngine()
+        source = (Path(__file__).resolve().parents[1] / "bar/contents/code/Host.js").read_text(encoding="utf-8")
+        self.assertFalse(engine.evaluate(source.replace(".pragma library", "")).isError())
+        for version, expected in (("6.7.5", True), ("6.8.2", True), ("6.8.0-beta1", True), ("6.9.0", False),
+                                  ("6.6.5", False), ("7.0.0", False), ("16.8.2", False), ("6.8", False), ("", False)):
+            self.assertEqual(engine.evaluate(f"supported('{version}')").toBool(), expected, version)
+        self.assertFalse(engine.evaluate("supported(undefined)").toBool())
 
     def test_transport_error_is_visible_without_optimistic_success(self):
         self.evaluate("sessionBackend = ({status: 'ready', canShutdown: true, requestShutdown: function() { throw new Error('private receiver details'); }})")

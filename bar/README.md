@@ -4,24 +4,24 @@
 
 ## Português
 
-O **Menu Orla (experimental)** é um applet separado (`org.orla.bar`, versão 0.1.0) para **Plasma 6.7.x**. É o primeiro componente da barra opcional, disponível somente no checkout de código. **Não está nos assets publicados das releases 0.2.5–0.2.11.** O dock continua independente.
+O **Menu Orla (experimental)** é um applet separado (`org.orla.bar`, versão 0.1.0) para **Plasma 6.7.x e 6.8.x**. É o primeiro componente da barra opcional, disponível somente no checkout de código. **Não está nos assets publicados das releases 0.2.5–0.2.11.** O dock continua independente.
 
 ### O que o código oferece
 
 - Botão com ícone próprio Orla ou sem ícone, label configurável e opção de mostrar o nome do aplicativo ativo. **Mostrar nome do menu**, **controles compactos (28 px)** e **Aplicar estilo inspirado no Mac** preservam o texto personalizado e permitem editar cada controle depois.
 - Nome em texto simples e limitado; preserva a apresentação desde o início da abertura do menu até seu fechamento completo. Aplicativo ativo sem nome aparece como **Aplicativo**; sem aplicativo ativo, **Área de trabalho**. Não mostra o título do documento/janela.
 - Ações explícitas de informações do sistema, configurações do KDE e configuração deste applet. Sobre o sistema abre o módulo nativo de informações da distribuição.
-- **Recentes**: até cinco aplicativos usados há pouco, com ícone, como os "Itens recentes" do menu Apple. A lista vem do modelo de uso recente do KDE (o mesmo do menu de aplicativos), carregado só no Plasma 6.7.x e só enquanto o Menu Orla está ativo. Clicar abre o aplicativo pelo ID do arquivo `.desktop` mostrado, mesmo que a ordem mude. O KDE só registra o uso quando há uma Activity atual.
+- **Recentes**: até cinco aplicativos usados há pouco, com ícone, como os "Itens recentes" do menu Apple. A lista vem do modelo de uso recente do KDE (o mesmo do menu de aplicativos), carregado só no Plasma 6.7.x/6.8.x e só enquanto o Menu Orla está ativo. Clicar abre o aplicativo pelo ID do arquivo `.desktop` mostrado, mesmo que a ordem mude. O KDE só registra o uso quando há uma Activity atual.
 - **Forçar encerramento…**: aciona o "Matar janela" do KWin (o mesmo de Ctrl+Alt+Esc); o próximo clique escolhe a janela, e Esc cancela.
 - **Atualizações…** (U3): mostra o estado que o notificador do Discover informa, num selo como o do menu Apple: **Disponíveis**, **Segurança**, **Reiniciar**, **Instalando…** ou **Sem rede**. A barra lê os itens registrados na bandeja do KDE (`StatusNotifierWatcher`), só enquanto o Menu Orla está ativo e de novo a cada abertura. O Discover só registra o item quando há algo a avisar, então sem selo a barra não afirma que o sistema está atualizado. Clicar aciona a mesma ação do ícone do Discover na bandeja: a página de atualizações ou o pedido de reinício. Sem o ícone, abre o Discover na página de atualizações. A barra não conta, baixa nem instala pacotes.
 - **Downloads do Steam…**: aparece só com o Steam aberto (o item dele na bandeja) e abre `steam://open/downloads`. O progresso dos jogos fica no Steam; a atualização do próprio Orla continua em **Sobre Orla Desktop** e no guia de updates.
 - Bloquear, suspender, sair, reiniciar e desligar conforme as capacidades disponíveis. Navegação e hover não executam ações. Sair/reiniciar/desligar usam `ForcePrompt` para solicitar confirmação nativa; envio aceito não comprova que a ação terminou e não há retry automático.
 
-A ponte privada `org.kde.plasma.private.sessions` fica em um componente isolado por Loader. Os adaptadores nativos só são carregados em hosts identificados como 6.7.x; fora dessa faixa, ficam indisponíveis. As APIs/fontes foram verificadas em Plasma 6.7.5, Qt 6.11.2, Fedora 44. A faixa 6.7.x é um limite do código, não uma matriz nativa validada.
+A ponte privada `org.kde.plasma.private.sessions` fica em um componente isolado por Loader. Os adaptadores nativos só são carregados em hosts identificados como 6.7.x ou 6.8.x (`contents/code/Host.js`); fora dessa faixa, ficam indisponíveis e a barra mostra **Área de trabalho** e nenhuma ação de sessão. As APIs/fontes foram verificadas em Plasma 6.7.5, Qt 6.11.2, Fedora 44. Em Plasma 6.8.2 foram conferidos os nomes usados nos `qmltypes` instalados de `org.kde.plasma.private.sessions` e `org.kde.plasma.private.kicker`, e os adaptadores de sessão, aplicativo ativo e atualizações carregaram sem avisos fora do painel (leitura apenas). A faixa é um limite do código, não uma matriz nativa validada.
 
 ### Instalação manual opcional
 
-Requer uma sessão Plasma 6.7.x e `kpackagetool6`. A atualização foi testada em um painel real no Fedora 44, Plasma 6.7.5/Wayland; outros ambientes e a primeira instalação continuam sem qualificação. Na raiz do checkout:
+Requer uma sessão Plasma 6.7.x ou 6.8.x e `kpackagetool6`. A atualização foi testada em um painel real no Fedora 44, Plasma 6.7.5/Wayland; outros ambientes e a primeira instalação continuam sem qualificação. Na raiz do checkout:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i bar
@@ -116,7 +116,7 @@ Em 12/10/2026, um teste real no painel superior comprovou hover, clique, menu co
 
 ## English
 
-**Orla Menu (experimental)** is a separate applet (`org.orla.bar`, version 0.1.0) for **Plasma 6.7.x**. It is the first optional bar component, available only in the source checkout. **It is excluded from the published 0.2.5–0.2.11 release assets.** The dock remains independent.
+**Orla Menu (experimental)** is a separate applet (`org.orla.bar`, version 0.1.0) for **Plasma 6.7.x and 6.8.x**. It is the first optional bar component, available only in the source checkout. **It is excluded from the published 0.2.5–0.2.11 release assets.** The dock remains independent.
 
 ### What the source provides
 
@@ -127,11 +127,11 @@ Em 12/10/2026, um teste real no painel superior comprovou hover, clique, menu co
 - **Downloads do Steam…** appears only while Steam runs (its tray item) and opens `steam://open/downloads`. Game progress stays in Steam; Orla's own update stays under **Sobre Orla Desktop** and the updates guide.
 - Capability-aware lock, suspend, logout, reboot and shutdown. Hover/navigation performs no action. Logout/reboot/shutdown use `ForcePrompt` to request native confirmation; accepted dispatch does not prove completion, and there is no automatic retry.
 
-The private `org.kde.plasma.private.sessions` bridge is isolated behind a Loader. Native adapters load only on hosts identified as 6.7.x; outside that range they stay unavailable. Sources/APIs were checked against Plasma 6.7.5, Qt 6.11.2, Fedora 44. The 6.7.x guard is a code boundary, not a validated native version matrix.
+The private `org.kde.plasma.private.sessions` bridge is isolated behind a Loader. Native adapters load only on hosts identified as 6.7.x or 6.8.x (`contents/code/Host.js`); outside that range they stay unavailable and the bar shows **Área de trabalho** and no session action. Sources/APIs were checked against Plasma 6.7.5, Qt 6.11.2, Fedora 44. On Plasma 6.8.2 the names used were checked in the installed `qmltypes` of `org.kde.plasma.private.sessions` and `org.kde.plasma.private.kicker`, and the session, active application and updates adapters loaded without warnings outside the panel (read only). The guard is a code boundary, not a validated native version matrix.
 
 ### Optional manual installation
 
-Requires a Plasma 6.7.x session and `kpackagetool6`. Updating the applet was tested in a real Fedora 44, Plasma 6.7.5/Wayland panel; other environments and first installation remain unqualified. From the checkout root:
+Requires a Plasma 6.7.x or 6.8.x session and `kpackagetool6`. Updating the applet was tested in a real Fedora 44, Plasma 6.7.5/Wayland panel; other environments and first installation remain unqualified. From the checkout root:
 
 ```sh
 kpackagetool6 -t Plasma/Applet -i bar
