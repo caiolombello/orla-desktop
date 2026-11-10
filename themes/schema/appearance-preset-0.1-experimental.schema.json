@@ -36,7 +36,9 @@
           "enum": [
             "glass",
             "midnight",
-            "paper"
+            "paper",
+            "frost",
+            "auto"
           ]
         },
         "tokens": {

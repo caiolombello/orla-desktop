@@ -70,8 +70,15 @@ var dockThemes = {
     midnight: {scheme: "dark", foreground: "#edf1f9", muted: "#9da9bf", accent: "#69d7c2",
         surface: "#111923", border: "#3c4b65", opacity: 1},
     paper: {scheme: "light", foreground: "#252b35", muted: "#606c79", accent: "#167361",
-        surface: "#f4f0e8", border: "#cec9bf", opacity: 1}
+        surface: "#f4f0e8", border: "#cec9bf", opacity: 1},
+    // Light translucent glass, the macOS dock in light mode.
+    frost: {scheme: "light", foreground: "#1d2430", muted: "#5b6675", accent: "#167361",
+        surface: "#eef1f6", border: "#d3d9e2", opacity: 199 / 255}
 };
+// "auto" follows the system scheme: Glass when dark, Frost when light.
+function concreteDockTheme(name, systemLight) {
+    return name === "auto" ? (systemLight ? "frost" : "glass") : dockThemes[name] ? name : "glass";
+}
 
 // 4 px grid. Prefer these steps over ad hoc numbers.
 var space = {xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32};

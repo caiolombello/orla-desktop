@@ -97,13 +97,15 @@ Item {
     property bool launcherOrderBusy: false
     property bool launcherReloadPending: false
     property string selectedIntegration: "quota"
-    readonly property bool light: appearanceState.effective.baseTheme === "paper"
+    // The built-in theme in effect; "auto" resolves through the system scheme.
+    readonly property var dockTheme: Style.dockTheme(Style.concreteDockTheme(appearanceState.effective.baseTheme,
+        appearanceState.systemLight))
+    readonly property bool light: dockTheme.scheme === "light"
     readonly property color foreground: appearanceState.effective.tokens.foreground
     readonly property color muted: appearanceState.effective.tokens.muted
     readonly property color accent: appearanceState.effective.tokens.accent
     readonly property color surface: appearanceState.overridden ? appearanceState.effective.tokens.surface
-        : light ? Style.dockThemes.paper.surface : presentation.appearance.theme === "midnight" ? Style.dockThemes.midnight.surface
-        : Style.alpha(Style.dockThemes.glass.surface, Style.dockThemes.glass.opacity)
+        : dockTheme.opacity < 1 ? Style.alpha(dockTheme.surface, dockTheme.opacity) : dockTheme.surface
     // Custom tokens can make any theme light; depth effects follow the real surface.
     readonly property bool lightSurface: Style.luminance(surface) > 0.4
     // Popups and menus follow the system color scheme's lightness (see DESIGN_SYSTEM.md).
@@ -315,6 +317,7 @@ Item {
         themeFileTransport: nativeThemeFileTransport
         themeFileBlocked: appearancePresetState.dirty
         configuration: root.presentation.appearance
+        systemLight: Style.schemeFor(systemColors.Kirigami.Theme.backgroundColor) === "light"
         scopeKey: profileState.activeProfileId
         writeAppearance: (next, scope, signature) => {
             if (scope !== profileState.activeProfileId || signature !== appearanceState.signature) return false;
@@ -832,10 +835,10 @@ Item {
     // Frosted: KWin blurs behind the slab, so a translucent theme lets it through.
     // Opaque themes (Midnight, Paper, custom opacity 1) stay opaque.
     readonly property real surfaceOpacity: appearanceState.overridden ? appearanceState.effective.tokens.opacity
-        : light || presentation.appearance.theme === "midnight" ? 1 : Style.dockThemes.glass.opacity
+        : dockTheme.opacity
     readonly property bool frosted: systemGlass && surfaceOpacity < 1
     readonly property color surfaceBase: appearanceState.overridden ? appearanceState.effective.tokens.surface
-        : Style.dockThemes.glass.surface
+        : dockTheme.surface
     GlassShadow {
         target: dockSurface
         radius: dockSurface.radius

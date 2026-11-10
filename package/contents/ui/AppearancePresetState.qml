@@ -21,7 +21,9 @@ QtObject {
     readonly property bool hasPreview: valid(internal.preview)
     readonly property var previewWidgets: hasPreview ? Profiles.copy(internal.preview.widgets) : null
     readonly property bool canApply: managed && hasPreview && !busy && !pending && !error.length && appearance.canApply
-        && JSON.stringify(appearance.effective) === JSON.stringify(internal.preview.appearance)
+        // An automatic appearance renders with the current scheme's colors.
+        && JSON.stringify(appearance.effective)
+            === JSON.stringify(Appearance.resolve(internal.preview.appearance, appearance.systemLight))
         && JSON.stringify(appearance.draft) === JSON.stringify(internal.preview.appearance)
     readonly property bool canUndo: !busy && !dirty && internal.previous !== null
         && internal.undoScope === scope && internal.undoRevision === revision

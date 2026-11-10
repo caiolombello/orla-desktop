@@ -130,7 +130,7 @@ class Gallery:
         for key in ("showSystemBattery", "showControlCenter"):
             config.setProperty(key, True)
         if host == "dark":
-            for theme in ("glass", "midnight", "paper"):
+            for theme in ("glass", "frost", "midnight", "paper"):
                 config.setProperty("theme", theme)
                 QTest.qWait(150)
                 self.save(f"dock-{theme}", window, self.scene_rect(dock))

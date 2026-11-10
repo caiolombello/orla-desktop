@@ -132,16 +132,22 @@ ColumnLayout {
                 onProfilesRequested: editor.profilesRequested()
             }
             SectionLabel { text: qsTr("Ponto de partida") }
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Style.space.sm
+                columns: 3
+                columnSpacing: Style.space.sm
+                rowSpacing: Style.space.sm
                 Repeater {
-                    model: [{key: "glass", label: "Vidro"}, {key: "midnight", label: "Meia-noite"}, {key: "paper", label: "Papel"}]
+                    model: [{key: "glass", label: qsTr("Vidro")}, {key: "frost", label: qsTr("Vidro claro")},
+                        {key: "auto", label: qsTr("Automático")}, {key: "midnight", label: qsTr("Meia-noite")},
+                        {key: "paper", label: qsTr("Papel")}]
                     // Theme card: a miniature of the dock body with its accent.
+                    // Automatic shows the theme the system scheme selects now.
                     Templates.Button {
                         id: themeCard
                         required property var modelData
-                        readonly property var theme: Style.dockTheme(modelData.key)
+                        readonly property var theme: Style.dockTheme(Style.concreteDockTheme(modelData.key,
+                            editor.appearance.systemLight))
                         objectName: "appearanceTheme" + modelData.key
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
@@ -203,6 +209,14 @@ ColumnLayout {
                     }
                 }
             }
+            Controls.Label {
+                objectName: "appearanceAutomaticNote"
+                Layout.fillWidth: true
+                visible: editor.appearance.automatic
+                text: qsTr("As cores e a opacidade seguem o modo claro ou escuro do sistema.")
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+            }
             SectionLabel { text: qsTr("Forma e movimento") }
             Card {
                 enabled: !editor.importing
@@ -221,6 +235,7 @@ ColumnLayout {
                             Controls.Label { Layout.fillWidth: true; text: modelData.label; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
                             Controls.SpinBox {
                                 objectName: "appearanceNumber" + modelData.key
+                                enabled: modelData.key !== "opacity" || !editor.appearance.automatic
                                 Accessible.name: modelData.label
                                 from: modelData.minimum; to: modelData.maximum
                                 value: editor.appearance.draft ? Math.round(editor.appearance.draft.tokens[modelData.key] * modelData.scale) : from
@@ -262,7 +277,7 @@ ColumnLayout {
                 visible: editor.advancedOpen
                 SectionLabel { text: qsTr("Cores · #RRGGBB") }
                 Card {
-                    enabled: !editor.importing
+                    enabled: !editor.importing && !editor.appearance.automatic
                     Layout.fillWidth: true
                     padding: 0
                     ColumnLayout {

@@ -92,7 +92,7 @@ function fieldError(key, value) {
     } else if (key === "doNotDisturb") {
         if (focusModes.indexOf(value) === -1) return "Modo de foco inválido. Escolha manter, ligar ou desligar.";
     } else if (key === "theme") {
-        if (["glass", "midnight", "paper"].indexOf(value) === -1) return "Tema inválido.";
+        if (Appearance.themes.indexOf(value) === -1) return "Tema inválido.";
     } else if (key === "iconSize") {
         if (!Number.isInteger(value) || value < 24 || value > 64) return "Tamanho de ícone inválido. Use de 24 a 64.";
     } else if (key === "animations") {
