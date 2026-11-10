@@ -43,6 +43,8 @@ Com o tema ativo, a Orla Dock detecta os marcadores do tema
 - **popups da dock** (Central de Controle, configurações, calendário, mídia…):
   usam a moldura de diálogo do tema, com desfoque e sombra do KWin; os módulos
   internos viram véus translúcidos, como no macOS.
+  Como o Plasma tira da moldura a borda do lado do painel, esses popups pedem
+  `floating` ao diálogo e mantêm os quatro cantos arredondados acima da dock.
 - **etiqueta do app**: usa a moldura de dica do tema.
 - **Menu Orla e “Sobre Orla Desktop”** (barra superior): o fundo desenhado
   some e o menu fica sobre a moldura de diálogo desfocada, como um popover do
