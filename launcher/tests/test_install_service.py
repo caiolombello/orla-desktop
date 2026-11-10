@@ -115,7 +115,11 @@ class ManagedServiceTracerTests(unittest.TestCase):
             self.assertIn("session", unit_text)
             self.assertNotIn("/versions/", unit_text)
             self.assertIn("PartOf=graphical-session.target", unit_text)
-            self.assertIn("After=graphical-session-pre.target", unit_text)
+            # After Plasma's compositor wrapper too: it exports the display, and a
+            # launcher started beside it aborts without one (Restart=no keeps it down).
+            self.assertIn("After=graphical-session-pre.target plasma-kwin_wayland.service plasma-kwin_x11.service\n",
+                          unit_text)
+            self.assertIn("Restart=no\n", unit_text)
             self.assertIn("WantedBy=graphical-session.target", unit_text)
             self.assertNotIn("After=graphical-session.target\n", unit_text)
             self.assertTrue(service_record.is_file())

@@ -698,6 +698,14 @@ ativo, inativo, desativado, parcial e não gerenciado. Uma ativação parcial te
 própria, confirma a inatividade e remove seus arquivos/link. Recibos, auditoria
 e dados do usuário permanecem. Não instala outro autostart nem atribui Meta.
 
+A unidade é ordenada depois do compositor do Plasma (`plasma-kwin_wayland.service`
+ou `plasma-kwin_x11.service`), que publica a tela para o gerenciador do usuário.
+Antes disso ela podia iniciar ao lado do compositor no login, não achar a tela e
+abortar; como não há reinício automático (`Restart=no`), a busca ficava parada
+até alguém iniciá-la de novo. Uma instalação já ativada mantém a unidade antiga
+até `service disable` e `service enable` com a nova geração; nesse meio-tempo,
+`systemctl --user start orla-launcher-managed.service` a inicia de novo.
+
 A instalação normal continua sem ativação automática. O serviço usa o gerenciador
 systemd do usuário e `busctl`; o diretório escolhido precisa pertencer ao caminho
 real de busca desse gerenciador. Configuração estranha, unidade mascarada ou dono
