@@ -1,7 +1,8 @@
 import QtQuick
 import org.kde.plasma.private.sessions as Sessions
 
-// Private QML bridge verified against Plasma 6.7.5 and isolated by Loader.
+// Private QML bridge verified against Plasma 6.7.5 (source) and 6.8.2 (installed
+// qmltypes, loaded read-only) and isolated by Loader.
 // https://raw.githubusercontent.com/KDE/plasma-workspace/v6.7.5/libkworkspace/sessionmanagement.h
 Item {
     readonly property string status: session.state === Sessions.SessionManagement.Ready ? "ready"

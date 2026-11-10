@@ -1,7 +1,8 @@
 import QtQuick
 import org.kde.plasma.private.kicker as Kicker
 
-// Private Kicker model verified against Plasma 6.7.5 and isolated by Loader.
+// Private Kicker model verified against Plasma 6.7.5 (source) and 6.8.2 (installed
+// qmltypes) and isolated by Loader.
 // https://invent.kde.org/plasma/plasma-workspace/-/blob/v6.7.5/applets/kicker/recentusagemodel.h
 // Standalone it names apps without the parent menu's name format.
 Item {
