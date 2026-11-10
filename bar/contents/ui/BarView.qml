@@ -16,7 +16,9 @@ Item {
     property var popupHost: null
     property var menuTooltipBackend: null
     property var controlCenterTooltipBackend: null
+    property var searchTooltipBackend: null
     readonly property alias controlCenterControl: controlCenterButton
+    readonly property alias searchControl: searchButton
     readonly property alias menuControl: menuButton
     readonly property bool menuIsOpen: menu.visible
     readonly property alias applicationControl: applicationButton
@@ -24,6 +26,8 @@ Item {
     property string hostVersion: Application.version
     property bool showOrlaMenu: true
     property bool showControlCenter: false
+    // The Spotlight button. The host decides what opens (launcher or KRunner).
+    property bool showSearch: false
     property QtObject controlCenterClient: null
     property Item controlCenterHost: null
     property string controlCenterLoadError: ""
@@ -299,6 +303,65 @@ Item {
                 border.color: menuButton.palette.highlight
                 visible: menuButton.down || menuButton.hovered || menuButton.visualFocus || root.menuIsOpen
                 Behavior on color { ColorAnimation { duration: Style.motion.fast } }
+            }
+        }
+        Templates.ToolButton {
+            id: searchButton
+            objectName: "barSearchButton"
+            visible: root.showSearch
+            text: qsTr("Buscar")
+            palette: menuButton.palette
+            implicitWidth: Style.size.iconButton + Style.space.xs
+            implicitHeight: root.implicitHeight
+            padding: Style.space.xs
+            topPadding: Math.min(padding, Math.max(0, (root.controlHeight - Style.size.iconMd) / 2))
+            bottomPadding: topPadding
+            focusPolicy: Qt.StrongFocus
+            hoverEnabled: true
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: root.controlHeight
+            Layout.maximumHeight: root.controlHeight
+            Layout.alignment: Qt.AlignVCenter
+            Accessible.name: text
+            Accessible.role: Accessible.Button
+            onPressed: if (root.searchTooltipBackend) root.searchTooltipBackend.hideImmediately()
+            onClicked: root.openRequested("search")
+            Controls.ToolTip.visible: hovered && !root.searchTooltipBackend
+            Controls.ToolTip.text: text
+            // A magnifier drawn in the text color, like the menu bar's other glyphs.
+            contentItem: Canvas {
+                objectName: "barSearchIcon"
+                readonly property color ink: searchButton.palette.windowText
+                onInkChanged: requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+                onPaint: {
+                    const context = getContext("2d");
+                    context.reset();
+                    const size = Math.min(width, height);
+                    const unit = size / 20;
+                    const left = (width - size) / 2;
+                    const top = (height - size) / 2;
+                    context.strokeStyle = ink;
+                    context.lineCap = "round";
+                    context.lineWidth = 1.8 * unit;
+                    context.beginPath();
+                    context.arc(left + 8.5 * unit, top + 8.5 * unit, 5.5 * unit, 0, 2 * Math.PI);
+                    context.stroke();
+                    context.beginPath();
+                    context.moveTo(left + 12.6 * unit, top + 12.6 * unit);
+                    context.lineTo(left + 17 * unit, top + 17 * unit);
+                    context.stroke();
+                }
+            }
+            background: Rectangle {
+                radius: Style.radius.control
+                color: Style.alpha(searchButton.palette.windowText, searchButton.down ? Style.state.pressed
+                    : searchButton.hovered ? Style.state.hover : 0)
+                border.width: searchButton.visualFocus ? Style.space.xxs : 0
+                border.color: searchButton.palette.highlight
+                visible: searchButton.down || searchButton.hovered || searchButton.visualFocus
+                Behavior on color { ColorAnimation { duration: Style.duration(Style.motion.fast, root.reducedMotion) } }
             }
         }
         Templates.ToolButton {

@@ -8,6 +8,7 @@ Controls.ScrollView {
     id: root
     property alias cfg_showOrlaMenu: showOrlaMenu.checked
     property alias cfg_showControlCenter: showControlCenter.checked
+    property alias cfg_showSearch: showSearch.checked
     property alias cfg_showApplicationName: showApplicationName.checked
     property alias cfg_menuLabel: menuLabel.text
     property alias cfg_showMenuLabel: showMenuLabel.checked
@@ -158,6 +159,13 @@ Controls.ScrollView {
                     text: qsTr("Mostrar Central de Controle")
                 }
                 Note { text: qsTr("A Central de Controle usa uma única Orla Dock ativa.") }
+                SettingCheckBox {
+                    id: showSearch
+                    objectName: "showSearchSetting"
+                    checked: true
+                    text: qsTr("Mostrar botão de busca")
+                }
+                Note { text: qsTr("Abre o Orla Launcher quando ele está ativo; senão, o KRunner.") }
             }
         }
         SettingsGroup {
@@ -180,12 +188,13 @@ Controls.ScrollView {
                         root.cfg_showMenuLabel = false;
                         root.cfg_compactHeight = true;
                         root.cfg_showApplicationName = true;
+                        root.cfg_showSearch = true;
                     }
                     FocusRing {}
                 }
                 Note {
                     objectName: "barPresetSummary"
-                    text: qsTr("Usa o ícone Orla sem nome ao lado, controles compactos e o nome do aplicativo ativo. Mantém suas escolhas de Menu Orla e Central de Controle.")
+                    text: qsTr("Usa o ícone Orla sem nome ao lado, controles compactos, o botão de busca e o nome do aplicativo ativo. Mantém suas escolhas de Menu Orla e Central de Controle.")
                 }
                 Disclosure {
                     id: menuDisclosure
