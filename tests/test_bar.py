@@ -70,6 +70,36 @@ class FixtureApplication(QObject):
     hasActiveApplication = Property(bool, lambda self: self.active, notify=changed)
 
 
+class FixtureApplicationActions(FixtureApplication):
+    """An application backend that also offers the application menu."""
+
+    def __init__(self):
+        super().__init__()
+        self.summary = dict(hide=2, hideOthers=3, showAll=1, quit=2)
+        self.calls = []
+
+    @Slot(result="QVariantMap")
+    def captureActions(self):
+        self.calls.append("capture")
+        return dict(self.summary)
+
+    @Slot()
+    def hide(self):
+        self.calls.append("hide")
+
+    @Slot()
+    def hideOthers(self):
+        self.calls.append("hideOthers")
+
+    @Slot()
+    def showAll(self):
+        self.calls.append("showAll")
+
+    @Slot()
+    def quit(self):
+        self.calls.append("quit")
+
+
 class FixtureRecent(QObject):
     changed = Signal()
 
@@ -171,6 +201,8 @@ class BarTests(unittest.TestCase):
         self.engine.warnings.connect(lambda values: self.warnings.extend(v.toString() for v in values))
         self.engine.rootContext().setContextProperty("fixtureSession", self.session)
         self.engine.rootContext().setContextProperty("fixtureApplication", self.application)
+        self.application_actions = FixtureApplicationActions()
+        self.engine.rootContext().setContextProperty("fixtureApplicationActions", self.application_actions)
         self.engine.rootContext().setContextProperty("fixtureControlCenter", self.control_center)
         self.engine.rootContext().setContextProperty("fixtureRecent", self.recent)
         self.engine.rootContext().setContextProperty("fixtureUpdates", self.updates)
@@ -204,10 +236,11 @@ class BarTests(unittest.TestCase):
         self.assertEqual(target.property(name), expected, name)
 
     def key_window(self):
-        menu = self.window.findChild(QObject, "orlaMenu")
-        if menu is not None and menu.property("visible"):
-            return next(window for window in self.app.topLevelWindows()
-                        if window != self.window and window.isVisible() and window.flags() & Qt.Popup)
+        for name in ("orlaMenu", "applicationMenu"):
+            menu = self.window.findChild(QObject, name)
+            if menu is not None and menu.property("visible"):
+                return next(window for window in self.app.topLevelWindows()
+                            if window != self.window and window.isVisible() and window.flags() & Qt.Popup)
         return self.window
 
     def wait_restored_focus(self, button):
@@ -941,6 +974,147 @@ class BarTests(unittest.TestCase):
         self.assertFalse(self.bar.property("nativeApplicationLoaded"))
         self.assertFalse(self.bar.property("nativeRecentApplicationsLoaded"))
         self.assertFalse(self.evaluate("requestSession('shutdown')"))
+        self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def test_application_menu_logic_acts_on_the_captured_app(self):
+        import json
+        from PySide6.QtQml import QJSEngine
+        engine = QJSEngine()
+        source = (Path(__file__).resolve().parents[1] / "bar/contents/code/AppMenu.js").read_text(encoding="utf-8")
+        self.assertFalse(engine.evaluate(source.replace(".pragma library", "")).isError())
+        def run(expression):
+            value = engine.evaluate(f"JSON.stringify({expression})")
+            self.assertFalse(value.isError(), value.toString())
+            return json.loads(value.toString())
+        def row(index, app, **state):
+            base = dict(index=index, appId=app, isWindow=True, active=False, minimized=False,
+                        minimizable=True, closable=True, winIds=[f"w{index}"])
+            base.update(state)
+            return base
+        rows = [row(0, "editor", active=True), row(1, "editor", minimized=True), row(2, "editor", closable=False),
+                row(3, "browser"), row(4, "browser", minimized=True), row(5, "player", minimizable=False),
+                dict(index=6, appId="files", isWindow=False)]
+        engine.globalObject().setProperty("rows", engine.evaluate(json.dumps(rows)))
+        self.assertEqual(run("target(rows)"), {"appId": "editor", "winIds": ["w0"]})
+        self.assertEqual(run("appWindows(rows, target(rows)).map(row => row.index)"), [0, 1, 2])
+        self.assertEqual(run("otherWindows(rows, target(rows)).map(row => row.index)"), [3, 4, 5])
+        self.assertEqual(run("hideTargets(appWindows(rows, target(rows))).map(row => row.index)"), [0, 2])
+        self.assertEqual(run("hideTargets(otherWindows(rows, target(rows))).map(row => row.index)"), [3])
+        self.assertEqual(run("showTargets(rows).map(row => row.index)"), [1, 4])
+        self.assertEqual(run("closeTargets(appWindows(rows, target(rows))).map(row => row.index)"), [0, 1])
+        self.assertEqual(run("summary(rows, target(rows))"), {"hide": 2, "hideOthers": 1, "showAll": 2, "quit": 2})
+        # No active window (the desktop): nothing is "the app", everything is "others".
+        idle = [row(0, "editor"), row(1, "browser", minimized=True)]
+        engine.globalObject().setProperty("idle", engine.evaluate(json.dumps(idle)))
+        self.assertIsNone(run("target(idle)"))
+        self.assertEqual(run("summary(idle, target(idle))"), {"hide": 0, "hideOthers": 1, "showAll": 1, "quit": 0})
+        # Without an AppId only the captured window counts, even beside a twin.
+        anonymous = [row(0, "", active=True), row(1, "")]
+        engine.globalObject().setProperty("anonymous", engine.evaluate(json.dumps(anonymous)))
+        self.assertEqual(run("appWindows(anonymous, target(anonymous)).map(row => row.index)"), [0])
+        self.assertEqual(run("summary(null, null)"), {"hide": 0, "hideOthers": 0, "showAll": 0, "quit": 0})
+
+    def test_application_name_stays_plain_text_without_actions(self):
+        button = self.item("activeApplicationButton")
+        menu = self.window.findChild(QObject, "applicationMenu")
+        self.assertFalse(button.property("enabled"))
+        self.assertFalse(self.item("activeApplicationPill").property("visible"))
+        # The name sits where the plain text did: no padding around it.
+        title = self.item("activeApplicationName")
+        self.assertEqual(title.mapToItem(button, QPointF(0, 0)).x(), 0)
+        center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, center.toPoint())
+        QTest.qWait(40)
+        self.assertFalse(menu.property("visible"))
+        self.assertFalse(self.evaluate("requestApplication('hide')"))
+        self.assertEqual(self.application_actions.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def test_application_menu_routes_each_action_once_and_keeps_the_name(self):
+        actions = self.application_actions
+        self.evaluate("applicationBackend = fixtureApplicationActions")
+        button = self.item("activeApplicationButton")
+        menu = self.window.findChild(QObject, "applicationMenu")
+        self.assertTrue(button.property("enabled"))
+        self.assertEqual(actions.calls, [], "nothing is read before the menu opens")
+        self.evaluate("forceActiveFocus(Qt.TabFocusReason)", button)
+        self.assertTrue(self.item("activeApplicationPill").property("visible"))
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        self.wait_property(menu, "opened", True)
+        self.assertEqual(actions.calls, ["capture"])
+        self.assertTrue(self.bar.property("applicationMenuIsOpen"))
+        background = self.window.findChild(QObject, "applicationMenuBackground")
+        self.assertEqual(self.evaluate("color.a", background), 1)
+        texts = {name: self.item(name).property("text") for name in
+                 ("applicationHide", "applicationHideOthers", "applicationShowAll", "applicationQuit")}
+        self.assertEqual(texts, {"applicationHide": "Ocultar Aplicativo sintético", "applicationHideOthers": "Ocultar outros",
+                                 "applicationShowAll": "Mostrar tudo", "applicationQuit": "Encerrar Aplicativo sintético"})
+        for name in texts:
+            self.assertTrue(self.item(name).property("enabled"), name)
+        # The menu's window takes the focus; the bar keeps naming the app it acts on.
+        actions.active = False
+        actions.name = ""
+        actions.changed.emit()
+        self.assertEqual(self.item("activeApplicationName").property("text"), "Aplicativo sintético")
+        self.assertEqual(self.item("applicationQuit").property("text"), "Encerrar Aplicativo sintético")
+        self.evaluate("triggered()", self.item("applicationHide"))
+        self.wait_property(menu, "visible", False)
+        self.assertEqual(actions.calls, ["capture", "hide"])
+        self.assertEqual(self.item("activeApplicationName").property("text"), "Área de trabalho")
+        # Each opening counts again; an action with nothing to reach is disabled.
+        actions.active = True
+        actions.name = "Segundo aplicativo"
+        actions.summary = dict(hide="many", hideOthers=0, showAll=10 ** 9, quit=-3)
+        actions.changed.emit()
+        self.evaluate("forceActiveFocus(Qt.TabFocusReason)", button)
+        self.wait_restored_focus(button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        self.wait_property(menu, "opened", True)
+        self.assertEqual(actions.calls, ["capture", "hide", "capture"])
+        enabled = {name: self.item(name).property("enabled") for name in texts}
+        self.assertEqual(enabled, {"applicationHide": False, "applicationHideOthers": False,
+                                   "applicationShowAll": True, "applicationQuit": False})
+        self.assertFalse(self.evaluate("requestApplication('quit')"))
+        self.assertFalse(self.evaluate("requestApplication('constructor')"))
+        self.assertTrue(menu.property("visible"))
+        QTest.keyClick(self.key_window(), Qt.Key_Escape)
+        self.wait_property(menu, "visible", False)
+        # Escape hands the focus back to the name.
+        self.wait_restored_focus(button)
+        self.assertEqual(actions.calls, ["capture", "hide", "capture"])
+        self.assertTrue(self.evaluate("requestApplication('showAll')"))
+        self.assertEqual(actions.calls[-1], "showAll")
+        # Hiding the name closes its menu and leaves no action behind.
+        self.evaluate("forceActiveFocus(Qt.TabFocusReason)", button)
+        self.wait_restored_focus(button)
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        self.wait_property(menu, "opened", True)
+        self.evaluate("showApplicationName = false")
+        self.wait_property(menu, "visible", False)
+        self.assertEqual(actions.calls.count("showAll"), 1)
+        self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.warnings, [])
+
+    def test_application_action_failure_is_visible_without_optimistic_success(self):
+        self.evaluate("applicationBackend = ({hasActiveApplication: true, appName: 'Aplicativo', "
+                      "captureActions: function() { return {hide: 1, hideOthers: 1, showAll: 1, quit: 1}; }, "
+                      "hide: function() { throw new Error('private receiver details'); }, "
+                      "hideOthers: function() {}, showAll: function() {}, quit: function() {}})")
+        menu = self.window.findChild(QObject, "applicationMenu")
+        self.evaluate("forceActiveFocus(Qt.TabFocusReason)", self.item("activeApplicationButton"))
+        QTest.keyClick(self.key_window(), Qt.Key_Space)
+        self.wait_property(menu, "opened", True)
+        self.assertFalse(self.evaluate("requestApplication('hide')"))
+        self.wait_property(menu, "visible", False)
+        self.assertIn("Não foi possível", self.bar.property("actionError"))
+        self.assertNotIn("private receiver", self.bar.property("actionError"))
+        self.assertTrue(self.item("sessionActionError").property("visible"))
+        # A backend missing one action offers no menu at all.
+        self.evaluate("applicationBackend = ({hasActiveApplication: true, appName: 'Aplicativo', "
+                      "captureActions: function() { return {hide: 1}; }, hide: function() {}})")
+        self.assertFalse(self.item("activeApplicationButton").property("enabled"))
+        self.assertEqual(self.bar.property("actionError"), "")
         self.assertEqual(self.session.calls, [])
         self.assertEqual(self.warnings, [])
 
