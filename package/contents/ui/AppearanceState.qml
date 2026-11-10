@@ -135,7 +135,9 @@ QtObject {
     property string scopeKey: "legacy"
     readonly property string savedJSON: typeof configuration.appearanceJSON === "string" ? configuration.appearanceJSON : ""
     readonly property var saved: savedJSON.length ? Appearance.parse(savedJSON) : ({error: ""})
-    readonly property var legacy: Appearance.legacy(configuration)
+    // The system scheme's lightness, for the automatic theme.
+    property bool systemLight: false
+    readonly property var legacy: Appearance.legacy(configuration, "", systemLight)
     readonly property var active: saved.value || legacy
     property bool editing: false
     property var draft: null
@@ -163,7 +165,8 @@ QtObject {
         || (defaultsDraft ? savedJSON.length > 0 : JSON.stringify(draft) !== beginDraftJSON))
     readonly property bool canUndo: previousJSON !== null && previousScope === scopeKey && undoSignature === signature
     readonly property bool canApply: editing && !busy && !stale && error.length === 0 && !themePending && themeError.length === 0 && draft !== null
-    readonly property var effective: editing && preview ? preview : active
+    readonly property var effective: Appearance.resolve(editing && preview ? preview : active, systemLight)
+    readonly property bool automatic: Boolean(draft) && draft.baseTheme === "auto"
     readonly property bool overridden: editing && preview ? !defaultsDraft : Boolean(saved.value)
 
     function clearThemeInput() {
@@ -213,8 +216,9 @@ QtObject {
             themeErrors = parsed.errors;
             return false;
         }
+        // A theme file brings its own colors, so it leaves the automatic theme.
         const next = Appearance.validate({formatVersion: Appearance.formatVersion,
-            baseTheme: draft.baseTheme, tokens: parsed.value.tokens});
+            baseTheme: Appearance.concrete(draft.baseTheme, systemLight), tokens: parsed.value.tokens});
         if (!next.value) return false;
         defaultsDraft = false;
         if (!live() || !refreshDraft(next.value, live)) return false;
@@ -290,7 +294,7 @@ QtObject {
         const live = () => fileRequest.generation === generation;
         defaultsDraft = false;
         if (!live()) return false;
-        return refreshDraft(Appearance.legacy(configuration, theme), live);
+        return refreshDraft(Appearance.legacy(configuration, theme, systemLight), live);
     }
     function restoreDefaults() {
         if (!invalidateThemeFile()) return false;

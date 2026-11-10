@@ -36,7 +36,7 @@ Com o tema ativo, a Orla Dock detecta os marcadores do tema
 - **dock**: o fundo do painel inferior é uma moldura invisível com o formato da
   placa (faixas transparentes de 10 × 12 px em volta), só para recortar o
   desfoque. A dock mede onde o painel desenha essa moldura, alinha a placa a
-  ela e pede ao painel exatamente o comprimento do conteúdo. O tema Vidro e cores
+  ela e pede ao painel exatamente o comprimento do conteúdo. Os temas Vidro e Vidro claro e cores
   personalizadas translúcidas viram uma tinta de 50% sobre o desfoque; Meia-noite,
   Papel e cores com opacidade 1 continuam opacos. A sombra desenhada sai, porque
   escureceria o vidro por baixo.

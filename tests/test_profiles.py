@@ -626,7 +626,9 @@ class ProfilesTests(unittest.TestCase):
         widgets.reverse()
         widgets[0]["visible"] = False
         self.assertTrue(self.command("commitPresentation", {"widgets": widgets, "calendarEvents": False}))
-        self.assertTrue(self.command("commitPresentation", {"appearance": {"theme": "paper"}}))
+        # The light glass and the automatic theme are profile themes too.
+        for theme in ("frost", "auto", "paper"):
+            self.assertTrue(self.command("commitPresentation", {"appearance": {"theme": theme}}), theme)
         work = self.snapshot()
         self.assertEqual(work["widgets"], widgets)
         self.assertFalse(work["calendarEvents"])

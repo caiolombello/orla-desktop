@@ -398,6 +398,45 @@ class AppearanceTests(unittest.TestCase):
         self.assertEqual(self.config.property("theme"), "glass")
         self.assertEqual(self.warnings, [])
 
+    def test_automatic_theme_follows_the_system_scheme_and_keeps_shape_tokens(self):
+        import json
+        self.evaluate("systemLight = false; selectTheme('auto'); setToken('radius', 9)")
+        self.assertTrue(self.state.property("automatic"))
+        self.assertEqual(self.evaluate("effective.baseTheme"), "auto")
+        self.assertEqual(self.evaluate("effective.tokens.surface"), "#283542")
+        dark_opacity = self.evaluate("effective.tokens.opacity")
+        self.evaluate("systemLight = true")
+        # Frost when light: colors and opacity switch, the chosen shape stays.
+        self.assertEqual(self.evaluate("effective.tokens.surface"), "#eef1f6")
+        self.assertEqual(self.evaluate("effective.tokens.foreground"), "#1d2430")
+        self.assertLess(self.evaluate("effective.tokens.opacity"), dark_opacity)
+        self.assertEqual(self.evaluate("effective.tokens.radius"), 9)
+        # Colors and opacity are not editable while automatic; a note says why.
+        self.open_advanced()
+        self.assertFalse(self.visual_item("appearanceNumberopacity").property("enabled"))
+        self.assertTrue(self.visual_item("appearanceNumberradius").property("enabled"))
+        self.assertTrue(self.visual_item("appearanceAutomaticNote").property("visible"))
+        self.assertTrue(self.evaluate("apply()"))
+        saved = json.loads(self.config.property("appearanceJSON"))
+        self.assertEqual(saved["baseTheme"], "auto")
+        self.assertEqual(saved["tokens"]["radius"], 9)
+        # The saved appearance keeps following the system after it is applied.
+        self.evaluate("systemLight = false")
+        self.assertEqual(self.evaluate("effective.tokens.surface"), "#283542")
+        self.assertEqual(self.warnings, [])
+
+    def test_frost_is_a_light_translucent_theme_and_a_theme_file_leaves_automatic(self):
+        self.evaluate("systemLight = true; selectTheme('frost')")
+        self.assertFalse(self.state.property("automatic"))
+        self.assertEqual(self.evaluate("effective.tokens.surface"), "#eef1f6")
+        self.assertLess(self.evaluate("effective.tokens.opacity"), 1)
+        self.evaluate("selectTheme('auto')")
+        self.set_theme(self.theme_text())
+        self.assertTrue(self.evaluate("previewTheme()"))
+        self.assertEqual(self.evaluate("draft.baseTheme"), "frost")
+        self.assertFalse(self.state.property("automatic"))
+        self.assertEqual(self.warnings, [])
+
     def test_apply_survives_recreating_the_component_with_same_configuration(self):
         self.evaluate("setToken('radius', 8); setToken('reducedMotion', true)")
         self.click("appearanceApply")
