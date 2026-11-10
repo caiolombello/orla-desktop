@@ -1281,8 +1281,12 @@ def _service_unit(paths, token):
     command = " ".join(_service_quote(part) for part in _service_command(paths))
     environment = " ".join(_service_quote(part) for part in _service_environment(paths))
     # ':' disables environment substitution in argv; '%' remains a specifier.
+    # Plasma's compositor wrapper exports the display to this manager before its
+    # unit counts as started; a launcher started beside it finds no display and
+    # aborts, and nothing restarts it. Unknown units in After= are ignored.
     return ("# Orla service " + token + "\n[Unit]\nDescription=Orla Launcher\n"
-            "PartOf=graphical-session.target\nAfter=graphical-session-pre.target\n"
+            "PartOf=graphical-session.target\n"
+            "After=graphical-session-pre.target plasma-kwin_wayland.service plasma-kwin_x11.service\n"
             "[Service]\nType=dbus\nBusName=org.orla.Launcher\nExecStart=:" + command + "\n"
             "Environment=" + environment + "\nRestart=no\nTimeoutStartSec=15\nTimeoutStopSec=15\n"
             "[Install]\nWantedBy=graphical-session.target\n").encode("utf-8")
