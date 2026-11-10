@@ -753,9 +753,10 @@ class BarTests(unittest.TestCase):
         self.assertEqual(self.session.calls, [])
 
     def test_panel_controls_and_artwork_fit_the_allocated_height(self):
-        self.evaluate("showControlCenter = true; showApplicationName = false")
+        self.evaluate("showControlCenter = true; showSearch = true; showApplicationName = false")
         menu = self.item("orlaMenuButton")
         center = self.item("barControlCenterButton")
+        search = self.item("barSearchButton")
         for compact in (False, True):
             self.bar.setProperty("compactHeight", compact)
             for height in (24, 28, 32, 64):
@@ -763,7 +764,8 @@ class BarTests(unittest.TestCase):
                     self.window.setHeight(height)
                     QTest.qWait(30)
                     for button, icon_name in ((menu, "orlaMenuIcon"),
-                                              (center, "barControlCenterIcon")):
+                                              (center, "barControlCenterIcon"),
+                                              (search, "barSearchIcon")):
                         self.assertGreaterEqual(button.y(), 0)
                         self.assertLessEqual(button.y() + button.height(), self.bar.height())
                         icon = self.item(icon_name)
@@ -956,6 +958,38 @@ class BarTests(unittest.TestCase):
         self.assertFalse(self.evaluate("openUpdates('system')"))
         self.assertEqual(self.bar.property("actionError"), "Não foi possível abrir as atualizações do sistema.")
         self.assertEqual(self.warnings, [])
+
+    def test_search_button_is_opt_in_and_hands_off_to_the_host_once(self):
+        button = self.item("barSearchButton")
+        self.assertFalse(button.property("visible"))
+        self.evaluate("showSearch = true")
+        self.assertTrue(button.property("visible"))
+        self.assertEqual(button.property("text"), "Buscar")
+        self.evaluate("forceActiveFocus()", button)
+        QTest.keyClick(self.window, Qt.Key_Space)
+        self.assertEqual(self.session.calls, ["search"])
+        self.assertEqual(self.control_center.calls, [])
+        # It sits before the Control Center, as Spotlight does in the macOS menu bar.
+        self.evaluate("showControlCenter = true")
+        QTest.qWait(30)
+        self.assertLess(button.x(), self.item("barControlCenterButton").x())
+        self.assertEqual(self.warnings, [])
+
+    def test_search_setting_defaults_on_and_the_preset_keeps_it_on(self):
+        config = (Path(__file__).resolve().parents[1] / "bar/contents/config/main.xml").read_text()
+        self.assertIn('<entry name="showSearch" type="Bool"><default>true</default></entry>', config)
+        path = Path(__file__).resolve().parents[1] / "bar/contents/ui/BarSettings.qml"
+        component = QQmlComponent(self.engine, QUrl.fromLocalFile(str(path)))
+        settings = component.create()
+        self.assertIsNotNone(settings, [error.toString() for error in component.errors()])
+        try:
+            self.assertTrue(settings.property("cfg_showSearch"))
+            self.evaluate("cfg_showSearch = false", settings)
+            self.evaluate("clicked()", settings.findChild(QQuickItem, "applyMacInspiredPreset"))
+            self.assertTrue(settings.property("cfg_showSearch"))
+        finally:
+            settings.deleteLater()
+            QCoreApplication.sendPostedEvents(settings, QEvent.DeferredDelete)
 
     def test_force_quit_hands_off_to_the_host_only_when_chosen(self):
         self.evaluate("triggered()", self.item("forceQuit"))

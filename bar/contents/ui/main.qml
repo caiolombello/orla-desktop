@@ -46,6 +46,7 @@ PlasmoidItem {
         onRepaintNeeded: root.themeGlass = hasElement("hint-orla-glass")
         Component.onCompleted: root.themeGlass = hasElement("hint-orla-glass")
     }
+    NativeSearch { id: nativeSearch }
     NativePopupHost {
         id: nativePopupHost
         location: Plasmoid.location
@@ -55,9 +56,11 @@ PlasmoidItem {
         popupHost: nativePopupHost
         menuTooltipBackend: nativeMenuTooltip
         controlCenterTooltipBackend: nativeControlCenterTooltip
+        searchTooltipBackend: nativeSearchTooltip
         anchors.fill: parent
         showOrlaMenu: Plasmoid.configuration.showOrlaMenu
         showControlCenter: Plasmoid.configuration.showControlCenter
+        showSearch: Plasmoid.configuration.showSearch
         controlCenterClient: controlCenterEntry.item
         controlCenterHost: nativeControlCenterHost
         reducedMotion: Kirigami.Units.shortDuration <= 0
@@ -75,6 +78,7 @@ PlasmoidItem {
             if (kind === "system") KCMUtils.KCMLauncher.openInfoCenter("kcm_about-distro");
             else if (kind === "settings") KCMUtils.KCMLauncher.openSystemSettings("");
             else if (kind === "configure") Plasmoid.containment.configureRequested(Plasmoid);
+            else if (kind === "search") nativeSearch.open();
             // KWin's own "kill window" pointer, the KDE counterpart of Force Quit.
             else if (kind === "forceQuit") DBus.SessionBus.asyncCall({service: "org.kde.KWin", path: "/KWin",
                 iface: "org.kde.KWin", member: "killWindow", signature: "", arguments: []}, () => {}, () => {});
@@ -89,6 +93,16 @@ PlasmoidItem {
         location: Plasmoid.location
         interactive: false
         active: bar.showOrlaMenu && bar.menuControl.enabled && !bar.menuControl.down && !bar.menuIsOpen
+    }
+    PlasmaCore.ToolTipArea {
+        id: nativeSearchTooltip
+        parent: bar.searchControl
+        anchors.fill: parent
+        mainText: qsTr("Buscar")
+        textFormat: Text.PlainText
+        location: Plasmoid.location
+        interactive: false
+        active: bar.showSearch && !bar.searchControl.down
     }
     PlasmaCore.ToolTipArea {
         id: nativeControlCenterTooltip

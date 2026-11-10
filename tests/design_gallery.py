@@ -896,13 +896,13 @@ class Gallery:
         QTest.mouseMove(window, QPointF(430, 430).toPoint())
         self.save(f"bar-{host}", window, QRectF(0, 0, 420, bar.height()))
         # Plasma's 32-point panel leaves a 24-point applet viewport after margins.
-        QQmlExpression(context, bar, "height = 24; showControlCenter = true; showApplicationName = false;"
+        QQmlExpression(context, bar, "height = 24; showControlCenter = true; showSearch = true; showApplicationName = false;"
                                      "controlCenterControl.forceActiveFocus(Qt.TabFocusReason)").evaluate()
         self.save(f"bar-{host}-short-focus", window, QRectF(0, 0, 420, bar.height()))
         QQmlExpression(context, bar, "compactHeight = true").evaluate()
         self.save(f"bar-{host}-compact-focus", window, QRectF(0, 0, 420, bar.height()))
         QQmlExpression(context, bar, "compactHeight = false; height = implicitHeight;"
-                                     "showControlCenter = false; showApplicationName = true").evaluate()
+                                     "showControlCenter = false; showSearch = false; showApplicationName = true").evaluate()
         QQmlExpression(context, bar, "menu.open()").evaluate()
         QTest.qWait(200)
         self.save(f"bar-{host}-menu", window, QRectF(0, 0, menu.property("width") + 8,
