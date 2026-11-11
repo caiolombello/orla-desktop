@@ -156,6 +156,16 @@ LauncherController::LauncherController(SteamProviderController *steam, QObject *
     refresh();
 }
 
+void LauncherController::publish()
+{
+    // rowsChanged goes first, so changed() handlers see the current rows.
+    if (m_rows != m_publishedRows) {
+        m_publishedRows = m_rows;
+        emit rowsChanged();
+    }
+    emit changed();
+}
+
 QObject *LauncherController::commands() const
 {
     return m_commands;
@@ -181,7 +191,7 @@ void LauncherController::refresh()
     m_rows.clear();
     m_backendRows.clear();
     if (m_launchedGeneration != m_generation) {
-        emit changed();
+        publish();
         return;
     }
     if (m_query.trimmed().isEmpty()) {
@@ -202,11 +212,11 @@ void LauncherController::refresh()
             m_backendRows.append(-1);
         }
         restoreSelection();
-        emit changed();
+        publish();
         return;
     }
     if (m_model.queryString() != m_query.trimmed()) {
-        emit changed();
+        publish();
         return;
     }
     QVariantList applicationRows;
@@ -345,7 +355,7 @@ void LauncherController::refresh()
         m_rows[row] = result;
     }
     restoreSelection();
-    emit changed();
+    publish();
 }
 
 QVariantMap LauncherController::presentationFor(const QString &runnerId) const
@@ -460,7 +470,7 @@ bool LauncherController::saveAlias(int row, quint64 generation, const QString &i
     if (appId.isEmpty() || generation != m_generation || id != m_selectedId) return false;
     const bool saved = m_aliases.save(alias, appId, revision);
     if (saved) savedAppsChanged();
-    else { reloadAliases(); emit changed(); }
+    else { reloadAliases(); publish(); }
     return saved;
 }
 
@@ -470,7 +480,7 @@ bool LauncherController::renameAlias(const QString &oldAlias, const QString &app
     if (generation != m_generation) return false;
     const bool renamed = m_aliases.rename(oldAlias, appId, newAlias, revision);
     if (renamed) savedAppsChanged();
-    else { reloadAliases(); emit changed(); }
+    else { reloadAliases(); publish(); }
     return renamed;
 }
 
@@ -480,7 +490,7 @@ bool LauncherController::removeAlias(const QString &alias, const QString &appId,
     if (generation != m_generation) return false;
     const bool removed = m_aliases.remove(alias, appId, revision);
     if (removed) savedAppsChanged();
-    else { reloadAliases(); emit changed(); }
+    else { reloadAliases(); publish(); }
     return removed;
 }
 
@@ -504,7 +514,7 @@ bool LauncherController::pinFavorite(int row, quint64 generation, const QString 
     const QString beforeRevision = m_favorites.revision();
     const bool saved = m_favorites.pin(appId, revision);
     if (saved || m_favorites.revision() != beforeRevision) savedAppsChanged();
-    else { reloadFavorites(); emit changed(); }
+    else { reloadFavorites(); publish(); }
     return saved;
 }
 
@@ -515,7 +525,7 @@ bool LauncherController::removeFavorite(const QString &appId, quint64 generation
     const QString beforeRevision = m_favorites.revision();
     const bool removed = m_favorites.unpin(appId, revision);
     if (removed || m_favorites.revision() != beforeRevision) savedAppsChanged();
-    else { reloadFavorites(); emit changed(); }
+    else { reloadFavorites(); publish(); }
     return removed;
 }
 
@@ -548,7 +558,7 @@ void LauncherController::setQuery(const QString &query)
         refresh();
         return;
     }
-    emit changed();
+    publish();
 }
 
 void LauncherController::select(int row)
@@ -556,7 +566,7 @@ void LauncherController::select(int row)
     if (row < 0 || row >= m_rows.size() || !m_rows[row].toMap().value("enabled").toBool()) return;
     m_selected = row;
     m_selectedId = m_rows[row].toMap().value("id").toString();
-    emit changed();
+    publish();
 }
 
 void LauncherController::moveSelection(int delta)
@@ -675,6 +685,6 @@ void LauncherController::dismiss()
         m_commands->cancelAll();
         m_commands->resetAvailability();
     }
-    emit changed();
+    publish();
     emit closeRequested();
 }

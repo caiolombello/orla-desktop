@@ -6,6 +6,7 @@
 #include <QQmlProperty>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QtQuickTest/quicktest.h>
 #include <QJSValue>
 #include <QClipboard>
 #include <QPointer>
@@ -550,11 +551,15 @@ private Q_SLOTS:
         auto *steamBack = window->findChild<QQuickItem *>(QStringLiteral("steamBackButton"));
         auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
         QVERIFY(aiEntry && steamEntry && steamBack && search);
+        // The entries share the search bar (Spotlight-like), after the field and never over it.
+        QTRY_VERIFY_WITH_TIMEOUT(search->width() >= 160, 1000);
+        const QRectF searchBounds = search->mapRectToItem(window->contentItem(), QRectF(0, 0, search->width(), search->height()));
         for (auto *entry : {aiEntry, steamEntry}) {
             QTRY_VERIFY_WITH_TIMEOUT(entry->width() >= 40 && entry->height() >= 40, 1000);
             const QRectF bounds = entry->mapRectToItem(window->contentItem(), QRectF(0, 0, entry->width(), entry->height()));
             QVERIFY(bounds.left() >= 0 && bounds.right() <= window->width());
-            QVERIFY(bounds.top() >= 0 && bounds.bottom() <= search->mapToItem(window->contentItem(), QPointF()).y());
+            QVERIFY(bounds.top() >= 0 && bounds.bottom() <= searchBounds.bottom());
+            QVERIFY(!bounds.intersects(searchBounds) && bounds.left() >= searchBounds.right());
         }
         aiEntry->forceActiveFocus();
         QTest::keyClick(window, Qt::Key_Tab);
@@ -2368,6 +2373,8 @@ QtObject {
             return static_cast<QQuickItem *>(nullptr);
         };
         const auto click = [&](const char *name) {
+            // A popup that just changed mode lays out on the next polish; aim at the settled geometry.
+            if (QQuickTest::qIsPolishScheduled(window) && !QQuickTest::qWaitForPolish(window)) return false;
             auto *target = item(name);
             if (!target || !target->isVisible() || !target->isEnabled()) return false;
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,

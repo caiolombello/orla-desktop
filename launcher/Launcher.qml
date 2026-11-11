@@ -20,7 +20,11 @@ Window {
     // panel. WindowSession asks KWin to blur behind it when available.
     color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint
-    readonly property int shadowMargin: Style.space.lg + Style.space.xxs
+    // A wide margin gives the panel a soft, macOS-like shadow.
+    readonly property int shadowMargin: Style.space.xxl
+    // Search bar on top, action bar at the bottom, as Spotlight and Raycast lay them out.
+    readonly property int headerHeight: Style.size.target + Style.space.xl
+    readonly property int footerHeight: Style.size.target + Style.space.xs
     readonly property var blurRequest: windowSession ? [glass.x, glass.y, glass.width, glass.height, glass.radius] : null
     onBlurRequestChanged: {
         if (blurRequest && windowSession.setBlurRegion)
@@ -135,26 +139,98 @@ Window {
         enabled: window.canOpenActions && !resultActions.visible
         onActivated: window.openResultActions()
     }
+
+    // A key hint drawn like a keyboard key: "Ctrl", "K", "↵".
+    component Keycap: Rectangle {
+        property alias text: keyLabel.text
+        readonly property var scheme: Style.scheme("dark")
+        implicitHeight: Style.size.iconMd
+        implicitWidth: Math.max(implicitHeight, keyLabel.implicitWidth + 2 * Style.space.xs + Style.space.xxs)
+        radius: Style.radius.xs
+        color: Style.alpha(scheme.text, Style.state.hover)
+        border.width: 1
+        border.color: Style.alpha(scheme.text, Style.state.chip)
+        Text {
+            id: keyLabel
+            anchors.centerIn: parent
+            color: parent.scheme.textMuted
+            font.pixelSize: Style.type.caption
+            font.weight: Style.weight.medium
+            textFormat: Text.PlainText
+        }
+    }
+    // Orla's mark: the brand squircle with its lowercase o.
+    component BrandMark: Rectangle {
+        property int size: Style.size.iconMd
+        readonly property var scheme: Style.scheme("dark")
+        implicitWidth: size
+        implicitHeight: size
+        radius: Math.round(size * Style.dock.iconRadius)
+        color: scheme.accent
+        Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: -1
+            text: "o"
+            color: parent.scheme.onAccent
+            font.pixelSize: parent.size >= Style.size.iconLg ? Style.type.headline : Style.type.label
+            font.weight: Style.weight.bold
+            textFormat: Text.PlainText
+        }
+    }
+    // Mode switches on the search bar (IA, Steam): quiet until hovered or open.
+    component HeaderChip: Button {
+        id: chip
+        property bool current: false
+        readonly property var scheme: Style.scheme("dark")
+        implicitHeight: Style.size.target
+        leftPadding: Style.space.md
+        rightPadding: Style.space.md
+        contentItem: Text {
+            text: chip.text
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            color: chip.current ? chip.scheme.accent : chip.hovered || chip.activeFocus ? chip.scheme.text : chip.scheme.textMuted
+            font.pixelSize: Style.type.label
+            font.weight: Style.weight.demiBold
+            textFormat: Text.PlainText
+        }
+        // The full target stays 40 px; the visible capsule is smaller.
+        background: Item {
+            implicitWidth: Style.size.target
+            implicitHeight: Style.size.target
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: Style.size.iconButton + Style.space.xs
+                radius: height / 2
+                color: chip.current ? Style.alpha(chip.scheme.accent, Style.state.selected)
+                    : chip.down ? Style.alpha(chip.scheme.text, Style.state.pressed)
+                    : chip.hovered ? Style.alpha(chip.scheme.text, Style.state.hover)
+                    : Style.alpha(chip.scheme.text, Style.state.chip)
+                border.width: chip.activeFocus ? 2 : 0
+                border.color: chip.scheme.focus
+            }
+        }
+    }
+
     Templates.Menu {
         id: resultActions
         objectName: "resultActionsMenu"
         // Keep the actions inside this glass window, including under KDE's style.
         popupType: Popup.Item
         parent: glass
-        x: glass.width - width - Style.space.md
-        y: glass.height - height - Style.space.md
-        width: Math.min(Style.size.popupWidth, glass.width - 2 * Style.space.md)
-        height: Math.min(contentItem.implicitHeight + 2 * padding, glass.height - 2 * Style.space.md)
-        padding: Style.space.sm
-        leftPadding: Style.space.sm
-        rightPadding: Style.space.sm
-        topPadding: Style.space.sm
-        bottomPadding: Style.space.sm
-        palette.window: ui.raised
+        // Raycast-like: the action panel rises from the action bar's right end.
+        x: glass.width - width - Style.space.sm
+        y: glass.height - window.footerHeight - height - Style.space.xs
+        width: Math.min(Style.size.popupWidth, glass.width - 2 * Style.space.sm)
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding,
+                         glass.height - window.footerHeight - 2 * Style.space.sm)
+        padding: Style.space.xs + Style.space.xxs
+        palette.window: ui.surface
         palette.text: ui.text
         palette.highlight: ui.accent
         palette.highlightedText: ui.onAccent
-        margins: window.shadowMargin + Style.space.md
+        margins: window.shadowMargin + Style.space.sm
         modal: true
         dim: false
         focus: true
@@ -165,11 +241,28 @@ Window {
             window.actionsEpisode++
             if (window.active && window.activePanel === "search" && !window.pendingDismiss && !aliasPreferences.visible) search.forceActiveFocus()
         }
-        background: Rectangle {
-            radius: Style.radius.module
-            color: ui.raised
-            border.width: 1
-            border.color: ui.borderStrong
+        background: Item {
+            // Layered soft shadow, then the popover itself.
+            Repeater {
+                model: 3
+                Rectangle {
+                    required property int index
+                    readonly property real spread: (index + 1) * Style.space.xs
+                    x: -spread
+                    y: -spread + Style.space.xs
+                    width: parent.width + spread * 2
+                    height: parent.height + spread * 2
+                    radius: Style.radius.module + spread
+                    color: Style.alpha(Style.glass.shade, 0.12 - index * 0.035)
+                }
+            }
+            Rectangle {
+                anchors.fill: parent
+                radius: Style.radius.module
+                color: ui.surface
+                border.width: 1
+                border.color: Style.alpha(Style.glass.highlight, Style.state.hover)
+            }
         }
         contentItem: ListView {
             implicitHeight: contentHeight
@@ -177,6 +270,7 @@ Window {
             currentIndex: resultActions.currentIndex
             highlightMoveDuration: 0
             highlightResizeDuration: 0
+            spacing: Style.space.xxs
             clip: true
             ScrollIndicator.vertical: ScrollIndicator { }
             Keys.onPressed: event => {
@@ -190,11 +284,14 @@ Window {
             id: actionTitle
             text: qsTr("Ações de %1").arg(window.actionsRow ? String(window.actionsRow.title).slice(0, 512) : "")
             enabled: false
-            implicitHeight: contentItem.implicitHeight + 2 * Style.space.xs
+            leftPadding: Style.space.sm
+            rightPadding: Style.space.sm
+            topPadding: Style.space.xs
+            implicitHeight: contentItem.implicitHeight + topPadding
             height: implicitHeight
             contentItem: Text {
                 text: actionTitle.text
-                color: ui.text; font.pixelSize: Style.type.body; font.weight: Style.weight.demiBold
+                color: ui.text; font.pixelSize: Style.type.body; font.weight: Style.weight.bold
                 textFormat: Text.PlainText; elide: Text.ElideRight
             }
             background: Item { }
@@ -203,15 +300,26 @@ Window {
             id: actionOrigin
             text: qsTr("Origem: %1").arg(window.actionsRow ? String(window.actionsRow.source).slice(0, 256) : "")
             enabled: false
-            implicitHeight: contentItem.implicitHeight + 2 * Style.space.xs
+            leftPadding: Style.space.sm
+            rightPadding: Style.space.sm
+            bottomPadding: Style.space.sm
+            implicitHeight: contentItem.implicitHeight + bottomPadding + Style.space.xxs
             height: implicitHeight
             contentItem: Text {
                 objectName: "resultActionsOrigin"
                 text: actionOrigin.text
                 color: ui.textMuted; font.pixelSize: Style.type.caption
                 textFormat: Text.PlainText; elide: Text.ElideRight
+                verticalAlignment: Text.AlignTop
             }
-            background: Item { }
+            // A hairline closes the header.
+            background: Item {
+                Rectangle {
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                    height: Style.size.divider
+                    color: Style.alpha(ui.text, Style.state.hover)
+                }
+            }
         }
         Instantiator {
             model: window.actionsRow ? window.actionsRow.actions.concat(window.actionsRow.preferences) : []
@@ -223,13 +331,19 @@ Window {
                     : modelData.preference === "add" ? "aliasAddAction" : modelData.preference === "manage" ? "aliasManageAction" : "launcherAction" + index
                 property var executionTicket: null
                 property int pressedEpisode: -1
+                // The first Orla preference starts a new group, below the result's own actions.
+                readonly property bool opensGroup: !!modelData.preference && !!window.actionsRow
+                    && index === window.actionsRow.actions.length && index > 0
                 text: String(modelData.text).slice(0, 512)
                 enabled: window.canOpenActions && (modelData.preference === "add" ? window.canAddAlias
                     : modelData.preference === "pin" || modelData.preference === "unpin" ? window.canChangeFavorite : true)
                 focusPolicy: Qt.StrongFocus
-                implicitHeight: Math.max(Style.size.target, contentItem.implicitHeight + 2 * Style.space.sm)
+                topInset: opensGroup ? Style.space.sm : 0
+                topPadding: topInset + Style.space.xs
+                bottomPadding: Style.space.xs
+                implicitHeight: Math.max(Style.size.control + topInset, contentItem.implicitHeight + topPadding + bottomPadding)
                 height: implicitHeight
-                leftPadding: Style.space.sm
+                leftPadding: Style.space.sm + Style.space.xxs
                 rightPadding: Style.space.sm
                 onPressed: {
                     pressedEpisode = window.actionsEpisode
@@ -267,15 +381,26 @@ Window {
                     } else window.executeTicket(ticket, false)
                 }
                 contentItem: Text {
-                    text: actionItem.text; color: ui.text
+                    text: actionItem.text
+                    color: actionItem.enabled ? ui.text : ui.textMuted
                     font.pixelSize: Style.type.body; textFormat: Text.PlainText
+                    verticalAlignment: Text.AlignVCenter
                     wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
                 }
+                // topInset keeps the group gap outside the highlight.
                 background: Rectangle {
                     radius: Style.radius.control
                     color: actionItem.highlighted ? Style.alpha(ui.accent, Style.state.selected) : "transparent"
                     border.width: resultActions.activeFocus && actionItem.highlighted ? 2 : 0
                     border.color: ui.focus
+                    Rectangle {
+                        visible: actionItem.opensGroup
+                        x: Style.space.xs
+                        width: parent.width - 2 * Style.space.xs
+                        y: -Math.round(actionItem.topInset / 2) - Style.space.xxs
+                        height: Style.size.divider
+                        color: Style.alpha(ui.text, Style.state.hover)
+                    }
                 }
             }
             onObjectAdded: (index, object) => resultActions.insertItem(index + 2, object)
@@ -316,16 +441,16 @@ Window {
     // Soft shadow in the transparent margin: stacked translucent outlines stay
     // cheap for the scene graph, unlike a blurred Canvas.
     Repeater {
-        model: 6
+        model: 8
         Rectangle {
             required property int index
-            readonly property real spread: (index + 1) * (window.shadowMargin - Style.space.xs) / 6
+            readonly property real spread: (index + 1) * (window.shadowMargin - Style.space.xs) / 8
             x: glass.x - spread
             y: glass.y - spread + Style.space.xs
             width: glass.width + spread * 2
             height: glass.height + spread * 2
             radius: glass.radius + spread
-            color: Style.alpha(Style.glass.shade, 0.07 - index * 0.01)
+            color: Style.alpha(Style.glass.shade, 0.06 - index * 0.0065)
         }
     }
     Rectangle {
@@ -333,9 +458,9 @@ Window {
         anchors.fill: parent
         anchors.margins: window.shadowMargin
         radius: Style.radius.popup + Style.space.xs
-        color: Style.alpha(ui.canvas, 0.86)
+        color: Style.alpha(ui.canvas, 0.84)
         border.width: 1
-        border.color: Style.alpha(Style.glass.highlight, 0.14)
+        border.color: Style.alpha(Style.glass.highlight, Style.state.pressed)
         // Specular top edge.
         Rectangle {
             anchors.fill: parent
@@ -343,101 +468,31 @@ Window {
             radius: parent.radius - 1
             gradient: Gradient {
                 GradientStop { position: 0; color: Style.alpha(Style.glass.highlight, Style.glass.sheenDark) }
-                GradientStop { position: 0.4; color: "transparent" }
+                GradientStop { position: 0.35; color: "transparent" }
             }
         }
     }
 
     ColumnLayout {
         anchors.fill: glass
-        anchors.margins: Style.space.lg
-        spacing: Style.space.md
-        RowLayout {
+        spacing: 0
+        // The search bar is the panel's top edge, like Spotlight: no field frame,
+        // large type, and the mode chips at its end.
+        Item {
             objectName: "launcherHeader"
             Layout.fillWidth: true
-            spacing: Style.space.sm
-            // The frameless window moves by dragging its header.
-            DragHandler { target: null; onActiveChanged: if (active) window.startSystemMove() }
-            Rectangle {
-                width: Style.size.iconButton; height: width; radius: Math.round(width * 0.3); color: ui.accent
-                Text { anchors.centerIn: parent; text: "o"; color: ui.onAccent; font.pixelSize: Style.type.headline; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-            }
-            Text { text: "Orla"; color: ui.text; font.pixelSize: Style.type.title; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; wrapMode: Text.Wrap; text: windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local"); color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
-            Button {
-                id: aiEntry
-                objectName: "aiEntryButton"
-                Layout.minimumWidth: 40
-                Layout.minimumHeight: 40
-                Layout.preferredHeight: 40
-                leftPadding: 12
-                rightPadding: 12
-                text: window.activePanel === "ai" ? qsTr("Busca") : qsTr("IA")
-                enabled: !window.pendingDismiss || window.activePanel === "ai"
-                Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
-                onClicked: {
-                    if (window.activePanel === "ai") window.closeAiPanel()
-                    else if (!window.pendingDismiss) {
-                        if (window.activePanel === "steam") steamProvider.cancelAll()
-                        window.activePanel = "ai"
-                        aiPanel.focusFirst()
-                    }
-                }
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: window.activePanel === "ai" ? ui.onAccent : ui.text; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: height / 2; color: window.activePanel === "ai" ? ui.accent : parent.hovered ? Style.alpha(ui.text, Style.state.pressed) : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
-            }
-            Button {
-                id: steamEntry
-                objectName: "steamEntryButton"
-                Layout.minimumWidth: 40
-                Layout.minimumHeight: 40
-                Layout.preferredHeight: 40
-                leftPadding: 12
-                rightPadding: 12
-                text: window.activePanel === "steam" ? qsTr("Busca") : qsTr("Steam")
-                enabled: !window.pendingDismiss || window.activePanel === "steam"
-                Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
-                onClicked: {
-                    if (window.activePanel === "steam") window.closeSteamPanel()
-                    else if (!window.pendingDismiss) {
-                        if (window.activePanel === "ai") {
-                            aiProviders.cancelAll()
-                            aiText.cancelAll()
-                        }
-                        window.activePanel = "steam"
-                        steamPanel.focusFirst()
-                    }
-                }
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: window.activePanel === "steam" ? ui.onAccent : ui.text; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: height / 2; color: window.activePanel === "steam" ? ui.accent : parent.hovered ? Style.alpha(ui.text, Style.state.pressed) : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
-            }
-        }
-        TextField {
-            id: search
-            objectName: "searchInput"
-            Layout.fillWidth: true
-            Layout.preferredHeight: Style.size.target + Style.space.lg
-            color: ui.text
-            placeholderText: qsTr("Buscar apps, arquivos ou calcular…")
-            placeholderTextColor: ui.textMuted
-            font.pixelSize: Style.type.headline
-            leftPadding: Style.size.target + Style.space.sm
-            rightPadding: Style.space.lg
-            selectByMouse: true
-            maximumLength: 512
-            Accessible.name: qsTr("Buscar aplicativos, arquivos, ajustes, jogos ou calcular")
-            visible: window.activePanel === "search"
-            background: Rectangle {
-                radius: height / 2
-                color: Style.alpha(ui.text, Style.state.hover)
-                border.width: 1
-                border.color: search.activeFocus ? Style.alpha(ui.accent, 0.6) : Style.alpha(ui.text, Style.state.pressed)
+            Layout.preferredHeight: window.headerHeight
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space.lg + Style.space.xxs
+                anchors.rightMargin: Style.space.md
+                spacing: Style.space.md
                 // Magnifier glyph, drawn so the launcher needs no icon theme.
                 Canvas {
-                    x: Style.space.lg
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Style.size.iconMd
-                    height: width
+                    id: magnifier
+                    visible: window.activePanel === "search"
+                    Layout.preferredWidth: Style.size.iconMd
+                    Layout.preferredHeight: Style.size.iconMd
                     onPaint: {
                         const context = getContext("2d")
                         context.reset()
@@ -445,29 +500,104 @@ Window {
                         context.lineWidth = 2
                         context.lineCap = "round"
                         context.beginPath()
-                        context.arc(width * 0.42, height * 0.42, width * 0.3, 0, 2 * Math.PI)
+                        context.arc(width * 0.42, height * 0.42, width * 0.32, 0, 2 * Math.PI)
                         context.stroke()
                         context.beginPath()
-                        context.moveTo(width * 0.65, height * 0.65)
+                        context.moveTo(width * 0.66, height * 0.66)
                         context.lineTo(width * 0.92, height * 0.92)
                         context.stroke()
                     }
                 }
+                // Other panels keep the brand in the bar; the panel names itself below.
+                BrandMark {
+                    visible: window.activePanel !== "search"
+                    size: Style.size.iconLg
+                }
+                Text {
+                    visible: window.activePanel !== "search"
+                    Layout.fillWidth: true
+                    text: "Orla"
+                    color: ui.text
+                    font.pixelSize: Style.type.title
+                    font.weight: Style.weight.demiBold
+                    textFormat: Text.PlainText
+                    // The frameless window moves by dragging the brand.
+                    DragHandler { target: null; onActiveChanged: if (active) window.startSystemMove() }
+                }
+                TextField {
+                    id: search
+                    objectName: "searchInput"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 0
+                    color: ui.text
+                    placeholderText: qsTr("Buscar no Orla")
+                    placeholderTextColor: ui.textMuted
+                    font.pixelSize: Style.type.headline
+                    leftPadding: 0
+                    rightPadding: 0
+                    selectByMouse: true
+                    selectionColor: Style.alpha(ui.accent, 0.4)
+                    selectedTextColor: ui.text
+                    maximumLength: 512
+                    Accessible.name: qsTr("Buscar aplicativos, arquivos, ajustes, jogos ou calcular")
+                    visible: window.activePanel === "search"
+                    // design-exempt: the search field is the launcher's resting focus; the caret marks it, as in Spotlight.
+                    background: Item { }
+                    onTextEdited: launcher.query = text
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onDownPressed: function(event) { launcher.moveSelection(1); event.accepted = true }
+                    Keys.onUpPressed: function(event) { launcher.moveSelection(-1); event.accepted = true }
+                    Keys.onReturnPressed: function(event) { window.executeSelection(); event.accepted = true }
+                    Keys.onEnterPressed: function(event) { window.executeSelection(); event.accepted = true }
+                    Component.onCompleted: forceActiveFocus()
+                }
+                HeaderChip {
+                    id: aiEntry
+                    objectName: "aiEntryButton"
+                    Layout.minimumWidth: Style.size.target
+                    Layout.preferredHeight: Style.size.target
+                    current: window.activePanel === "ai"
+                    text: window.activePanel === "ai" ? qsTr("Busca") : qsTr("IA")
+                    enabled: !window.pendingDismiss || window.activePanel === "ai"
+                    Accessible.name: window.activePanel === "ai" ? qsTr("Voltar à busca local") : qsTr("Abrir provedores de IA, desligados")
+                    onClicked: {
+                        if (window.activePanel === "ai") window.closeAiPanel()
+                        else if (!window.pendingDismiss) {
+                            if (window.activePanel === "steam") steamProvider.cancelAll()
+                            window.activePanel = "ai"
+                            aiPanel.focusFirst()
+                        }
+                    }
+                }
+                HeaderChip {
+                    id: steamEntry
+                    objectName: "steamEntryButton"
+                    Layout.minimumWidth: Style.size.target
+                    Layout.preferredHeight: Style.size.target
+                    current: window.activePanel === "steam"
+                    text: window.activePanel === "steam" ? qsTr("Busca") : qsTr("Steam")
+                    enabled: !window.pendingDismiss || window.activePanel === "steam"
+                    Accessible.name: window.activePanel === "steam" ? qsTr("Voltar à busca local") : qsTr("Abrir jogos Steam locais")
+                    onClicked: {
+                        if (window.activePanel === "steam") window.closeSteamPanel()
+                        else if (!window.pendingDismiss) {
+                            if (window.activePanel === "ai") {
+                                aiProviders.cancelAll()
+                                aiText.cancelAll()
+                            }
+                            window.activePanel = "steam"
+                            steamPanel.focusFirst()
+                        }
+                    }
+                }
             }
-            onTextEdited: launcher.query = text
-            Keys.priority: Keys.BeforeItem
-            Keys.onDownPressed: function(event) { launcher.moveSelection(1); event.accepted = true }
-            Keys.onUpPressed: function(event) { launcher.moveSelection(-1); event.accepted = true }
-            Keys.onReturnPressed: function(event) { window.executeSelection(); event.accepted = true }
-            Keys.onEnterPressed: function(event) { window.executeSelection(); event.accepted = true }
-            Component.onCompleted: forceActiveFocus()
         }
-        RowLayout {
-            visible: window.activePanel === "search"
+        // Edge-to-edge hairline under the search bar.
+        Rectangle {
             Layout.fillWidth: true
-            // A summary of the main sources; each result names its own section.
-            Text { Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 1; text: window.commands ? qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM · ORLA") : qsTr("APLICATIVOS · ARQUIVOS · AJUSTES · STEAM"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText }
-            Text { text: launcher.status === "loading" ? qsTr("Buscando…") : launcher.rows.length === 1 ? qsTr("1 resultado") : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length) : ""; color: ui.accent; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
+            Layout.preferredHeight: Style.size.divider
+            color: Style.alpha(ui.text, Style.state.hover)
         }
         Item {
             visible: window.activePanel === "search"
@@ -477,45 +607,73 @@ Window {
                 id: results
                 objectName: "resultsList"
                 anchors.fill: parent
+                anchors.leftMargin: Style.space.sm
+                anchors.rightMargin: Style.space.sm
+                topMargin: Style.space.xs
+                bottomMargin: Style.space.sm
                 clip: true
-                spacing: 6
+                spacing: Style.space.xxs
+                // Keep a few rows ready below the fold so scrolling never waits on icons.
+                cacheBuffer: (Style.size.target + Style.space.xs) * 4
+                boundsBehavior: Flickable.StopAtBounds
                 model: launcher.rows
                 section.property: "categoryLabel"
                 section.delegate: Text {
                     required property string section
                     width: results.width; height: Style.size.iconButton; text: section; color: ui.textMuted
-                    verticalAlignment: Text.AlignBottom; bottomPadding: Style.space.xs; leftPadding: Style.space.sm
-                    font.pixelSize: Style.type.overline; font.weight: Font.Bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText
+                    verticalAlignment: Text.AlignBottom; bottomPadding: Style.space.xs + Style.space.xxs; leftPadding: Style.space.sm + Style.space.xxs
+                    font.pixelSize: Style.type.overline; font.weight: Style.weight.bold; font.letterSpacing: Style.letterSpacing.overline; textFormat: Text.PlainText
+                    elide: Text.ElideRight
                 }
-                ScrollBar.vertical: ScrollBar { }
+                // A slim overlay bar, as on macOS; it appears while scrolling.
+                ScrollBar.vertical: Templates.ScrollBar {
+                    id: resultsScroll
+                    parent: results
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    anchors.topMargin: results.topMargin
+                    anchors.bottomMargin: results.bottomMargin
+                    padding: Style.space.xxs
+                    policy: ScrollBar.AsNeeded
+                    contentItem: Rectangle {
+                        implicitWidth: Style.space.xs
+                        radius: width / 2
+                        color: Style.alpha(ui.text, resultsScroll.pressed ? 0.45 : 0.3)
+                        opacity: resultsScroll.active && resultsScroll.size < 1 ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: Style.motion.normal } }
+                    }
+                }
                 delegate: ItemDelegate {
                     id: result
                     required property int index
                     required property var modelData
                     property var rowData: modelData
                     property var executionTicket: null
-                    // Leave the scrollbar its own lane.
-                    width: results.width - (results.ScrollBar.vertical.visible ? results.ScrollBar.vertical.width + Style.space.xs : 0)
+                    width: results.width
                     readonly property bool selected: launcher.selectedIndex === result.index
                     readonly property var tile: Style.iconTiles[rowData.kind === "calculator" || rowData.kind === "datetime" ? "slate" : rowData.kind === "steam" ? "ink"
                         : rowData.kind === "command" ? Style.widgetTiles.peripherals : "sea"]
-                    height: Style.size.target + Style.space.md
+                    height: Style.size.target + Style.space.xs
                     enabled: rowData.enabled && !window.executionBlocked && !aliasPreferences.visible
                     hoverEnabled: true
-                    leftPadding: Style.space.sm
-                    rightPadding: Style.space.md
+                    leftPadding: Style.space.sm + Style.space.xxs
+                    rightPadding: Style.space.sm + Style.space.xxs
                     Accessible.name: rowData.title + ", " + rowData.source
+                    // The accent tints the selection; text keeps full contrast.
                     background: Rectangle {
-                        radius: Style.radius.card
-                        color: result.selected ? ui.accent : result.hovered ? Style.alpha(ui.text, Style.state.hover) : "transparent"
+                        radius: Style.radius.tile
+                        color: result.selected ? Style.alpha(ui.accent, Style.state.selected)
+                            : result.hovered ? Style.alpha(ui.text, Style.state.chip) : "transparent"
                         border.width: result.activeFocus ? 2 : 0
                         border.color: ui.focus
                     }
                     contentItem: RowLayout {
                         spacing: Style.space.md
+                        opacity: result.enabled ? 1 : Style.state.disabled + 0.2
                         Item {
-                            Layout.preferredWidth: Style.size.iconLg + Style.space.xs
-                            Layout.preferredHeight: Style.size.iconLg + Style.space.xs
+                            Layout.preferredWidth: Style.size.iconLg
+                            Layout.preferredHeight: Style.size.iconLg
                             // The app's own icon from the theme, as Spotlight shows it.
                             ControlsImpl.IconImage {
                                 id: resultIcon
@@ -535,16 +693,25 @@ Window {
                                 }
                                 border.width: 1
                                 border.color: Style.alpha(Style.glass.highlight, 0.18)
-                                Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : result.rowData.kind === "command" ? "%" : "▦"; color: result.tile.ink; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
+                                Text { anchors.centerIn: parent; text: result.rowData.kind === "calculator" ? "=" : result.rowData.kind === "steam" ? "S" : result.rowData.kind === "command" ? "%" : "▦"; color: result.tile.ink; font.pixelSize: Style.type.title; font.weight: Style.weight.bold; textFormat: Text.PlainText }
                             }
                         }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text { Layout.fillWidth: true; text: result.rowData.title; color: result.selected ? ui.onAccent : ui.text; font.pixelSize: Style.type.title; font.weight: Font.DemiBold; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
-                            Text { Layout.fillWidth: true; text: result.rowData.description || result.rowData.source; color: result.selected ? Style.alpha(ui.onAccent, 0.8) : ui.textMuted; font.pixelSize: Style.type.label; elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText }
+                        // One line, as Raycast lists: the name, then its detail in muted type.
+                        Text {
+                            id: resultTitle
+                            Layout.maximumWidth: Math.max(0, result.availableWidth * 0.62)
+                            text: result.rowData.title; color: ui.text
+                            font.pixelSize: Style.type.title; font.weight: Style.weight.medium
+                            elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText
                         }
-                        Text { text: result.selected ? "↵" : ""; color: ui.onAccent; font.pixelSize: Style.type.title; font.weight: Font.Bold; textFormat: Text.PlainText }
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: result.rowData.description || result.rowData.source; color: ui.textMuted
+                            font.pixelSize: Style.type.body
+                            elide: Text.ElideRight; maximumLineCount: 1; textFormat: Text.PlainText
+                        }
+                        Keycap { visible: result.selected; text: "↵" }
                     }
                     onPressed: executionTicket = { row: index, generation: rowData.generation, id: rowData.id }
                     onClicked: {
@@ -556,60 +723,161 @@ Window {
             }
             Column {
                 anchors.centerIn: parent
-                width: Math.min(parent.width - 24, 390)
-                spacing: 10
+                width: Math.min(parent.width - 2 * Style.space.xl, 400)
+                spacing: Style.space.sm
                 visible: launcher.rows.length === 0
                 Text {
-                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: ui.text; font.pixelSize: Style.type.headline; textFormat: Text.PlainText
+                    width: parent.width; horizontalAlignment: Text.AlignHCenter; color: ui.text
+                    font.pixelSize: Style.type.title; font.weight: Style.weight.demiBold; textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
                     text: launcher.status === "error" ? qsTr("Não foi possível buscar") : launcher.status === "loading" ? qsTr("Buscando no seu computador") : launcher.status === "empty" ? qsTr("Nenhum resultado") : qsTr("O que você quer abrir?")
                 }
                 Text {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter; color: ui.textMuted; font.pixelSize: Style.type.body; wrapMode: Text.Wrap; textFormat: Text.PlainText
-                    text: launcher.status === "error" ? launcher.error : launcher.status === "empty" ? qsTr("Tente outro nome ou uma expressão como 24 * 7.") : launcher.status === "loading" ? qsTr("Você pode continuar digitando ou cancelar com Esc.") : qsTr("Digite um nome ou uma conta. Enter executa a seleção.")
+                    text: launcher.status === "error" ? launcher.error : launcher.status === "empty" ? qsTr("Tente outro nome ou uma expressão como 24 * 7.") : launcher.status === "loading" ? qsTr("Você pode continuar digitando ou cancelar com Esc.")
+                        : window.commands ? qsTr("Aplicativos, arquivos, ajustes, contas, jogos Steam e comandos do Orla.") : qsTr("Aplicativos, arquivos, ajustes, contas e jogos Steam.")
+                }
+                // Keys to know, shown only on the empty surface.
+                Row {
+                    visible: launcher.status === "idle"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    topPadding: Style.space.sm
+                    spacing: Style.space.lg
+                    Repeater {
+                        model: [{keys: ["↑", "↓"], label: qsTr("navegar")}, {keys: ["↵"], label: qsTr("abrir")}, {keys: ["Esc"], label: qsTr("fechar")}]
+                        Row {
+                            required property var modelData
+                            spacing: Style.space.xs
+                            Repeater { model: parent.modelData.keys; Keycap { required property string modelData; text: modelData } }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                leftPadding: Style.space.xxs
+                                text: parent.modelData.label; color: ui.textMuted
+                                font.pixelSize: Style.type.caption; textFormat: Text.PlainText
+                            }
+                        }
+                    }
                 }
             }
         }
         Text {
             objectName: "executionWaiting"
             Layout.fillWidth: true
+            Layout.leftMargin: Style.space.lg
+            Layout.rightMargin: Style.space.lg
+            Layout.bottomMargin: Style.space.sm
             visible: window.activePanel === "search" && (window.executionBlocked || (windowSession && windowSession.notice.length > 0) || String(launcher.favoriteError || "").length > 0)
             text: window.executionBlocked ? qsTr("Aguarde o encerramento das operações antes de abrir um resultado.")
                 : windowSession && windowSession.notice.length > 0 ? windowSession.notice : String(launcher.favoriteError || "").slice(0, 256)
             color: ui.warning; font.pixelSize: Style.type.caption; wrapMode: Text.Wrap; textFormat: Text.PlainText
         }
-        Rectangle { Layout.fillWidth: true; height: 1; color: Style.alpha(ui.text, Style.state.hover); visible: window.activePanel === "search" }
-        RowLayout {
+        // Action bar: who is answering on the left, what Enter and Ctrl+K do on the right.
+        Rectangle {
+            objectName: "launcherFooter"
             visible: window.activePanel === "search"
             Layout.fillWidth: true
-            spacing: 8
-            Text { text: qsTr("↑ ↓ navegar · Esc fechar"); color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText }
-            Item { Layout.fillWidth: true }
-            Button {
-                objectName: "actionsButton"
-                text: qsTr("Ações · Ctrl+K")
-                enabled: window.canOpenActions
-                onClicked: window.openResultActions()
-                leftPadding: Style.space.md
-                rightPadding: Style.space.md
-                Layout.preferredHeight: Style.size.iconButton + Style.space.xs
-                contentItem: Text { text: parent.text; color: parent.enabled ? ui.accent : ui.textMuted; font.pixelSize: Style.type.label; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText; elide: Text.ElideRight }
-                background: Rectangle { radius: height / 2; color: Style.alpha(ui.text, Style.state.hover); border.color: parent.activeFocus ? ui.focus : "transparent"; border.width: 2 }
-                Layout.maximumWidth: window.width < 560 ? 118 : 150
+            Layout.preferredHeight: window.footerHeight
+            Layout.leftMargin: 1
+            Layout.rightMargin: 1
+            Layout.bottomMargin: 1
+            color: Style.alpha(Style.glass.shade, 0.16)
+            bottomLeftRadius: glass.radius - 1
+            bottomRightRadius: glass.radius - 1
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                height: Style.size.divider
+                color: Style.alpha(ui.text, Style.state.chip)
             }
-            Button {
-                objectName: "executeButton"
-                property var executionTicket: null
-                // Things that open (apps, settings, places, documents, files) say "Abrir"; answers and actions say "Usar".
-                text: window.selectedRow && ["app", "steam", "alias", "favorite", "setting", "location", "document", "file"].indexOf(window.selectedRow.kind) >= 0 ? qsTr("Abrir ↵") : qsTr("Usar ↵")
-                enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
-                    && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
-                onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
-                onClicked: window.executeTicket(executionTicket, false)
-                leftPadding: Style.space.md
-                rightPadding: Style.space.md
-                Layout.preferredHeight: Style.size.iconButton + Style.space.xs
-                contentItem: Text { text: parent.text; color: parent.enabled ? ui.onAccent : ui.textMuted; font.pixelSize: Style.type.label; font.weight: Font.DemiBold; verticalAlignment: Text.AlignVCenter; textFormat: Text.PlainText }
-                background: Rectangle { radius: height / 2; color: parent.enabled ? ui.accent : Style.alpha(ui.text, Style.state.hover); border.width: parent.activeFocus ? 2 : 0; border.color: ui.text }
+            // The frameless window moves by dragging the action bar.
+            DragHandler { target: null; onActiveChanged: if (active) window.startSystemMove() }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space.md + Style.space.xxs
+                anchors.rightMargin: Style.space.sm
+                spacing: Style.space.sm
+                BrandMark { }
+                Text {
+                    text: "Orla"; color: ui.text
+                    font.pixelSize: Style.type.label; font.weight: Style.weight.demiBold; textFormat: Text.PlainText
+                }
+                Text {
+                    objectName: "resultSummary"
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    elide: Text.ElideRight
+                    color: ui.textMuted; font.pixelSize: Style.type.caption; textFormat: Text.PlainText
+                    font.features: {"tnum": 1}
+                    text: launcher.status === "loading" ? qsTr("Buscando…")
+                        : launcher.rows.length === 1 ? qsTr("1 resultado")
+                        : launcher.rows.length ? qsTr("%1 resultados").arg(launcher.rows.length)
+                        : windowSession && windowSession.shortcutText ? windowSession.shortcutText : qsTr("Busca local")
+                }
+                Button {
+                    id: actionsButton
+                    objectName: "actionsButton"
+                    text: qsTr("Ações")
+                    Accessible.name: qsTr("Ações do resultado, Ctrl+K")
+                    enabled: window.canOpenActions
+                    onClicked: window.openResultActions()
+                    leftPadding: Style.space.sm + Style.space.xxs
+                    rightPadding: Style.space.xs + Style.space.xxs
+                    Layout.preferredHeight: Style.size.iconButton + Style.space.xs
+                    contentItem: RowLayout {
+                        spacing: Style.space.sm
+                        Text {
+                            text: actionsButton.text; color: actionsButton.enabled ? ui.text : ui.textMuted
+                            font.pixelSize: Style.type.label; font.weight: Style.weight.medium; textFormat: Text.PlainText
+                        }
+                        Row { spacing: Style.space.xxs; Keycap { text: "Ctrl" } Keycap { text: "K" } }
+                    }
+                    background: Rectangle {
+                        radius: height / 2
+                        color: actionsButton.down ? Style.alpha(ui.text, Style.state.pressed)
+                            : actionsButton.hovered ? Style.alpha(ui.text, Style.state.hover) : "transparent"
+                        border.width: actionsButton.activeFocus ? 2 : 0
+                        border.color: ui.focus
+                    }
+                }
+                Rectangle {
+                    Layout.preferredWidth: Style.size.divider
+                    Layout.preferredHeight: Style.size.iconSm
+                    color: Style.alpha(ui.text, Style.state.selected)
+                }
+                Button {
+                    id: executeButton
+                    objectName: "executeButton"
+                    property var executionTicket: null
+                    // Things that open (apps, settings, places, documents, files) say "Abrir"; answers and actions say "Usar".
+                    readonly property bool opens: !window.selectedRow || ["app", "steam", "alias", "favorite", "setting", "location", "document", "file"].indexOf(window.selectedRow.kind) >= 0
+                    text: opens ? qsTr("Abrir ↵") : qsTr("Usar ↵")
+                    Accessible.name: opens ? qsTr("Abrir, Enter") : qsTr("Usar, Enter")
+                    enabled: launcher.status === "ready" && launcher.selectedIndex >= 0
+                        && !!window.selectedRow && window.selectedRow.enabled === true && !window.executionBlocked && !aliasPreferences.visible
+                    onPressed: executionTicket = window.selectedRow ? { row: launcher.selectedIndex, generation: window.selectedRow.generation, id: window.selectedRow.id } : null
+                    onClicked: window.executeTicket(executionTicket, false)
+                    leftPadding: Style.space.md
+                    rightPadding: Style.space.xs + Style.space.xxs
+                    Layout.preferredHeight: Style.size.iconButton + Style.space.xs
+                    contentItem: RowLayout {
+                        spacing: Style.space.sm
+                        Text {
+                            text: executeButton.opens ? qsTr("Abrir") : qsTr("Usar")
+                            color: executeButton.enabled ? ui.accent : ui.textMuted
+                            font.pixelSize: Style.type.label; font.weight: Style.weight.demiBold; textFormat: Text.PlainText
+                        }
+                        Keycap { text: "↵" }
+                    }
+                    // The one primary action: a tinted capsule, matching the selected row.
+                    background: Rectangle {
+                        radius: height / 2
+                        color: !executeButton.enabled ? "transparent"
+                            : executeButton.down ? Style.alpha(ui.accent, Style.state.selected + Style.state.hover)
+                            : executeButton.hovered ? Style.alpha(ui.accent, Style.state.selected + Style.state.chip)
+                            : Style.alpha(ui.accent, Style.state.selected)
+                        border.width: executeButton.activeFocus ? 2 : 0
+                        border.color: ui.focus
+                    }
+                }
             }
         }
         AiSettings {
@@ -618,6 +886,7 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 0
+            Layout.margins: Style.space.lg
             visible: window.activePanel === "ai"
             controller: aiProviders
             textController: aiText
@@ -629,6 +898,7 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 0
+            Layout.margins: Style.space.lg
             visible: window.activePanel === "command"
             controller: window.commands
             operationStartBlocked: window.pendingDismiss
@@ -640,6 +910,7 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 0
+            Layout.margins: Style.space.lg
             visible: window.activePanel === "steam"
             controller: steamProvider
             operationStartBlocked: window.pendingDismiss
