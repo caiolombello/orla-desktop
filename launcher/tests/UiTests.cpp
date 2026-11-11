@@ -6,6 +6,7 @@
 #include <QQmlProperty>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QtQuickTest/quicktest.h>
 #include <QJSValue>
 #include <QClipboard>
 #include <QPointer>
@@ -2372,6 +2373,8 @@ QtObject {
             return static_cast<QQuickItem *>(nullptr);
         };
         const auto click = [&](const char *name) {
+            // A popup that just changed mode lays out on the next polish; aim at the settled geometry.
+            if (QQuickTest::qIsPolishScheduled(window) && !QQuickTest::qWaitForPolish(window)) return false;
             auto *target = item(name);
             if (!target || !target->isVisible() || !target->isEnabled()) return false;
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,

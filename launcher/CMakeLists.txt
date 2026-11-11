@@ -70,7 +70,7 @@ target_link_libraries(orla-launcher PRIVATE orla-launcher-core Qt6::Widgets Qt6:
 
 include(CTest)
 if(BUILD_TESTING)
-    find_package(Qt6 6.11.2 REQUIRED COMPONENTS Test DBus Network)
+    find_package(Qt6 6.11.2 REQUIRED COMPONENTS Test DBus Network QuickTest)
     find_program(ORLA_DBUS_DAEMON dbus-daemon REQUIRED)
     find_program(ORLA_GDBUS gdbus REQUIRED)
     add_executable(orla-launcher-tests tests/LauncherTests.cpp)
@@ -100,7 +100,7 @@ if(BUILD_TESTING)
     target_compile_definitions(orla-launcher-ui-tests PRIVATE
         ORLA_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
     qt_add_resources(orla-launcher-ui-tests ui PREFIX "/orla" FILES Launcher.qml AliasPreferences.qml AiSettings.qml SteamSettings.qml OrlaCommandPanel.qml AddonPeripherals.js Style.js)
-    target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::DBus
+    target_link_libraries(orla-launcher-ui-tests PRIVATE orla-launcher-core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Test Qt6::QuickTest Qt6::DBus
         KF6::GlobalAccel KF6::WindowSystem)
     # Keep action/cleanup coverage complete without growing the UI watchdog.
     set(ORLA_UI_ACTION_TESTS allResultActionsAreReachableByKeyboard resultExecutionWaitsForOwnerCleanup
