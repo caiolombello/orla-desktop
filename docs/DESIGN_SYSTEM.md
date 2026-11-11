@@ -158,11 +158,21 @@ surfaces so keyboard, input methods and accessibility keep KDE behavior. Sliders
 
 ## Other surfaces
 
-- **Launcher (Spotlight-like).** Frameless, transparent window; the visible part is a
-  rounded glass panel inside a shadow margin. `WindowSession.setBlurRegion()` asks KWin
-  to blur behind that panel. Search is a capsule with a magnifier; results show the
-  app's own theme icon (`iconName` from KRunner, drawn with `IconImage`) and the
-  selected row is filled with the accent. The header drags the window.
+- **Launcher (Spotlight/Raycast-like).** Frameless, transparent window; the visible part
+  is a rounded glass panel inside a soft shadow margin. `WindowSession.setBlurRegion()`
+  asks KWin to blur behind that panel. Three bands, split by edge-to-edge hairlines:
+  - *Search bar* (`launcherHeader`): magnifier, a frameless headline-size field and the
+    mode chips (IA, Steam) at its end; chips keep 40 px targets with a smaller capsule.
+    Other panels show the brand mark there instead of the field.
+  - *Results*: one-line rows (theme icon via `IconImage`, name, muted detail), grouped by
+    uppercase source labels. The selection is tinted with the accent
+    (`Style.state.selected`) and shows a `↵` key; text keeps full contrast. The scroll
+    bar is a slim overlay.
+  - *Action bar* (`launcherFooter`): brand mark, result count or shortcut, then
+    `Ações` with `Ctrl K` keys and the one primary action (`Abrir`/`Usar` with `↵`).
+    It drags the window. The actions popover rises from its right end, with the
+    result's own actions first and Orla's preferences after a hairline.
+  Key hints are drawn as keycaps, never as color alone.
 - **Appearance.** Keep presets and portable JSON behind the initially collapsed
   “Presets e aparência portátil” control. Names and current preview status stay
   visible; a saved preset identity must never be inferred. Basic themes and

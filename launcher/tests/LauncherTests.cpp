@@ -264,6 +264,30 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(!launcher.rows().isEmpty() && launcher.status() == "ready", 5000);
         QCOMPARE(launcher.rows().first().toMap().value("title").toString(), QStringLiteral("81"));
     }
+    void rowsNotifyOnlyWhenTheResultsChange()
+    {
+        LauncherControllerTestOwner controllerOwner;
+        LauncherController &launcher = controllerOwner.controller();
+        QSignalSpy rows(&launcher, &LauncherController::rowsChanged);
+        QSignalSpy changed(&launcher, &LauncherController::changed);
+        launcher.setQuery(QStringLiteral("2+2"));
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        QVERIFY(rows.count() >= 1);
+        // Moving the selection and repeated refreshes keep the same rows, so the
+        // view keeps its delegates instead of rebuilding the whole list.
+        rows.clear();
+        changed.clear();
+        launcher.select(0);
+        launcher.moveSelection(1);
+        launcher.moveSelection(-1);
+        QVERIFY(changed.count() >= 1);
+        QCOMPARE(rows.count(), 0);
+        launcher.setQuery(QStringLiteral("9*9"));
+        QCOMPARE(rows.count(), 1); // Typing clears the old rows at once.
+        QTRY_COMPARE_WITH_TIMEOUT(launcher.status(), QStringLiteral("ready"), 5000);
+        QCOMPARE(launcher.rows().first().toMap().value("title").toString(), QStringLiteral("81"));
+        QVERIFY(rows.count() >= 2);
+    }
     void oversizedInputReportsRecoverableErrorWithoutSearching()
     {
         LauncherControllerTestOwner controllerOwner;
