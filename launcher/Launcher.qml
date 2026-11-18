@@ -716,8 +716,11 @@ Window {
                     onPressed: executionTicket = { row: index, generation: rowData.generation, id: rowData.id }
                     onClicked: {
                         const ticket = executionTicket
+                        // A run that closes the launcher clears the rows and destroys this delegate,
+                        // so resolve the field before executing.
+                        const field = search
                         window.executeTicket(ticket, true)
-                        search.forceActiveFocus()
+                        field.forceActiveFocus()
                     }
                 }
             }
