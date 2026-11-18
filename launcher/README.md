@@ -610,7 +610,7 @@ diretórios como observados agora. `uninstall` e `recover --finish-install` aind
 recusam essa mudança com `directory_operation_requires_original_device`, antes
 de escrever, assim como `update` em recibos `posix-strict-0.1`. O banco do update
 conserva pins completos: um rollback depois de outro reboot é recusado com
-`update_parent`, e um segundo update ainda encontra o slot ocupado. Bancos de
+`update_parent`; `finalize` (abaixo) libera o slot para o próximo update. Bancos de
 transação e recuperação conservam seus pins completos; um banco retido também
 é validado antes de criar um lock ausente. Migração, Workspace e qualificação
 por login/reboot têm aceites separados.
@@ -821,6 +821,8 @@ python3 -I -B /caminho/bootstrap-novo/install.py update /caminho/novo-launcher.z
 python3 -I -B /caminho/bootstrap-novo/install.py rollback
 # Se a troca foi interrompida, recuperar sempre volta à versão anterior:
 python3 -I -B /caminho/bootstrap-novo/install.py recover --rollback-update
+# Depois de conferir a versão em uso, descartar a outra e liberar o próximo update:
+python3 -I -B /caminho/bootstrap-novo/install.py finalize
 ```
 
 Os mesmos comandos estão disponíveis em `python3 scripts/orla.py launcher`.
@@ -838,8 +840,22 @@ identidades divergentes são recusados, com a primeira falha preservada quando
 sua gravação é possível. As trocas usam renomeação Linux sem copiar/apagar como
 alternativa. [Semântica de troca](https://man7.org/linux/man-pages/man2/rename.2.html)
 
-Esta etapa suporta uma transação e um predecessor, sem encadear atualizações,
-trocar as ferramentas instaladas ou limpar versões retidas. A remoção pelo
+`finalize` descarta o lado estacionado — a versão anterior depois de um update,
+ou a nova depois de um rollback — e remove os dois slots, liberando o próximo
+update. Recusa uma troca em andamento (`pending_transaction`) e qualquer arquivo
+retido divergente ou extra, antes de remover algo. Como um reboot pode renumerar
+os dispositivos fixados no banco, `finalize` admite pelo conteúdo: o schema do
+banco, o recibo ativo com sua guarda e os bytes de cada arquivo retido. Isso é
+mais fraco que os pins da mesma sessão exigidos por update e rollback. A remoção
+segue a ordem payload, diretórios, seletor/barreira do slot e banco por último;
+um `finalize` interrompido é retomado por outro `finalize`, e update/rollback
+recusam esses estados intermediários. Depois dele não há volta para a versão
+descartada. O histórico de recibos permanece, por isso um update para um arquivo
+já descartado é recusado com `update_history_exists`. Um slot de dados vazio
+deixado por um update interrompido antes do banco também é removido.
+
+Esta etapa suporta uma transação e um predecessor por vez, sem trocar as
+ferramentas instaladas. A remoção pelo
 controlador antigo remove os 12 arquivos ativos e preserva a outra versão,
 workspaces e histórico; esses arquivos retidos ainda exigem uma etapa de gestão
 própria. Uma preparação incompleta fica preservada e é recusada sem bloquear A.

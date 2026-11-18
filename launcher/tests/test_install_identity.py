@@ -337,6 +337,12 @@ class InstallIdentityTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "update_parent")
             self.assertEqual(self.snapshot(fixture), before)
             self.assertEqual(manager.status(paths)["archiveSha256"], digest)
+            # Login after that reboot still opens the successor with the slot occupied.
+            with mock.patch.object(manager.os, "execv") as execute:
+                self.assertEqual(self.invoke(manager, paths, "session"), (0, ""))
+            binary = str(manager._base(paths) / "versions" / digest / "bin/orla-launcher")
+            execute.assert_called_once_with(binary, [binary, "--managed-shortcuts", "--start-hidden"])
+            self.assertEqual(self.snapshot(fixture), before)
 
     def test_new_schema_rejects_missing_unknown_and_malformed_proofs(self):
         fixture = self.fixture()

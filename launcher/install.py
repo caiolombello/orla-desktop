@@ -2324,6 +2324,111 @@ def recover_update(paths: InstallPaths, *, backend=None) -> dict:
     return _update_return_a(paths, backend, recovery=True)
 
 
+def _finalize_rmdir(path):
+    with _directory(path.parent) as parent:
+        named = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        _update_need(stat.S_ISDIR(named.st_mode) and named.st_uid == os.getuid()
+                     and named.st_dev == os.fstat(parent).st_dev, "update_workspace")
+        os.rmdir(path.name, dir_fd=parent)
+        os.fsync(parent)
+
+
+def _finalize_parked(paths, bank, key):
+    """The parked payload files still present, each checked against the bank."""
+    _state_slot, data_slot = _update_paths(paths)
+    digest = bank[key]["archiveSha256"]
+    version = data_slot / "versions" / digest
+    _update_members(data_slot, set(), {"versions"})
+    if _exists(data_slot / "versions"):
+        # Never the active tree, whatever its path.
+        with _directory(data_slot / "versions") as parked, _directory(_base(paths) / "versions") as active:
+            _update_need((os.fstat(parked).st_dev, os.fstat(parked).st_ino)
+                         != (os.fstat(active).st_dev, os.fstat(active).st_ino), "update_versions")
+        _update_members(data_slot / "versions", set(), {digest})
+    for path, names in ((version, {"bin", "libexec", "LICENSE"}), (version / "bin", {"orla-launcher"}),
+                        (version / "libexec", {name.split("/", 1)[1] for name, _mode in PAYLOAD if name.startswith("libexec/")})):
+        if _exists(path):
+            _update_members(path, set(), names)
+    records = {record["key"]: record for record in bank["payloads"][key == "to"]["files"]}
+    present = []
+    for name, mode in PAYLOAD:
+        path = version / name
+        if _exists(path):
+            data, _pin = _read(path, mode=mode)
+            record = records["payload/" + name]
+            _update_need(len(data) == record["size"] and hashlib.sha256(data).hexdigest() == record["sha256"], "managed_drift")
+            present.append((path, mode, record))
+    return present
+
+
+def finalize_update(paths: InstallPaths, *, backend=None) -> dict:
+    """Discard the parked side of a finished update so another update can start.
+
+    The bank pins devices, which a reboot may renumber, so this admits by content:
+    the bank's own schema, the active receipt and its guard, and the exact bytes
+    of every parked file. That is weaker than the same-boot pins update and
+    rollback require, and it only removes what the bank describes.
+    """
+    try:
+        paths = _paths(paths)
+        state_slot, data_slot = _update_paths(paths)
+        if backend is not None:
+            raise InstallError("backend_unimplemented")
+        _recovery_parents(paths)
+        with _locked(paths):
+            for name in ("pending.json", "pending-error.json", "pending-intent.json"):
+                _update_need(_update_optional(_state(paths) / name) is None, "pending_transaction")
+            kept = _receipt(paths)
+            _guard(paths, kept)
+            bank_path = state_slot / "bank.json"
+            if not _exists(state_slot) or not _exists(bank_path):
+                # Nothing parked, the empty slot a cut finalize left, or the empty
+                # data slot an update cut before creating its state slot left.
+                if _exists(data_slot):
+                    _update_need(not _exists(state_slot), "update_workspace")
+                    _update_members(data_slot, set())
+                    _finalize_rmdir(data_slot)
+                if _exists(state_slot):
+                    _update_members(state_slot, set())
+                    _finalize_rmdir(state_slot)
+                return _report(paths, kept)
+            data, _pin = _read(bank_path, mode=0o600, limit=MAX_UPDATE_BYTES)
+            bank = _update_bank(paths, data)
+            _update_need(kept in (bank["from"], bank["to"]), "update_selector_changed")
+            gone = "to" if kept == bank["from"] else "from"
+            names = _update_members(state_slot, {"bank.json"}, {"current.json", "barrier.json", "first-error.json"})
+            # The parked tree goes first, then the slot's selector and barrier,
+            # and the bank last: a cut finalize is re-entered, never mistaken for
+            # an update that rollback could still use.
+            parked = _exists(data_slot)
+            _update_need(not parked or {"current.json", "barrier.json"} <= names, "update_workspace")
+            if "current.json" in names:
+                _update_need(_read(state_slot / "current.json", mode=0o600, limit=MAX_RECEIPT_BYTES)[0] == _json(bank[gone]),
+                             "update_selector_changed")
+            if "barrier.json" in names:
+                _update_need(_read(state_slot / "barrier.json", mode=0o600, limit=MAX_RECEIPT_BYTES)[0]
+                             == bytes.fromhex(bank["barrier"]["dataHex"]), "update_barrier")
+            if "first-error.json" in names:
+                _read(state_slot / "first-error.json", mode=0o600, limit=4096)
+            present = _finalize_parked(paths, bank, gone) if parked else []
+            for path, mode, record in present:
+                _unlink_checked(path, record, mode)
+            if parked:
+                version = data_slot / "versions" / bank[gone]["archiveSha256"]
+                for path in (version / "bin", version / "libexec", version, data_slot / "versions", data_slot):
+                    if _exists(path):
+                        _finalize_rmdir(path)
+            for name in ("current.json", "barrier.json", "first-error.json", "bank.json"):
+                path = state_slot / name
+                if _exists(path):
+                    raw, _pin = _read(path, mode=0o600, limit=MAX_UPDATE_BYTES)
+                    _unlink_checked(path, {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}, 0o600)
+            _finalize_rmdir(state_slot)
+            return _report(paths, kept)
+    except OSError as error:
+        raise InstallError("filesystem_unknown") from error
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="orla-launcherctl")
     parser.add_argument("--home", type=Path)
@@ -2339,6 +2444,7 @@ def main(arguments: list[str] | None = None) -> int:
     update_command.add_argument("--sha256", required=True)
     update_command.add_argument("--commit", required=True)
     commands.add_parser("rollback")
+    commands.add_parser("finalize")
     for command in ("status", "launch", "uninstall", "session"):
         commands.add_parser(command)
     service_command = commands.add_parser("service", allow_abbrev=False)
@@ -2365,6 +2471,8 @@ def main(arguments: list[str] | None = None) -> int:
             result = update_archive(options.archive, expected_sha256=options.sha256, expected_commit=options.commit, paths=paths)
         elif options.command == "rollback":
             result = rollback_update(paths)
+        elif options.command == "finalize":
+            result = finalize_update(paths)
         elif options.command == "service":
             result = service(paths, options.action)
         elif options.command == "session":
