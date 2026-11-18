@@ -832,6 +832,12 @@ def install_archive(archive: Path, *, expected_sha256: str, expected_commit: str
         if _exists(_state(paths) / "current.json") or _exists(_base(paths)) \
                 or any(_exists(files[key][0]) for key in ("controller", "launcher", "menu")):
             raise InstallError("install_conflict")
+        # Receipt history is immutable: refuse a used archive before writing anything.
+        for path in (_state(paths) / "receipts" / (expected_sha256 + ".json"),
+                     _state(paths) / "transactions" / (expected_sha256 + "-install.json"),
+                     _state(paths) / "transactions" / (expected_sha256 + "-installed.json")):
+            if _exists(path):
+                raise InstallError("install_history_exists")
         for child in ("transactions", "receipts"):
             with _directory(_state(paths) / child, create=True, mode=0o700) as descriptor:
                 if os.fstat(descriptor).st_uid != os.getuid() or stat.S_IMODE(os.fstat(descriptor).st_mode) != 0o700:
