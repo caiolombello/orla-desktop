@@ -272,14 +272,21 @@ class UpdatesEntryTests(unittest.TestCase):
         return subprocess.run([sys.executable,'-I',* ([] if qt else ['-S']),'-B',str(self.bundle/'workspace/main.py'),*args],cwd=self.base,env=self.env,capture_output=True,text=True,timeout=30)
 
     def gui(self,mode='passive',hidden=False):
+        # The helper must report the bundle's own version, or the result is refused as invalid.
         helper=self.base/'offline.py'
-        helper.write_text("import json\nprint(json.dumps("+repr(dict(status='no_release',reason=None,source='https://api.github.com/repos/caiolombello/orla-desktop/releases',installed_version='0.2.9',available_version=None,available_url=None,channel='stable',checked_at='2026-10-20T12:00:00Z'))+"))\n")
+        helper.write_text("import json\nprint(json.dumps("+repr(dict(status='no_release',reason=None,source='https://api.github.com/repos/caiolombello/orla-desktop/releases',installed_version=json.loads((ROOT/'package/metadata.json').read_text())['KPlugin']['Version'],available_version=None,available_url=None,channel='stable',checked_at='2026-10-20T12:00:00Z'))+"))\n")
         command=[sys.executable,'-I','-B','-c',GUI,str(self.bundle),mode,str(helper)]
+        env=self.env
         if hidden:
             if not shutil.which('bwrap'):self.skipTest('Bubblewrap absent: Source-hidden qualification unavailable')
             mount=self.base/'home-mount';mount.mkdir(exist_ok=True)
-            command=['bwrap','--die-with-parent','--unshare-net','--uid',str(os.getuid()),'--gid',str(os.getgid()),'--ro-bind','/','/','--bind',str(mount),'/home','--ro-bind',str(next(p for p in ROOT.parents if p.parent == Path('/home'))),str(next(p for p in ROOT.parents if p.parent == Path('/home'))),'--perms','0755','--tmpfs',str(ROOT.parents[3]),'--bind',str(self.base),str(self.base),'--proc','/proc','--dev','/dev','--',*command]
-        result=subprocess.run(command,cwd=self.base,env=self.env,capture_output=True,text=True,timeout=15)
+            # An unprivileged sandbox shows host root as the overflow user, so the store would refuse
+            # every parent: the synthetic tree is mounted over a top-level directory it owns instead.
+            inner='/mnt'
+            moved=lambda value:value.replace(str(self.base),inner)
+            env={key:moved(value) for key,value in self.env.items()}
+            command=['bwrap','--die-with-parent','--unshare-net','--uid',str(os.getuid()),'--gid',str(os.getgid()),'--ro-bind','/','/','--bind',str(mount),'/home','--ro-bind',str(next(p for p in ROOT.parents if p.parent == Path('/home'))),str(next(p for p in ROOT.parents if p.parent == Path('/home'))),'--perms','0755','--tmpfs',str(ROOT.parents[3]),'--bind',str(self.base),inner,'--chdir',inner,'--proc','/proc','--dev','/dev','--',*map(moved,command)]
+        result=subprocess.run(command,cwd=self.base,env=env,capture_output=True,text=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertNotIn('Destroyed while process',result.stderr)
         return json.loads(result.stdout)

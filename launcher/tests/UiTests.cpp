@@ -1804,6 +1804,74 @@ private Q_SLOTS:
             << "pid_group_reaped=true owned_ai_runtime_removed=true hide_once=true";
     }
 
+    void clickedResultThatClosesTheLauncherReturnsFocusWithoutAStaleScope()
+    {
+        // The run dismisses and clears the rows, destroying the clicked delegate inside its own handler.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("ReferenceError")));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString steamHelper = directory.filePath(QStringLiteral("click-steam.py"));
+        const QByteArray steamDocument = R"({"apps":[{"appid":"42","library":"library-0","name":"Synthetic Click Game","ownership":"unknown","source":"local_manifest","status":"installed_candidate"}],"connection":"unknown","errors":[],"libraries":[{"id":"library-0","kind":"native","root":"root-0","status":"available"}],"ownership":"unknown","roots":[{"id":"root-0","kind":"native","status":"available"}],"schema_version":"0.1-experimental","status":"available"})" "\n";
+        {
+            QFile file(steamHelper);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("import base64,sys\nsys.stdout.buffer.write(base64.b64decode('");
+            file.write(steamDocument.toBase64());
+            file.write("'))\n");
+        }
+        QList<QUrl> opened;
+        SteamProviderController steam(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), steamHelper,
+            [&](const QUrl &url) { opened.append(url); return true; }); // Owned callback: no real Steam URI.
+        AiProviderController ai(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-helper.py"));
+        AiTextController aiText(QStringLiteral(ORLA_TEST_PYTHON_EXECUTABLE), QStringLiteral("/missing/orla-ai-text-helper.py"));
+        LauncherControllerTestOwner controllerOwner(&steam);
+        LauncherController &controller = controllerOwner.controller();
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("launcher", &controller);
+        engine.rootContext()->setContextProperty("aiProviders", &ai);
+        engine.rootContext()->setContextProperty("aiText", &aiText);
+        engine.rootContext()->setContextProperty("steamProvider", &steam);
+        engine.rootContext()->setContextProperty("windowSession", QVariant::fromValue<QObject *>(nullptr));
+        engine.load(QUrl(QStringLiteral("qrc:/orla/Launcher.qml")));
+        QCOMPARE(engine.rootObjects().size(), 1);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *search = window->findChild<QQuickItem *>(QStringLiteral("searchInput"));
+        QVERIFY(search);
+        QSignalSpy dismissed(&controller, &LauncherController::closeRequested);
+        steam.scan({QStringLiteral("native=/synthetic/root")});
+        QTRY_COMPARE_WITH_TIMEOUT(steam.status(), QStringLiteral("available"), 1500);
+        controller.setQuery(QStringLiteral("Synthetic Click Game"));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.status(), QStringLiteral("ready"), 3000);
+        QCOMPARE(controller.rows().size(), 1);
+        const QVariant rowId = controller.rows().first().toMap().value("id");
+        QQuickItem *delegate = nullptr;
+        const auto scriptMap = [](const QVariant &value) {
+            return value.metaType() == QMetaType::fromType<QJSValue>()
+                ? value.value<QJSValue>().toVariant().toMap() : value.toMap();
+        };
+        const auto findDelegate = [&]() -> QQuickItem * {
+            QList<QQuickItem *> items{window->contentItem()};
+            for (int i = 0; i < items.size(); ++i) {
+                auto *item = items[i];
+                items.append(item->childItems());
+                if (item->isVisible() && item->property("executionTicket").isValid()
+                    && scriptMap(item->property("rowData")).value("id") == rowId) return item;
+            }
+            return nullptr;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT((delegate = findDelegate()) && delegate->isEnabled(), 1000);
+        QPointer<QQuickItem> clicked(delegate);
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          delegate->mapToScene(QPointF(delegate->width() / 2, delegate->height() / 2)).toPoint());
+        QCOMPARE(opened, QList<QUrl>{QUrl(QStringLiteral("steam://rungameid/42"))});
+        QCOMPARE(dismissed.count(), 1);
+        QVERIFY(controller.rows().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(clicked.isNull(), 1000); // The handler really ran on a destroyed delegate.
+        QVERIFY(search->hasActiveFocus());
+    }
+
     void windowCloseAndQuitWaitForAllThreeOwnersExactlyOnce()
     {
         QTemporaryDir directory;
