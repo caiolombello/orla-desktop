@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 
 
@@ -1302,7 +1303,10 @@ class ContextsDockTests(unittest.TestCase):
         # Switching an area changes neither profiles nor context rules.
         self.assertEqual(self.evaluate("JSON.stringify([configuration.profilesJSON,configuration.contextsJSON,profiles.activeProfileId])"), before)
         self.evaluate("closeSession()", popup)
-        QTest.qWait(200)
+        # The popup's close transition decides when the session ends; poll instead of guessing it.
+        deadline = time.monotonic() + 1.5
+        while state.property("active") and time.monotonic() < deadline:
+            QTest.qWait(10)
         self.assertFalse(state.property("active"))
 
     def test_desktop_switch_keyboard_selection_and_single_tab_request(self):
