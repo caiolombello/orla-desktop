@@ -606,9 +606,10 @@ payload não atualiza esse gerenciador nem migra uma instalação antiga. `updat
 aceita a renumeração do dispositivo no Btrfs quando a prova persistente,
 relida do descritor aberto, e o inode, modo e dono continuam iguais; o recibo
 anterior e seu histórico ficam byte a byte iguais, e o novo recibo registra os
-diretórios como observados agora. `uninstall` e `recover --finish-install` ainda
-recusam essa mudança com `directory_operation_requires_original_device`, antes
-de escrever, assim como `update` em recibos `posix-strict-0.1`. O banco do update
+diretórios como observados agora. `uninstall` aceita a mesma prova e remove
+pelos pins observados agora, sem reescrever o histórico. `recover --finish-install`
+ainda recusa essa mudança com `directory_operation_requires_original_device`, antes
+de escrever, assim como `update` e `uninstall` em recibos `posix-strict-0.1`. O banco do update
 guarda pins completos. Depois de outro reboot, rollback e `recover --rollback-update`
 comparam esses pins por uma única renumeração: os diretórios-pais do banco só
 podem mudar de `st_dev`, cada número antigo vira um único novo, e cada dispositivo
@@ -864,8 +865,8 @@ ferramentas instaladas. Para trocar o gerenciador instalado, rode `finalize`,
 `service disable` e `uninstall`, e então `install` de um arquivo novo pelo
 bootstrap novo, seguido de `service enable`: o install grava o próprio
 gerenciador e o controlador com o hash dele, e o serviço é regenerado pelo novo.
-Precisa ser na mesma sessão do último update ou install, porque `uninstall`
-continua exigindo os dispositivos originais. Um arquivo já usado é recusado com
+Depois de um reboot, `uninstall` admite a renumeração Btrfs com a mesma prova
+persistente do update e remove pelos pins observados agora. Um arquivo já usado é recusado com
 `install_history_exists` antes de qualquer escrita. A remoção pelo
 controlador antigo remove os 12 arquivos ativos e preserva a outra versão,
 workspaces e histórico; esses arquivos retidos ainda exigem uma etapa de gestão

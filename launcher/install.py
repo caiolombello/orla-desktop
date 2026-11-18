@@ -208,9 +208,9 @@ def _same_directory(a, b, key):
 
 
 def _operation_directory_pins(paths, receipt, *, admit_proofs=False):
-    # Uninstall and finish-install recovery still use historical full pins.
-    # Refuse before their first write rather than partially applying after reboot.
-    # A payload update admits a persistent btrfs proof (see _admits).
+    # Finish-install recovery still uses historical full pins: refuse before its
+    # first write rather than partially applying after reboot. Payload updates and
+    # uninstall admit a persistent btrfs proof (see _admits).
     if receipt["schema"] == IDENTITY_SCHEMA:
         directories = _directories(paths, receipt["archiveSha256"])
         for record in receipt["directories"]:
@@ -221,6 +221,19 @@ def _operation_directory_pins(paths, receipt, *, admit_proofs=False):
                     admitted = list(_directory_identity(os.fstat(descriptor))) == record["pin"]
                 if not admitted:
                     raise InstallError("directory_operation_requires_original_device")
+
+
+def _admitted_directory_pins(paths, receipt):
+    # The receipt's directories as observed now, each admitted by _admits, so that
+    # later by-name checks compare against this boot's device numbers.
+    directories = _directories(paths, receipt["archiveSha256"])
+    observed = {}
+    for record in receipt["directories"]:
+        with _directory(directories[record["key"]]) as descriptor:
+            if not _admits(receipt, record["key"], descriptor):
+                raise InstallError("directory_operation_requires_original_device")
+            observed[record["key"]] = list(_directory_identity(os.fstat(descriptor)))
+    return observed
 
 
 @contextmanager
@@ -921,16 +934,17 @@ def uninstall(paths: InstallPaths, *, backend=None) -> dict:
     if backend is not None:
         raise InstallError("backend_unimplemented")
     if _exists(_state(paths) / "current.json"):
-        _operation_directory_pins(paths, _receipt(paths))
+        _operation_directory_pins(paths, _receipt(paths), admit_proofs=True)
     with _locked(paths):
         _service_disabled(paths)
         if _pending(paths) is not None:
             raise InstallError("pending_transaction")
         receipt = _receipt(paths)
         _guard(paths, receipt)
-        _operation_directory_pins(paths, receipt)
+        _operation_directory_pins(paths, receipt, admit_proofs=True)
         digest = receipt["archiveSha256"]
-        directories = {record["key"]: record["pin"] for record in receipt["directories"]}
+        # A reboot may renumber a btrfs device; remove by this boot's admitted pins.
+        directories = _admitted_directory_pins(paths, receipt)
         _write_new(_state(paths) / "transactions" / (digest + "-uninstall.json"),
                    _json({"operation": "uninstall", "archiveSha256": digest, "phase": "prepared", "files": receipt["files"]}), 0o600)
         # Pending exists before any deletion, so interrupted status is truthful.
