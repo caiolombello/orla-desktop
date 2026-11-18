@@ -81,8 +81,9 @@ Item {
                     KeyNavigation.backtab: downloadsButton
                     onActiveFocusChanged: if (activeFocus) panel.reveal(this)
                     onClicked: panel.backRequested()
-                    contentItem: Text { text: parent.text; color: ui.accent; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
-                    background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 2 : 0; border.color: ui.accent }
+                    leftPadding: Style.space.md; rightPadding: Style.space.md
+                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.text; font.pixelSize: Style.type.label; font.weight: Style.weight.medium; textFormat: Text.PlainText }
+                    background: Rectangle { implicitHeight: Style.size.iconButton + Style.space.xs; radius: height / 2; color: parent.down ? Style.alpha(ui.text, Style.state.pressed) : parent.hovered ? Style.alpha(ui.text, Style.state.hover) : Style.alpha(ui.text, Style.state.chip); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
                 }
                 Item { Layout.fillWidth: true }
                 Text { text: qsTr("SOMENTE SESSÃO"); color: ui.textMuted; font.pixelSize: Style.type.overline; font.letterSpacing: 1; textFormat: Text.PlainText }
@@ -151,7 +152,7 @@ Item {
                 Accessible.description: qsTr("Preenche raízes existentes nos locais conhecidos sem ler metadados dos jogos")
                 onClicked: panel.locateRoots()
                 contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.text : ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
-                background: Rectangle { radius: Style.radius.control; color: ui.raised; border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
+                background: Rectangle { radius: Style.radius.control; color: parent.down ? Style.alpha(ui.text, Style.state.pressed) : parent.hovered ? Style.alpha(ui.text, Style.state.hover) : Style.alpha(ui.text, Style.state.chip + 0.02); border.width: parent.activeFocus ? 2 : 1; border.color: parent.activeFocus ? ui.focus : Style.alpha(ui.text, Style.state.hover + 0.02) }
             }
             Text {
                 objectName: "steamRootDiscoveryMessage"
@@ -181,8 +182,8 @@ Item {
                 text: qsTr("Abrir downloads no Steam")
                 Accessible.description: qsTr("Encaminha a URI fixa de downloads; não confirma que o cliente abriu")
                 onClicked: if (!panel.operationStartBlocked) panel.controller.openDownloads()
-                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.caption; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                background: Rectangle { radius: Style.radius.control; color: Style.alpha(ui.accent, 0.14); border.width: parent.activeFocus ? 2 : 1; border.color: ui.accent }
+                contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.text : ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
+                background: Rectangle { radius: Style.radius.control; color: parent.down ? Style.alpha(ui.text, Style.state.pressed) : parent.hovered ? Style.alpha(ui.text, Style.state.hover) : Style.alpha(ui.text, Style.state.chip + 0.02); border.width: parent.activeFocus ? 2 : 1; border.color: parent.activeFocus ? ui.focus : Style.alpha(ui.text, Style.state.hover + 0.02) }
             }
             Item { Layout.preferredHeight: Style.space.xs }
         }

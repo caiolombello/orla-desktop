@@ -19,7 +19,7 @@ class LauncherController final : public QObject
     Q_OBJECT
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY changed)
     Q_PROPERTY(quint64 generation READ generation NOTIFY changed)
-    Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
+    Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(int selectedIndex READ selectedIndex NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
@@ -69,10 +69,14 @@ public:
     QStringList runnerIds() const { return m_runnerIds; }
 Q_SIGNALS:
     void changed();
+    // Only when the rows differ: selection moves and repeated runner updates
+    // must not make the view rebuild every result delegate.
+    void rowsChanged();
     void closeRequested();
 private:
     friend class LauncherControllerTestOwner;
     void refresh();
+    void publish();
     void restoreSelection();
     void steamChanged();
     void savedAppsChanged();
@@ -90,6 +94,7 @@ private:
     QString m_error;
     QString m_selectedId;
     QVariantList m_rows;
+    QVariantList m_publishedRows;
     QVariantList m_aliasPresentation;
     QVariantList m_favoritePresentation;
     bool m_collectingSavedPresentation = false;

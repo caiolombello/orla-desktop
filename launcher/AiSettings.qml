@@ -97,8 +97,9 @@ Item {
                     text: qsTr("← Busca")
                     Accessible.name: qsTr("Voltar à busca local")
                     onClicked: panel.backRequested()
-                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
-                    background: Rectangle { radius: Style.radius.control; color: ui.surface; border.width: parent.activeFocus ? 1 : 0; border.color: ui.accent }
+                    leftPadding: Style.space.md; rightPadding: Style.space.md
+                    contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.text; font.pixelSize: Style.type.label; font.weight: Style.weight.medium; textFormat: Text.PlainText }
+                    background: Rectangle { implicitHeight: Style.size.iconButton + Style.space.xs; radius: height / 2; color: parent.down ? Style.alpha(ui.text, Style.state.pressed) : parent.hovered ? Style.alpha(ui.text, Style.state.hover) : Style.alpha(ui.text, Style.state.chip); border.width: parent.activeFocus ? 2 : 0; border.color: ui.focus }
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
@@ -182,8 +183,8 @@ Item {
                             else if (!panel.operationStartBlocked && !panel.controller.busy)
                                 panel.controller.probeCodex("qml-consent")
                         }
-                        contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: ui.accent; font.pixelSize: Style.type.caption; font.weight: Font.DemiBold; textFormat: Text.PlainText }
-                        background: Rectangle { radius: Style.radius.control; color: Style.alpha(ui.accent, 0.14); border.width: parent.activeFocus ? 2 : 1; border.color: ui.accent }
+                        contentItem: Text { text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: parent.enabled ? ui.text : ui.textMuted; font.pixelSize: Style.type.label; textFormat: Text.PlainText }
+                        background: Rectangle { radius: Style.radius.control; color: parent.down ? Style.alpha(ui.text, Style.state.pressed) : parent.hovered ? Style.alpha(ui.text, Style.state.hover) : Style.alpha(ui.text, Style.state.chip + 0.02); border.width: parent.activeFocus ? 2 : 1; border.color: parent.activeFocus ? ui.focus : Style.alpha(ui.text, Style.state.hover + 0.02) }
                     }
                 }
             }
