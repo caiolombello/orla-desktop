@@ -609,8 +609,13 @@ anterior e seu histórico ficam byte a byte iguais, e o novo recibo registra os
 diretórios como observados agora. `uninstall` e `recover --finish-install` ainda
 recusam essa mudança com `directory_operation_requires_original_device`, antes
 de escrever, assim como `update` em recibos `posix-strict-0.1`. O banco do update
-conserva pins completos: um rollback depois de outro reboot é recusado com
-`update_parent`; `finalize` (abaixo) libera o slot para o próximo update. Bancos de
+guarda pins completos. Depois de outro reboot, rollback e `recover --rollback-update`
+comparam esses pins por uma única renumeração: os diretórios-pais do banco só
+podem mudar de `st_dev`, cada número antigo vira um único novo, e cada dispositivo
+renumerado precisa conter o diretório base de um dos recibos com a prova Btrfs
+relida agora. Uma divisão entre dispositivos, uma prova diferente, recibos `0.1`
+ou a política estrita são recusados com `update_parent` antes de escrever.
+`finalize` (abaixo) libera o slot para o próximo update. Bancos de
 transação e recuperação conservam seus pins completos; um banco retido também
 é validado antes de criar um lock ausente. Migração, Workspace e qualificação
 por login/reboot têm aceites separados.

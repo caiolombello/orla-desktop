@@ -320,29 +320,49 @@ class InstallIdentityTests(unittest.TestCase):
             self.assertEqual((state / "current.json").read_bytes(), predecessor)
             self.assertEqual(sorted(path.name for path in versions.iterdir()), [fixture[3]])
 
-    def test_update_rollback_after_a_later_device_drift_refuses_before_writing(self):
-        # The update bank pins its parents and moved files by device; a reboot
-        # between update and rollback is not admitted yet.
+    def test_login_and_rollback_after_a_later_device_drift(self):
+        # A reboot between update and rollback renumbers every pinned device once;
+        # the bank's pins are compared through that one-to-one renumbering.
         fixture = self.fixture()
         manager, paths = fixture[5], fixture[1]
         archive, digest = self.successor(fixture)
         with self.filesystem(manager) as fs:
             fixtures.InstallGuardTests.install(self, fixture)
+            predecessor = (manager._state(paths) / "current.json").read_bytes()
             fs["dev"] = 53
             self.update(manager, paths, archive, digest)
             fs["dev"] = 55
-            before = self.snapshot(fixture)
-            with self.assertRaises(manager.InstallError) as raised:
-                manager.rollback_update(paths)
-            self.assertEqual(raised.exception.code, "update_parent")
-            self.assertEqual(self.snapshot(fixture), before)
             self.assertEqual(manager.status(paths)["archiveSha256"], digest)
             # Login after that reboot still opens the successor with the slot occupied.
             with mock.patch.object(manager.os, "execv") as execute:
                 self.assertEqual(self.invoke(manager, paths, "session"), (0, ""))
             binary = str(manager._base(paths) / "versions" / digest / "bin/orla-launcher")
             execute.assert_called_once_with(binary, [binary, "--managed-shortcuts", "--start-hidden"])
-            self.assertEqual(self.snapshot(fixture), before)
+            self.assertEqual(manager.rollback_update(paths)["archiveSha256"], fixture[3])
+            self.assertEqual((manager._state(paths) / "current.json").read_bytes(), predecessor)
+            fs["dev"] = 57
+            self.assertEqual(manager.status(paths)["archiveSha256"], fixture[3])
+
+    def test_rollback_refuses_an_unconfirmed_or_inconsistent_renumbering_before_writing(self):
+        for case in ("split", "proof", "posix"):
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                manager, paths = fixture[5], fixture[1]
+                archive, digest = self.successor(fixture)
+                with self.filesystem(manager, btrfs=case != "posix") as fs:
+                    fixtures.InstallGuardTests.install(self, fixture)
+                    self.update(manager, paths, archive, digest)
+                    fs["dev"] = 55
+                    if case == "split":
+                        # One parent on another device than its peers: not one renumbering.
+                        fs["directoryDevices"][os.stat(manager._state(paths) / "receipts").st_ino] = 77
+                    elif case == "proof":
+                        fs["subvolumeUuid"] = b"t" * 16
+                    before = self.snapshot(fixture)
+                    with self.assertRaises(manager.InstallError) as raised:
+                        manager.rollback_update(paths)
+                    self.assertEqual(raised.exception.code, "update_parent")
+                    self.assertEqual(self.snapshot(fixture), before)
 
     def test_new_schema_rejects_missing_unknown_and_malformed_proofs(self):
         fixture = self.fixture()
@@ -544,7 +564,9 @@ class InstallIdentityTests(unittest.TestCase):
                                              runtime_inventory=package_tests.runtime_inventory())
         return archive, digest
 
-    def test_legacy_and_new_update_banks_remain_strict_after_device_drift(self):
+    def test_legacy_update_banks_remain_strict_and_new_ones_renumber_after_device_drift(self):
+        # A 0.2 bank is compared through a renumbering confirmed by btrfs proofs
+        # (test_login_and_rollback_after_a_later_device_drift); 0.1 has no proofs.
         for legacy in (False, True):
             with self.subTest(legacy=legacy):
                 fixture = self.fixture()
@@ -562,6 +584,9 @@ class InstallIdentityTests(unittest.TestCase):
                     (manager._state(paths) / "lock").unlink()
                     before = self.snapshot(fixture)
                     fs["dev"] = 53
+                    if not legacy:
+                        self.assertEqual(manager.rollback_update(paths)["archiveSha256"], fixture[3])
+                        continue
                     for action in (manager.rollback_update, manager.recover_update):
                         with self.assertRaises(manager.InstallError) as raised:
                             action(paths)
