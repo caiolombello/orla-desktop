@@ -175,14 +175,51 @@ def _receipt_directory_proofs(paths, receipt, *, versions_root=None):
     return proofs
 
 
-def _operation_directory_pins(paths, receipt):
-    # Transactions and destructive consumers still use historical full pins.
+def _directory_pin(receipt, key):
+    return next(item["pin"] for item in receipt["directories"] if item["key"] == key)
+
+
+def _admits(receipt, key, descriptor):
+    """Whether the open directory is the receipt's directory `key`.
+
+    Btrfs device numbers are not persistent across boots. A 0.2 receipt admits a
+    renumbered st_dev only under the btrfs policy, with the same inode, mode and
+    owner, and a persistent proof re-read from this descriptor now.
+    """
+    observed = list(_directory_identity(os.fstat(descriptor)))
+    pin = _directory_pin(receipt, key)
+    if observed == pin:
+        return True
+    if receipt["schema"] != IDENTITY_SCHEMA or observed[1:] != pin[1:]:
+        return False
+    recorded = receipt["directoryProofs"][key]
+    return recorded["policy"] == "btrfs-fd-0.1" and _directory_proof(descriptor, observed) == recorded
+
+
+def _same_directory(a, b, key):
+    # Two receipts name one directory; a btrfs device renumbering between their
+    # admissions is admitted only with equal persistent proofs.
+    left, right = _directory_pin(a, key), _directory_pin(b, key)
+    if left == right:
+        return True
+    return a["schema"] == b["schema"] == IDENTITY_SCHEMA and left[1:] == right[1:] \
+        and a["directoryProofs"][key]["policy"] == "btrfs-fd-0.1" \
+        and a["directoryProofs"][key] == b["directoryProofs"][key]
+
+
+def _operation_directory_pins(paths, receipt, *, admit_proofs=False):
+    # Uninstall and finish-install recovery still use historical full pins.
     # Refuse before their first write rather than partially applying after reboot.
+    # A payload update admits a persistent btrfs proof (see _admits).
     if receipt["schema"] == IDENTITY_SCHEMA:
         directories = _directories(paths, receipt["archiveSha256"])
         for record in receipt["directories"]:
             with _directory(directories[record["key"]]) as descriptor:
-                if list(_directory_identity(os.fstat(descriptor))) != record["pin"]:
+                if admit_proofs:
+                    admitted = _admits(receipt, record["key"], descriptor)
+                else:
+                    admitted = list(_directory_identity(os.fstat(descriptor))) == record["pin"]
+                if not admitted:
                     raise InstallError("directory_operation_requires_original_device")
 
 
@@ -1892,9 +1929,11 @@ def _update_bank(paths, data):
     _update_need(a["archiveSha256"] != b["archiveSha256"])
     file_maps = [{item["key"]: item for item in value["files"]} for value in receipts]
     dir_maps = [{item["key"]: item["pin"] for item in value["directories"]} for value in receipts]
+    # Both versions directories exist on one device during the switch, so their
+    # inodes differ even when the predecessor was admitted on an older device number.
     _update_need(all(file_maps[0][key] == file_maps[1][key] for key in UPDATE_SHARED) and
-                 all(dir_maps[0][key] == dir_maps[1][key] for key in ("base", "tools")) and
-                 dir_maps[0]["versions"][:2] != dir_maps[1]["versions"][:2])
+                 all(_same_directory(a, b, key) for key in ("base", "tools")) and
+                 dir_maps[0]["versions"][1] != dir_maps[1]["versions"][1])
     selectors = bank["selectors"]
     _update_need(type(selectors) is list and len(selectors) == 2)
     for item, key, receipt in zip(selectors, ("from", "to"), receipts):
@@ -1966,13 +2005,11 @@ def _update_guard(paths, data, pin):
     if "first-error.json" in names:
         _read(state_slot / "first-error.json", mode=0o600, limit=4096)
     receipts = {key: bank[key] for key in ("from", "to")}
-    dir_maps = {key: {item["key"]: item["pin"] for item in receipt["directories"]} for key, receipt in receipts.items()}
     roots = {"active": _base(paths) / "versions", "slot": data_slot / "versions"}
     locations = {}
     for position, path in roots.items():
         with _directory(path) as descriptor:
-            identity = list(_directory_identity(os.fstat(descriptor)))
-        matching = [key for key in receipts if dir_maps[key]["versions"] == identity]
+            matching = [key for key in receipts if _admits(receipts[key], "versions", descriptor)]
         _update_need(len(matching) == 1, "update_versions")
         locations[position] = matching[0]
     _update_need(locations["active"] != locations["slot"], "update_versions")
@@ -2020,7 +2057,6 @@ def _update_rename(paths, data, pin, operation):
     bank, positions = _update_guard(paths, data, pin)
     state_slot, data_slot = _update_paths(paths)
     parents = {item["key"]: item["pin"] for item in bank["parents"]}
-    dirs = {key: {item["key"]: item["pin"] for item in bank[key]["directories"]} for key in ("from", "to")}
     if operation in ("activate", "park"):
         _update_need((operation == "activate") == (positions[0] == "slot"), "update_barrier")
         _update_need(positions[1] == positions[2], "update_barrier")
@@ -2036,9 +2072,11 @@ def _update_rename(paths, data, pin, operation):
         flags = 2
         if operation == "versions":
             source, target = _base(paths) / "versions", data_slot / "versions"
-            left_parent, right_parent = dirs["from"]["base"], parents["data-slot"]
-            left = dirs[positions[1]]["versions"]
-            right = dirs["to" if positions[1] == "from" else "from"]["versions"]
+            # The base directory belongs to the predecessor receipt, which may
+            # name it by an older btrfs device number.
+            left_parent, right_parent = (bank["from"], "base"), parents["data-slot"]
+            left = bank[positions[1]]
+            right = bank["to" if positions[1] == "from" else "from"]
         elif operation == "current":
             source, target = _state(paths) / "current.json", state_slot / "current.json"
             left_parent, right_parent = parents["state"], parents["state-slot"]
@@ -2047,8 +2085,9 @@ def _update_rename(paths, data, pin, operation):
         else:
             raise InstallError("update_operation")
     with _directory(source.parent) as source_fd, _directory(target.parent) as target_fd:
-        _update_need(list(_directory_identity(os.fstat(source_fd))) == left_parent and
-                     list(_directory_identity(os.fstat(target_fd))) == right_parent, "update_parent")
+        source_parent = _admits(*left_parent, source_fd) if type(left_parent) is tuple \
+            else list(_directory_identity(os.fstat(source_fd))) == left_parent
+        _update_need(source_parent and list(_directory_identity(os.fstat(target_fd))) == right_parent, "update_parent")
         _update_need(os.fstat(source_fd).st_dev == os.fstat(target_fd).st_dev, "update_cross_device")
         def check(path, descriptor, expected):
             if expected is None:
@@ -2059,7 +2098,13 @@ def _update_rename(paths, data, pin, operation):
                 raise InstallError("update_conflict")
             named = os.stat(path.name, dir_fd=descriptor, follow_symlinks=False)
             if operation == "versions":
-                _update_need(stat.S_ISDIR(named.st_mode) and list(_directory_identity(named)) == expected, "update_versions")
+                # By name there is no descriptor to re-read a proof from: the guard
+                # just proved it. Here the inode must match, and a renumbered device
+                # must still be the open parent's, so no other subvolume or mount.
+                observed, pin = list(_directory_identity(named)), _directory_pin(expected, "versions")
+                _update_need(stat.S_ISDIR(named.st_mode) and (observed == pin or (
+                    expected["schema"] == IDENTITY_SCHEMA and expected["directoryProofs"]["versions"]["policy"] == "btrfs-fd-0.1"
+                    and observed[1:] == pin[1:] and named.st_dev == os.fstat(descriptor).st_dev)), "update_versions")
             else:
                 observed = _update_moved(path, expected)
                 _update_need(_identity(named) == observed, "update_moved_changed")
@@ -2134,8 +2179,13 @@ def _update_prepare(paths, a, decoded, digest, commit):
     state_pin = _mkdir_new(state_slot, 0o700)
     try:
         versions = data_slot / "versions"
-        directory_pins = {"base": next(item["pin"] for item in a["directories"] if item["key"] == "base"),
-                          "tools": next(item["pin"] for item in a["directories"] if item["key"] == "tools")}
+        # The successor names the shared directories as they are observed now,
+        # after the guard admitted them for the predecessor.
+        directory_pins = {}
+        for key in ("base", "tools"):
+            with _directory(_directories(paths, a["archiveSha256"])[key]) as descriptor:
+                _update_need(_admits(a, key, descriptor), "managed_parent_drift")
+                directory_pins[key] = list(_directory_identity(os.fstat(descriptor)))
         directory_pins["versions"] = _mkdir_new(versions)
         version = versions / digest
         directory_pins["version"] = _mkdir_new(version)
@@ -2216,14 +2266,14 @@ def update_archive(archive: Path, *, expected_sha256: str, expected_commit: str,
         except package.PackageError as error:
             raise InstallError(error.code) from None
         if _exists(_state(paths) / "current.json"):
-            _operation_directory_pins(paths, _receipt(paths))
+            _operation_directory_pins(paths, _receipt(paths), admit_proofs=True)
         _recovery_parents(paths)
         with _locked(paths):
             _service_disabled(paths)
             _update_need(all(item["pin"] is None for item in _recovery_controls(paths)), "pending_transaction")
             a = _receipt(paths)
             _guard(paths, a)
-            _operation_directory_pins(paths, a)
+            _operation_directory_pins(paths, a, admit_proofs=True)
             data, pin, bank = _update_prepare(paths, a, decoded, expected_sha256, expected_commit)
             try:
                 _bank, positions = _update_rename(paths, data, pin, "activate")

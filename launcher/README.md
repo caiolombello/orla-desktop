@@ -602,10 +602,15 @@ recibos. Outros filesystems e ABIs não implementadas mantêm a verificação PO
 estrita; não há qualificação de persistência nesses casos.
 
 Recibos `0.1` e ferramentas já instaladas permanecem estritos. Atualizar apenas o
-payload não atualiza esse gerenciador nem migra uma instalação antiga. Nesta
-fatia, `uninstall`, `update` e `recover --finish-install` ainda recusam uma
-mudança nos dispositivos observados dos diretórios gerenciados com
-`directory_operation_requires_original_device`, antes de escrever. Bancos de
+payload não atualiza esse gerenciador nem migra uma instalação antiga. `update`
+aceita a renumeração do dispositivo no Btrfs quando a prova persistente,
+relida do descritor aberto, e o inode, modo e dono continuam iguais; o recibo
+anterior e seu histórico ficam byte a byte iguais, e o novo recibo registra os
+diretórios como observados agora. `uninstall` e `recover --finish-install` ainda
+recusam essa mudança com `directory_operation_requires_original_device`, antes
+de escrever, assim como `update` em recibos `posix-strict-0.1`. O banco do update
+conserva pins completos: um rollback depois de outro reboot é recusado com
+`update_parent`, e um segundo update ainda encontra o slot ocupado. Bancos de
 transação e recuperação conservam seus pins completos; um banco retido também
 é validado antes de criar um lock ausente. Migração, Workspace e qualificação
 por login/reboot têm aceites separados.
