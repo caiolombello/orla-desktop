@@ -860,7 +860,13 @@ já descartado é recusado com `update_history_exists`. Um slot de dados vazio
 deixado por um update interrompido antes do banco também é removido.
 
 Esta etapa suporta uma transação e um predecessor por vez, sem trocar as
-ferramentas instaladas. A remoção pelo
+ferramentas instaladas. Para trocar o gerenciador instalado, rode `finalize`,
+`service disable` e `uninstall`, e então `install` de um arquivo novo pelo
+bootstrap novo, seguido de `service enable`: o install grava o próprio
+gerenciador e o controlador com o hash dele, e o serviço é regenerado pelo novo.
+Precisa ser na mesma sessão do último update ou install, porque `uninstall`
+continua exigindo os dispositivos originais. Um arquivo já usado é recusado com
+`install_history_exists` antes de qualquer escrita. A remoção pelo
 controlador antigo remove os 12 arquivos ativos e preserva a outra versão,
 workspaces e histórico; esses arquivos retidos ainda exigem uma etapa de gestão
 própria. Uma preparação incompleta fica preservada e é recusada sem bloquear A.

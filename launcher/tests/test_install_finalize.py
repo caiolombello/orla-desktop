@@ -188,6 +188,41 @@ class FinalizeUpdateTests(unittest.TestCase):
         self.assertEqual(self.slots(manager, paths), (False, False))
         self.assertEqual(self.update(manager, paths, b)["archiveSha256"], b[1])
 
+    def test_finalize_uninstall_then_a_new_archive_installs_the_running_manager(self):
+        # The installed manager never changes in place; after finalize, uninstalling and
+        # installing a new archive is the supported way to replace it with this one.
+        fixture = self.fixture()
+        b = self.archive(fixture, "B", b"B", "b" * 40)
+        c = self.archive(fixture, "C", b"C", "d" * 40)
+        manager, paths = self.installed(fixture)
+        backend = service_fixtures.FakeServiceBackend(paths, fixture[3])
+        self.assertEqual(manager.service(paths, "enable", backend=backend)["status"], "active")
+        self.assertEqual(manager.service(paths, "disable", backend=backend)["status"], "disabled")
+        self.update(manager, paths, b)
+        # Finalize first: uninstall leaves a retained slot behind, and finalize needs a receipt.
+        self.assertEqual(manager.finalize_update(paths)["archiveSha256"], b[1])
+        self.assertEqual(manager.uninstall(paths)["status"], "uninstalled")
+        receipts = manager._state(paths) / "receipts"
+        self.assertEqual(sorted(p.stem for p in receipts.iterdir()), sorted([fixture[3], b[1]]))
+        # History keeps every earlier archive out, but a new one installs beside it.
+        for archive in ((fixture[2], fixture[3], "a" * 40), b):
+            before = self.snapshot(fixture)
+            with self.assertRaises(manager.InstallError) as raised:
+                manager.install_archive(archive[0], expected_sha256=archive[1], expected_commit=archive[2], paths=paths)
+            self.assertEqual(raised.exception.code, "install_history_exists")
+            self.assertEqual(self.snapshot(fixture), before)
+        self.assertEqual(manager.install_archive(c[0], expected_sha256=c[1], expected_commit=c[2], paths=paths)["archiveSha256"], c[1])
+        installed = (manager._base(paths) / "tools/install.py").read_bytes()
+        self.assertEqual(installed, (fixture[4] / "install.py").read_bytes())
+        controller = (paths.home / ".local/bin/orla-launcherctl").read_text()
+        self.assertIn(manager.hashlib.sha256(installed).hexdigest(), controller)
+        backend = service_fixtures.FakeServiceBackend(paths, c[1])
+        self.assertEqual(manager.service(paths, "enable", backend=backend)["status"], "active")
+        unit = (paths.data_home / "systemd/user" / manager.SERVICE_UNIT).read_text()
+        self.assertIn("After=graphical-session-pre.target plasma-kwin_wayland.service plasma-kwin_x11.service\n", unit)
+        self.session(manager, paths, c[1])
+        install_fixtures.InstallGuardTests.assert_userdata(self, fixture)
+
 
 if __name__ == "__main__":
     unittest.main()
