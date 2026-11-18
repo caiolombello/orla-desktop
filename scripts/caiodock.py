@@ -542,6 +542,7 @@ def parser() -> argparse.ArgumentParser:
     launcher_service.add_argument("action", choices=("enable", "status", "disable"))
     launcher_commands.add_parser("uninstall", help="remove owned launcher files and preserve user configuration")
     launcher_commands.add_parser("rollback", help="restore the retained launcher payload")
+    launcher_commands.add_parser("finalize", help="discard the retained launcher payload so another update can start")
     launcher_recover = launcher_commands.add_parser("recover", help="recover an owned launcher transaction", allow_abbrev=False)
     launcher_recovery_mode = launcher_recover.add_mutually_exclusive_group(required=True)
     launcher_recovery_mode.add_argument("--finish-install", action="store_true")
