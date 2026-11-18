@@ -1973,9 +1973,44 @@ def _update_bank(paths, data):
     return bank
 
 
-def _update_moved(path, record):
+def _bank_devices(paths, bank):
+    """Old to new device numbers for the bank's pins, after a reboot renumbered them.
+
+    The bank's parents must be the same directories but for st_dev, the mapping
+    must be one-to-one, and each renumbered device must hold a receipt's base
+    directory whose persistent btrfs proof is re-read now. Same-boot banks map
+    every device to itself.
+    """
+    mapping = {}
+    observed = _update_parent_pins(paths)
+    for item, seen in zip(bank["parents"], observed):
+        _update_need(item["key"] == seen["key"] and item["pin"][1:] == seen["pin"][1:], "update_parent")
+        _update_need(mapping.setdefault(item["pin"][0], seen["pin"][0]) == seen["pin"][0], "update_parent")
+    _update_need(len(set(mapping.values())) == len(mapping), "update_parent")
+    for old, new in mapping.items():
+        if old == new:
+            continue
+        confirmed = False
+        with _directory(_base(paths)) as descriptor:
+            for receipt in (bank["from"], bank["to"]):
+                if _directory_pin(receipt, "base")[0] == old and os.fstat(descriptor).st_dev == new \
+                        and _admits(receipt, "base", descriptor):
+                    confirmed = True
+        _update_need(confirmed, "update_parent")
+    return mapping
+
+
+def _mapped(pin, mapping):
+    return [mapping.get(pin[0], pin[0])] + list(pin[1:])
+
+
+def _update_captured(path, record, mode, mapping):
+    return _update_capture(path, record["key"], mode) == {**record, "pin": _mapped(record["pin"], mapping)}
+
+
+def _update_moved(path, record, mapping=None):
     data, pin = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
-    original = record["pin"]
+    original = _mapped(record["pin"], mapping or {})
     _update_need(list(pin[:8]) == original[:8] and pin[8] >= original[8] and data.hex() == record["dataHex"], "update_moved_changed")
     return pin
 
@@ -1993,13 +2028,13 @@ def _update_guard(paths, data, pin):
     actual, current_pin = _read(state_slot / "bank.json", mode=0o600, limit=MAX_UPDATE_BYTES)
     _update_need(actual == data and list(current_pin) == list(pin), "update_bank_changed")
     bank = _update_bank(paths, actual)
-    _update_need(_update_parent_pins(paths) == bank["parents"], "update_parent")
+    mapping = _bank_devices(paths, bank)
     for name in ("pending.json", "pending-error.json"):
         _update_need(_update_optional(_state(paths) / name) is None, "pending_transaction")
     active = _update_optional(_state(paths) / "pending-intent.json") is not None
     parked = _update_optional(state_slot / "barrier.json") is not None
     _update_need(active != parked, "update_barrier")
-    _update_moved(_state(paths) / "pending-intent.json" if active else state_slot / "barrier.json", bank["barrier"])
+    _update_moved(_state(paths) / "pending-intent.json" if active else state_slot / "barrier.json", bank["barrier"], mapping)
     names = _update_members(state_slot, {"bank.json", "current.json"} | ({"barrier.json"} if parked else set()), {"first-error.json"})
     _update_members(data_slot, {"versions"})
     if "first-error.json" in names:
@@ -2018,25 +2053,25 @@ def _update_guard(paths, data, pin):
         _guard(paths, receipt, versions_root=roots[position])
         records = bank["payloads"][key == "to"]["files"]
         for record, (name, mode) in zip(records, PAYLOAD):
-            _update_need(_update_capture(roots[position] / receipt["archiveSha256"] / name, record["key"], mode) == record, "update_payload_changed")
+            _update_need(_update_captured(roots[position] / receipt["archiveSha256"] / name, record, mode, mapping), "update_payload_changed")
     fixed = _files(paths, bank["from"]["archiveSha256"])
     for record in bank["shared"]:
         path, mode = fixed[record["key"]]
-        _update_need(_update_capture(path, record["key"], mode) == record, "update_shared_changed")
+        _update_need(_update_captured(path, record, mode, mapping), "update_shared_changed")
     for record, key in zip(bank["histories"], ("from", "to")):
         path = _state(paths) / "receipts" / (bank[key]["archiveSha256"] + ".json")
-        _update_need(_update_capture(path, key, 0o600) == record and _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)[0] == _json(bank[key]), "update_history_changed")
+        _update_need(_update_captured(path, record, 0o600, mapping) and record["key"] == key and _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)[0] == _json(bank[key]), "update_history_changed")
     selector_locations = {}
     for position, path in (("active", _state(paths) / "current.json"), ("slot", state_slot / "current.json")):
         raw, observed = _read(path, mode=0o600, limit=MAX_RECEIPT_BYTES)
-        matching = [record for record in bank["selectors"] if list(observed[:8]) == record["pin"][:8] and
+        matching = [record for record in bank["selectors"] if list(observed[:8]) == _mapped(record["pin"], mapping)[:8] and
                     observed[8] >= record["pin"][8] and raw.hex() == record["dataHex"]]
         _update_need(len(matching) == 1, "update_selector_changed")
         selector_locations[position] = matching[0]["key"]
     _update_need(selector_locations["active"] != selector_locations["slot"], "update_selector_changed")
     _update_need(active or locations["active"] == selector_locations["active"], "update_inactive_mixed")
     _update_need(_receipt(paths) == bank[selector_locations["active"]], "update_selector_changed")
-    _update_need(_update_parent_pins(paths) == bank["parents"], "update_parent")
+    _update_need(_bank_devices(paths, bank) == mapping, "update_parent")
     return bank, ("active" if active else "slot", locations["active"], selector_locations["active"])
 
 
@@ -2056,7 +2091,8 @@ def _update_error(paths, a, b, error, state_pin):
 def _update_rename(paths, data, pin, operation):
     bank, positions = _update_guard(paths, data, pin)
     state_slot, data_slot = _update_paths(paths)
-    parents = {item["key"]: item["pin"] for item in bank["parents"]}
+    mapping = _bank_devices(paths, bank)
+    parents = {item["key"]: _mapped(item["pin"], mapping) for item in bank["parents"]}
     if operation in ("activate", "park"):
         _update_need((operation == "activate") == (positions[0] == "slot"), "update_barrier")
         _update_need(positions[1] == positions[2], "update_barrier")
@@ -2106,7 +2142,7 @@ def _update_rename(paths, data, pin, operation):
                     expected["schema"] == IDENTITY_SCHEMA and expected["directoryProofs"]["versions"]["policy"] == "btrfs-fd-0.1"
                     and observed[1:] == pin[1:] and named.st_dev == os.fstat(descriptor).st_dev)), "update_versions")
             else:
-                observed = _update_moved(path, expected)
+                observed = _update_moved(path, expected, mapping)
                 _update_need(_identity(named) == observed, "update_moved_changed")
                 _update_need(_identity(os.stat(path.name, dir_fd=descriptor, follow_symlinks=False)) == observed, "update_moved_changed")
         check(source, source_fd, left)
