@@ -16,6 +16,7 @@ from unittest import mock
 
 import test_install_guards as fixtures
 import test_install_service as service_fixtures
+import test_install_update_guards as update_fixtures
 
 
 class InstallIdentityTests(unittest.TestCase):
@@ -224,6 +225,7 @@ class InstallIdentityTests(unittest.TestCase):
                     self.assertEqual(self.snapshot(fixture), before)
 
     def test_destructive_or_transaction_operations_refuse_device_drift_before_first_write(self):
+        # Payload updates admit a persistent btrfs proof (tests below); these do not.
         fixture = self.fixture()
         manager, paths = fixture[5], fixture[1]
         with self.filesystem(manager) as fs:
@@ -232,13 +234,109 @@ class InstallIdentityTests(unittest.TestCase):
             (manager._state(paths) / "lock").unlink()
             before = self.snapshot(fixture)
             with mock.patch.object(manager, "_write_new", side_effect=AssertionError("write before identity admission")):
-                for action in (lambda: manager.uninstall(paths), lambda: manager.recover_finish_install(paths),
-                               lambda: manager.update_archive(fixture[2], expected_sha256=fixture[3],
-                                                              expected_commit="a" * 40, paths=paths)):
+                for action in (lambda: manager.uninstall(paths), lambda: manager.recover_finish_install(paths)):
                     with self.assertRaises(manager.InstallError) as raised:
                         action()
                     self.assertEqual(raised.exception.code, "directory_operation_requires_original_device")
             self.assertEqual(self.snapshot(fixture), before)
+
+    def successor(self, fixture):
+        root = fixture[0] / "successor archive"
+        root.mkdir()
+        package_fixtures = update_fixtures.archive_fixtures.package_fixtures
+        stage = package_fixtures.PackageTests().make_stage(root)
+        (stage / "libexec/steam.py").write_bytes(b"# distinct inert successor fixture\n")
+        archive = root / "B.zip"
+        digest = package_fixtures.package.build(stage, archive, version="0.1.1", commit="b" * 40,
+                                                ci_image_digest="sha256:" + "c" * 64,
+                                                runtime_inventory=package_fixtures.runtime_inventory())
+        self.assertNotEqual(digest, fixture[3])
+        return archive, digest
+
+    def update(self, manager, paths, archive, digest):
+        return manager.update_archive(archive, expected_sha256=digest, expected_commit="b" * 40, paths=paths)
+
+    def test_update_admits_btrfs_device_drift_keeps_the_predecessor_exact_and_rolls_back(self):
+        fixture = self.fixture()
+        manager, paths = fixture[5], fixture[1]
+        archive, digest = self.successor(fixture)
+        with self.filesystem(manager) as fs:
+            fixtures.InstallGuardTests.install(self, fixture)
+            state = manager._state(paths)
+            predecessor = (state / "current.json").read_bytes()
+            history = (state / "receipts" / (fixture[3] + ".json")).read_bytes()
+            fs["dev"] = 53
+            report = self.update(manager, paths, archive, digest)
+            self.assertEqual(report["archiveSha256"], digest)
+            self.assertEqual(manager.status(paths)["archiveSha256"], digest)
+            # History stays byte-identical; the successor names directories as observed now.
+            self.assertEqual((state / "receipts" / (fixture[3] + ".json")).read_bytes(), history)
+            successor = manager._receipt(paths)
+            self.assertTrue(all(item["pin"][0] == 53 for item in successor["directories"]))
+            self.assertEqual(successor["directoryProofs"]["base"], json.loads(predecessor)["directoryProofs"]["base"])
+            report = manager.rollback_update(paths)
+            self.assertEqual(report["archiveSha256"], fixture[3])
+            self.assertEqual((state / "current.json").read_bytes(), predecessor)
+            self.assertEqual(manager.status(paths)["archiveSha256"], fixture[3])
+
+    def test_update_refuses_drift_with_another_proof_strict_policy_or_legacy_receipt(self):
+        cases = (("proof", True, False, "directory_operation_requires_original_device"),
+                 ("posix", False, False, "directory_operation_requires_original_device"),
+                 ("legacy", True, True, "managed_parent_drift"))
+        for name, btrfs, legacy, code in cases:
+            with self.subTest(case=name):
+                fixture = self.fixture()
+                manager, paths = fixture[5], fixture[1]
+                archive, digest = self.successor(fixture)
+                with self.filesystem(manager, btrfs=btrfs) as fs:
+                    fixtures.InstallGuardTests.install(self, fixture)
+                    if legacy:
+                        self.legacy(manager, paths)
+                    fs["dev"] = 53
+                    if name == "proof":
+                        fs["subvolumeUuid"] = b"t" * 16
+                    before = self.snapshot(fixture)
+                    with mock.patch.object(manager, "_write_new", side_effect=AssertionError("write before identity admission")):
+                        with self.assertRaises(manager.InstallError) as raised:
+                            self.update(manager, paths, archive, digest)
+                    self.assertEqual(raised.exception.code, code)
+                    self.assertEqual(self.snapshot(fixture), before)
+
+    def test_update_by_name_versions_check_requires_the_parent_device(self):
+        # A renumbered versions entry must still live on its open parent's device.
+        fixture = self.fixture()
+        manager, paths = fixture[5], fixture[1]
+        archive, digest = self.successor(fixture)
+        with self.filesystem(manager) as fs:
+            fixtures.InstallGuardTests.install(self, fixture)
+            state = manager._state(paths)
+            predecessor = (state / "current.json").read_bytes()
+            versions = manager._base(paths) / "versions"
+            fs["dev"] = 53
+            fs["directoryDevices"][os.stat(versions).st_ino] = 99
+            with self.assertRaises(manager.InstallError) as raised:
+                self.update(manager, paths, archive, digest)
+            self.assertEqual(raised.exception.code, "update_versions")
+            self.assertEqual((state / "current.json").read_bytes(), predecessor)
+            self.assertEqual(sorted(path.name for path in versions.iterdir()), [fixture[3]])
+
+    def test_update_rollback_after_a_later_device_drift_refuses_before_writing(self):
+        # The update bank pins its parents and moved files by device; a reboot
+        # between update and rollback is not admitted yet.
+        fixture = self.fixture()
+        manager, paths = fixture[5], fixture[1]
+        archive, digest = self.successor(fixture)
+        with self.filesystem(manager) as fs:
+            fixtures.InstallGuardTests.install(self, fixture)
+            fs["dev"] = 53
+            self.update(manager, paths, archive, digest)
+            fs["dev"] = 55
+            before = self.snapshot(fixture)
+            with self.assertRaises(manager.InstallError) as raised:
+                manager.rollback_update(paths)
+            self.assertEqual(raised.exception.code, "update_parent")
+            self.assertEqual(self.snapshot(fixture), before)
+            self.assertEqual(manager.status(paths)["archiveSha256"], digest)
 
     def test_new_schema_rejects_missing_unknown_and_malformed_proofs(self):
         fixture = self.fixture()
