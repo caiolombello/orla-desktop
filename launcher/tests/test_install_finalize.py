@@ -86,10 +86,9 @@ class FinalizeUpdateTests(unittest.TestCase):
             with self.assertRaises(manager.InstallError) as raised:
                 self.update(manager, paths, c)
             self.assertEqual(raised.exception.code, "update_history_exists")
-            # The restored receipt still names the first boot's device: uninstall stays strict.
-            with self.assertRaises(manager.InstallError) as raised:
-                manager.uninstall(paths)
-            self.assertEqual(raised.exception.code, "directory_operation_requires_original_device")
+            # The restored receipt still names the first boot's device; uninstall admits it by proof.
+            self.assertEqual(manager.uninstall(paths)["status"], "uninstalled")
+            self.assertFalse(manager._base(paths).exists())
 
     def test_finalize_refuses_an_update_in_flight_and_changed_parked_content_before_removing(self):
         fixture = self.fixture()

@@ -224,8 +224,8 @@ class InstallIdentityTests(unittest.TestCase):
                         self.assertEqual(json.loads(output)["code"], expected)
                     self.assertEqual(self.snapshot(fixture), before)
 
-    def test_destructive_or_transaction_operations_refuse_device_drift_before_first_write(self):
-        # Payload updates admit a persistent btrfs proof (tests below); these do not.
+    def test_finish_install_recovery_refuses_device_drift_before_first_write(self):
+        # Payload updates and uninstall admit a persistent btrfs proof (tests below); this does not.
         fixture = self.fixture()
         manager, paths = fixture[5], fixture[1]
         with self.filesystem(manager) as fs:
@@ -234,11 +234,48 @@ class InstallIdentityTests(unittest.TestCase):
             (manager._state(paths) / "lock").unlink()
             before = self.snapshot(fixture)
             with mock.patch.object(manager, "_write_new", side_effect=AssertionError("write before identity admission")):
-                for action in (lambda: manager.uninstall(paths), lambda: manager.recover_finish_install(paths)):
-                    with self.assertRaises(manager.InstallError) as raised:
-                        action()
-                    self.assertEqual(raised.exception.code, "directory_operation_requires_original_device")
+                with self.assertRaises(manager.InstallError) as raised:
+                    manager.recover_finish_install(paths)
+                self.assertEqual(raised.exception.code, "directory_operation_requires_original_device")
             self.assertEqual(self.snapshot(fixture), before)
+
+    def test_uninstall_admits_btrfs_device_drift_and_keeps_history_and_userdata(self):
+        fixture = self.fixture()
+        manager, paths = fixture[5], fixture[1]
+        with self.filesystem(manager) as fs:
+            fixtures.InstallGuardTests.install(self, fixture)
+            history = (manager._state(paths) / "receipts" / (fixture[3] + ".json")).read_bytes()
+            fs["dev"] = 53
+            code, output = self.invoke(manager, paths, "uninstall")
+            self.assertEqual(code, 0, output)
+            self.assertEqual(json.loads(output)["status"], "uninstalled")
+            self.assertFalse(manager._base(paths).exists())
+            self.assertFalse((manager._state(paths) / "current.json").exists())
+            for key in ("controller", "launcher", "menu"):
+                self.assertFalse(manager._files(paths, fixture[3])[key][0].exists())
+            self.assertFalse((manager._state(paths) / "pending.json").exists())
+            self.assertEqual((manager._state(paths) / "receipts" / (fixture[3] + ".json")).read_bytes(), history)
+            fixtures.InstallGuardTests.assert_userdata(self, fixture)
+
+    def test_uninstall_refuses_drift_with_another_proof_or_owner_before_writing(self):
+        for case in ("proof", "owner"):
+            with self.subTest(case=case):
+                fixture = self.fixture()
+                manager, paths = fixture[5], fixture[1]
+                with self.filesystem(manager) as fs:
+                    fixtures.InstallGuardTests.install(self, fixture)
+                    fs["dev"] = 53
+                    tools = os.stat(manager._base(paths) / "tools").st_ino
+                    if case == "proof":
+                        fs["proofs"][tools] = {"inodeGeneration": 8}
+                    else:
+                        fs["statChanges"][tools] = {"st_gid": os.getgid() + 1}
+                    before = self.snapshot(fixture)
+                    with mock.patch.object(manager, "_write_new", side_effect=AssertionError("write before identity admission")):
+                        with self.assertRaises(manager.InstallError) as raised:
+                            manager.uninstall(paths)
+                    self.assertIn(raised.exception.code, ("managed_parent_drift", "directory_operation_requires_original_device"))
+                    self.assertEqual(self.snapshot(fixture), before)
 
     def successor(self, fixture):
         root = fixture[0] / "successor archive"
