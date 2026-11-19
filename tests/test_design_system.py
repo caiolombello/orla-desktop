@@ -87,11 +87,13 @@ class DesignSystemTests(unittest.TestCase):
             source = source.replace('textMuted: "#a5b4bf"', 'textMuted: "#33404c"', 1)
             source = source.replace('muted: "#606c79"', 'muted: "#606c7a"', 1)
             source = source.replace('coral: {top: "#d9736c"', 'coral: {top: "#f2b8b0"', 1)
+            source = source.replace('badge = {fill: "#d70015"', 'badge = {fill: "#ff8a80"', 1)
             (root / design.CANONICAL).write_text(source, encoding="utf-8")
             errors = "\n".join(design.contrast_errors(root))
             self.assertIn("Style.schemes.dark.textMuted on surface", errors)
             self.assertIn("Style.dockThemes.paper.muted", errors)
             self.assertIn("Style.iconTiles.coral.ink on top", errors)
+            self.assertIn("Style.badge.ink on fill", errors)
 
     def test_scheme_selection_follows_background_lightness(self):
         from PySide6.QtCore import QCoreApplication

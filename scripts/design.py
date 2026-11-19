@@ -118,7 +118,7 @@ def _libraries(root: Path):
     from PySide6.QtQml import QJSEngine
     QCoreApplication.instance() or QCoreApplication([])
     engine = QJSEngine()
-    style = _load(engine, root, CANONICAL, ("schemes", "dockThemes", "iconTiles", "contrast"))
+    style = _load(engine, root, CANONICAL, ("schemes", "dockThemes", "iconTiles", "badge", "contrast"))
     appearance = _load(engine, root, Path("package/contents/code/Appearance.js"), ("legacy",))
     return engine, style, appearance
 
@@ -146,6 +146,10 @@ def contrast_errors(root: Path = ROOT) -> list[str]:
             value = ratio(tile["ink"], tile[stop])
             if value < MINIMUM_ICON_CONTRAST:
                 errors.append(f"Style.iconTiles.{name}.ink on {stop}: {value:.2f}:1 < 3:1")
+    badge = style.property("badge").toVariant()
+    value = ratio(badge["ink"], badge["fill"])
+    if value < MINIMUM_TEXT_CONTRAST:
+        errors.append(f"Style.badge.ink on fill: {value:.2f}:1 < 4.5:1")
     legacy = appearance.property("legacy")
     for name, theme in style.property("dockThemes").toVariant().items():
         for role in ("foreground", "muted"):

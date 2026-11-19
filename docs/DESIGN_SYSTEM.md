@@ -19,6 +19,9 @@ symbols, wallpapers or app icons).
 - **The dock is icons only.** A glass slab hugs one row of artwork. Apps show their
   theme icon; widgets are *live icons* (gradient squircles that draw their data).
   No text inside the dock: names and details live in the hover label and tooltips.
+  The one exception is the unread badge, a red pill (`Style.badge`) on an app icon's
+  top-right corner with its count (up to "99+"). Like a live icon's numerals, it is
+  part of the artwork; the count is also in the tile's accessible name.
 - **Glass, not boxes.** Surfaces are translucent-looking slabs with a soft top sheen,
   a specular 1 px rim that is brightest at the top, a hairline and a soft shadow.
   Large, concentric corners. Never a panel frame around a panel frame.
@@ -287,7 +290,7 @@ Do:
 
 Don't:
 - Hardcode `#hex`, named colors, `Qt.rgba(...)`, numeric `pixelSize` or non-zero numeric `radius` in QML.
-- Put text inside the dock or draw a frame around the dock's glass.
+- Put text inside the dock (except the unread badge) or draw a frame around the dock's glass.
 - Draw shadows with a blurred `Canvas` on surfaces that resize (popovers, the dock):
   every resize repaints on the CPU. Use `GlassShadow`.
 - Let a shadow spread beyond the transparent margin that holds it; the window edge

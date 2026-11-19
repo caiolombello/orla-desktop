@@ -104,6 +104,8 @@ jobs:
         run: |
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_integrations.py' -v
           $ORLA_CI_PYTHON -m unittest discover -s tests -p 'test_package_cli.py' -v
+          # Badge mapping and polling state are portable; the tile and dock need local KDE modules.
+          (cd tests && QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest test_dock_badges.BadgesLogicTests test_dock_badges.BadgeStateTests -v)
           $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_search_shortcut.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_panel_layout*.py' -v
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_QUICK_CONTROLS_STYLE=Fusion $ORLA_CI_PYTHON -B -m unittest discover -s tests -p 'test_workspace*.py' -v

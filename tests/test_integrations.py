@@ -383,5 +383,115 @@ with tempfile.TemporaryDirectory() as temporary:
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+    def test_launcher_badges_merge_keys_bound_input_and_follow_the_sender(self):
+        badges = self.bridge.LauncherBadges()
+        self.assertTrue(badges.update(':1.4', 'application://org.example.Mail.desktop', {'count': 3, 'count-visible': True}))
+        # Partial updates keep the other key, as Plasma's task manager does.
+        self.assertTrue(badges.update(':1.4', 'application://org.example.Mail.desktop', {'count': 5}))
+        self.assertTrue(badges.update(':1.5', 'org.example.Chat.desktop', {'count': 2}))
+        ids = ['org.example.Mail.desktop', 'org.example.Chat.desktop', 'org.example.Other.desktop']
+        self.assertEqual(badges.counts(ids), {'schemaVersion': 1, 'status': 'ready',
+                                              'entries': [{'desktopId': 'org.example.Mail.desktop', 'count': 5}]})
+        badges.update(':1.5', 'org.example.Chat.desktop', {'count-visible': True})
+        self.assertEqual([e['desktopId'] for e in badges.counts(ids)['entries']],
+                         ['org.example.Chat.desktop', 'org.example.Mail.desktop'])
+        for properties in ({'count': -1}, {'count': 2 ** 31}, {'count': True}, {'count': 1.5}, {'count-visible': 1}):
+            badges.update(':1.4', 'application://org.example.Mail.desktop', properties)
+        self.assertEqual(badges.counts(['org.example.Mail.desktop'])['entries'], [{'desktopId': 'org.example.Mail.desktop', 'count': 5}])
+        badges.update(':1.4', 'application://org.example.Mail.desktop', {'count': 0})
+        self.assertEqual(badges.counts(['org.example.Mail.desktop'])['entries'], [])
+        for uri in ('application://../x.desktop', 'application://x', 'file:///x.desktop', 'a' * 300 + '.desktop', 7, ''):
+            self.assertFalse(badges.update(':1.4', uri, {'count': 1, 'count-visible': True}), uri)
+        self.assertFalse(badges.update('', 'x.desktop', {'count': 1}))
+        self.assertFalse(badges.update(':1.4', 'x.desktop', ['count']))
+        badges.remove_sender(':1.5')
+        self.assertEqual(badges.counts(ids)['entries'], [])
+        self.assertEqual(badges.senders(), {':1.4'})
+        for query in (None, ['x'], ['../x.desktop'], ['x.desktop'] * 129):
+            self.assertEqual(badges.counts(query), {'schemaVersion': 1, 'error': 'invalid-ids'})
+
+    def test_launcher_badges_refuse_new_apps_past_the_limit(self):
+        badges = self.bridge.LauncherBadges()
+        for index in range(self.bridge.BADGE_LIMIT):
+            self.assertTrue(badges.update(':1.9', f'app{index}.desktop', {'count': 1, 'count-visible': True}))
+        self.assertFalse(badges.update(':1.9', 'late.desktop', {'count': 1, 'count-visible': True}))
+        self.assertTrue(badges.update(':1.9', 'app0.desktop', {'count': 4}))
+
+    @unittest.skipUnless(shutil.which('dbus-run-session'), 'private D-Bus runner unavailable')
+    def test_private_bus_badges_follow_signals_and_the_sender_leaving(self):
+        # A private bus keeps the emitters and the claimed Unity name away from the user session.
+        runner = r'''
+import json, os, subprocess, sys, tempfile, time
+from pathlib import Path
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtDBus import QDBusConnection, QDBusArgument, QDBusMessage
+app = QCoreApplication([])
+EMITTER = """
+import sys, time
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtDBus import QDBusConnection, QDBusMessage
+app = QCoreApplication([])
+bus = QDBusConnection.sessionBus()
+for line in sys.stdin:
+    uri, count, visible = line.split()
+    signal = QDBusMessage.createSignal('/org/example/badge', 'com.canonical.Unity.LauncherEntry', 'Update')
+    signal.setArguments([uri, {'count': int(count), 'count-visible': visible == 'yes'}])
+    bus.send(signal)
+    bus.call(QDBusMessage.createMethodCall('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetId'))
+    print('sent', flush=True)
+"""
+with tempfile.TemporaryDirectory() as temporary:
+    source = Path(temporary) / 'integrations.py'
+    source.write_bytes(Path(sys.argv[1]).read_bytes())
+    for sibling in ('addon_store.py', 'addon_io.py', 'addon_format.py'):
+        source.with_name(sibling).write_bytes(Path(sys.argv[1]).with_name(sibling).read_bytes())
+    env = dict(os.environ, HOME=temporary, XDG_STATE_HOME=temporary + '/state',
+               XDG_DATA_HOME=temporary + '/data', XDG_CONFIG_HOME=temporary + '/config',
+               XDG_CACHE_HOME=temporary + '/cache')
+    service = subprocess.Popen([sys.executable, str(source), '--serve'], env=env)
+    emitter = None
+    try:
+        bus = QDBusConnection.sessionBus()
+        deadline = time.monotonic() + 5
+        while not bus.interface().isServiceRegistered('org.caiodock.Integrations').value():
+            assert service.poll() is None
+            assert time.monotonic() < deadline
+            time.sleep(.02)
+        def counts(ids):
+            argument = QDBusArgument()
+            argument << ids
+            message = QDBusMessage.createMethodCall('org.caiodock.Integrations', '/org/caiodock/Integrations',
+                                                   'org.caiodock.Integrations1', 'BadgeCounts')
+            message.setArguments([argument])
+            reply = bus.call(message)
+            assert reply.type() == QDBusMessage.ReplyMessage, reply.errorMessage()
+            return json.loads(reply.arguments()[0])
+        # Nothing claims the Unity name before a dock asks for counts.
+        assert not bus.interface().isServiceRegistered('com.canonical.Unity').value()
+        ids = ['org.example.Mail.desktop']
+        assert counts(ids) == {'schemaVersion': 1, 'status': 'ready', 'entries': []}
+        assert bus.interface().isServiceRegistered('com.canonical.Unity').value()
+        assert counts(['../x'])['error'] == 'invalid-ids'
+        emitter = subprocess.Popen([sys.executable, '-c', EMITTER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        emitter.stdin.write('application://org.example.Mail.desktop 4 yes\n'); emitter.stdin.flush()
+        assert emitter.stdout.readline().strip() == 'sent'
+        deadline = time.monotonic() + 3
+        while counts(ids)['entries'] != [{'desktopId': 'org.example.Mail.desktop', 'count': 4}]:
+            assert time.monotonic() < deadline, counts(ids)
+            time.sleep(.05)
+        emitter.stdin.close(); emitter.wait(timeout=5)
+        deadline = time.monotonic() + 3
+        while counts(ids)['entries']:
+            assert time.monotonic() < deadline, 'count survived its sender leaving the bus'
+            time.sleep(.05)
+    finally:
+        for process in (emitter, service):
+            if process is not None and process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
+'''
+        result = subprocess.run(['dbus-run-session', '--', sys.executable, '-c', runner, str(MODULE)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 if __name__ == '__main__':
     unittest.main()

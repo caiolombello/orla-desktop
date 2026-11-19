@@ -5,6 +5,7 @@ import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 import org.kde.plasma.private.mpris as Mpris
+import "../code/Badges.js" as Badges
 import "../code/Logic.js" as Logic
 import "../code/Profiles.js" as Profiles
 import "../code/Style.js" as Style
@@ -38,6 +39,7 @@ Item {
     property alias tasksModel: tasks
     property alias pomodoro: focusTimer
     property alias integrations: localIntegrations
+    property alias badges: dockBadges
     property alias addonsSession: addonsSession
     property var addonTransportOverride: null
     property alias appearance: appearanceState
@@ -723,6 +725,19 @@ Item {
         active: enabledModules.length > 0
         enabledModules: ["quota", "peripherals", "recording"].filter(module => root.widgetVisible(module))
     }
+    NativeBadges {
+        id: dockBadges
+        objectName: "dockBadges"
+        active: Boolean(root.configuration.showBadges)
+        idsProvider: function() {
+            const ids = [];
+            for (let row = 0; row < taskRepeater.count; row++) {
+                const tile = taskRepeater.itemAt(row);
+                if (tile && tile.desktopId.length) ids.push(tile.desktopId);
+            }
+            return ids;
+        }
+    }
     AddonTransport { id: nativeAddonTransport }
     AddonsSession {
         id: addonsSession
@@ -953,6 +968,8 @@ Item {
                     launching: Boolean(model.IsStartup)
                     activeTask: Boolean(model.IsActive)
                     attention: Boolean(model.IsDemandingAttention)
+                    readonly property string desktopId: Badges.desktopId(model.LauncherUrlWithoutIcon)
+                    badgeCount: dockBadges.countFor(desktopId)
                     nativeLabel: root.nativePopups || taskDragState.active
                     onHoveredChanged: root.hoverTile(taskTile, hovered)
                     onActiveFocusChanged: if (activeFocus) root.revealInViewport(taskTile)
