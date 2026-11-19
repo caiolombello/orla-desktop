@@ -1,4 +1,4 @@
-// Plasma 6.7.5 fixed operations. Request fields are validated Orla data.
+// Plasma 6.7.5 fixed operations; 6.8.3 reads the inventory only. Request fields are validated Orla data.
 (function () {
     const request = __ORLA_REQUEST__;
     const moduleIds = {menu:"org.orla.bar", "control-center":"org.orla.bar", "global-menu":"org.kde.plasma.appmenu",
@@ -54,11 +54,13 @@
                 || marker(panel).schemaVersion !== 1) throw new Error("managed panel identity changed");
         return panel;
     }
-    if (applicationVersion !== "6.7.5") throw new Error("unsupported Plasma version");
+    if (["6.7.5", "6.8.3"].indexOf(applicationVersion) < 0) throw new Error("unsupported Plasma version");
     if (request.operation === "inspect") {
         print(JSON.stringify(inventory(request.connector)));
         return;
     }
+    // Only the read above runs on 6.8.3; its changed shell scripting was not cycled natively.
+    if (applicationVersion !== "6.7.5") throw new Error("unsupported Plasma version");
     if (request.operation === "remove-owned") {
         if (!equal(inventory(request.connector), request.expectedInventory))
             throw new Error("post-layout inventory changed before owned removal");
