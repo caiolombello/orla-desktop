@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
+import "../code/Badges.js" as Badges
 import "../code/Style.js" as Style
 
 // One dock slot, macOS-like: artwork only, a dot for running apps, a gentle lift
@@ -23,6 +24,8 @@ Controls.AbstractButton {
     property bool activeTask: false
     property bool attention: false
     property bool launching: false
+    // Unread count an app publishes; 0 hides the badge.
+    property int badgeCount: 0
     property int iconSize: 42
     property int animationDuration: Style.motion.fast
     property string tooltip: title
@@ -37,7 +40,7 @@ Controls.AbstractButton {
     implicitHeight: iconSize + 16
     padding: 0
     hoverEnabled: true
-    Accessible.name: tooltip
+    Accessible.name: badgeCount > 0 ? qsTr("%1, %2 não lidas").arg(tooltip).arg(badgeCount) : tooltip
     Controls.ToolTip {
         id: hoverTip
         parent: tile
@@ -79,6 +82,29 @@ Controls.AbstractButton {
                 source: tile.iconSource
                 color: tile.foreground
                 active: tile.hovered
+            }
+            Rectangle {
+                id: badge
+                objectName: "tileBadge"
+                // Numeric artwork on the app icon, as macOS draws it; it lifts and bounces with the icon.
+                visible: tile.badgeCount > 0 && tile.liveKind.length === 0
+                z: 1
+                height: Style.size.badge
+                width: Math.max(height, badgeText.implicitWidth + Style.space.sm)
+                radius: Style.radius.pill
+                x: parent.width - width + Style.space.xs
+                y: -Style.space.xs
+                color: Style.badge.fill
+                Text {
+                    id: badgeText
+                    objectName: "tileBadgeText"
+                    anchors.centerIn: parent
+                    text: Badges.label(tile.badgeCount)
+                    textFormat: Text.PlainText
+                    color: Style.badge.ink
+                    font.pixelSize: Style.type.caption
+                    font.weight: Style.weight.bold
+                }
             }
             LiveIcon {
                 anchors.centerIn: parent

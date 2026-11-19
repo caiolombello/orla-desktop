@@ -147,6 +147,19 @@ class Gallery:
             shutil.rmtree(empty_trash, ignore_errors=True)
             config.setProperty("showTrash", False)
             QTest.qWait(100)
+            # Unread badges from a synthetic service reply; the session bus is never read.
+            evaluate("""badges.transport = Qt.createQmlObject('import QtQml; QtObject { function asyncCall(m, ok, fail) { '
+                + 'ok({value: JSON.stringify({schemaVersion: 1, status: "ready", entries: ['
+                + '{desktopId: "org.kde.dolphin.desktop", count: 3}, {desktopId: "org.kde.konsole.desktop", count: 128}]})}); } }', badges)""")
+            config.setProperty("showBadges", True)
+            QTest.qWait(100)
+            for theme in ("glass", "frost"):
+                config.setProperty("theme", theme)
+                QTest.qWait(150)
+                self.save(f"dock-{theme}-badges", window, self.scene_rect(dock))
+            config.setProperty("showBadges", False)
+            config.setProperty("theme", "glass")
+            QTest.qWait(100)
         for name, source in POPUPS:
             evaluate("closeContext(); settings.close()")
             QTest.qWait(60)

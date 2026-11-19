@@ -53,7 +53,7 @@ Read this file first, then [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) before
 - Reuse `Tile`, `LiveIcon`, `GlassRim`, `GlassShadow`, `DockPopup`, `ProgressRing`, `Card`,
   `FormRow`, `OrlaButton`, `OrlaIconButton`, `SegmentedTabs`/`SegmentTab`, `SectionLabel`
   before creating a component. At most one `primary` button per surface.
-- No text inside the dock and no frame around its glass. Shadows use `GlassShadow`
+- No text inside the dock (the unread badge is the one exception) and no frame around its glass. Shadows use `GlassShadow`
   (layered), never a blurred Canvas on surfaces that resize.
 - Widget/status icons: Breeze `*-symbolic`, tinted. Never tint app icons.
 - Keep native `Controls` (TextField, ComboBox, SpinBox, CheckBox) inside Orla surfaces.

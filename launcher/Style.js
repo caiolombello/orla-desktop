@@ -134,6 +134,9 @@ var levels = {good: "#69d7c2", low: "#f2b866", critical: "#ff8a7a"};
 // Privacy indicators, as macOS draws them: orange while the microphone records,
 // green while the camera does. Always tint an icon with them, never a bare dot.
 var privacy = {microphone: "#ff9f0a", camera: "#30d158"};
+// Unread badge on dock app icons: the same red on every dock theme, as macOS
+// does. `ink` keeps 4.5:1 against `fill` (checked).
+var badge = {fill: "#d70015", ink: "#ffffff"};
 function iconTile(kind) { return iconTiles[widgetTiles[kind] || "slate"]; }
 
 // Type roles in logical pixels. Body copy keeps the system font size; set a
@@ -160,6 +163,7 @@ var size = {
     iconLg: 28,
     ringStroke: 3,
     indicator: 4,      // running-app dot
+    badge: 18,         // unread badge height on dock app icons
     popupWidth: 350,
     divider: 1
 };

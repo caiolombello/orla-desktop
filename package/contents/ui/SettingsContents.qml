@@ -345,6 +345,14 @@ ColumnLayout {
                     onToggled: settings.configuration.showDownloads = checked
                     onActiveFocusChanged: if (activeFocus) settings.reveal(this)
                 }
+                Controls.CheckBox {
+                    objectName: "showBadges"
+                    Layout.fillWidth: true
+                    text: qsTr("Mostrar contadores de não lidas nos apps (global)")
+                    checked: Boolean(settings.configuration.showBadges)
+                    onToggled: settings.configuration.showBadges = checked
+                    onActiveFocusChanged: if (activeFocus) settings.reveal(this)
+                }
                 Controls.Label {
                     Layout.fillWidth: true
                     text: qsTr("Preferência global salva imediatamente. Não muda com o perfil e pode ser desativada aqui.")

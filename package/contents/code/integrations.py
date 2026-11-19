@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import stat
 
 # Zen exports a percentage of a USD spending limit, not a usage allowance.
@@ -209,6 +210,64 @@ def _snapshot_json():
     return json.dumps(collect_snapshot(), ensure_ascii=False, allow_nan=False, separators=(',', ':'))
 
 
+# Unread counts that apps publish through the Unity LauncherEntry signal, the
+# same source Plasma's task manager reads. Any session peer can emit it, so
+# entries, IDs and counts are bounded and nothing is logged.
+BADGE_LIMIT = 64
+BADGE_QUERY_LIMIT = 128
+BADGE_COUNT_LIMIT = 2 ** 31 - 1
+BADGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.+-]{0,200}\.desktop')
+
+
+def badge_desktop_id(uri):
+    if type(uri) is not str or len(uri) > 256:
+        return None
+    value = uri[len('application://'):] if uri.startswith('application://') else uri
+    return value if BADGE_ID.fullmatch(value) else None
+
+
+class LauncherBadges:
+    """Merge partial updates per key, as Plasma does; a sender that leaves the bus takes its counts along."""
+
+    def __init__(self):
+        self._entries = {}
+
+    def update(self, sender, uri, properties):
+        desktop_id = badge_desktop_id(uri)
+        if (desktop_id is None or type(sender) is not str or not 0 < len(sender) <= 255
+                or not isinstance(properties, dict)):
+            return False
+        entry = self._entries.get(desktop_id)
+        if entry is None:
+            if len(self._entries) >= BADGE_LIMIT:
+                return False
+            entry = {'count': 0, 'visible': False}
+        count = properties.get('count')
+        if type(count) is int and 0 <= count <= BADGE_COUNT_LIMIT:
+            entry['count'] = count
+        visible = properties.get('count-visible')
+        if type(visible) is bool:
+            entry['visible'] = visible
+        entry['sender'] = sender
+        self._entries[desktop_id] = entry
+        return True
+
+    def remove_sender(self, sender):
+        for desktop_id in [key for key, entry in self._entries.items() if entry['sender'] == sender]:
+            del self._entries[desktop_id]
+
+    def senders(self):
+        return {entry['sender'] for entry in self._entries.values()}
+
+    def counts(self, desktop_ids):
+        if (not isinstance(desktop_ids, list) or len(desktop_ids) > BADGE_QUERY_LIMIT
+                or any(badge_desktop_id(value) != value for value in desktop_ids)):
+            return {'schemaVersion': 1, 'error': 'invalid-ids'}
+        entries = [{'desktopId': key, 'count': self._entries[key]['count']} for key in sorted(set(desktop_ids))
+                   if key in self._entries and self._entries[key]['visible'] and self._entries[key]['count'] > 0]
+        return {'schemaVersion': 1, 'status': 'ready', 'entries': entries}
+
+
 def _source_fingerprint():
     try:
         info = Path(__file__).stat()
@@ -218,11 +277,47 @@ def _source_fingerprint():
 
 
 def serve():
-    from PySide6.QtCore import ClassInfo, QCoreApplication, QObject, QTimer, Slot
-    from PySide6.QtDBus import QDBusConnection
+    from PySide6.QtCore import ClassInfo, QCoreApplication, QObject, QTimer, Slot, SLOT
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusServiceWatcher
 
     app = QCoreApplication([])
     source_fingerprint = _source_fingerprint()
+
+    class BadgeListener(QObject):
+        def __init__(self, bus):
+            super().__init__()
+            self.bus = bus
+            self.badges = LauncherBadges()
+            self.watcher = QDBusServiceWatcher(self)
+            self.watcher.setConnection(bus)
+            self.watcher.setWatchMode(QDBusServiceWatcher.WatchModeFlag.WatchForUnregistration)
+            self.watcher.serviceUnregistered.connect(self.left)
+            self.listening = bus.connect('', '', 'com.canonical.Unity.LauncherEntry', 'Update',
+                                         self, SLOT('update(QString,QVariantMap,QDBusMessage)'))
+            # Some apps publish only while this name has an owner. Plasma's task
+            # manager claims it when present; otherwise this listener does.
+            if self.listening:
+                bus.registerService('com.canonical.Unity')
+
+        @Slot(str, 'QVariantMap', QDBusMessage)
+        def update(self, uri, properties, message):
+            sender = message.service()
+            if not self.badges.update(sender, uri, properties):
+                return
+            watched = set(self.watcher.watchedServices())
+            live = self.badges.senders()
+            for service in watched - live:
+                self.watcher.removeWatchedService(service)
+            if sender not in watched:
+                self.watcher.addWatchedService(sender)
+                # A sender that left before the watch began would keep its count forever.
+                if not self.bus.interface().isServiceRegistered(sender).value():
+                    self.left(sender)
+
+        @Slot(str)
+        def left(self, service):
+            self.badges.remove_sender(service)
+            self.watcher.removeWatchedService(service)
 
     @ClassInfo({'D-Bus Interface': 'org.caiodock.Integrations1'})
     class CacheBridge(QObject):
@@ -233,6 +328,7 @@ def serve():
             self.idle.setInterval(300_000)
             self.idle.timeout.connect(app.quit)
             self.idle.start()
+            self.listener = None
 
         @Slot(result=str)
         def Snapshot(self):
@@ -243,6 +339,18 @@ def serve():
         def SnapshotFor(self, modules):
             self.idle.start()
             return _selected_snapshot_json(modules)
+
+        @Slot('QStringList', result=str)
+        def BadgeCounts(self, desktop_ids):
+            self.idle.start()
+            # Listen only once a dock asks: other modules never claim the Unity name.
+            if self.listener is None:
+                self.listener = BadgeListener(QDBusConnection.sessionBus())
+            if not self.listener.listening:
+                result = {'schemaVersion': 1, 'status': 'unavailable', 'entries': []}
+            else:
+                result = self.listener.badges.counts(list(desktop_ids))
+            return json.dumps(result, ensure_ascii=True, separators=(',', ':'))
 
     bridge = CacheBridge()
     bus = QDBusConnection.sessionBus()

@@ -54,6 +54,7 @@ Window {
         property bool showControlCenter: false
         property bool showTrash: false
         property bool showDownloads: false
+        property bool showBadges: false
         property bool calendarEvents: false
         property bool currentDesktopOnly: false
         property int focusMinutes: 25
