@@ -191,6 +191,31 @@ Perfis e configurações ficam fora do pacote e não são tocados. Depois de
 atualizar ou voltar, o Plasma precisa reiniciar (ou sair e entrar) para carregar
 a versão nova. O registro fica em `~/.local/state/orla/dock-update/state.json`.
 
+### Na janela Sobre e atualizações (Source)
+
+Quando a referência é a dock instalada para o usuário e a última consulta achou
+uma release mais nova, a janela mostra **Atualizar a dock para X** (a ação
+principal da tela). O botão roda `orla.py update apply --channel <canal da
+janela>` desta mesma cópia, em processo próprio, e o fechamento da janela espera
+o fim da instalação. Só o código de saída, o `status` JSON e o registro
+`state.json` (lido com campos fixos) decidem o texto; mensagens em inglês do
+CLI nunca aparecem. Depois de atualizar ou voltar, a janela pede para reiniciar
+o Plasma ou entrar de novo, sem reiniciar nada sozinha. Com uma versão guardada
+e o registro em `applied`, `installing` ou `recovery_required`, aparece
+**Voltar para a dock X**. O bundle do Workspace não carrega o CLI da dock, então
+lá os botões não aparecem.
+
+![Atualização disponível, escuro](screenshots/updates-apply/dark-apply-available.png)
+![Atualizada, escuro](screenshots/updates-apply/dark-applied.png)
+![Atualização disponível, claro](screenshots/updates-apply/light-apply-available.png)
+![Atualizada, claro](screenshots/updates-apply/light-applied.png)
+
+`tests/test_updates_desktop_apply.py` cobre a regra de quando oferecer, os
+resultados fixos (atualizada, nada novo, versão anterior restaurada, recuperação
+pendente, falha), o watchdog, o fechamento que espera, a volta, o leitor do
+registro e a vista com teclado e foco. Não houve atualização real pela janela:
+a dock instalada já está na release mais nova.
+
 Testes: `tests/test_dock_update.py` (offline) cobre a atualização com a versão
 guardada, as recusas sem mudar nada (hash, SHA256SUMS duplicado, versão,
 pacote de outro applet, Plasma antigo, arquivo que não é ZIP), a volta

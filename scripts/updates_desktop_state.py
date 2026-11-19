@@ -77,6 +77,33 @@ def installed_dock(data_home):
     except (ValueError, KeyError, TypeError, RecursionError):
         reference = None
     return ('found', reference) if reference else ('invalid', None)
+DOCK_UPDATE_PHASES = ('installing', 'applied', 'rolled_back', 'recovery_required')
+
+def dock_update_record(state_home):
+    """Passive read of the record `orla.py update` keeps: None, or phase/from/to/kept.
+
+    Only fixed fields are returned, never the file's own strings; the kept
+    package must be the one `apply` names under `kept/` and a regular file.
+    """
+    folder = Path(state_home) / 'orla/dock-update'
+    try:
+        value = strict_json(read_regular(folder / 'state.json').decode('utf-8'))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, UnicodeError, RecursionError):
+        return dict(phase='invalid', fromVersion='', toVersion='', kept=False)
+    if not isinstance(value, dict) or value.get('phase') not in DOCK_UPDATE_PHASES \
+            or not isinstance(value.get('from'), str) or parse_version(value['from']) is None \
+            or not isinstance(value.get('to'), str) or parse_version(value['to']) is None:
+        return dict(phase='invalid', fromVersion='', toVersion='', kept=False)
+    kept = value.get('kept') == str(folder / 'kept' / ('orla-dock-' + value['from'] + '.plasmoid'))
+    if kept:
+        try:
+            kept = stat.S_ISREG(os.lstat(value['kept']).st_mode)
+        except OSError:
+            kept = False
+    return dict(phase=value['phase'], fromVersion=value['from'], toVersion=value['to'], kept=kept)
+
 CACHE_SCHEMA = 'orla-updates-desktop-cache-0.1'
 PREF_SCHEMA = 'orla-updates-preferences-0.1'
 
@@ -218,6 +245,7 @@ class Store:
         config = Path(root) / 'config' if root is not None else xdg('XDG_CONFIG_HOME', '.config')
         cache = Path(root) / 'cache' if root is not None else xdg('XDG_CACHE_HOME', '.cache')
         self.data = Path(root) / 'data' if root is not None else xdg('XDG_DATA_HOME', '.local/share')
+        self.state = Path(root) / 'state' if root is not None else xdg('XDG_STATE_HOME', '.local/state')
         self.preferences = config / 'orla/updates.json'
         self.cache = cache / 'orla/updates-desktop.json'
         self.blocked = set()
@@ -244,6 +272,9 @@ class Store:
 
     def installed_dock(self):
         return installed_dock(self.data)
+
+    def dock_update(self):
+        return dock_update_record(self.state)
 
     def save_preference(self, channel):
         if self.preferences in self.blocked:
