@@ -147,6 +147,48 @@ class ScriptTests(unittest.TestCase):
         self.assertFalse(result.isError(), result.toString())
         self.assertEqual(engine.evaluate("panels().length").toInt(), 0)
 
+    def test_plasma_6_8_3_reads_the_inventory_and_refuses_every_mutation(self):
+        import json
+        engine = self.engine()
+        self.assertFalse(engine.evaluate('applicationVersion = "6.8.3"').isError())
+        result = engine.evaluate(layout.render_script("inspect", connector="DP-1"))
+        self.assertFalse(result.isError(), result.toString())
+        info = json.loads(engine.evaluate("messages[0]").toString())
+        self.assertEqual(info["version"], "6.8.3")
+        self.assertEqual(info["panels"], inventory()["panels"])
+        plan = layout.build_plan(manifest(), inventory())
+        current = copy.deepcopy(inventory()); current["selectedScreen"]["connector"] = "DP-1"
+        for operation, source in (
+                ("apply", layout.render_script("apply", plan=plan)),
+                ("remove-owned", layout.render_script("remove-owned", panel_id=28, token="a" * 64,
+                                                      connector="DP-1", expected_inventory=inventory()))):
+            with self.subTest(operation=operation):
+                result = engine.evaluate(source)
+                self.assertTrue(result.isError())
+                self.assertIn("unsupported Plasma version", result.toString())
+        self.assertEqual(engine.evaluate("messages.length").toInt(), 1)
+        self.assertEqual(engine.evaluate("JSON.stringify(panels().map(p => p.id))").toString(),
+                         json.dumps([panel["id"] for panel in inventory()["panels"]], separators=(",", ":")))
+        for version in ("6.8.2", "6.8.30", "6.9.0"):
+            with self.subTest(version=version):
+                engine.evaluate(f'applicationVersion = "{version}"')
+                result = engine.evaluate(layout.render_script("inspect", connector="DP-1"))
+                self.assertTrue(result.isError())
+
+    def test_template_versions_match_the_python_gates_and_guard_every_mutation(self):
+        import re
+        template = (Path(__file__).resolve().parents[1] / "scripts/panel_layout.js").read_text()
+        admitted = re.findall(r'\[([^\]]*)\]\.indexOf\(applicationVersion\) < 0', template)
+        self.assertEqual(len(admitted), 1)
+        self.assertEqual(tuple(re.findall(r'"([^"]+)"', admitted[0])), layout.INSPECT_PLASMA)
+        strict = re.findall(r'applicationVersion !== "([^"]+)"', template)
+        self.assertEqual(strict, [layout.SUPPORTED_PLASMA])
+        guard = template.index('applicationVersion !== "')
+        self.assertLess(template.index('request.operation === "inspect"'), guard)
+        for operation in ("remove-owned", "reorder-owned", "update-owned", "apply"):
+            self.assertLess(guard, template.index(f'request.operation === "{operation}"')
+                            if operation != "apply" else template.index('request.operation !== "apply"'))
+
     def test_disabled_cc_changes_neither_old_widget_count_nor_old_configs(self):
         import json
         data = control_center_manifest(); data["modules"][-2]["enabled"] = False
@@ -207,7 +249,7 @@ class FakeRuntime:
         self.config_home = config_home; self.failure = failure
         self.identity = {**type(self).identity, "target": {"configHome": str(config_home.resolve())}}
         self.events = []; self.is_stopped = False; self.applied = False; self.disabled = False; self.plan = None
-    def preflight(self, *, allow_stopped=False):
+    def preflight(self, *, allow_stopped=False, read_only=False):
         self.events.append("preflight")
         if self.failure == "preflight": raise layout.LayoutError("capability unavailable")
     def inspect(self, connector=""):
@@ -372,6 +414,29 @@ class NativeContractTests(unittest.TestCase):
         self.assertTrue(commands.active)
 
 
+class PlasmaVersionTests(unittest.TestCase):
+    def runtime(self, version):
+        commands = FakeCommands(); commands.version = version
+        return commands, layout.NativeRuntime("plasma-plasmashell.service", runner=commands, locate=lambda tool:tool,
+                                              process_reader=fake_process, process_absent=lambda pid:True)
+
+    def test_only_the_read_only_preflight_admits_plasma_6_8_3(self):
+        for version in ("plasmashell 6.7.5", "plasmashell 6.8.3"):
+            with self.subTest(version=version):
+                commands, runtime = self.runtime(version)
+                runtime.preflight(read_only=True)
+                runtime.preflight(allow_stopped=True, read_only=True)
+        commands, runtime = self.runtime("plasmashell 6.8.3")
+        with self.assertRaises(layout.LayoutError) as refused: runtime.preflight()
+        # The workspace window maps this exact text to its compatibility message.
+        self.assertEqual(str(refused.exception), "panel composition requires Plasma 6.7.5")
+        for version in ("plasmashell 6.8.2", "plasmashell 6.8.31", "plasmashell 6.9.0", "plasmashell 16.8.3"):
+            commands, runtime = self.runtime(version)
+            with self.subTest(version=version), self.assertRaises(layout.LayoutError):
+                runtime.preflight(read_only=True)
+        self.assertFalse(any("start" in argv or "stop" in argv for argv,_ in commands.calls))
+
+
 class RecoveryTests(unittest.TestCase):
     setUp = TransactionTests.setUp
     def test_corrupt_backup_is_rejected_without_stopping_a_usable_current_shell(self):
@@ -514,6 +579,46 @@ class StatusTests(unittest.TestCase):
                 self.assertNotIn("marker",data["panels"][0])
             self.assertNotIn("start",runtime.events)
             self.assertFalse(data["nativeValidated"])
+
+
+    def test_status_reads_plasma_6_8_3_and_every_mutating_command_refuses_before_stopping(self):
+        import contextlib,io,os,json
+        from unittest import mock
+        from scripts import caiodock
+        store = layout.FileStore(self.config, self.root/"xdg-state/orla/layouts")
+        receipt = layout.apply_layout(self.plan, FakeRuntime(self.config), store)
+        files = {name:(self.config/name).read_bytes() for name in layout.CONFIG_FILES}
+        manifest_path = self.root/"manifest.json"; manifest_path.write_text(json.dumps(manifest()))
+        plan_path = self.root/"plan.json"; plan_path.write_text(json.dumps(self.plan))
+        receipt_path = store._directory(receipt)/"receipt.json"
+        env = {"XDG_CONFIG_HOME":str(self.config),"XDG_STATE_HOME":str(self.root/"xdg-state")}
+        commands = FakeCommands(); commands.version = "plasmashell 6.8.3"
+        runtime = layout.NativeRuntime("plasma-plasmashell.service", runner=commands, locate=lambda tool:tool,
+                                       process_reader=fake_process, process_absent=lambda pid:True)
+        output = io.StringIO()
+        with mock.patch.dict(os.environ,env), mock.patch.object(layout,"NativeRuntime",return_value=runtime), contextlib.redirect_stdout(output):
+            self.assertEqual(caiodock.main(["layout","status","--service",runtime.unit]),0)
+        data = json.loads(output.getvalue())
+        self.assertEqual(data["receiptPhase"], "COMMITTED")
+        self.assertTrue(data["liveInventoryAvailable"])
+        self.assertEqual([panel["id"] for panel in data["panels"]], [panel["id"] for panel in inventory()["panels"]])
+        commands.calls.clear()
+        for argv in (["plan","--manifest",str(manifest_path),"--output",str(self.root/"new-plan.json")],
+                     ["apply","--plan",str(plan_path)],
+                     ["plan-update","--receipt",str(receipt_path),"--add","control-center","--output",str(self.root/"u.json")],
+                     ["disable","--receipt",str(receipt_path)],
+                     ["restore","--receipt",str(receipt_path)]):
+            with self.subTest(argv=argv[0]):
+                errors = io.StringIO()
+                with mock.patch.dict(os.environ,env), mock.patch.object(layout,"NativeRuntime",return_value=runtime), \
+                        contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
+                    code = caiodock.main(["layout",argv[0],"--service",runtime.unit,*argv[1:]])
+                self.assertNotEqual(code, 0)
+                self.assertIn("panel composition requires Plasma 6.7.5", errors.getvalue())
+        self.assertFalse(any("start" in call or "stop" in call or "evaluateScript" in " ".join(call)
+                             for call,_ in commands.calls))
+        self.assertEqual({name:(self.config/name).read_bytes() for name in layout.CONFIG_FILES}, files)
+        self.assertFalse((self.root/"new-plan.json").exists())
 
 
 class DisableTests(unittest.TestCase):

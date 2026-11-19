@@ -8,6 +8,9 @@ from pathlib import Path
 import re
 
 SUPPORTED_PLASMA = "6.7.5"
+# Read-only inventory (`layout status`) also runs on 6.8.3. Every mutation stays
+# on the version whose apply/disable/restore cycle was proven natively.
+INSPECT_PLASMA = ("6.7.5", "6.8.3")
 MODULE_IDS = {
     "menu": "org.orla.bar", "control-center": "org.orla.bar", "global-menu": "org.kde.plasma.appmenu",
     "spacer": "org.kde.plasma.panelspacer", "tray": "org.kde.plasma.systemtray",
@@ -543,7 +546,7 @@ class NativeRuntime:
         facts["digest"] = hashlib.sha256(json.dumps(facts, sort_keys=True).encode()).hexdigest()
         return facts, {"pid": pid, "startTick": before["startTick"]}
 
-    def preflight(self, *, allow_stopped=False):
+    def preflight(self, *, allow_stopped=False, read_only=False):
         for name in ("gdbus", "systemctl"):
             if not self.locate(name): raise LayoutError(f"required layout tool unavailable: {name}")
         try:
@@ -553,7 +556,8 @@ class NativeRuntime:
             executable = self._service(False)
             if self._has_bus_owner(): raise LayoutError("another process owns the Plasma bus name")
         version = self._command(executable, ["--version"])
-        if not re.search(r"(?:Plasma|plasmashell)\s+6\.7\.5(?:\s|$)", version):
+        versions = INSPECT_PLASMA if read_only else (SUPPORTED_PLASMA,)
+        if not re.search(r"(?:Plasma|plasmashell)\s+(?:" + "|".join(map(re.escape, versions)) + r")(?:\s|$)", version):
             raise LayoutError("panel composition requires Plasma 6.7.5")
 
     def stop(self):
@@ -1223,7 +1227,7 @@ def cli(args):
         print("Plan saved; no panel changed. Review the selected panel IDs before apply.")
         return 0
     if args.layout_action == "status":
-        runtime.preflight(allow_stopped=True)
+        runtime.preflight(allow_stopped=True, read_only=True)
         record = store.current()
         stopped = runtime.stopped()
         result = {"receiptPhase": record["phase"] if record else "UNMANAGED", "dockManagedIndependently": True,
