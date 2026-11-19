@@ -66,6 +66,8 @@ def _probe_ui(root):
         busy = Property(bool, lambda self: False, constant=True)
         closePending = Property(bool, lambda self: False, constant=True)
         canCheck = Property(bool, lambda self: False, constant=True)
+        canApply = Property(bool, lambda self: False, constant=True)
+        canRollback = Property(bool, lambda self: False, constant=True)
         state = Property("QVariantMap", lambda self: dict(version="", role="", record={},
                          lastCompleted={}, historical=True, releaseUrl=""), constant=True)
 
