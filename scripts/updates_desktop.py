@@ -17,6 +17,13 @@ def now():
 def cli_command(root, reference, channel):
     return (str(Path(sys.executable).resolve()), ['-I', '-B', str(root / 'scripts/updates.py'), 'check', '--installed-version', reference['version'], '--channel', channel])
 
+# `orla.py update` from this same copy, isolated: the root is the only import path.
+UPDATE_ENTRY = 'import sys;sys.path.insert(0,sys.argv[1]);from scripts.caiodock import main;raise SystemExit(main(sys.argv[2:]))'
+
+def update_command(root, action, channel):
+    arguments = ['update', action] + (['--channel', channel] if action == 'apply' else [])
+    return (str(Path(sys.executable).resolve()), ['-I', '-B', '-c', UPDATE_ENTRY, str(root)] + arguments)
+
 class CheckProcess(QObject):
     """One request owns a new Unix session, through termination and direct reaping.
 
@@ -175,10 +182,41 @@ class CheckProcess(QObject):
                 raise ValueError(self.failure)
             if self.process.exitStatus() != QProcess.NormalExit:
                 raise ValueError('crash')
-            data = validate_result(strict_json(bytes(self.output).decode('utf-8')), self.channel, self.reference['version'], self.process.exitCode())
+            data = self.interpret()
         except (ValueError, TypeError, UnicodeError, RecursionError):
-            data = result('unavailable', self.failure or 'invalid_result', self.reference['version'], self.channel, self.attempted_at)
+            data = self.unavailable()
         self.done.emit(data)
+
+    def interpret(self):
+        return validate_result(strict_json(bytes(self.output).decode('utf-8')), self.channel, self.reference['version'], self.process.exitCode())
+
+    def unavailable(self):
+        return result('unavailable', self.failure or 'invalid_result', self.reference['version'], self.channel, self.attempted_at)
+
+
+class UpdateProcess(CheckProcess):
+    """`orla.py update apply|rollback`: only the exit code and the JSON status are read.
+
+    Its English errors on stderr are never shown; the window maps the outcome and
+    the update record to fixed strings.
+    """
+
+    def __init__(self, program, args, watchdog_ms, parent):
+        super().__init__(program, args, None, None, watchdog_ms, None, parent)
+
+    def interpret(self):
+        text = bytes(self.output).decode('utf-8').strip()
+        code = self.process.exitCode()
+        if code == 1 and not text:
+            return 'error'
+        value = strict_json(text)
+        if code != 0 or not isinstance(value, dict) or not isinstance(value.get('status'), str):
+            raise ValueError('update result')
+        return value['status']
+
+    def unavailable(self):
+        return 'error'
+
 # Fixed, read-only Plasma script: versions of the dock widgets Plasma has loaded.
 RUNNING_SCRIPT = ('var v=[];panels().forEach(function(p){p.widgets().forEach(function(w){'
                   'if(w.type==="org.caiodock.dock")v.push(String(w.version));});});'
@@ -228,7 +266,8 @@ class UpdatesController(QObject):
     changed = Signal()
     closeReady = Signal()
 
-    def __init__(self, root, reference=_UNSET, *, runner=None, storage_root=None, opener=None, watchdog_ms=15000, running_probe=None, parent=None):
+    def __init__(self, root, reference=_UNSET, *, runner=None, storage_root=None, opener=None, watchdog_ms=15000, running_probe=None,
+                 update_runner=None, update_watchdog_ms=300000, parent=None):
         super().__init__(parent)
         self.root = Path(root).resolve()
         self._source = reference is _UNSET
@@ -237,6 +276,13 @@ class UpdatesController(QObject):
         self._installed_status = 'absent'
         self.reference = None
         self._runner = runner or cli_command
+        # Installing needs the dock CLI, which only a full copy carries (not the Workspace bundle).
+        self._update_supported = update_runner is not None or all(
+            (self.root / 'scripts' / name).is_file() for name in ('caiodock.py', 'dock_update.py'))
+        self._update_runner = update_runner or update_command
+        self._update_watchdog_ms = update_watchdog_ms
+        self._operation = ''
+        self._update_outcome = ''
         self._running_probe = running_probe or plasma_running_probe
         self._running = dict(status='unread', versions=[])
         self._running_token = None
@@ -256,6 +302,7 @@ class UpdatesController(QObject):
         self._historical = True
         self._last_completed = {}
         self.restore_record()
+        self._dock_update = self._store.dock_update()
 
     @Property(str, notify=changed)
     def channel(self):
@@ -304,11 +351,78 @@ class UpdatesController(QObject):
         self._installed_status, installed = self._store.installed_dock()
         self.reference = installed if installed and valid_reference(installed) else self._fallback
 
+    @Property(bool, notify=changed)
+    def canApply(self):
+        data = self._record.get('result') or {}
+        return self._update_supported and not self._busy and not self._closing and self.reference is not None \
+            and self.reference['role'] == 'installed' and data.get('status') == 'update_available'
+
+    @Property(bool, notify=changed)
+    def canRollback(self):
+        record = self._dock_update or {}
+        return self._update_supported and not self._busy and not self._closing and record.get('kept') is True \
+            and record.get('phase') in ('installing', 'applied', 'recovery_required')
+
+    def dock_update_state(self):
+        record = self._dock_update or {}
+        return dict(supported=self._update_supported, operation=self._operation, outcome=self._update_outcome,
+                    phase=record.get('phase', ''), fromVersion=record.get('fromVersion', ''),
+                    toVersion=record.get('toVersion', ''), kept=record.get('kept') is True)
+
+    @Slot()
+    def applyUpdate(self):
+        if self.canApply:
+            self._start_update('apply')
+
+    @Slot()
+    def rollbackUpdate(self):
+        if self.canRollback:
+            self._start_update('rollback')
+
+    def _start_update(self, action):
+        self._busy = True
+        self._operation = action
+        self._update_outcome = ''
+        try:
+            program, args = self._update_runner(self.root, action, self._channel)
+            process = UpdateProcess(program, args, self._update_watchdog_ms, self)
+            self._process = process
+            process.done.connect(lambda status: self.update_completed(process, action, status))
+            self.changed.emit()
+            process.start()
+        except (OSError, ValueError, TypeError):
+            self.update_completed(None, action, 'error')
+
+    def update_completed(self, process, action, status):
+        if process is not self._process:
+            return
+        self._process = None
+        self._dock_update = self._store.dock_update()
+        phase = (self._dock_update or {}).get('phase')
+        if action == 'apply':
+            outcome = 'updated' if status == 'updated' else 'current' if status in ('up_to_date', 'no_release') \
+                else 'restored' if status == 'error' and phase == 'rolled_back' \
+                else 'recovery' if status == 'error' and phase in ('recovery_required', 'installing') else 'failed'
+        else:
+            outcome = 'rolled_back' if status == 'rolled_back' else 'failed'
+        self._update_outcome = outcome
+        self._operation = ''
+        # The installed dock may have changed; its saved check belongs to the old version.
+        self.resolve_reference()
+        self.restore_record()
+        self._busy = False
+        if process:
+            process.deleteLater()
+        self.changed.emit()
+        if self._closing and not self._close_emitted:
+            self._close_emitted = True
+            self.closeReady.emit()
+
     @Property('QVariantMap', notify=changed)
     def state(self):
         installed = self.reference if self.reference and self.reference['role'] == 'installed' else None
         other = self._fallback if installed else None
-        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', installedStatus=self._installed_status, installedVersion=installed['version'] if installed else '', otherRole=other['role'] if other else '', otherVersion=other['version'] if other else '', runningStatus=self._running['status'], runningVersions=list(self._running['versions']), record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record())
+        return dict(status=self._status, version=self.reference['version'] if self.reference else '', role=self.reference['role'] if self.reference else '', installedStatus=self._installed_status, installedVersion=installed['version'] if installed else '', otherRole=other['role'] if other else '', otherVersion=other['version'] if other else '', runningStatus=self._running['status'], runningVersions=list(self._running['versions']), record=self._record, releaseUrl=(self._record.get('result') or {}).get('available_url') or '', openingFailed=self._opening_failed, historical=self._historical, lastCompleted=self._last_completed, storageWarning=self._storage_warning, timeUnreliable=self.time_unreliable(), old=self.old_record(), dockUpdate=self.dock_update_state())
 
     def restore_record(self):
         entry = self._records.get(self._channel, {})

@@ -54,7 +54,15 @@ Controls.ApplicationWindow {
     }
     onClosing: event => { event.accepted = controller.requestClose(); }
 
+    readonly property var dockUpdate: window.state.dockUpdate || ({})
+    function focusLost(control) {
+        const current = window.activeFocusItem;
+        // A disabled control hands focus to its card, which is not a tab stop.
+        return control.activeFocus || !current || !current.visible || !current.activeFocusOnTab;
+    }
     function statusText() {
+        if (window.dockUpdate.operation === "apply") return qsTr("Atualizando a dock… Não feche o Plasma.");
+        if (window.dockUpdate.operation === "rollback") return qsTr("Voltando à versão anterior da dock…");
         if (controller.closePending && controller.busy) return qsTr("Fechando após a consulta…");
         if (!window.state.version) return qsTr("Referência de versão indisponível");
         if (controller.busy) return qsTr("Consultando releases oficiais…");
@@ -76,6 +84,19 @@ Controls.ApplicationWindow {
         if (result.reason === "timeout") return qsTr("A consulta excedeu o tempo limite. Tente novamente.");
         if (result.reason === "network_error") return qsTr("Rede indisponível. Tente novamente quando houver conexão.");
         if (result.status === "unavailable") return qsTr("A consulta não produziu um resultado válido. Você pode tentar novamente.");
+        return "";
+    }
+    function updateText() {
+        const outcome = window.dockUpdate.outcome;
+        if (outcome === "updated") return qsTr("Dock atualizada de %1 para %2.").arg(window.dockUpdate.fromVersion).arg(window.dockUpdate.toVersion);
+        if (outcome === "current") return qsTr("Nenhuma versão mais nova para instalar neste canal.");
+        if (outcome === "restored") return qsTr("A atualização falhou e a versão anterior foi reinstalada.");
+        if (outcome === "rolled_back") return qsTr("A dock voltou para %1.").arg(window.dockUpdate.fromVersion);
+        if (outcome === "recovery") return qsTr("A atualização não terminou. Volte à versão anterior.");
+        if (outcome === "failed") return qsTr("Não foi possível concluir. Nada foi instalado ou a versão anterior continua no lugar.");
+        // Left by a run that ended outside this window.
+        if (window.dockUpdate.phase === "installing" || window.dockUpdate.phase === "recovery_required")
+            return qsTr("Uma atualização da dock não terminou. Volte à versão anterior.");
         return "";
     }
     function componentText() {
@@ -165,7 +186,7 @@ Controls.ApplicationWindow {
                         Layout.fillWidth: true
                         implicitHeight: Math.max(Style.size.target, implicitContentHeight + verticalPadding * 2)
                         text: qsTr("Consultar agora")
-                        variant: "primary"
+                        variant: apply.visible ? "secondary" : "primary"
                         enabled: controller.canCheck
                         onClicked: controller.check()
                         Keys.onReturnPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
@@ -177,6 +198,49 @@ Controls.ApplicationWindow {
                         text: window.statusText()
                     }
                     Copy { text: window.reasonText(); visible: text.length > 0; color: window.ui.textMuted }
+                    Orla.OrlaButton {
+                        id: apply
+                        objectName: "updatesApply"
+                        Layout.fillWidth: true
+                        implicitHeight: Math.max(Style.size.target, implicitContentHeight + verticalPadding * 2)
+                        readonly property string target: (window.state.record.result || {}).available_version || ""
+                        text: qsTr("Atualizar a dock para %1").arg(target)
+                        variant: "primary"
+                        visible: controller.canApply || window.dockUpdate.operation === "apply"
+                        enabled: controller.canApply
+                        Accessible.description: qsTr("Baixa a release oficial, confere o SHA256SUMS e guarda a versão atual para poder voltar")
+                        onClicked: controller.applyUpdate()
+                        Keys.onReturnPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
+                        Keys.onEnterPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
+                        // Disabled while it runs, the button drops focus; hand it to Check when it hides.
+                        onVisibleChanged: if (!visible && window.focusLost(apply)) check.forceActiveFocus(Qt.TabFocusReason)
+                    }
+                    Copy {
+                        objectName: "updatesApplyScope"
+                        visible: apply.visible
+                        text: qsTr("Baixa do repositório oficial no GitHub, confere o SHA256SUMS e guarda a versão atual para poder voltar. Perfis e configurações não mudam.")
+                        color: window.ui.textMuted
+                    }
+                    Copy { objectName: "updatesApplyResult"; text: window.updateText(); visible: text.length > 0 }
+                    Copy {
+                        objectName: "updatesRestart"
+                        visible: window.dockUpdate.outcome === "updated" || window.dockUpdate.outcome === "rolled_back" || window.dockUpdate.outcome === "restored"
+                        text: qsTr("Reinicie o Plasma ou saia e entre de novo na sessão para carregar esta versão.")
+                        color: window.ui.textMuted
+                    }
+                    Orla.OrlaButton {
+                        id: rollback
+                        objectName: "updatesRollback"
+                        Layout.fillWidth: true
+                        implicitHeight: Math.max(Style.size.target, implicitContentHeight + verticalPadding * 2)
+                        text: qsTr("Voltar para a dock %1").arg(window.dockUpdate.fromVersion)
+                        visible: controller.canRollback || window.dockUpdate.operation === "rollback"
+                        enabled: controller.canRollback
+                        onClicked: controller.rollbackUpdate()
+                        Keys.onReturnPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
+                        Keys.onEnterPressed: event => { if (!event.isAutoRepeat) clicked(); event.accepted = true; }
+                        onVisibleChanged: if (!visible && window.focusLost(rollback)) check.forceActiveFocus(Qt.TabFocusReason)
+                    }
                     Copy { objectName: "updatesDates"; text: window.datesText(); visible: text.length > 0; color: window.ui.textMuted }
                     Copy {
                         objectName: "updatesHistory"

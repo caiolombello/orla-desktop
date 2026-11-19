@@ -1116,6 +1116,22 @@ class Gallery:
                 controller.readRunning()
                 self.save(f'updates-{host}-running-differs',window)
                 details.setProperty('checked',False)
+                # Updating the installed dock: a synthetic `orla.py update apply` that records and bumps it.
+                kept=root/'state/orla/dock-update/kept/orla-dock-1.2.3.plasmoid'
+                applier=root/'apply.py'
+                applier.write_text('import json,pathlib,time\ntime.sleep(.7)\n'
+                    f'k=pathlib.Path({str(kept)!r});k.parent.mkdir(parents=True,exist_ok=True);k.write_bytes(b"PK")\n'
+                    f'(k.parent.parent/"state.json").write_text(json.dumps({{"phase":"applied","from":"1.2.3","to":"2.0.0","kept":str(k),"channel":"stable","at":1}}))\n'
+                    f'pathlib.Path({str(package/"metadata.json")!r}).write_text(json.dumps({{"KPlugin":{{"Id":"org.caiodock.dock","Version":"2.0.0"}}}}))\n'
+                    'print(json.dumps({"status":"updated","from":"1.2.3","to":"2.0.0"}))\n')
+                controller=UpdatesController(ROOT,reference,runner=runner,storage_root=root,opener=lambda url:True,
+                                             update_runner=lambda *args:(sys.executable,['-I','-B',str(applier)]))
+                window.setProperty('controller',controller)
+                mode['status']='update_available';controller.check();wait()
+                self.save(f'updates-{host}-apply-available',window)
+                controller.applyUpdate()
+                self.save(f'updates-{host}-applying',window);wait()
+                self.save(f'updates-{host}-applied',window)
                 window.resize(420,720)
                 font=window.property('font');font.setPointSizeF(font.pointSizeF()*2);window.setProperty('font',font)
                 self.save(f'updates-{host}-large-text',window)
